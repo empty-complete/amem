@@ -1,0 +1,10 @@
+code: idea
+version: 1.0.0
+target: atom
+applies_to: idea
+description: {ru: "Идея: пояснение обязательно, связи — только уточнение и «см. также»."}
+extends: [has_label]
+fields:
+  - {path: body, required: true, severity: warning, message: {ru: "У идеи нет пояснения."}}
+links:
+  allowed: [refines, see_also]

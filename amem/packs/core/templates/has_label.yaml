@@ -1,0 +1,10 @@
+code: has_label
+version: 1.0.0
+target: atom
+description: {ru: "Интерфейс для всех видов атомов. Подпись — само утверждение с названием объекта; «простыми словами» — короткое пояснение для человека."}
+fields:
+  - {path: label, required: true, severity: violation}
+  - path: summary_plain
+    required: true
+    severity: violation
+    message: {ru: "Нет пояснения «простыми словами»."}

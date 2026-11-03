@@ -1,0 +1,50 @@
+scheme: kind
+concepts:
+- code: fact
+  label:
+    ru: факт
+    en: fact
+  definition:
+    ru: Утверждение о мире или наблюдение из документа, не являющееся нормой или решением.
+- code: term
+  label:
+    ru: термин
+    en: term
+  definition:
+    ru: Определение термина или обозначения.
+- code: method
+  label:
+    ru: методика
+    en: method
+  definition:
+    ru: Как делать — порядок работы, приём, правило оформления, инструмент.
+- code: decision
+  label:
+    ru: решение
+    en: decision
+  definition:
+    ru: Принятое проектное или техническое решение и его обоснование.
+- code: question
+  label:
+    ru: вопрос
+    en: question
+  definition:
+    ru: Открытый вопрос или противоречие, требующее решения.
+- code: lesson
+  label:
+    ru: урок
+    en: lesson
+  definition:
+    ru: Что пошло не так и как этого избежать.
+- code: requirement
+  label:
+    ru: требование
+    en: requirement
+  definition:
+    ru: Требование заказчика, технического задания или проекта, не норматив.
+- code: parameter
+  label:
+    ru: параметр
+    en: parameter
+  definition:
+    ru: Значение величины с единицей и условиями применения.

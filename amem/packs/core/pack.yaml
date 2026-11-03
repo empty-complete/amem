@@ -1,0 +1,7 @@
+name: core
+version: 1.0.0
+title: Ядро amem
+description: >-
+  Базовый словарь: виды атомов, классы сущностей, виды связей и селекторы,
+  общие для любого домена. Шаблоны-интерфейсы has_label, has_source, has_value.
+license: MIT

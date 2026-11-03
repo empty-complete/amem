@@ -1,0 +1,16 @@
+kind: parameter
+label: {ru: "Нормативное ветровое давление w0 по ветровым районам (СП 20, табл. 11.1)"}
+summary_plain: {ru: "Ветровое давление на высоте 10 м по ветровому району: от 0,17 кПа (Iа) до 0,85 кПа (VII)."}
+codes: [w0, "11.1"]
+content:
+  table:
+    columns:
+      - {code: wind_region, label: {ru: ветровой район}}
+      - {code: wind_pressure_norm, label: {ru: w0}, unit: kPa}
+    rows: [[Iа, 0.17], [I, 0.23], [II, 0.30], [III, 0.38], [IV, 0.48], [V, 0.60], [VI, 0.73], [VII, 0.85]]
+about: [ent:sp20_13330]
+sources:
+  - path: Документы/СП 20.13330.2016.pdf
+    selectors: [{type: table, value: "11.1"}, {type: page, value: "27"}]
+    quote: Таблица 11.1
+    edition: ent:sp20_13330_2016_ch1_6
