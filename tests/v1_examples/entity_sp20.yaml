@@ -1,0 +1,6 @@
+entity_class: document
+key: sp20_13330
+label: {ru: "СП 20.13330 Нагрузки и воздействия"}
+aliases: [СП 20, СНиП 2.01.07]
+codes: [сп 20.13330]
+external_ids: {bsdd: null, wikidata: null}

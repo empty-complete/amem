@@ -1,0 +1,30 @@
+[project]
+name = "amem"
+version = "0.1.0.dev0"
+license = {text = "MIT"}
+description = "База знаний из атомов: схема, хранилище с ревизиями, объекты и автопроверка"
+requires-python = ">=3.10"
+dependencies = [
+  "pymupdf>=1.24",
+  "rapidfuzz>=3.0",
+  "pydantic>=2.13,<3",
+  "pyyaml>=6",
+  "psycopg[binary]>=3.2,<4",
+  "rfc8785==0.1.4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "linkml==1.12.1", "linkml-runtime==1.12.1", "jsonschema>=4.20", "ocfl-py==2.1.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["amem*"]
+
+[tool.setuptools.package-data]
+amem = ["schema/*.yaml", "schema/*.json", "sql/*.sql", "packs/core/pack.yaml", "packs/core/vocab/*.yaml", "packs/core/templates/*.yaml"]

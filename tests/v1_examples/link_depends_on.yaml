@@ -1,0 +1,5 @@
+rel: depends_on
+src: atm:01929f3a-7c4e-7b21-9a6f-3d2c8e1f0a55
+dst: ent:sp20_13330
+note: {ru: "п. 10.1"}
+confidence: 1.0

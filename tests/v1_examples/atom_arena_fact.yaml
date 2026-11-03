@@ -1,0 +1,29 @@
+kind: fact
+key: arena.mullion_spacing
+label:
+  ru: Стойки витражей входов Арены — только по краям дверей, шаг до 2,5 м
+summary_plain:
+  ru: Крепить козырёк можно только к крайним стойкам витража; над дверью стойки нет.
+body:
+  ru: "По развёрткам АР1 л. 24–25: стойки стоят по краям дверных проёмов."
+aliases: [шаг стоек витража Арены]
+codes: [вн-42, вн-48]
+content:
+  values:
+    - property: mullion_spacing_max
+      label: {ru: "шаг стоек, макс."}
+      amount: 2500
+      unit: mm
+      quantity_kind: Length
+qualifiers:
+  - {property: applies_to_range, value_text: "Вн-42…Вн-48"}
+about: [ent:perm_arena, "@glazing"]
+sources:
+  - path: Архив/Составить спецификацию наружных козырьков на объект Арена/Исходники/ППГ-МГ-01_2025-МСА-АР1_v6.pdf
+    selectors:
+      - {type: page, value: "26", label: "л. 24"}
+    quote: витражная стоечно-ригельная система
+    role: primary
+rank: preferred
+scope: {project: ent:perm_arena, discipline: [facade, structural], visibility: department}
+tags: [козырёк, витраж]

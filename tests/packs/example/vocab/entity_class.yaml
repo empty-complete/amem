@@ -1,0 +1,5 @@
+scheme: entity_class
+concepts:
+  - code: collection
+    label: {ru: подборка, en: collection}
+    definition: {ru: Подборка материалов по теме.}

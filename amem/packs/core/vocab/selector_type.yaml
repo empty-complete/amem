@@ -1,0 +1,75 @@
+scheme: selector_type
+concepts:
+- code: page
+  label:
+    ru: страница
+    en: page
+  definition:
+    ru: Номер страницы PDF, считая с первой страницы файла.
+- code: clause
+  label:
+    ru: пункт
+    en: clause
+  definition:
+    ru: 'Пункт или подпункт документа: 10.1, Б.8 е).'
+- code: table
+  label:
+    ru: таблица
+    en: table
+  definition:
+    ru: 'Номер таблицы: 11.1.'
+- code: figure
+  label:
+    ru: рисунок
+    en: figure
+  definition:
+    ru: Номер рисунка.
+- code: formula
+  label:
+    ru: формула
+    en: formula
+  definition:
+    ru: Номер формулы.
+- code: text_quote
+  label:
+    ru: цитата
+    en: text quote
+  definition:
+    ru: Место по фрагменту текста — только для файлов без страниц (docx, md). Проверяемая цитата — поле
+      quote источника.
+- code: slide
+  label:
+    ru: слайд
+    en: slide
+  definition:
+    ru: Номер слайда презентации.
+- code: sheet
+  label:
+    ru: лист
+    en: sheet
+  definition:
+    ru: Лист книги xlsx или лист чертежа.
+- code: range
+  label:
+    ru: диапазон
+    en: range
+  definition:
+    ru: 'Диапазон ячеек: B4:K12.'
+- code: heading
+  label:
+    ru: раздел
+    en: heading
+  definition:
+    ru: Заголовок раздела документа.
+- code: lines
+  label:
+    ru: строки
+    en: lines
+  definition:
+    ru: 'Строки файла: 40-72.'
+- code: function
+  label:
+    ru: функция
+    en: function
+  definition:
+    ru: Функция в скрипте .m или .py.

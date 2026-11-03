@@ -1,0 +1,20 @@
+code: has_value
+version: 1.0.0
+target: atom
+description: {ru: "Интерфейс для всех видов атомов: все единицы — коды UCUM с учётом регистра (kPa, mm, W/(m2.K), Cel, 1)."}
+fields:
+  - path: content.values[].unit
+    ucum: true
+    severity: violation
+  - path: content.values[].qualifiers[].unit
+    ucum: true
+    severity: violation
+  - path: content.table.columns[].unit
+    ucum: true
+    severity: violation
+  - path: content.formula.symbols[].unit
+    ucum: true
+    severity: violation
+  - path: qualifiers[].unit
+    ucum: true
+    severity: violation
