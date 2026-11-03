@@ -1,0 +1,50 @@
+scheme: entity_class
+concepts:
+- code: project
+  label:
+    ru: объект строительства
+    en: project
+  definition:
+    ru: Работа с целью и сроками — продукт, исследование, стройка, кампания.
+- code: document
+  label:
+    ru: документ
+    en: document
+  definition:
+    ru: Проект, отчёт, каталог, спецификация, переписка — рабочий документ.
+- code: edition
+  label:
+    ru: редакция
+    en: edition
+  definition:
+    ru: Редакция норматива или документа со сроком действия — СП 20.13330.2016 с изм. 1–6.
+- code: organization
+  label:
+    ru: организация
+    en: organization
+  definition:
+    ru: Изготовитель, заказчик, проектировщик.
+- code: person
+  label:
+    ru: человек
+    en: person
+  definition:
+    ru: Человек — автор, специалист, участник проекта.
+- code: place
+  label:
+    ru: место
+    en: place
+  definition:
+    ru: Город или район строительства.
+- code: software
+  label:
+    ru: программа
+    en: software
+  definition:
+    ru: Расчётная или проектная программа — COMSOL, WINDOW.
+- code: topic
+  label:
+    ru: тема
+    en: topic
+  definition:
+    ru: Тема или область знаний, объединяющая атомы.

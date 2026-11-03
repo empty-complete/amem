@@ -1,0 +1,145 @@
+scheme: rel
+concepts:
+- code: about
+  label:
+    ru: относится к
+    en: about
+  definition:
+    ru: Атом говорит об этой сущности.
+  inverse_label:
+    ru: о нём
+  pairs:
+  - atom>entity
+  symmetric: false
+  via_field: about
+- code: derived_from
+  label:
+    ru: выведен из
+    en: derived from
+  definition:
+    ru: A получен из B — сводка, пересчёт, вывод.
+  inverse_label:
+    ru: основа для
+  pairs:
+  - atom>atom
+  symmetric: false
+  via_field: derived_from
+- code: part_of
+  label:
+    ru: часть
+    en: part of
+  definition:
+    ru: A — часть B.
+  inverse_label:
+    ru: состоит из
+  pairs:
+  - atom>atom
+  - entity>entity
+  symmetric: false
+- code: depends_on
+  label:
+    ru: зависит от
+    en: depends on
+  definition:
+    ru: Значение A зависит от B.
+  inverse_label:
+    ru: влияет на
+  pairs:
+  - atom>atom
+  - atom>entity
+  symmetric: false
+- code: refines
+  label:
+    ru: уточняет
+    en: refines
+  definition:
+    ru: A уточняет или детализирует B.
+  inverse_label:
+    ru: уточняется
+  pairs:
+  - atom>atom
+  symmetric: false
+- code: supersedes
+  label:
+    ru: заменяет
+    en: supersedes
+  definition:
+    ru: A заменяет B — новая редакция, замена изделия, исправленное значение.
+  inverse_label:
+    ru: заменён
+  pairs:
+  - atom>atom
+  - entity>entity
+  symmetric: false
+- code: contradicts
+  label:
+    ru: противоречит
+    en: contradicts
+  definition:
+    ru: A противоречит B — нужен разбор.
+  inverse_label:
+    ru: противоречит
+  pairs:
+  - atom>atom
+  symmetric: true
+- code: example_of
+  label:
+    ru: пример
+    en: example of
+  definition:
+    ru: A — пример или частный случай B.
+  inverse_label:
+    ru: имеет пример
+  pairs:
+  - atom>atom
+  - entity>entity
+  symmetric: false
+- code: answers
+  label:
+    ru: отвечает на
+    en: answers
+  definition:
+    ru: Решение или факт A отвечает на вопрос B.
+  inverse_label:
+    ru: ответ
+  pairs:
+  - atom>atom
+  symmetric: false
+- code: same_as
+  label:
+    ru: то же, что
+    en: same as
+  definition:
+    ru: A и B — одно и то же; ставится при слиянии дублей.
+  inverse_label:
+    ru: то же, что
+  pairs:
+  - atom>atom
+  - entity>entity
+  symmetric: true
+- code: see_also
+  label:
+    ru: см. также
+    en: see also
+  definition:
+    ru: Слабая связь, когда другие не подходят. Заметка обязательна.
+  inverse_label:
+    ru: см. также
+  pairs:
+  - atom>atom
+  - atom>entity
+  - entity>atom
+  - entity>entity
+  symmetric: true
+- code: used_in
+  label:
+    ru: применяется в
+    en: used in
+  definition:
+    ru: A применяется в B — система на объекте, профиль в системе.
+  inverse_label:
+    ru: использует
+  pairs:
+  - atom>entity
+  - entity>entity
+  symmetric: false

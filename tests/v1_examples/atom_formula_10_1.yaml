@@ -1,0 +1,19 @@
+kind: parameter
+label: {ru: "Нормативная снеговая нагрузка на покрытие"}
+summary_plain: {ru: "Вес снега на земле умножают на три коэффициента: снос ветром, термический и форму покрытия."}
+content:
+  formula:
+    latex: 'S_0 = c_e\,c_t\,\mu\,S_g'
+    plain: 'S0 = ce*ct*mu*Sg'
+    symbols:
+      - {symbol: S_0, unit: kPa}
+      - {symbol: \mu, term: "@term_mu", unit: '1'}
+      - {symbol: S_g, unit: kPa}
+codes: [s0, sg, mu, "10.1"]
+about: [ent:sp20_13330]
+sources:
+  - path: Документы/СП 20.13330.2016.pdf
+    selectors: [{type: clause, value: "10.1"}, {type: page, value: "23"}]
+    quote: нормативное значение снеговой нагрузки на горизонтальную проекцию покрытия
+    edition: ent:sp20_13330_2016_ch1_6
+valid_from: 2017-06-04

@@ -1,0 +1,8 @@
+entity_class: edition
+key: sp20_13330_2016_ch1_6
+label: {ru: "СП 20.13330.2016 с изм. № 1–6"}
+edition_of: ent:sp20_13330
+valid_from: 2017-06-04
+sources:
+  - path: Документы/СП 20.13330.2016.pdf
+    role: primary

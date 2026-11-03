@@ -1,0 +1,7 @@
+reason: СП 20, разд. 10 — снеговые нагрузки
+entities:
+  - {ref: "@sp20", entity_class: document, key: sp20_13330, label: {ru: "СП 20.13330 Нагрузки и воздействия"}}
+atoms:
+  - {ref: "@sg", kind: term, label: {ru: "Sg — вес снегового покрова на 1 м² горизонтальной поверхности земли"}, about: ["@sp20"]}
+links:
+  - {rel: depends_on, src: "@sg", dst: "@sp20"}

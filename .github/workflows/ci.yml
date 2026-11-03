@@ -1,0 +1,30 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      # тестовые базы, как в docker-compose.yml: 18 на 5433, 16 на 5434
+      db-test:
+        image: pgvector/pgvector:0.8.1-pg18
+        env: {POSTGRES_DB: test, POSTGRES_USER: test, POSTGRES_PASSWORD: test}
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U test -d test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+      db-test-pg16:
+        image: pgvector/pgvector:0.8.1-pg16
+        env: {POSTGRES_DB: test, POSTGRES_USER: test, POSTGRES_PASSWORD: test}
+        ports: ["5434:5432"]
+        options: >-
+          --health-cmd "pg_isready -U test -d test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q -p no:cacheprovider
+      - run: python tools/gen_schema.py --check

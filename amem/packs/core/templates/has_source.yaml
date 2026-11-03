@@ -1,0 +1,13 @@
+code: has_source
+version: 1.0.0
+target: atom
+description: {ru: "Интерфейс для всех видов атомов: у атома есть источник и место в нём. Что у PDF обязательны страница и дословная цитата, проверяет уровень 2 по виду файла — шаблоном это не выразить."}
+fields:
+  - path: sources
+    required: true
+    severity: violation
+    message: {ru: "У атома нет источника."}
+  - path: sources[].selectors
+    required: true
+    severity: warning
+    message: {ru: "Не указано место в источнике — страница, пункт, лист."}
