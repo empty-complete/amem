@@ -10,6 +10,8 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Literal
 
+import psycopg
+
 from . import sources
 
 SEARCH_TEXT_VERSION = 1
@@ -94,3 +96,50 @@ def search_text(payload: dict, target: Target) -> SearchText:
     document = " ".join(fragment for weight in "ABCD" for fragment in weighted[weight])
     codes = tuple(sorted({normalize_code(code) for code in raw_codes if isinstance(code, str) and code.strip()}))
     return SearchText(weighted, document, codes)
+
+
+def refresh_record(conn: psycopg.Connection, target: Target, record_id) -> None:
+    """Проекция одной записи из её текущей ревизии; вызывается в транзакции записи и при перестройке."""
+    if target not in ("atom", "entity"):
+        raise ValueError(f"неизвестный вид записи {target!r}")
+    with conn.transaction():
+        row = conn.execute(
+            f"SELECT id, payload, content_hash, recorded_at FROM {target}_current WHERE {target}_id = %s",
+            (record_id,)).fetchone()
+        if row is None:
+            conn.execute("DELETE FROM search_code WHERE target = %s AND record_id = %s", (target, record_id))
+            conn.execute("DELETE FROM search_document WHERE target = %s AND record_id = %s", (target, record_id))
+            return
+        revision_id, payload, content_hash, recorded_at = row
+        text = search_text(payload, target)
+        parts = {weight.lower(): " ".join(text.weighted[weight]) for weight in "ABCD"}
+        vector = " || ".join(f"setweight(to_tsvector('russian', %({weight.lower()})s), '{weight}')"
+                             for weight in "ABCD")
+        params = {"target": target, "record_id": record_id, "revision_id": revision_id,
+                  "content_hash": content_hash, "document": text.document, "codes": list(text.codes),
+                  "updated_at": recorded_at, **parts}
+        conn.execute(
+            f"INSERT INTO search_document (target, record_id, revision_id, content_hash, document, search_vector, "
+            f"codes, updated_at) VALUES (%(target)s, %(record_id)s, %(revision_id)s, %(content_hash)s, %(document)s, "
+            f"{vector}, %(codes)s, %(updated_at)s) ON CONFLICT (target, record_id) DO UPDATE SET "
+            "revision_id = EXCLUDED.revision_id, content_hash = EXCLUDED.content_hash, "
+            "document = EXCLUDED.document, search_vector = EXCLUDED.search_vector, codes = EXCLUDED.codes, "
+            "updated_at = EXCLUDED.updated_at", params)
+        conn.execute("DELETE FROM search_code WHERE target = %s AND record_id = %s", (target, record_id))
+        with conn.cursor() as cur:
+            cur.executemany("INSERT INTO search_code (target, record_id, code) VALUES (%s, %s, %s)",
+                            [(target, record_id, code) for code in text.codes])
+
+
+def rebuild_search(conn: psycopg.Connection) -> int:
+    """Полностью перестроить производный поиск из текущих ревизий; исходные записи не меняются."""
+    with conn.transaction():
+        rows = []
+        for target in ("atom", "entity"):
+            rows.extend((target, row[0]) for row in conn.execute(
+                f"SELECT {target}_id FROM {target}_current ORDER BY {target}_id").fetchall())
+        conn.execute("DELETE FROM search_code")
+        conn.execute("DELETE FROM search_document")
+        for target, record_id in rows:
+            refresh_record(conn, target, record_id)
+        return len(rows)

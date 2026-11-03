@@ -43,7 +43,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 from psycopg.types.range import Range
 
-from . import canon
+from . import canon, search
 from .ids import uuid7
 
 Target = Literal["atom", "entity"]
@@ -296,6 +296,7 @@ def _write_revision(conn, plan: _Planned, cs: uuid.UUID, agent: str, reason: str
              source["edition"].split(":", 1)[1] if source.get("edition") else None, source.get("role")))
     try:
         _refresh(conn, target, record_id)
+        search.refresh_record(conn, target, record_id)
     except RecordError as e:
         raise RecordError(f"{plan.label}: {e}") from e
     return Revision(target, record_id, revision_id, n, content_hash, created=True)
@@ -517,6 +518,7 @@ def decide(conn: psycopg.Connection, target: Target, revision_id: uuid.UUID, acc
             raise RecordError(f"ревизия {revision_id} не ждёт проверки — решение по ней уже принято") from e
         try:
             _refresh(conn, target, record_id)
+            search.refresh_record(conn, target, record_id)
         except RecordError as e:
             raise RecordError(f"{PREFIX[target]}:{record_id}: {e}") from e
 
