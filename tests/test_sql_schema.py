@@ -25,7 +25,8 @@ ENUM_COLUMNS = [
     ("source", "verdict", "SourceVerdict"),
 ]
 # перечни, которых нет в схеме LinkML: служебные значения базы
-NOT_ENUM = {("status_log", "target")}
+NOT_ENUM = {("status_log", "target"), ("search_document", "target"), ("search_code", "target"),
+            ("embedding", "target")}
 
 # поля записей схемы, которых нет в теле ревизии, → где они хранятся (у концов связи — пара столбцов)
 RECORD_COLUMNS = {

@@ -38,6 +38,7 @@ def pg(request):
     admin.execute(f'CREATE SCHEMA "{schema}"')
     # расширения ставятся на всю базу, в public; миграция повторяет CREATE EXTENSION IF NOT EXISTS
     admin.execute("CREATE EXTENSION IF NOT EXISTS btree_gist SCHEMA public")
+    admin.execute("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public")
     # autocommit — как у сервера (db.connect): каждый conn.transaction() — настоящая транзакция
     conn = psycopg.connect(dsn, autocommit=True, options=f"-c search_path={schema},public")
     try:
