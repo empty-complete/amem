@@ -319,3 +319,181 @@ def similar(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
                      limit=limit, include_record=include_record,
                      semantic="used" if channels["vector"] is not None else "unavailable",
                      reasons=reasons, model=model, durations_ms=durations, useful=usefulness, now=now)
+
+
+_GRAPH_STRUCTURAL = {"about", "derived_from"}
+_GRAPH_ROLE_RANK = {"primary": 0, "secondary": 1, "derived": 2}
+
+
+def _graph_node_rows(conn: psycopg.Connection, refs) -> dict:
+    refs = list(refs)
+    if not refs:
+        return {}
+    ids = [ref.split(":", 1)[1] for ref in refs]
+    rows = []
+    with conn.cursor(row_factory=dict_row) as cur:
+        for target in ("atom", "entity"):
+            kind = "kind" if target == "atom" else "entity_class"
+            selected = cur.execute(
+                f"SELECT %(target)s AS target, rec.id, rec.key, rec.{kind} AS kind, rec.status, "
+                f"r.id AS revision_id, r.n AS revision FROM {target} rec "
+                f"JOIN {target}_current r ON r.{target}_id = rec.id WHERE rec.id = ANY(%(ids)s::uuid[])",
+                {"target": target, "ids": ids}).fetchall()
+            rows.extend(selected)
+    nodes = {}
+    for row in rows:
+        ref = f"{records.PREFIX[row['target']]}:{row['id']}"
+        nodes[ref] = {
+            "ref": ref, "target": row["target"], "key": row["key"],
+            "kind" if row["target"] == "atom" else "entity_class": row["kind"],
+            "status": row["status"], "revision": row["revision"], "_revision_id": row["revision_id"],
+        }
+    return nodes
+
+
+def _graph_edges(conn: psycopg.Connection, frontier, rel) -> list[dict]:
+    """Активные link и структурные ребра только текущих ревизий, прилегающие к frontier."""
+    ids = [ref.split(":", 1)[1] for ref in frontier]
+    params = {"ids": ids, "rel": rel}
+    edges = []
+    with conn.cursor(row_factory=dict_row) as cur:
+        if rel is None or rel not in _GRAPH_STRUCTURAL:
+            condition = "AND l.rel = %(rel)s" if rel is not None else ""
+            rows = cur.execute(
+                "SELECT l.id, l.rel, coalesce(l.src_atom, l.src_entity) AS src, "
+                "CASE WHEN l.src_atom IS NULL THEN 'ent' ELSE 'atm' END AS src_prefix, "
+                "coalesce(l.dst_atom, l.dst_entity) AS dst, "
+                "CASE WHEN l.dst_atom IS NULL THEN 'ent' ELSE 'atm' END AS dst_prefix, "
+                "l.qualifiers, l.confidence, l.changeset_id, l.agent, l.created_at FROM link l "
+                "WHERE l.retired_at IS NULL AND (coalesce(l.src_atom, l.src_entity) = ANY(%(ids)s::uuid[]) "
+                f"OR coalesce(l.dst_atom, l.dst_entity) = ANY(%(ids)s::uuid[])) {condition} ORDER BY l.id",
+                params).fetchall()
+            for row in rows:
+                edges.append({
+                    "id": str(row["id"]), "rel": row["rel"],
+                    "src": f"{row['src_prefix']}:{row['src']}", "dst": f"{row['dst_prefix']}:{row['dst']}",
+                    "changeset": str(row["changeset_id"]), "agent": row["agent"],
+                    "created_at": row["created_at"].isoformat(), "confidence": row["confidence"],
+                    **({"qualifiers": row["qualifiers"]} if row["qualifiers"] is not None else {}),
+                })
+        for field in sorted(_GRAPH_STRUCTURAL & ({rel} if rel is not None else _GRAPH_STRUCTURAL)):
+            table = "atom_about" if field == "about" else "atom_derived"
+            other = "entity_id" if field == "about" else "atom_id"
+            prefix = "ent" if field == "about" else "atm"
+            rows = cur.execute(
+                f"SELECT r.atom_id, f.{other} AS other_id, r.id AS revision_id, r.changeset_id, cs.agent, "
+                f"r.recorded_at AS created_at FROM atom_current r JOIN {table} f ON f.revision_id = r.id "
+                f"JOIN changeset cs ON cs.id = r.changeset_id "
+                f"WHERE r.atom_id = ANY(%(ids)s::uuid[]) OR f.{other} = ANY(%(ids)s::uuid[]) "
+                "ORDER BY r.id, f." + other, params).fetchall()
+            for row in rows:
+                edges.append({
+                    "id": f"{field}:{row['revision_id']}:{row['other_id']}", "rel": field,
+                    "src": f"atm:{row['atom_id']}", "dst": f"{prefix}:{row['other_id']}",
+                    "changeset": str(row["changeset_id"]), "agent": row["agent"],
+                    "created_at": row["created_at"].isoformat(), "confidence": None,
+                })
+    return edges
+
+
+def _graph_source_roles(conn: psycopg.Connection, nodes: dict) -> dict:
+    revision_ids = [node["_revision_id"] for node in nodes.values() if node["target"] == "atom"]
+    roles = {ref: [] for ref, node in nodes.items() if node["target"] == "atom"}
+    if not revision_ids:
+        return roles
+    rows = conn.execute("SELECT atom_revision_id, role FROM source WHERE atom_revision_id = ANY(%s::uuid[]) "
+                        "ORDER BY atom_revision_id, position", (revision_ids,)).fetchall()
+    by_revision = {node["_revision_id"]: ref for ref, node in nodes.items() if node["target"] == "atom"}
+    for revision_id, role in rows:
+        roles[by_revision[revision_id]].append(role)
+    return roles
+
+
+def _path_confidence(path: dict, edges: dict):
+    scored = [edges[edge_id] for edge_id in path["edges"] if edges[edge_id]["rel"] not in _GRAPH_STRUCTURAL]
+    if not scored or any(edge["confidence"] is None for edge in scored):
+        return None
+    return min(edge["confidence"] for edge in scored)
+
+
+def _path_evidence_role(path: dict, nodes: dict, roles: dict):
+    weakest = None
+    for ref in path["nodes"]:
+        if nodes[ref]["target"] != "atom":
+            continue
+        atom_roles = roles[ref]
+        if not atom_roles or any(role not in _GRAPH_ROLE_RANK for role in atom_roles):
+            return None
+        rank = max(_GRAPH_ROLE_RANK[role] for role in atom_roles)
+        weakest = rank if weakest is None else max(weakest, rank)
+    if weakest is None:
+        return None
+    return next(role for role, rank in _GRAPH_ROLE_RANK.items() if rank == weakest)
+
+
+def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 2, rel=None, status=None) -> dict:
+    """Кратчайшие пути от записи по link/about/derived_from; узел посещается один раз."""
+    if isinstance(depth, bool) or not isinstance(depth, int) or not 1 <= depth <= 3:
+        raise records.RecordError("depth должен быть целым числом от 1 до 3")
+    _, _, start = _history_ref(conn, ref)
+    allowed_statuses = search._channel_statuses([status] if isinstance(status, str) else status)
+    nodes = _graph_node_rows(conn, [start])
+    if start not in nodes:
+        raise records.RecordError(f"{start}: у записи нет текущей ревизии")
+    nodes[start]["depth"] = 0
+    paths = {start: {"nodes": [start], "edges": []}}
+    result_edges = []
+    visited = {start}
+    frontier = [start]
+
+    for level in range(1, depth + 1):
+        adjacent = _graph_edges(conn, frontier, rel)
+        candidate_refs = {edge[end] for edge in adjacent for end in ("src", "dst")} - visited
+        candidates_info = _graph_node_rows(conn, candidate_refs)
+        candidates = []
+        for edge in adjacent:
+            for current in frontier:
+                if current == edge["src"]:
+                    neighbor, direction = edge["dst"], "forward"
+                elif current == edge["dst"]:
+                    neighbor, direction = edge["src"], "reverse"
+                else:
+                    continue
+                if neighbor in visited:
+                    continue
+                info = candidates_info.get(neighbor)
+                if info is None or info["status"] not in allowed_statuses:
+                    continue
+                path_key = (*paths[current]["edges"], edge["id"])
+                candidates.append((path_key, neighbor, current, edge, direction, info))
+        candidates.sort(key=lambda item: (item[0], item[1], item[2]))
+        next_frontier = []
+        for _, neighbor, current, edge, direction, info in candidates:
+            if neighbor in visited:
+                continue
+            info["depth"] = level
+            nodes[neighbor] = info
+            oriented = {**edge, "from": current, "to": neighbor, "direction": direction}
+            result_edges.append(oriented)
+            paths[neighbor] = {"nodes": [*paths[current]["nodes"], neighbor],
+                               "edges": [*paths[current]["edges"], edge["id"]]}
+            visited.add(neighbor)
+            next_frontier.append(neighbor)
+        frontier = next_frontier
+        if not frontier:
+            break
+
+    edge_by_id = {edge["id"]: edge for edge in result_edges}
+    roles = _graph_source_roles(conn, nodes)
+    public_paths = []
+    for ref, path in paths.items():
+        if ref == start:
+            continue
+        public_paths.append({**path, "confidence": _path_confidence(path, edge_by_id),
+                             "evidence_role": _path_evidence_role(path, nodes, roles)})
+    return {
+        "recipe": "around_entity", "start": start, "depth": depth,
+        "nodes": [{key: value for key, value in node.items() if not key.startswith("_")}
+                  for node in nodes.values()],
+        "edges": result_edges, "paths": public_paths, "retrieval_id": None,
+    }
