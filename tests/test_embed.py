@@ -199,6 +199,31 @@ def test_backend_none_disables_provider_without_importing_fastembed(kb, provider
     assert embed.get_provider() is None
 
 
+class ExplodingProvider(FakeProvider):
+    def _embed(self, texts):
+        raise AssertionError("provider вызван при AMEM_BACKEND=none")
+
+
+def test_backend_none_overrides_explicit_provider_in_sync(kb, provider, monkeypatch):
+    put_atom(kb)
+    model = embed.register_model(kb, provider)
+    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setitem(sys.modules, "fastembed", None)
+    result = embed.sync_embeddings(kb, model["id"], ExplodingProvider())
+    assert result["embedded"] == 0 and result["missing"] == 1
+    assert kb.execute("SELECT count(*) FROM embedding").fetchone()[0] == 0
+
+
+def test_backend_none_overrides_explicit_provider_in_embed_revision(kb, provider, monkeypatch):
+    revision = put_atom(kb)
+    model = embed.register_model(kb, provider)
+    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setitem(sys.modules, "fastembed", None)
+    result = embed.embed_revision(kb, "atom", revision.revision_id, model["id"], ExplodingProvider())
+    assert result["embedded"] is False
+    assert kb.execute("SELECT count(*) FROM embedding").fetchone()[0] == 0
+
+
 def test_fastembed_is_lazy_and_download_requires_explicit_permission(monkeypatch):
     created = []
 
@@ -223,3 +248,13 @@ def test_fastembed_is_lazy_and_download_requires_explicit_permission(monkeypatch
     allowed = embed.FastembedProvider(allow_download=True)
     allowed.embed(["one"])
     assert created[1]["local_files_only"] is False
+
+
+def test_fastembed_preserves_transitive_module_not_found(monkeypatch):
+    def missing_dependency(name):
+        raise ModuleNotFoundError("No module named 'transitive_dependency'", name="transitive_dependency")
+
+    monkeypatch.setattr(embed.importlib, "import_module", missing_dependency)
+    with pytest.raises(ModuleNotFoundError) as caught:
+        embed.FastembedProvider().embed(["one"])
+    assert caught.value.name == "transitive_dependency"
