@@ -141,6 +141,7 @@ def _diff(before, after) -> list[dict]:
             changes.append(change)
 
     walk(before, after, "")
+    changes.sort(key=lambda change: change["path"])
     return changes
 
 
