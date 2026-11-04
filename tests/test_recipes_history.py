@@ -153,6 +153,13 @@ def test_recursive_diff_distinguishes_missing_null_and_treats_array_as_value():
     assert before == before_copy and after == after_copy
 
 
+def test_recursive_diff_sorts_by_escaped_json_pointer():
+    assert recipes._diff({"/": 1, "0": 1}, {"/": 2, "0": 2}) == [
+        {"path": "/0", "before": 1, "after": 2},
+        {"path": "/~1", "before": 1, "after": 2},
+    ]
+
+
 def test_status_link_creation_and_retirement_include_either_end(kb):
     written = records.commit(kb, [
         atom("source"),
