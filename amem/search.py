@@ -177,7 +177,7 @@ def _like_prefix(value: str) -> str:
 
 
 def _lexical_channel(conn: psycopg.Connection, query: str, channel: str, *, target=None,
-                     kind=None, entity_class=None, statuses=None) -> list[dict]:
+                     kind=None, entity_class=None, statuses=None, exclude=None) -> list[dict]:
     if not isinstance(query, str):
         raise ValueError("запрос должен быть строкой")
     if not query.strip():
@@ -190,12 +190,18 @@ def _lexical_channel(conn: psycopg.Connection, query: str, channel: str, *, targ
               "statuses": list(allowed_statuses)}
     if channel == "code_prefix":
         params["prefix"] = _like_prefix(params["query"])
+    if exclude is not None:
+        if exclude[0] not in _REF_PREFIX:
+            raise ValueError(f"неизвестный вид записи {exclude[0]!r}")
+        params["exclude_target"], params["exclude_record_id"] = exclude
 
     selects = []
     for current_target in targets:
         table = current_target                             # только из закрытого _REF_PREFIX
         conditions = [f"d.target = %(target_{table})s", "rec.status = ANY(%(statuses)s)"]
         params[f"target_{table}"] = table
+        if exclude is not None:
+            conditions.append("NOT (d.target = %(exclude_target)s AND d.record_id = %(exclude_record_id)s)")
         if table == "atom" and kind is not None:
             conditions.append("rec.kind = %(kind)s")
             params["kind"] = kind
@@ -239,6 +245,93 @@ def _code_prefix(conn: psycopg.Connection, query: str, **filters) -> list[dict]:
 
 def _fts(conn: psycopg.Connection, query: str, **filters) -> list[dict]:
     return _lexical_channel(conn, query, "fts", **filters)
+
+
+# Тот же preimage, что в embed.text_hash, но вычисляемый в SQL до отсечения топ-50.
+_FRESH_TEXT_HASH = (
+    "e.text_hash = %(hash_prefix)s || encode(sha256("
+    "convert_to('amem-search-text', 'UTF8') || decode('00', 'hex') || "
+    "convert_to(%(text_version)s, 'UTF8') || decode('00', 'hex') || "
+    "convert_to(d.document, 'UTF8')), 'hex')"
+)
+
+
+def _active_model(conn: psycopg.Connection):
+    return conn.execute(
+        "SELECT id, name, version, dims, backend, active, created_at FROM embedding_model "
+        "WHERE active").fetchone()
+
+
+def _hash_params() -> dict:
+    return {"hash_prefix": f"sha256-s{SEARCH_TEXT_VERSION}:", "text_version": str(SEARCH_TEXT_VERSION)}
+
+
+def _current_embedding(conn: psycopg.Connection, target: Target, record_id, model_id):
+    """Свежий вектор именно текущей ревизии и активной модели; старую ревизию не подставлять."""
+    if target not in _REF_PREFIX:
+        raise ValueError(f"неизвестный вид записи {target!r}")
+    from pgvector.psycopg import register_vector
+    register_vector(conn)
+    table = target
+    return conn.execute(
+        f"SELECT e.vec FROM search_document d JOIN {table}_current r ON r.id = d.revision_id "
+        f"AND r.{table}_id = d.record_id JOIN embedding e ON e.target = d.target "
+        f"AND e.revision_id = d.revision_id JOIN embedding_model m ON m.id = e.model_id AND m.active "
+        f"WHERE d.target = %(target)s AND d.record_id = %(record_id)s AND m.id = %(model_id)s "
+        f"AND e.dims = m.dims AND {_FRESH_TEXT_HASH}",
+        {"target": target, "record_id": record_id, "model_id": model_id, **_hash_params()}).fetchone()
+
+
+def _vector(conn: psycopg.Connection, vector, model_id, *, target=None, kind=None,
+            entity_class=None, statuses=None, exclude=None) -> list[dict]:
+    """Топ-50 по фактическому cosine distance среди свежих векторов активной модели."""
+    targets = _channel_targets(target, kind, entity_class)
+    allowed_statuses = _channel_statuses(statuses)
+    if not targets or not allowed_statuses:
+        return []
+    from pgvector import HalfVector
+    from pgvector.psycopg import register_vector
+    register_vector(conn)
+    params = {"query_vector": vector if isinstance(vector, HalfVector) else HalfVector(vector),
+              "model_id": model_id, "statuses": list(allowed_statuses), **_hash_params()}
+    if exclude is not None:
+        if exclude[0] not in _REF_PREFIX:
+            raise ValueError(f"неизвестный вид записи {exclude[0]!r}")
+        params["exclude_target"], params["exclude_record_id"] = exclude
+
+    selects = []
+    for current_target in targets:
+        table = current_target
+        conditions = [
+            f"d.target = %(target_{table})s", "rec.status = ANY(%(statuses)s)",
+            "m.id = %(model_id)s AND m.active", "e.dims = m.dims", _FRESH_TEXT_HASH,
+        ]
+        params[f"target_{table}"] = table
+        if exclude is not None:
+            conditions.append("NOT (d.target = %(exclude_target)s AND d.record_id = %(exclude_record_id)s)")
+        if table == "atom" and kind is not None:
+            conditions.append("rec.kind = %(kind)s")
+            params["kind"] = kind
+        if table == "entity" and entity_class is not None:
+            conditions.append("rec.entity_class = %(entity_class)s")
+            params["entity_class"] = entity_class
+        selects.append(
+            f"SELECT d.target, d.record_id, d.revision_id, e.vec <=> %(query_vector)s AS source_rank "
+            f"FROM search_document d JOIN {table} rec ON rec.id = d.record_id "
+            f"JOIN {table}_current r ON r.id = d.revision_id AND r.{table}_id = d.record_id "
+            f"JOIN embedding e ON e.target = d.target AND e.revision_id = d.revision_id "
+            f"JOIN embedding_model m ON m.id = e.model_id WHERE {' AND '.join(conditions)}")
+
+    # Все вызовы имеют хотя бы фильтр статуса. Iterative scan не даёт HNSW остановиться
+    # на первых неподходящих векторах; окончательный порядок задаёт фактическое distance.
+    with conn.transaction():
+        conn.execute("SET LOCAL hnsw.iterative_scan = 'strict_order'")
+        rows = conn.execute(
+            f"SELECT * FROM ({' UNION ALL '.join(selects)}) found "
+            f"ORDER BY source_rank ASC, target, record_id LIMIT {_CHANNEL_LIMIT}", params).fetchall()
+    return [{"target": row[0], "record_id": str(row[1]), "revision_id": str(row[2]),
+             "ref": f"{_REF_PREFIX[row[0]]}:{row[1]}", "rank": rank, "source_rank": float(row[3])}
+            for rank, row in enumerate(rows, 1)]
 
 
 RANKING_V1 = {
