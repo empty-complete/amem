@@ -69,7 +69,7 @@ def test_exact_fact_returns_all_ambiguous_codes_without_hidden_best_answer(kb):
     assert {item["ref"] for item in result["items"][:2]} == exact_refs
     assert result["items"][2]["ref"] == f"atm:{written.revisions[2].record_id}"
     assert len(result["items"]) == 3
-    assert "answer" not in result and "best" not in result and "retrieval_id" not in result
+    assert "answer" not in result and "best" not in result and result["retrieval_id"]
     assert all(set(item) == {
         "ref", "revision", "label", "snippet", "status", "review_state", "score", "matches",
     } for item in result["items"])
@@ -79,6 +79,7 @@ def test_exact_fact_returns_all_ambiguous_codes_without_hidden_best_answer(kb):
 
 def search_recipe(kb, name, query, **kwargs):
     from amem import recipes
+    kwargs.setdefault("agent", AGENT)
     return getattr(recipes, name)(kb, query, **kwargs)
 
 
@@ -181,7 +182,7 @@ def wanted_payload_id(kb, key):
     return kb.execute("SELECT id FROM atom WHERE key = %s", (key,)).fetchone()[0]
 
 
-def test_similar_text_finds_expected_neighbour_without_writing_knowledge(kb, provider):
+def test_similar_text_finds_expected_neighbour_and_logs_only_retrieval(kb, provider):
     written = write(kb, atom("alpha", "alpha"), atom("near", "near alpha"), atom("beta", "beta"))
     activate(kb, provider)
     tables = ("atom", "entity", "changeset", "retrieval", "retrieval_item", "atom_use")
@@ -194,7 +195,9 @@ def test_similar_text_finds_expected_neighbour_without_writing_knowledge(kb, pro
     assert result["items"][0]["matches"][0]["channel"] == "vector"
     assert result["channels"]["used"] == ["vector", "fts"]
     after = {table: kb.execute(f"SELECT count(*) FROM {table}").fetchone()[0] for table in tables}
-    assert after == before
+    atom_items = sum(item["ref"].startswith("atm:") for item in result["items"])
+    assert after == {**before, "retrieval": before["retrieval"] + 1,
+                     "retrieval_item": before["retrieval_item"] + atom_items}
 
 
 def test_similar_ref_uses_current_stored_vector_and_excludes_source(kb, provider):
