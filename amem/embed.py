@@ -84,6 +84,8 @@ class FastembedProvider(EmbeddingProvider):
             try:
                 module = importlib.import_module("fastembed")
             except ModuleNotFoundError as e:
+                if e.name != "fastembed":
+                    raise
                 raise EmbeddingError("fastembed не установлен: установите optional extra amem[embed]") from e
             self._model = module.TextEmbedding(
                 model_name=self.name,
@@ -95,11 +97,13 @@ class FastembedProvider(EmbeddingProvider):
                 for vector in self._model.embed(texts)]
 
 
-def get_provider() -> EmbeddingProvider | None:
-    """Provider из AMEM_BACKEND; none полностью отключает вычисление эмбеддингов."""
+def get_provider(explicit: EmbeddingProvider | None = None) -> EmbeddingProvider | None:
+    """Выбрать provider по AMEM_BACKEND; none имеет приоритет даже над явным аргументом."""
     backend = os.environ.get("AMEM_BACKEND", "fastembed").strip().lower()
     if backend == "none":
         return None
+    if explicit is not None:
+        return explicit
     if backend == "fastembed":
         return FastembedProvider()
     raise EmbeddingError(f"неизвестный AMEM_BACKEND {backend!r}: нужен fastembed или none")
@@ -216,7 +220,7 @@ def sync_embeddings(conn: psycopg.Connection, model_id, provider: EmbeddingProvi
     _, stale = _current(rows, model[3])
     if not stale:
         return {"embedded": 0, **embedding_coverage(conn, model[0])}
-    selected = get_provider() if provider is None else provider
+    selected = get_provider(provider)
     if selected is None:
         return {"embedded": 0, **embedding_coverage(conn, model[0])}
     _check_provider(model, selected)
@@ -244,7 +248,7 @@ def embed_revision(conn: psycopg.Connection, target: Target, revision_id, model_
               "text_hash": digest, "embedded": False}
     if row[4] == digest and row[5] == model[3]:
         return result
-    selected = get_provider() if provider is None else provider
+    selected = get_provider(provider)
     if selected is None:
         return result
     _check_provider(model, selected)
