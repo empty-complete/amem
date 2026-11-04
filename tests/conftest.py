@@ -1,10 +1,48 @@
 """Общие фикстуры: тестовые документы и соединения с тестовыми базами схемы v1."""
+import hashlib
 import os
 from pathlib import Path
 
 import pytest
 
+from amem.embed import EmbeddingProvider
 from samples import make_docs
+
+
+class FakeProvider(EmbeddingProvider):
+    """Детерминированные 384-мерные вектора без модели, кэша и сети."""
+
+    name = "fake-text"
+    version = "1"
+    dims = 384
+    backend = "fake"
+
+    def __init__(self):
+        self.calls = []
+
+    @staticmethod
+    def vector(text: str) -> list[float]:
+        known = {
+            "alpha": 0,
+            "near alpha": 0,
+            "beta": 1,
+        }
+        if text in known:
+            index = known[text]
+            vector = [0.0] * 384
+            vector[index] = 1.0
+            if text == "near alpha":
+                vector[1] = 0.01
+            return vector
+        # Для произвольного документа отображение тоже фиксировано между запусками.
+        index = hashlib.sha256(text.encode("utf-8")).digest()[0] % 384
+        vector = [0.0] * 384
+        vector[index] = 1.0
+        return vector
+
+    def _embed(self, texts):
+        self.calls.append(list(texts))
+        return [self.vector(text) for text in texts]
 
 
 @pytest.fixture

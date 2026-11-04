@@ -10,11 +10,13 @@ dependencies = [
   "pydantic>=2.13,<3",
   "pyyaml>=6",
   "psycopg[binary]>=3.2,<4",
+  "pgvector>=0.5.1,<1",
   "rfc8785==0.1.4",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "linkml==1.12.1", "linkml-runtime==1.12.1", "jsonschema>=4.20", "ocfl-py==2.1.0"]
+embed = ["fastembed>=0.9.1,<0.10"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
