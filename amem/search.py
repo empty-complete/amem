@@ -143,3 +143,141 @@ def rebuild_search(conn: psycopg.Connection) -> int:
         for target, record_id in rows:
             refresh_record(conn, target, record_id)
         return len(rows)
+
+
+_CHANNEL_LIMIT = 50
+_REF_PREFIX = {"atom": "atm", "entity": "ent"}
+_DEFAULT_STATUSES = ("draft", "needs_review", "auto_verified", "verified")
+_STATUSES = _DEFAULT_STATUSES + ("rejected", "deprecated", "superseded")
+
+
+def _channel_targets(target, kind, entity_class) -> tuple[Target, ...]:
+    if target is not None and target not in _REF_PREFIX:
+        raise ValueError(f"неизвестный вид записи {target!r}")
+    targets = (target,) if target is not None else ("atom", "entity")
+    return tuple(t for t in targets if not (t == "atom" and entity_class is not None)
+                 and not (t == "entity" and kind is not None))
+
+
+def _channel_statuses(statuses) -> tuple[str, ...]:
+    if statuses is None:
+        return _DEFAULT_STATUSES
+    if isinstance(statuses, str):
+        raise ValueError("statuses должен быть последовательностью статусов, не строкой")
+    values = tuple(dict.fromkeys(statuses))
+    unknown = set(values) - set(_STATUSES)
+    if unknown:
+        raise ValueError(f"неизвестные статусы: {', '.join(sorted(unknown))}")
+    return values
+
+
+def _like_prefix(value: str) -> str:
+    """Префикс LIKE: специальные символы запроса остаются обычными символами марки."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
+def _lexical_channel(conn: psycopg.Connection, query: str, channel: str, *, target=None,
+                     kind=None, entity_class=None, statuses=None) -> list[dict]:
+    if not isinstance(query, str):
+        raise ValueError("запрос должен быть строкой")
+    if not query.strip():
+        return []
+    targets = _channel_targets(target, kind, entity_class)
+    allowed_statuses = _channel_statuses(statuses)
+    if not targets or not allowed_statuses:
+        return []
+    params = {"query": normalize_code(query) if channel != "fts" else query,
+              "statuses": list(allowed_statuses)}
+    if channel == "code_prefix":
+        params["prefix"] = _like_prefix(params["query"])
+
+    selects = []
+    for current_target in targets:
+        table = current_target                             # только из закрытого _REF_PREFIX
+        conditions = [f"d.target = %(target_{table})s", "rec.status = ANY(%(statuses)s)"]
+        params[f"target_{table}"] = table
+        if table == "atom" and kind is not None:
+            conditions.append("rec.kind = %(kind)s")
+            params["kind"] = kind
+        if table == "entity" and entity_class is not None:
+            conditions.append("rec.entity_class = %(entity_class)s")
+            params["entity_class"] = entity_class
+        if channel == "code_exact":
+            source_rank = "NULL::float"
+            conditions.append("EXISTS (SELECT 1 FROM search_code c WHERE c.target = d.target "
+                              "AND c.record_id = d.record_id AND c.code = %(query)s)")
+        elif channel == "code_prefix":
+            source_rank = "NULL::float"
+            conditions.append("EXISTS (SELECT 1 FROM search_code c WHERE c.target = d.target "
+                              "AND c.record_id = d.record_id AND c.code LIKE %(prefix)s ESCAPE '\\')")
+            # Даже если у записи есть более длинная марка, точное совпадение получает вес только в code_exact.
+            conditions.append("NOT EXISTS (SELECT 1 FROM search_code c WHERE c.target = d.target "
+                              "AND c.record_id = d.record_id AND c.code = %(query)s)")
+        elif channel == "fts":
+            source_rank = "ts_rank_cd(d.search_vector, websearch_to_tsquery('russian', %(query)s))"
+            conditions.append("d.search_vector @@ websearch_to_tsquery('russian', %(query)s)")
+        else:
+            raise ValueError(f"неизвестный лексический канал {channel!r}")
+        selects.append(f"SELECT d.target, d.record_id, d.revision_id, {source_rank} AS source_rank "
+                       f"FROM search_document d JOIN {table} rec ON rec.id = d.record_id "
+                       f"WHERE {' AND '.join(conditions)}")
+    order = "source_rank DESC, target, record_id" if channel == "fts" else "target, record_id"
+    rows = conn.execute(f"SELECT * FROM ({' UNION ALL '.join(selects)}) found "
+                        f"ORDER BY {order} LIMIT {_CHANNEL_LIMIT}", params).fetchall()
+    return [{"target": row[0], "record_id": str(row[1]), "revision_id": str(row[2]),
+             "ref": f"{_REF_PREFIX[row[0]]}:{row[1]}", "rank": rank, "source_rank": row[3]}
+            for rank, row in enumerate(rows, 1)]
+
+
+def _code_exact(conn: psycopg.Connection, query: str, **filters) -> list[dict]:
+    return _lexical_channel(conn, query, "code_exact", **filters)
+
+
+def _code_prefix(conn: psycopg.Connection, query: str, **filters) -> list[dict]:
+    return _lexical_channel(conn, query, "code_prefix", **filters)
+
+
+def _fts(conn: psycopg.Connection, query: str, **filters) -> list[dict]:
+    return _lexical_channel(conn, query, "fts", **filters)
+
+
+def _snippet(document: str, limit: int = 240) -> str:
+    if len(document) <= limit:
+        return document
+    return document[:limit].rsplit(" ", 1)[0] + "…"
+
+
+def _enrich(conn: psycopg.Connection, candidates: list[dict], *, include_record=False) -> list[dict]:
+    """Добавить к внутренним кандидатам только публичные поля карточки; очки здесь не раскрываются."""
+    if not candidates:
+        return []
+    grouped = {}
+    for candidate in candidates:
+        target = candidate["target"]
+        if target not in _REF_PREFIX:
+            raise ValueError(f"неизвестный вид записи {target!r}")
+        grouped.setdefault(target, []).append(candidate["record_id"])
+    rows = {}
+    for target, record_ids in grouped.items():
+        result = conn.execute(
+            f"SELECT d.target, d.record_id, d.document, r.n, r.review_state, rec.status, r.payload->'label' "
+            f"FROM search_document d JOIN {target} rec ON rec.id = d.record_id "
+            f"JOIN {target}_current r ON r.id = d.revision_id "
+            f"WHERE d.target = %(target)s AND d.record_id = ANY(%(ids)s::uuid[])",
+            {"target": target, "ids": record_ids}).fetchall()
+        rows.update({(row[0], str(row[1])): row for row in result})
+
+    if include_record:
+        from . import lookup                       # records → search: импорт только по требованию
+    cards = []
+    for candidate in candidates:
+        target, record_id = candidate["target"], candidate["record_id"]
+        row = rows.get((target, record_id))
+        if row is None:
+            raise ValueError(f"поисковая проекция {candidate['ref']} не найдена")
+        card = {"ref": candidate["ref"], "revision": row[3], "label": row[6],
+                "snippet": _snippet(row[2]), "status": row[5], "review_state": row[4]}
+        if include_record:
+            card["record"] = lookup.get(conn, target, record_id)
+        cards.append(card)
+    return cards
