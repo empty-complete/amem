@@ -227,20 +227,46 @@ def test_similar_ref_rejects_missing_record_and_record_without_current_revision(
 
 
 def test_similar_ref_without_current_fresh_vector_does_not_substitute_old_revision(kb, provider):
-    source = write(kb, atom("alpha", "alpha"), atom("other", "unrelated")).revisions[0]
+    written = write(kb,
+                    atom("source", "legacyonly"),
+                    atom("old_match", "legacyonly"),
+                    atom("current_match", "currentonly"))
+    source = written.revisions[0]
     activate(kb, provider)
     revised = records.commit(kb, [Item("atom", {
-        "kind": "fact", "key": "alpha", "label": {"ru": "new current text"},
-        "summary_plain": {"ru": "new current text"},
+        "kind": "fact", "key": "source", "label": {"ru": "currentonly"},
+        "summary_plain": {"ru": "currentonly"},
     }, record_id=source.record_id)], agent=AGENT).revisions[0]
     assert revised.revision_id != source.revision_id
 
+    class QueryRecorder:
+        def __init__(self, conn):
+            self.conn = conn
+            self.queries = []
+
+        def execute(self, sql, params=None):
+            self.queries.append(sql)
+            return self.conn.execute(sql, params)
+
+        def __getattr__(self, name):
+            return getattr(self.conn, name)
+
+    recorder = QueryRecorder(kb)
+    from amem import recipes
+    source_data = recipes._source_document(recorder, f"atm:{source.record_id}")
+    assert "currentonly" in source_data[2] and "legacyonly" not in source_data[2]
     result = search_recipe(kb, "similar", f"atm:{source.record_id}", provider=provider)
 
     assert result["semantic"] == "unavailable"
     assert result["channels"]["skipped"] == ["vector"]
     assert result["channels"]["reasons"] == {"vector": "source_embedding_missing"}
+    assert result["items"], "FTS fallback должен найти запись с текстом текущей ревизии"
+    assert [item["ref"] for item in result["items"]] == [f"atm:{written.revisions[2].record_id}"]
+    assert f"atm:{written.revisions[1].record_id}" not in by_ref(result)
     assert all(match["channel"] == "fts" for item in result["items"] for match in item["matches"])
+    assert all(item["matches"] for item in result["items"])
+    assert any("d.revision_id = r.id" in query for query in recorder.queries), \
+        "документ должен соединяться именно с текущей revision_id"
 
 
 def test_similar_without_active_model_uses_fts_and_reports_unavailable(kb):

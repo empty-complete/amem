@@ -31,7 +31,7 @@ def _check_query_provider(model, provider: embed.EmbeddingProvider) -> None:
             f"provider не соответствует активной модели: ожидалось {expected!r}, получено {actual!r}")
 
 
-def _timed(conn, channel, function, durations):
+def _timed(channel, function, durations):
     started = time.perf_counter()
     rows = function()
     durations[channel] = (time.perf_counter() - started) * 1000
@@ -69,9 +69,9 @@ def exact_fact(conn: psycopg.Connection, query: str, *, limit: int = 10, target=
     filters = {"target": target, "kind": kind, "entity_class": entity_class, "statuses": statuses}
     durations = {}
     channels = {
-        "code_exact": _timed(conn, "code_exact", lambda: search._code_exact(conn, query, **filters), durations),
-        "code_prefix": _timed(conn, "code_prefix", lambda: search._code_prefix(conn, query, **filters), durations),
-        "fts": _timed(conn, "fts", lambda: search._fts(conn, query, **filters), durations),
+        "code_exact": _timed("code_exact", lambda: search._code_exact(conn, query, **filters), durations),
+        "code_prefix": _timed("code_prefix", lambda: search._code_prefix(conn, query, **filters), durations),
+        "fts": _timed("fts", lambda: search._fts(conn, query, **filters), durations),
         "vector": None,
     }
     model, selected, reason = _availability(conn, provider)
@@ -81,7 +81,7 @@ def exact_fact(conn: psycopg.Connection, query: str, *, limit: int = 10, target=
         _check_query_provider(model, selected)
         vector = selected.embed([query])[0]
         channels["vector"] = _timed(
-            conn, "vector", lambda: search._vector(conn, vector, model[0], **filters), durations)
+            "vector", lambda: search._vector(conn, vector, model[0], **filters), durations)
     reasons = {"vector": reason} if reason is not None else {}
     return _response(conn, "exact_fact", channels, limit=limit, include_record=include_record,
                      semantic="used" if channels["vector"] is not None else "unavailable",
@@ -97,6 +97,7 @@ def _source_document(conn: psycopg.Connection, ref: str):
         f"SELECT rec.id, r.id, d.document FROM {table} rec "
         f"LEFT JOIN {table}_current r ON r.{table}_id = rec.id "
         f"LEFT JOIN search_document d ON d.target = %(target)s AND d.record_id = rec.id "
+        f"AND d.revision_id = r.id "
         f"WHERE rec.id = %(record_id)s",
         {"target": target, "record_id": record_id}).fetchone()
     if row is None:
@@ -142,8 +143,8 @@ def similar(conn: psycopg.Connection, query: str, *, limit: int = 10, target=Non
                 vector = stored[0]
         if vector is not None:
             channels["vector"] = _timed(
-                conn, "vector", lambda: search._vector(conn, vector, model[0], **filters), durations)
-    channels["fts"] = _timed(conn, "fts", lambda: search._fts(conn, fts_query, **filters), durations)
+                "vector", lambda: search._vector(conn, vector, model[0], **filters), durations)
+    channels["fts"] = _timed("fts", lambda: search._fts(conn, fts_query, **filters), durations)
     reasons = {"vector": reason} if reason is not None else {}
     return _response(conn, "similar", channels, limit=limit, include_record=include_record,
                      semantic="used" if channels["vector"] is not None else "unavailable",
