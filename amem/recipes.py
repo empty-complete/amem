@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime
 
 import psycopg
+from psycopg.rows import dict_row
 
 from . import embed, records, search, usefulness
 
@@ -66,6 +68,162 @@ def _response(conn: psycopg.Connection, recipe: str, channels: dict, *, query: s
         "embedding_coverage": embed.embedding_coverage(conn, model[0]) if model is not None else None,
         "items": items,
         "retrieval_id": retrieval_id,
+    }
+
+
+def _history_moment(value, name: str):
+    if value is not None and (not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None):
+        raise records.RecordError(f"{name} {value!r}: нужно время с часовым поясом (datetime с tzinfo)")
+    return value
+
+
+def _history_ref(conn: psycopg.Connection, ref: str | None):
+    """Проверить ref даже для пустого интервала: отсутствующая запись — не пустая история."""
+    if ref is None:
+        return None, None, None
+    try:
+        prefix, value = ref.split(":", 1)
+        target = records.TARGET[prefix]
+    except (AttributeError, ValueError, KeyError) as e:
+        raise records.RecordError(f"ref {ref!r}: нужна ссылка atm:<UUID> или ent:<UUID>") from e
+    record_id = records.as_uuid(value, what="ref")
+    if conn.execute(f"SELECT 1 FROM {target} WHERE id = %s", (record_id,)).fetchone() is None:
+        raise records.RecordError(f"{ref}: такой записи нет")
+    return target, record_id, f"{prefix}:{record_id}"
+
+
+def _history_interval(column: str, since, until) -> str:
+    """Полуоткрытый интервал [since, until); имя столбца выбирает только код ниже."""
+    clauses = []
+    if since is not None:
+        clauses.append(f"{column} >= %(since)s")
+    if until is not None:
+        clauses.append(f"{column} < %(until)s")
+    return " AND ".join(clauses) or "TRUE"
+
+
+def _history_in(value, since, until) -> bool:
+    return (since is None or value >= since) and (until is None or value < until)
+
+
+def _json_equal(before, after) -> bool:
+    """Сравнение JSON без питоновского True == 1; int и float остаются JSON-числами."""
+    if isinstance(before, bool) or isinstance(after, bool):
+        return type(before) is type(after) and before == after
+    if isinstance(before, (int, float)) and isinstance(after, (int, float)):
+        return before == after
+    if type(before) is not type(after):
+        return False
+    if isinstance(before, dict):
+        return before.keys() == after.keys() and all(_json_equal(before[key], after[key]) for key in before)
+    if isinstance(before, list):
+        return len(before) == len(after) and all(_json_equal(a, b) for a, b in zip(before, after))
+    return before == after
+
+
+def _diff(before, after) -> list[dict]:
+    """Рекурсивный diff JSON: RFC 6901-пути; массив — одно значение, отсутствующая сторона опущена."""
+    changes = []
+
+    def walk(old, new, path):
+        if isinstance(old, dict) and isinstance(new, dict):
+            for key in sorted(old.keys() | new.keys()):
+                child = f"{path}/{key.replace('~', '~0').replace('/', '~1')}"
+                if key not in old:
+                    changes.append({"path": child, "after": new[key]})
+                elif key not in new:
+                    changes.append({"path": child, "before": old[key]})
+                else:
+                    walk(old[key], new[key], child)
+            return
+        if not _json_equal(old, new):
+            change = {"path": path, "before": old, "after": new}
+            changes.append(change)
+
+    walk(before, after, "")
+    return changes
+
+
+def what_changed(conn: psycopg.Connection, *, ref: str | None = None,
+                 since: datetime | None = None, until: datetime | None = None) -> dict:
+    """События записи или всей базы за [since, until), без поиска и журнала retrieval."""
+    since = _history_moment(since, "since")
+    until = _history_moment(until, "until")
+    if since is not None and until is not None and since >= until:
+        raise records.RecordError("since должен быть строго раньше until")
+    target, record_id, normalized_ref = _history_ref(conn, ref)
+    params = {"since": since, "until": until, "record_id": record_id, "target": target}
+    timed_events = []
+
+    def add(kind, event_id, at, **fields):
+        timed_events.append((at, {"type": kind, "id": str(event_id), "at": at.isoformat(), **fields}))
+
+    with conn.cursor(row_factory=dict_row) as cur:
+        for item_target in ("atom", "entity"):
+            recorded = _history_interval("r.recorded_at", since, until)
+            reviewed = _history_interval("r.reviewed_at", since, until)
+            scope = f"AND r.{item_target}_id = %(record_id)s" if target == item_target else ""
+            if target is not None and target != item_target:
+                continue
+            rows = cur.execute(
+                f"SELECT r.id, r.{item_target}_id AS record_id, r.n, r.payload, r.content_hash, "
+                f"r.valid_from, r.valid_to, r.recorded_at, r.review_state, r.reviewed_by, r.reviewed_at, "
+                f"p.payload AS previous_payload, p.content_hash AS previous_content_hash "
+                f"FROM {item_target}_revision r "
+                f"LEFT JOIN {item_target}_revision p ON p.{item_target}_id = r.{item_target}_id AND p.n = r.n - 1 "
+                f"WHERE ({recorded} OR {reviewed}) {scope}", params).fetchall()
+            item_ref = f"{records.PREFIX[item_target]}:"
+            for row in rows:
+                event_ref = f"{item_ref}{row['record_id']}"
+                if _history_in(row["recorded_at"], since, until):
+                    previous = row["previous_payload"]
+                    add("revision", row["id"], row["recorded_at"], ref=event_ref, revision=row["n"],
+                        recorded_at=row["recorded_at"].isoformat(),
+                        previous_content_hash=row["previous_content_hash"], content_hash=row["content_hash"],
+                        valid_from=row["valid_from"].isoformat() if row["valid_from"] else None,
+                        valid_to=row["valid_to"].isoformat() if row["valid_to"] else None,
+                        changes=_diff(previous if previous is not None else {}, row["payload"]))
+                if row["reviewed_at"] is not None and _history_in(row["reviewed_at"], since, until):
+                    add("review", row["id"], row["reviewed_at"], ref=event_ref, revision=row["n"],
+                        review_state=row["review_state"], reviewed_at=row["reviewed_at"].isoformat(),
+                        reviewed_by=row["reviewed_by"])
+
+        changed_at = _history_interval("changed_at", since, until)
+        scope = "AND target = %(target)s AND record_id = %(record_id)s" if target is not None else ""
+        rows = cur.execute(
+            f"SELECT id, target, record_id, status, agent, reason, changed_at FROM status_log "
+            f"WHERE {changed_at} {scope}", params).fetchall()
+        for row in rows:
+            add("status", row["id"], row["changed_at"],
+                ref=f"{records.PREFIX[row['target']]}:{row['record_id']}", status=row["status"],
+                changed_at=row["changed_at"].isoformat(), agent=row["agent"], reason=row["reason"])
+
+        created = _history_interval("created_at", since, until)
+        retired = _history_interval("retired_at", since, until)
+        if target == "atom":
+            scope = "AND (src_atom = %(record_id)s OR dst_atom = %(record_id)s)"
+        elif target == "entity":
+            scope = "AND (src_entity = %(record_id)s OR dst_entity = %(record_id)s)"
+        else:
+            scope = ""
+        rows = cur.execute(
+            f"SELECT id, rel, src_atom, src_entity, dst_atom, dst_entity, created_at, retired_at "
+            f"FROM link WHERE ({created} OR {retired}) {scope}", params).fetchall()
+        for row in rows:
+            src = f"{'atm' if row['src_atom'] is not None else 'ent'}:{row['src_atom'] or row['src_entity']}"
+            dst = f"{'atm' if row['dst_atom'] is not None else 'ent'}:{row['dst_atom'] or row['dst_entity']}"
+            if _history_in(row["created_at"], since, until):
+                add("link_created", row["id"], row["created_at"], rel=row["rel"], src=src, dst=dst,
+                    created_at=row["created_at"].isoformat())
+            if row["retired_at"] is not None and _history_in(row["retired_at"], since, until):
+                add("link_retired", row["id"], row["retired_at"], rel=row["rel"], src=src, dst=dst,
+                    retired_at=row["retired_at"].isoformat())
+
+    events = [event for _, event in sorted(timed_events, key=lambda item: (item[0], item[1]["type"], item[1]["id"]))]
+    return {
+        "recipe": "what_changed", "ref": normalized_ref,
+        "since": since.isoformat() if since else None, "until": until.isoformat() if until else None,
+        "events": events, "retrieval_id": None,
     }
 
 
