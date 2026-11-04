@@ -1,7 +1,7 @@
-"""Именованные поисковые рецепты: компактная выдача без записи и скрытого выбора ответа.
+"""Именованные поисковые рецепты: компактная выдача без скрытого выбора ответа.
 
-Журнал retrieval и полезность появятся отдельной задачей. Здесь семантический канал либо
-действительно выполняется активной моделью, либо явно пропускается с причиной; FTS остаётся доступен.
+Каждый успешный поиск пишет retrieval с происхождением. Семантический канал либо действительно
+выполняется активной моделью, либо явно пропускается с причиной; FTS остаётся доступен.
 """
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import time
 
 import psycopg
 
-from . import embed, records, search
+from . import embed, records, search, usefulness
 
 
 def _availability(conn: psycopg.Connection, provider):
@@ -38,14 +38,20 @@ def _timed(channel, function, durations):
     return rows
 
 
-def _response(conn: psycopg.Connection, recipe: str, channels: dict, *, limit: int,
-              include_record: bool, semantic: str, reasons: dict, model,
-              durations_ms: dict) -> dict:
+def _response(conn: psycopg.Connection, recipe: str, channels: dict, *, query: str, agent: str,
+              activity, limit: int, include_record: bool, semantic: str, reasons: dict, model,
+              durations_ms: dict, useful: bool, now) -> dict:
+    candidates = [row for rows in channels.values() if rows is not None for row in rows]
+    multipliers = usefulness.multipliers(conn, candidates, now=now) if useful else None
     ranked = search._rrf(channels, search.RANKING_V1["recipes"][recipe], limit=limit,
-                         exact_fact=recipe == "exact_fact", durations_ms=durations_ms)
+                         exact_fact=recipe == "exact_fact", durations_ms=durations_ms,
+                         usefulness=multipliers)
     cards = search._enrich(conn, ranked["hits"], include_record=include_record)
     items = [{**card, "score": hit["score"], "matches": hit["matches"]}
              for hit, card in zip(ranked["hits"], cards)]
+    retrieval_id = usefulness.record_retrieval(
+        conn, agent=agent, activity=activity, recipe=recipe, query=query,
+        ranking_version=ranked["ranking_version"], hits=ranked["hits"], now=now)
     return {
         "recipe": recipe,
         "ranking_version": ranked["ranking_version"],
@@ -59,12 +65,14 @@ def _response(conn: psycopg.Connection, recipe: str, channels: dict, *, limit: i
         "candidate_count": ranked["candidate_count"],
         "embedding_coverage": embed.embedding_coverage(conn, model[0]) if model is not None else None,
         "items": items,
+        "retrieval_id": retrieval_id,
     }
 
 
-def exact_fact(conn: psycopg.Connection, query: str, *, limit: int = 10, target=None,
-               kind=None, entity_class=None, statuses=None, include_record: bool = False,
-               provider: embed.EmbeddingProvider | None = None) -> dict:
+def exact_fact(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
+               limit: int = 10, target=None, kind=None, entity_class=None, statuses=None,
+               include_record: bool = False, provider: embed.EmbeddingProvider | None = None,
+               usefulness: bool = True, now=None) -> dict:
     """Найти марку или формулировку всеми четырьмя каналами, не выбирая один «лучший» ответ."""
     filters = {"target": target, "kind": kind, "entity_class": entity_class, "statuses": statuses}
     durations = {}
@@ -83,9 +91,10 @@ def exact_fact(conn: psycopg.Connection, query: str, *, limit: int = 10, target=
         channels["vector"] = _timed(
             "vector", lambda: search._vector(conn, vector, model[0], **filters), durations)
     reasons = {"vector": reason} if reason is not None else {}
-    return _response(conn, "exact_fact", channels, limit=limit, include_record=include_record,
+    return _response(conn, "exact_fact", channels, query=query, agent=agent, activity=activity,
+                     limit=limit, include_record=include_record,
                      semantic="used" if channels["vector"] is not None else "unavailable",
-                     reasons=reasons, model=model, durations_ms=durations)
+                     reasons=reasons, model=model, durations_ms=durations, useful=usefulness, now=now)
 
 
 def _source_document(conn: psycopg.Connection, ref: str):
@@ -109,9 +118,10 @@ def _source_document(conn: psycopg.Connection, ref: str):
     return target, record_id, row[2]
 
 
-def similar(conn: psycopg.Connection, query: str, *, limit: int = 10, target=None,
-            kind=None, entity_class=None, statuses=None, include_record: bool = False,
-            provider: embed.EmbeddingProvider | None = None) -> dict:
+def similar(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
+            limit: int = 10, target=None, kind=None, entity_class=None, statuses=None,
+            include_record: bool = False, provider: embed.EmbeddingProvider | None = None,
+            usefulness: bool = True, now=None) -> dict:
     """Найти похожие записи по тексту либо по atm:/ent: ссылке на существующую запись."""
     if not isinstance(query, str):
         raise ValueError("запрос должен быть строкой")
@@ -146,6 +156,7 @@ def similar(conn: psycopg.Connection, query: str, *, limit: int = 10, target=Non
                 "vector", lambda: search._vector(conn, vector, model[0], **filters), durations)
     channels["fts"] = _timed("fts", lambda: search._fts(conn, fts_query, **filters), durations)
     reasons = {"vector": reason} if reason is not None else {}
-    return _response(conn, "similar", channels, limit=limit, include_record=include_record,
+    return _response(conn, "similar", channels, query=query, agent=agent, activity=activity,
+                     limit=limit, include_record=include_record,
                      semantic="used" if channels["vector"] is not None else "unavailable",
-                     reasons=reasons, model=model, durations_ms=durations)
+                     reasons=reasons, model=model, durations_ms=durations, useful=usefulness, now=now)

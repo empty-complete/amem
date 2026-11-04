@@ -345,8 +345,9 @@ RANKING_V1 = {
 
 
 def _rrf(channels: dict[str, list[dict] | None], weights: dict[str, float], *, limit: int = 10,
-         exact_fact: bool = False, durations_ms: dict[str, float] | None = None) -> dict:
-    """Слить ранжированные каналы по RRF; None означает пропущенный, а не пустой канал."""
+         exact_fact: bool = False, durations_ms: dict[str, float] | None = None,
+         usefulness: dict[str, float] | None = None) -> dict:
+    """Слить каналы по RRF, затем применить полезность и только после этого отсортировать."""
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
         raise ValueError("limit должен быть целым числом от 1 до 100")
 
@@ -371,6 +372,9 @@ def _rrf(channels: dict[str, list[dict] | None], weights: dict[str, float], *, l
             hit["score"] += weight / (RANKING_V1["k"] + rank)
             hit["matches"].append({"channel": channel, "rank": rank, "source_rank": row["source_rank"]})
 
+    if usefulness:
+        for hit in merged.values():
+            hit["score"] *= usefulness.get(hit["ref"], 1)
     ordered = sorted(merged.values(), key=lambda hit: (
         0 if exact_fact and hit["ref"] in exact_refs else 1, -hit["score"], hit["ref"]))
     timings = durations_ms or {}
