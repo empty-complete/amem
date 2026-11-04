@@ -241,6 +241,56 @@ def _fts(conn: psycopg.Connection, query: str, **filters) -> list[dict]:
     return _lexical_channel(conn, query, "fts", **filters)
 
 
+RANKING_V1 = {
+    "version": "rrf-v1",
+    "k": 60,
+    "recipes": {
+        "exact_fact": {"code_exact": 4, "code_prefix": 2, "fts": 1, "vector": 0.25},
+        "similar": {"vector": 2, "fts": 0.5},
+    },
+}
+
+
+def _rrf(channels: dict[str, list[dict] | None], weights: dict[str, float], *, limit: int = 10,
+         exact_fact: bool = False, durations_ms: dict[str, float] | None = None) -> dict:
+    """Слить ранжированные каналы по RRF; None означает пропущенный, а не пустой канал."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ValueError("limit должен быть целым числом от 1 до 100")
+
+    used_channels = [channel for channel in weights if channels.get(channel) is not None]
+    skipped_channels = [channel for channel in weights if channels.get(channel) is None]
+    exact_refs = {row["ref"] for row in channels.get("code_exact") or []}
+    merged = {}
+    for channel, weight in weights.items():
+        rows = channels.get(channel)
+        if rows is None:
+            continue
+        for row in rows:
+            ref = row["ref"]
+            # Точная марка получает только вклад code_exact, даже при искусственно продублированном входе.
+            if channel == "code_prefix" and ref in exact_refs:
+                continue
+            hit = merged.setdefault(ref, {
+                "target": row["target"], "record_id": row["record_id"],
+                "revision_id": row["revision_id"], "ref": ref, "score": 0.0, "matches": [],
+            })
+            rank = row["rank"]
+            hit["score"] += weight / (RANKING_V1["k"] + rank)
+            hit["matches"].append({"channel": channel, "rank": rank, "source_rank": row["source_rank"]})
+
+    ordered = sorted(merged.values(), key=lambda hit: (
+        0 if exact_fact and hit["ref"] in exact_refs else 1, -hit["score"], hit["ref"]))
+    timings = durations_ms or {}
+    return {
+        "hits": ordered[:limit],
+        "ranking_version": RANKING_V1["version"],
+        "used_channels": used_channels,
+        "skipped_channels": skipped_channels,
+        "candidate_count": len(merged),
+        "durations_ms": {channel: timings[channel] for channel in weights if channel in timings},
+    }
+
+
 def _snippet(document: str, limit: int = 240) -> str:
     if len(document) <= limit:
         return document
