@@ -177,6 +177,86 @@ class Severity(str, Enum):
     info = "info"
 
 
+class CheckCode(str, Enum):
+    """
+    Код замечания автопроверки; уровень и важность — в спецификации.
+    """
+    schema = "schema"
+    unknown_code = "unknown_code"
+    ref_unknown = "ref_unknown"
+    template = "template"
+    ucum = "ucum"
+    unit_required = "unit_required"
+    bounds_order = "bounds_order"
+    link_not_allowed = "link_not_allowed"
+    link_required = "link_required"
+    link_pair = "link_pair"
+    retired_record = "retired_record"
+    record_error = "record_error"
+    source_unresolved = "source_unresolved"
+    version_missing = "version_missing"
+    digest_mismatch = "digest_mismatch"
+    pdf_page_required = "pdf_page_required"
+    pdf_quote_required = "pdf_quote_required"
+    quote_not_found = "quote_not_found"
+    quote_fuzzy = "quote_fuzzy"
+    number_not_found = "number_not_found"
+    page_moved = "page_moved"
+    place_unresolved = "place_unresolved"
+    no_text = "no_text"
+    external_source = "external_source"
+    source_error = "source_error"
+    numbers_unchecked = "numbers_unchecked"
+    edition_filled = "edition_filled"
+    unknown_property = "unknown_property"
+    out_of_range = "out_of_range"
+    unit_mismatch = "unit_mismatch"
+    conflict = "conflict"
+    duplicate = "duplicate"
+    related = "related"
+
+
+class ReviewReason(str, Enum):
+    """
+    Почему запись попала в очередь проверки.
+    """
+    semantic = "semantic"
+    warning = "warning"
+    high_risk = "high_risk"
+    semantic_doubt = "semantic_doubt"
+    edit = "edit"
+    source_changed = "source_changed"
+    audit = "audit"
+    calibration = "calibration"
+
+
+class ReviewItemState(str, Enum):
+    queued = "queued"
+    claimed = "claimed"
+    done = "done"
+    obsolete = "obsolete"
+
+
+class VerificationMethod(str, Enum):
+    llm_judge = "llm_judge"
+    human = "human"
+
+
+class VerificationOutcome(str, Enum):
+    confirmed = "confirmed"
+    partial = "partial"
+    refuted = "refuted"
+    uncertain = "uncertain"
+
+
+class HighRiskRule(str, Enum):
+    """
+    Правило шаблона, по которому запись считается рискованной.
+    """
+    always = "always"
+    numeric = "numeric"
+
+
 class TemplateTarget(str, Enum):
     atom = "atom"
     entity = "entity"
@@ -305,7 +385,7 @@ class Value(ConfiguredBaseModel):
     quantity_kind: Optional[str] = Field(default=None, description="""Род величины QUDT — Pressure, Length.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'Concept']} })
     value_text: Optional[str] = Field(default=None, description="""Нечисловое значение — ветровой район «II».""", json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'Qualifier']} })
     value_state: Optional[ValueState] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'Qualifier']} })
-    note: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'LinkPayload']} })
+    note: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'LinkPayload', 'Verification']} })
     qualifiers: Optional[list[Qualifier]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'AtomPayload', 'LinkPayload']} })
 
     @field_validator('property')
@@ -400,7 +480,7 @@ class Formula(ConfiguredBaseModel):
 class Column(ConfiguredBaseModel):
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
 
-    code: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Column', 'Concept', 'Template']} })
+    code: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Column', 'Concept', 'Template', 'CheckIssue']} })
     label: LangString = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Selector',
                        'Value',
                        'Qualifier',
@@ -637,16 +717,23 @@ class Atom(AtomPayload):
                        'ObjectRecord',
                        'Agent',
                        'Activity',
-                       'Changeset']} })
+                       'Changeset',
+                       'ReviewItem',
+                       'Verification']} })
     schema_version: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity']} })
     revision: Optional[int] = Field(default=None, ge=1, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity']} })
     content_hash: Optional[str] = Field(default=None, description="""Хэш канонического тела ревизии; метка cN — версия правил канонизации (сейчас c1, amem/canon.py).""", json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity']} })
     status: Optional[Status] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Concept']} })
     review_state: Optional[ReviewState] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity']} })
-    created_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link', 'Changeset']} })
+    created_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom',
+                       'Entity',
+                       'Link',
+                       'Changeset',
+                       'ReviewItem',
+                       'Verification']} })
     recorded_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'ObjectVersion']} })
     changeset: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link']} })
-    agent: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link', 'Changeset']} })
+    agent: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link', 'Changeset', 'Verification']} })
     activity: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Bundle', 'Changeset']} })
     ref: Optional[str] = Field(default=None, description="""Временное имя в пачке (@имя) для ссылок внутри неё. В ревизию не записывается.""", json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'EntityPayload']} })
     key: Optional[str] = Field(default=None, description="""Необязательный читаемый ключ.""", json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'EntityPayload']} })
@@ -923,16 +1010,23 @@ class Entity(EntityPayload):
                        'ObjectRecord',
                        'Agent',
                        'Activity',
-                       'Changeset']} })
+                       'Changeset',
+                       'ReviewItem',
+                       'Verification']} })
     schema_version: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity']} })
     revision: Optional[int] = Field(default=None, ge=1, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity']} })
     content_hash: Optional[str] = Field(default=None, description="""Хэш канонического тела ревизии; метка cN — версия правил канонизации (сейчас c1, amem/canon.py).""", json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity']} })
     status: Optional[Status] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Concept']} })
     review_state: Optional[ReviewState] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity']} })
-    created_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link', 'Changeset']} })
+    created_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom',
+                       'Entity',
+                       'Link',
+                       'Changeset',
+                       'ReviewItem',
+                       'Verification']} })
     recorded_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'ObjectVersion']} })
     changeset: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link']} })
-    agent: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link', 'Changeset']} })
+    agent: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link', 'Changeset', 'Verification']} })
     activity: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Bundle', 'Changeset']} })
     ref: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'EntityPayload']} })
     key: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'EntityPayload']} })
@@ -1092,9 +1186,9 @@ class LinkPayload(ConfiguredBaseModel):
     rel: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['LinkPayload', 'RequiredLink']} })
     src: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['LinkPayload']} })
     dst: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['LinkPayload']} })
-    note: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'LinkPayload']} })
+    note: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'LinkPayload', 'Verification']} })
     qualifiers: Optional[list[Qualifier]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'AtomPayload', 'LinkPayload']} })
-    confidence: Optional[float] = Field(default=None, ge=0, le=1, json_schema_extra = { "linkml_meta": {'domain_of': ['LinkPayload']} })
+    confidence: Optional[float] = Field(default=None, ge=0, le=1, json_schema_extra = { "linkml_meta": {'domain_of': ['LinkPayload', 'Verification']} })
 
     @field_validator('rel')
     def pattern_rel(cls, v):
@@ -1145,17 +1239,24 @@ class Link(LinkPayload):
                        'ObjectRecord',
                        'Agent',
                        'Activity',
-                       'Changeset']} })
-    created_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link', 'Changeset']} })
+                       'Changeset',
+                       'ReviewItem',
+                       'Verification']} })
+    created_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom',
+                       'Entity',
+                       'Link',
+                       'Changeset',
+                       'ReviewItem',
+                       'Verification']} })
     changeset: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link']} })
-    agent: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link', 'Changeset']} })
+    agent: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link', 'Changeset', 'Verification']} })
     retired_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Link']} })
     rel: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['LinkPayload', 'RequiredLink']} })
     src: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['LinkPayload']} })
     dst: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['LinkPayload']} })
-    note: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'LinkPayload']} })
+    note: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'LinkPayload', 'Verification']} })
     qualifiers: Optional[list[Qualifier]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'AtomPayload', 'LinkPayload']} })
-    confidence: Optional[float] = Field(default=None, ge=0, le=1, json_schema_extra = { "linkml_meta": {'domain_of': ['LinkPayload']} })
+    confidence: Optional[float] = Field(default=None, ge=0, le=1, json_schema_extra = { "linkml_meta": {'domain_of': ['LinkPayload', 'Verification']} })
 
     @field_validator('id')
     def pattern_id(cls, v):
@@ -1270,7 +1371,9 @@ class ObjectRecord(ConfiguredBaseModel):
                        'ObjectRecord',
                        'Agent',
                        'Activity',
-                       'Changeset']} })
+                       'Changeset',
+                       'ReviewItem',
+                       'Verification']} })
     kind: ObjectKind = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'ObjectRecord', 'Activity']} })
     original_name: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ObjectRecord']} })
     media_type: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ObjectRecord']} })
@@ -1300,7 +1403,7 @@ class Bundle(ConfiguredBaseModel):
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
 
-    reason: Optional[str] = Field(default=None, description="""Основание — что за документ или задача.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Bundle', 'Changeset']} })
+    reason: Optional[str] = Field(default=None, description="""Основание — что за документ или задача.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Bundle', 'Changeset', 'ReviewItem']} })
     activity: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Bundle', 'Changeset']} })
     entities: Optional[list[EntityPayload]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Bundle']} })
     atoms: Optional[list[AtomPayload]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Bundle']} })
@@ -1327,7 +1430,7 @@ class Concept(ConfiguredBaseModel):
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
 
     scheme: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Concept']} })
-    code: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Column', 'Concept', 'Template']} })
+    code: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Column', 'Concept', 'Template', 'CheckIssue']} })
     label: LangString = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Selector',
                        'Value',
                        'Qualifier',
@@ -1411,11 +1514,11 @@ class FieldRule(ConfiguredBaseModel):
     path: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Source', 'FieldRule']} })
     required: Optional[bool] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule', 'LinkRules']} })
     min_count: Optional[int] = Field(default=None, ge=0, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule']} })
-    severity: Optional[Severity] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule', 'RequiredLink']} })
+    severity: Optional[Severity] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule', 'RequiredLink', 'CheckIssue']} })
     ucum: Optional[bool] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule']} })
     selector_types: Optional[list[str]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule']} })
     entity_classes: Optional[list[str]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule']} })
-    message: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule']} })
+    message: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule', 'CheckIssue']} })
 
     @field_validator('path')
     def pattern_path(cls, v):
@@ -1462,7 +1565,7 @@ class RequiredLink(ConfiguredBaseModel):
 
     rel: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['LinkPayload', 'RequiredLink']} })
     to_classes: Optional[list[str]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['RequiredLink']} })
-    severity: Optional[Severity] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule', 'RequiredLink']} })
+    severity: Optional[Severity] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule', 'RequiredLink', 'CheckIssue']} })
 
     @field_validator('rel')
     def pattern_rel(cls, v):
@@ -1520,14 +1623,15 @@ class Template(ConfiguredBaseModel):
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
 
-    code: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Column', 'Concept', 'Template']} })
+    code: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Column', 'Concept', 'Template', 'CheckIssue']} })
     version: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Template']} })
-    target: TemplateTarget = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Template']} })
+    target: TemplateTarget = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Template', 'ReviewItem']} })
     applies_to: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Template']} })
     extends: Optional[list[str]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Template']} })
     description: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['EntityPayload', 'Template']} })
     fields: Optional[list[FieldRule]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Template']} })
     links: Optional[LinkRules] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Bundle', 'Template']} })
+    high_risk: Optional[list[HighRiskRule]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Template']} })
 
     @field_validator('code')
     def pattern_code(cls, v):
@@ -1591,7 +1695,9 @@ class Agent(ConfiguredBaseModel):
                        'ObjectRecord',
                        'Agent',
                        'Activity',
-                       'Changeset']} })
+                       'Changeset',
+                       'ReviewItem',
+                       'Verification']} })
     name: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Agent']} })
 
     @field_validator('id')
@@ -1617,7 +1723,9 @@ class Activity(ConfiguredBaseModel):
                        'ObjectRecord',
                        'Agent',
                        'Activity',
-                       'Changeset']} })
+                       'Changeset',
+                       'ReviewItem',
+                       'Verification']} })
     kind: ActivityKind = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'ObjectRecord', 'Activity']} })
     label: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Selector',
                        'Value',
@@ -1654,13 +1762,20 @@ class Changeset(ConfiguredBaseModel):
                        'ObjectRecord',
                        'Agent',
                        'Activity',
-                       'Changeset']} })
-    agent: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link', 'Changeset']} })
+                       'Changeset',
+                       'ReviewItem',
+                       'Verification']} })
+    agent: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link', 'Changeset', 'Verification']} })
     activity: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Bundle', 'Changeset']} })
-    reason: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Bundle', 'Changeset']} })
-    state: ChangesetState = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Changeset']} })
+    reason: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Bundle', 'Changeset', 'ReviewItem']} })
+    state: ChangesetState = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Changeset', 'ReviewItem']} })
     check_report: Optional[Any] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Changeset']} })
-    created_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link', 'Changeset']} })
+    created_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom',
+                       'Entity',
+                       'Link',
+                       'Changeset',
+                       'ReviewItem',
+                       'Verification']} })
 
     @field_validator('id')
     def pattern_id(cls, v):
@@ -1702,6 +1817,240 @@ class Changeset(ConfiguredBaseModel):
         return v
 
 
+class CheckIssue(ConfiguredBaseModel):
+    """
+    Замечание автопроверки.
+    """
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
+
+    level: int = Field(default=..., ge=1, le=4, json_schema_extra = { "linkml_meta": {'domain_of': ['CheckIssue']} })
+    severity: Severity = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule', 'RequiredLink', 'CheckIssue']} })
+    code: CheckCode = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Column', 'Concept', 'Template', 'CheckIssue']} })
+    where: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CheckIssue']} })
+    message: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule', 'CheckIssue']} })
+    details: Optional[Any] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['CheckIssue', 'ReviewItem']} })
+
+
+class CheckReport(ConfiguredBaseModel):
+    """
+    Отчёт пакета; пишется в changeset.check_report до записи ревизий.
+    """
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
+
+    format: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CheckReport']} })
+    levels: Any = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CheckReport']} })
+    issues: Optional[list[CheckIssue]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['CheckReport']} })
+    degraded: Optional[list[Any]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['CheckReport']} })
+    templates: Optional[list[str]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['CheckReport']} })
+    records: Optional[list[Any]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['CheckReport']} })
+
+    @field_validator('format')
+    def pattern_format(cls, v):
+        pattern=re.compile(r"^amem\.check/1$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.fullmatch(element):
+                    err_msg = f"Invalid format format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.fullmatch(v):
+            err_msg = f"Invalid format format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+
+class ReviewItem(ConfiguredBaseModel):
+    """
+    Пункт очереди проверки. Ревизия — атома или сущности, по target.
+    """
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
+
+    id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Atom',
+                       'Entity',
+                       'Link',
+                       'ObjectRecord',
+                       'Agent',
+                       'Activity',
+                       'Changeset',
+                       'ReviewItem',
+                       'Verification']} })
+    target: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Template', 'ReviewItem']} })
+    record_id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['ReviewItem']} })
+    revision_id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['ReviewItem']} })
+    reason: ReviewReason = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Bundle', 'Changeset', 'ReviewItem']} })
+    state: ReviewItemState = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Changeset', 'ReviewItem']} })
+    changeset_id: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ReviewItem']} })
+    details: Optional[Any] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['CheckIssue', 'ReviewItem']} })
+    created_at: datetime  = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Atom',
+                       'Entity',
+                       'Link',
+                       'Changeset',
+                       'ReviewItem',
+                       'Verification']} })
+    created_by: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['ReviewItem']} })
+    claimed_by: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ReviewItem']} })
+    claimed_until: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ReviewItem']} })
+    closed_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ReviewItem']} })
+
+    @field_validator('id')
+    def pattern_id(cls, v):
+        pattern=re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.fullmatch(element):
+                    err_msg = f"Invalid id format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.fullmatch(v):
+            err_msg = f"Invalid id format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+    @field_validator('target')
+    def pattern_target(cls, v):
+        pattern=re.compile(r"^(atom|entity)$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.fullmatch(element):
+                    err_msg = f"Invalid target format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.fullmatch(v):
+            err_msg = f"Invalid target format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+    @field_validator('record_id')
+    def pattern_record_id(cls, v):
+        pattern=re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.fullmatch(element):
+                    err_msg = f"Invalid record_id format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.fullmatch(v):
+            err_msg = f"Invalid record_id format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+    @field_validator('revision_id')
+    def pattern_revision_id(cls, v):
+        pattern=re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.fullmatch(element):
+                    err_msg = f"Invalid revision_id format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.fullmatch(v):
+            err_msg = f"Invalid revision_id format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+    @field_validator('changeset_id')
+    def pattern_changeset_id(cls, v):
+        pattern=re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.fullmatch(element):
+                    err_msg = f"Invalid changeset_id format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.fullmatch(v):
+            err_msg = f"Invalid changeset_id format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+    @field_validator('created_by')
+    def pattern_created_by(cls, v):
+        pattern=re.compile(r"^(person|model):[a-z0-9_.-]+$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.fullmatch(element):
+                    err_msg = f"Invalid created_by format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.fullmatch(v):
+            err_msg = f"Invalid created_by format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+    @field_validator('claimed_by')
+    def pattern_claimed_by(cls, v):
+        pattern=re.compile(r"^(person|model):[a-z0-9_.-]+$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.fullmatch(element):
+                    err_msg = f"Invalid claimed_by format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.fullmatch(v):
+            err_msg = f"Invalid claimed_by format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+
+class Verification(ConfiguredBaseModel):
+    """
+    Вердикт по пункту очереди; неизменяемый.
+    """
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
+
+    id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Atom',
+                       'Entity',
+                       'Link',
+                       'ObjectRecord',
+                       'Agent',
+                       'Activity',
+                       'Changeset',
+                       'ReviewItem',
+                       'Verification']} })
+    review_item_id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Verification']} })
+    method: VerificationMethod = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Verification']} })
+    outcome: VerificationOutcome = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Verification']} })
+    confidence: Optional[float] = Field(default=None, ge=0, le=1, json_schema_extra = { "linkml_meta": {'domain_of': ['LinkPayload', 'Verification']} })
+    agent: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Link', 'Changeset', 'Verification']} })
+    note: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'LinkPayload', 'Verification']} })
+    created_at: datetime  = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Atom',
+                       'Entity',
+                       'Link',
+                       'Changeset',
+                       'ReviewItem',
+                       'Verification']} })
+
+    @field_validator('id')
+    def pattern_id(cls, v):
+        pattern=re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.fullmatch(element):
+                    err_msg = f"Invalid id format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.fullmatch(v):
+            err_msg = f"Invalid id format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+    @field_validator('review_item_id')
+    def pattern_review_item_id(cls, v):
+        pattern=re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.fullmatch(element):
+                    err_msg = f"Invalid review_item_id format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.fullmatch(v):
+            err_msg = f"Invalid review_item_id format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+    @field_validator('agent')
+    def pattern_agent(cls, v):
+        pattern=re.compile(r"^(person|model):[a-z0-9_.-]+$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.fullmatch(element):
+                    err_msg = f"Invalid agent format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.fullmatch(v):
+            err_msg = f"Invalid agent format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+
 # Model rebuild
 # see https://pydantic-docs.helpmanual.io/usage/models/#rebuilding-a-model
 LangString.model_rebuild()
@@ -1734,3 +2083,7 @@ Template.model_rebuild()
 Agent.model_rebuild()
 Activity.model_rebuild()
 Changeset.model_rebuild()
+CheckIssue.model_rebuild()
+CheckReport.model_rebuild()
+ReviewItem.model_rebuild()
+Verification.model_rebuild()
