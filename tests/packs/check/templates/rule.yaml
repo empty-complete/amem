@@ -1,0 +1,13 @@
+code: rule
+version: 1.0.0
+target: atom
+applies_to: rule
+description: {ru: "Правило: значения обязательны, ссылка на документ желательна; числа — к человеку."}
+extends: [has_label]
+high_risk: [numeric]
+fields:
+  - {path: content.values, required: true, severity: violation}
+links:
+  allowed: [refines, see_also, about]
+  required:
+    - {rel: about, to_classes: [document], severity: warning}
