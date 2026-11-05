@@ -11,7 +11,7 @@ from amem.ids import uuid7
 from amem.records import Item, commit
 
 AGENT = "model:claude"
-HUMAN = "person:filipp"
+HUMAN = "person:reviewer"
 EXAMPLE = Path(__file__).parent / "packs" / "example"
 
 
