@@ -67,6 +67,15 @@ def test_bfs_uses_both_directions_current_fields_and_shortest_paths(kb):
     ], agent=AGENT)
     refs = written.refs
 
+    default = around(kb, refs["@root"])
+    first_level = {refs["@root"], refs["@peer"], refs["@a"]}
+    assert default["depth"] == 1
+    assert {node["ref"] for node in default["nodes"]} == first_level
+    assert len(default["edges"]) == 2
+    assert all(edge["from"] == refs["@root"] and edge["to"] in first_level for edge in default["edges"])
+    assert {path["nodes"][-1] for path in default["paths"]} == {refs["@peer"], refs["@a"]}
+    assert all(len(path["nodes"]) == 2 and len(path["edges"]) == 1 for path in default["paths"])
+
     result = around(kb, refs["@root"], depth=3)
 
     depths = {node["ref"]: node["depth"] for node in result["nodes"]}
