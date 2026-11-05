@@ -85,6 +85,22 @@ def test_item_of_foreign_revision_is_refused(kb):
         _item(kb, other_rev, record)
 
 
+def test_entity_item_checks_record_of_revision(kb):
+    first, second = (commit(kb, [Item("entity", {"ref": "@e", "entity_class": "document", "key": key,
+                                                 "label": {"ru": "Справочник величин"}})], agent=AGENT).revisions[0]
+                     for key in ("doc.one", "doc.two"))
+    values = {"target": "entity", "reason": "semantic", "state": "queued", "created_at": _now(), "created_by": AGENT}
+
+    def insert(record, rev):
+        row = {"id": uuid7(), "record_id": record, "entity_revision_id": rev, **values}
+        kb.execute(f"INSERT INTO review_item ({', '.join(row)}) VALUES ({', '.join(['%s'] * len(row))})",
+                   list(row.values()))
+
+    with pytest.raises(psycopg.errors.RaiseException, match="amem:"):
+        insert(first.record_id, second.revision_id)
+    insert(second.record_id, second.revision_id)
+
+
 @pytest.mark.parametrize("state", ["claimed", "done"])
 def test_item_must_start_queued(kb, state):
     record, rev = _atom(kb)
@@ -185,7 +201,7 @@ def test_migration_drops_text_cache_of_docx_and_xlsx(pg, tmp_path, monkeypatch):
     monkeypatch.setattr(db, "SQL_DIR", tmp_path)
     assert db.migrate(pg)[-1] == "0005_search.sql"
     digests = {}
-    for i, name in enumerate(["a.docx", "b.xlsx", "c.pdf"]):
+    for i, name in enumerate(["a.docx", "b.xlsx", "c.pdf", "D.XLSM"]):
         oid, digest = uuid7(), f"sha256:{i:064x}"
         digests[name] = digest
         pg.execute("INSERT INTO object (id, kind, original_name, created_at) VALUES (%s, 'file', %s, now())",
@@ -193,7 +209,10 @@ def test_migration_drops_text_cache_of_docx_and_xlsx(pg, tmp_path, monkeypatch):
         pg.execute("INSERT INTO object_version (object_id, kind, n, digest, size, recorded_at) "
                    "VALUES (%s, 'file', 1, %s, 0, now())", (oid, digest))
         pg.execute("INSERT INTO object_text (digest, page, text) VALUES (%s, 0, '')", (digest,))
+    # у docx есть и настоящая страница: сброс трогает только page = 0
+    pg.execute("INSERT INTO object_text (digest, page, text) VALUES (%s, 1, 'Давление')", (digests["a.docx"],))
     monkeypatch.setattr(db, "SQL_DIR", real)
     assert db.migrate(pg) == ["0006_check.sql"]
     left = {r[0] for r in pg.execute("SELECT digest FROM object_text WHERE page = 0")}
     assert left == {digests["c.pdf"]}
+    assert pg.execute("SELECT text FROM object_text WHERE page = 1").fetchall() == [("Давление",)]
