@@ -94,10 +94,10 @@ def test_bad_rule_path_is_rejected(tmp_path, path, match):
 
 
 def test_check_path_returns_last_field():
-    assert packs._check_path("content.values", "atom")["multivalued"] is True
-    assert packs._check_path("sources[].selectors", "atom")["range"] == "Selector"
-    assert packs._check_path("edition_of", "entity")["pattern"].startswith("^(ent:")
-    assert packs._check_path("rel", "link")["required"] is True
+    assert packs.check_path("content.values", "atom")["multivalued"] is True
+    assert packs.check_path("sources[].selectors", "atom")["range"] == "Selector"
+    assert packs.check_path("edition_of", "entity")["pattern"].startswith("^(ent:")
+    assert packs.check_path("rel", "link")["required"] is True
 
 
 def test_template_code_in_two_packs_is_rejected(tmp_path):
@@ -172,7 +172,8 @@ def test_kind_without_template_gets_only_interfaces(pg, monkeypatch):
                                  "content.values[].unit", "content.values[].qualifiers[].unit",
                                  "content.table.columns[].unit", "content.formula.symbols[].unit", "qualifiers[].unit"}
     nothing = templates.rules_for(active, "entity", "document")             # у сущностей шаблонов нет
-    assert nothing == templates.Rules((), {}, None, (), frozenset())
+    assert nothing == templates.Rules(templates=(), fields={}, allowed=None, required_links=(),
+                                      high_risk=frozenset())
 
 
 def test_descendant_rule_replaces_interface_rule(pg, monkeypatch, tmp_path):

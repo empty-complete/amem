@@ -108,7 +108,8 @@ def test_clean_batch_describes_records_refs_and_templates(kb):
     assert (r.label, r.target, r.code, r.record_id, r.status, r.ok) == ("@r", "atom", "rule", None, None, True)
     assert r.payload == rule()
     assert r.rules.templates == (*INTERFACES, "rule@1.0.0") and r.rules.high_risk == frozenset({"numeric"})
-    assert (doc.target, doc.code, doc.rules) == ("entity", "document", templates.Rules((), {}, None, (), frozenset()))
+    assert (doc.target, doc.code) == ("entity", "document")
+    assert doc.rules == templates.Rules(templates=(), fields={}, allowed=None, required_links=(), high_risk=frozenset())
     assert i.rules.templates == (*INTERFACES, "idea@1.0.0")
     assert batch.refs == {"@r": ("atom", "rule"), "@doc": ("entity", "document"), "@i": ("atom", "idea")}
     assert batch.templates == (*INTERFACES, "rule@1.0.0", "idea@1.0.0")
@@ -270,6 +271,20 @@ def test_template_issue_names_template_path_and_rule(kb):
     assert issue.details == {"template": "rule@1.0.0", "rel": "about", "to_classes": ["document"]}
 
 
+@pytest.mark.parametrize("items, links, details", [
+    ([atom("@a", kind="nope")], [], {"scheme": "kind", "value": "nope"}),
+    ([entity("@e", cls="nope")], [], {"scheme": "entity_class", "value": "nope"}),
+    ([atom("@a", sources=[source_md(MD, selectors=[{"type": "table", "value": "1", "refined_by":
+                                                    {"type": "pagee", "value": "2"}}])])], [],
+     {"scheme": "selector_type", "value": "pagee"}),
+    ([atom("@a"), atom("@b")], [{"rel": "nope", "src": "@a", "dst": "@b"}], {"scheme": "rel", "value": "nope"}),
+])
+def test_unknown_code_names_scheme_and_value(kb, items, links, details):
+    _, _, report = run(kb, *items, links=links)
+    [issue] = report.issues
+    assert (issue.code, issue.details) == ("unknown_code", details)
+
+
 def test_report_of_level1_passes_check_report_schema(kb):
     _, issues, report = run(kb, rule(content=None, about=["ent:missing_key"]), atom("@a", label=None),
                             links=[{"rel": "refines", "src": "@r", "dst": "@doc"}])
@@ -295,11 +310,21 @@ def test_unknown_record_id(kb):
     assert run(kb, Proposal("atom", atom("@a"), "not-a-uuid"))[1] == [("schema", "violation", "@a: record_id")]
 
 
-@pytest.mark.parametrize("status", ["deprecated", "superseded"])
-def test_edit_of_retired_record(kb, status):
+def test_two_edits_of_one_record_in_batch(kb):
     ids = existing(kb, atom("@a", sources=None))
-    records.set_status(kb, "atom", ids["@a"], status, agent=HUMAN)
-    batch, issues, report = run(kb, Proposal("atom", atom("@a"), ids["@a"]))
+    _, issues, report = run(kb, Proposal("atom", atom("@a"), ids["@a"]), Proposal("atom", atom("@b"), str(ids["@a"])))
+    assert issues == [("schema", "violation", "@b: record_id")]
+    assert report.issues[0].message.endswith("запись уже правится в этой пачке: @a")
+
+
+@pytest.mark.parametrize("status", ["deprecated", "superseded"])
+@pytest.mark.parametrize("stored, edit", [(atom("@a", sources=None), atom("@a")), (entity("@a"), entity("@a"))],
+                         ids=["atom", "entity"])
+def test_edit_of_retired_record(kb, status, stored, edit):
+    target = proposal(stored).target
+    ids = existing(kb, stored)
+    records.set_status(kb, target, ids["@a"], status, agent=HUMAN)
+    batch, issues, report = run(kb, Proposal(target, edit, ids["@a"]))
     assert issues == [("retired_record", "violation", "@a")]
     assert report.issues[0].details == {"status": status}
     assert (batch.items[0].record_id, batch.items[0].status) == (ids["@a"], status)
@@ -319,6 +344,13 @@ def test_link_from_existing_record_follows_its_template(kb):
     existing(kb, DOC, atom("@r", kind="rule", sources=None, about=["@doc"], key="r1"))
     _, issues, _ = run(kb, atom("@a"), links=[{"rel": "depends_on", "src": "atm:r1", "dst": "@a"}])
     assert issues == [("link_not_allowed", "violation", "links[0]")]
+
+
+def test_stored_link_does_not_break_allowed_on_edit(kb):
+    """Уже записанные связи на allowed не перепроверяются: пакет отвечает за то, что предлагает."""
+    ids = existing(kb, DOC, atom("@r", kind="rule", sources=None, about=["@doc"]), atom("@a", sources=None),
+                   links=[{"rel": "depends_on", "src": "@r", "dst": "@a"}])
+    assert run(kb, Proposal("atom", rule(about=[f"ent:{ids['@doc']}"]), ids["@r"]))[1] == []
 
 
 def test_link_to_itself_by_name_and_id(kb):
@@ -367,6 +399,11 @@ MEMO = {
                 ("template", "violation", "@m: sources[1].selectors")),
     "about_project": ([memo(about=["@doc", "@p"]), DOC, entity("@p", cls="project")], [],
                       ("template", "violation", "@m: about[1]")),
+    # правило memo с тем же путём заменило has_source: required-предупреждения нет, есть selector_types
+    "no_selectors": ([memo(sources=[{"path": PDF, "quote": "Нормативное значение"}]), DOC], [],
+                     ("template", "violation", "@m: sources[0].selectors")),
+    # один дефект — одно замечание: ref_unknown, а entity_classes по этой ссылке молчит
+    "about_atom": ([memo(about=["@doc", "@a"]), DOC, atom("@a")], [], ("ref_unknown", "violation", "@m: about[1]")),
     "one_code": ([memo(codes=["w0"]), DOC], [], ("template", "warning", "@m: codes")),
     "no_codes": ([memo(codes=None), DOC], [], ("template", "warning", "@m: codes")),
     "note_linked": ([note(), atom("@a")], [SEE], None),

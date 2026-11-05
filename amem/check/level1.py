@@ -72,6 +72,17 @@ class _Node:
     identity: tuple
 
 
+@dataclass(frozen=True)
+class _Slot:
+    """Место правила поля: правило и его шаблон, метка записи, точный путь, значение, тип поля по схеме."""
+    rule: dict
+    origin: str | None
+    label: str
+    where: str
+    value: object
+    range: str | None
+
+
 @dataclass
 class _Link:
     where: str
@@ -109,8 +120,11 @@ class _Level1:
         self.names: dict[str, int] = {}                     # @имя → номер записи пачки
         self.ids: dict[tuple[str, uuid.UUID], int] = {}     # (вид, id) правки → номер записи пачки
         self.found: dict[str, _Node | None] = {}            # ссылка на запись базы → её конец, на время пачки
+        self.unresolved: set[str] = set()                   # места, где ссылка уже дала ref_unknown
         self.merged: dict[tuple[str, str], Rules] = {}
         self.applied: dict[str, None] = {}                  # code@version шаблонов записей и связей пачки по порядку
+        # поля тела, через которые выражается вид связи: вид → поле (about, derived_from)
+        self.via = {rel: data["via_field"] for rel, data in self.vocab["rel"].items() if data.get("via_field")}
 
     def add(self, severity: str, code: str, where: str, message: str, **details) -> None:
         self.report.add(LEVEL, severity, code, where, message, **details)
@@ -165,6 +179,11 @@ class _Level1:
             self.add("violation", "ref_unknown", f"{item.label}: record_id", f"{ref}: такой записи нет", ref=ref)
             return
         item.status = row[0]
+        first = self.ids.get((t, item.record_id))
+        if first is not None:                  # две ревизии одной записи в пачке: какая из них текущая — неясно
+            self.schema(f"{item.label}: record_id", ["record_id"],
+                        f"запись уже правится в этой пачке: {self.items[first].label}")
+            return
         self.ids[(t, item.record_id)] = i
         if item.status in RETIRED:
             self.add("violation", "retired_record", item.label,
@@ -227,6 +246,7 @@ class _Level1:
         else:
             problem = f"нет записи с ключом {ref.partition(':')[2]}"
         self.add("violation", "ref_unknown", where, f"{ref}: {problem}", ref=ref)
+        self.unresolved.add(where)
         return None
 
     # --- записи ---
@@ -255,39 +275,63 @@ class _Level1:
             selector, where = selector.get("refined_by"), f"{where}.refined_by"
 
     def field_rules(self, label: str, target: str, body: dict, rules: Rules) -> None:
-        """Правила полей FieldRule; важность — из правила, по умолчанию violation."""
+        """Правила полей FieldRule — по каждому месту пути; важность — из правила, по умолчанию violation."""
         for path, rule in rules.fields.items():
-            field = _field(path, target)
-            broken = functools.partial(self._broken, rule, rules.field_origins.get(path), label)
+            range_ = _field(path, target).get("range")
             for where, value in _slots(body, path):
-                if rule.get("required") and _empty(value, field.get("range")):
-                    broken(where, "required", f"Не заполнено поле {where}.")
-                    continue
-                if rule.get("min_count") is not None and _count(value) < rule["min_count"]:
-                    broken(where, "min_count", f"В {where} меньше {rule['min_count']} элементов.")
-                if rule.get("selector_types"):
-                    types = rule["selector_types"]
-                    for group, selectors in _selector_groups(where, value, field.get("range")):
-                        if not any(t in types for s in selectors for t in _chain(s)):
-                            broken(group, "selector_types", f"Нет места вида {', '.join(types)} — "
-                                                            "ни у селектора, ни в его уточнениях refined_by.")
-                if rule.get("entity_classes"):
-                    classes = rule["entity_classes"]
-                    for at, ref in _each(where, value):
-                        node = self.node(ref)              # неизвестную ссылку уже назвал ref_unknown
-                        if node is not None and (node.target != "entity" or node.code not in classes):
-                            whose = f"сущность класса {node.code}" if node.target == "entity" else "атом"
-                            broken(at, "entity_classes",
-                                   f"{ref} — {whose}, а нужна сущность класса {', '.join(classes)}.", ref=ref)
-                if rule.get("ucum") and value is not None and not units.is_ucum(value):
-                    broken(where, "ucum", f"Единица {value!r} — не код UCUM (с учётом регистра: kPa, mm, "
-                                          "W/(m2.K), Cel, 1).", unit=value)
+                slot = _Slot(rule, rules.field_origins.get(path), label, where, value, range_)
+                if self._rule_required(slot):
+                    continue                   # пустое поле: остальные виды правила нового о нём не скажут
+                self._rule_min_count(slot)
+                self._rule_selector_types(slot)
+                self._rule_entity_classes(slot)
+                self._rule_ucum(slot)
 
-    def _broken(self, rule: dict, origin: str | None, label: str, where: str, kind: str, default: str,
-                **extra) -> None:
+    def _rule_required(self, slot: _Slot) -> bool:
+        if not slot.rule.get("required") or not _empty(slot.value, slot.range):
+            return False
+        self._broken(slot, slot.where, "required", f"Не заполнено поле {slot.where}.")
+        return True
+
+    def _rule_min_count(self, slot: _Slot) -> None:
+        n = slot.rule.get("min_count")
+        if n is not None and _count(slot.value) < n:
+            self._broken(slot, slot.where, "min_count", f"В {slot.where} меньше {n} элементов.")
+
+    def _rule_selector_types(self, slot: _Slot) -> None:
+        types = slot.rule.get("selector_types")
+        if not types:
+            return
+        for where, selectors in _selector_groups(slot.where, slot.value, slot.range):
+            if not any(t in types for s in selectors for t in _chain(s)):
+                self._broken(slot, where, "selector_types",
+                             f"Нет места вида {', '.join(types)} — ни у селектора, ни в его уточнениях refined_by.")
+
+    def _rule_entity_classes(self, slot: _Slot) -> None:
+        classes = slot.rule.get("entity_classes")
+        if not classes:
+            return
+        for where, ref in _each(slot.where, slot.value):
+            if f"{slot.label}: {where}" in self.unresolved:
+                continue                       # один дефект — одно замечание: ref_unknown уже есть
+            node = self.node(ref)
+            if node is not None and (node.target != "entity" or node.code not in classes):
+                whose = f"сущность класса {node.code}" if node.target == "entity" else "атом"
+                self._broken(slot, where, "entity_classes",
+                             f"{ref} — {whose}, а нужна сущность класса {', '.join(classes)}.", ref=ref)
+
+    def _rule_ucum(self, slot: _Slot) -> None:
+        if slot.rule.get("ucum") and slot.value is not None and not units.is_ucum(slot.value):
+            self._broken(slot, slot.where, "ucum",
+                         f"Единица {slot.value!r} — не код UCUM (с учётом регистра: kPa, mm, W/(m2.K), Cel, 1).",
+                         unit=slot.value)
+
+    def _broken(self, slot: _Slot, where: str, kind: str, default: str, **extra) -> None:
+        """Замечание правила поля: код ucum у правила ucum, иначе template; текст — message правила или общий."""
+        rule = slot.rule
         message = (rule.get("message") or {}).get("ru") or default
-        self.add(rule.get("severity") or "violation", "ucum" if kind == "ucum" else "template", f"{label}: {where}",
-                 message, template=origin, path=rule["path"], rule=kind, **extra)
+        self.add(rule.get("severity") or "violation", "ucum" if kind == "ucum" else "template",
+                 f"{slot.label}: {where}", message, template=slot.origin, path=rule["path"], rule=kind, **extra)
 
     def hard_rules(self, label: str, target: str, body: dict) -> None:
         """Что шаблоном не выразить: у значения или границы есть единица, границы по порядку, значение в границах."""
@@ -349,44 +393,63 @@ class _Level1:
         return self.rules(node.target, node.code, applied=False)      # шаблон записи базы, не записи пачки
 
     def link_rules(self, links: list[_Link]) -> None:
-        """allowed — у связей пачки и полей-связей тела; required — вместе с действующими связями записи в базе."""
-        outgoing: dict[tuple, list[tuple[str, _Node]]] = {}
+        """Правила связей шаблонов: исходящие связи записей пачки, затем allowed, затем required."""
+        outgoing = self._outgoing(links)
+        self._check_allowed(links)
+        self._check_required(outgoing)
+
+    def _via_fields(self, item: Prepared) -> list[tuple[str, str, list]]:
+        """Поля тела, через которые выражается вид связи: (вид связи, поле, ссылки)."""
+        return [(rel, name, item.payload[name]) for rel, name in self.via.items() if item.payload.get(name)]
+
+    def _outgoing(self, links: list[_Link]) -> dict[int, list[tuple[str, _Node]]]:
+        """Исходящие связи записей пачки: номер записи → (вид, другой конец). Связи пачки (у симметричной — с обоих
+        концов) и поля-связи тела; связи в базе добавляет _check_required."""
+        out: dict[int, list[tuple[str, _Node]]] = {}
         for link in links:
-            ends = [(link.src, link.dst)] + ([(link.dst, link.src)] if link.symmetric else [])
-            for own, other in ends:
-                outgoing.setdefault(own.identity, []).append((link.rel, other))
+            for own, other in _ends(link):
+                if own.identity[0] == "item":
+                    out.setdefault(own.identity[1], []).append((link.rel, other))
+        for i, item in enumerate(self.items):
+            if item.ok:
+                for rel, _, refs in self._via_fields(item):
+                    out.setdefault(i, []).extend((rel, node) for node in map(self.node, refs) if node is not None)
+        return out
+
+    def _check_allowed(self, links: list[_Link]) -> None:
+        """allowed — по шаблону каждого исходящего конца связи пачки (и записи базы) и у полей-связей тела."""
+        for link in links:
+            for own, _ in _ends(link):
                 rules = self.node_rules(own)
                 if rules is not None and rules.allowed is not None and link.rel not in rules.allowed:
-                    self._not_allowed(link.where, link.rel, own, rules)
-        via = {rel: data["via_field"] for rel, data in self.vocab["rel"].items() if data.get("via_field")}
+                    self._not_allowed(link.where, link.rel, own.code, rules)
+        for item in self.items:
+            if item.ok and item.rules.allowed is not None:
+                for rel, name, _ in self._via_fields(item):
+                    if rel not in item.rules.allowed:
+                        self._not_allowed(f"{item.label}: {name}", rel, item.code, item.rules)
+
+    def _check_required(self, outgoing: dict[int, list[tuple[str, _Node]]]) -> None:
+        """required — среди исходящих связей пачки и действующих связей записи в базе."""
         for i, item in enumerate(self.items):
-            if not item.ok:
+            if not item.ok or not item.rules.required_links:
                 continue
-            rules, mine = item.rules, list(outgoing.get(("item", i), []))
-            for rel, name in via.items():
-                refs = item.payload.get(name)
-                if not refs:
-                    continue
-                if rules.allowed is not None and rel not in rules.allowed:
-                    self._not_allowed(f"{item.label}: {name}", rel, _Node(item.target, item.code, ("item", i)), rules)
-                mine += [(rel, node) for node in map(self.node, refs) if node is not None]
-            if not rules.required_links:
-                continue
+            mine = outgoing.get(i, [])
             if item.status is not None:
-                mine += self.stored_links(item.target, item.record_id)
-            for req in rules.required_links:
+                mine = mine + self.stored_links(item.target, item.record_id)
+            for req in item.rules.required_links:
                 if any(_satisfies(rel, node, req) for rel, node in mine):
                     continue
                 classes = req.get("to_classes")
                 message = f"Нет связи {req['rel']}" + (f" с сущностью класса {', '.join(classes)}" if classes else "")
                 self.add(req.get("severity") or "violation", "link_required", item.label, message + ".",
-                         template=rules.link_origins.get(req["rel"]), rel=req["rel"],
+                         template=item.rules.link_origins.get(req["rel"]), rel=req["rel"],
                          **({"to_classes": classes} if classes else {}))
 
-    def _not_allowed(self, where: str, rel: str, own: _Node, rules: Rules) -> None:
+    def _not_allowed(self, where: str, rel: str, code: str | None, rules: Rules) -> None:
         allowed = sorted(rules.allowed)
         self.add("violation", "link_not_allowed", where,
-                 f"Связь {rel} не допускается шаблоном {own.code} (можно: {', '.join(allowed) or 'никакие'}).",
+                 f"Связь {rel} не допускается шаблоном {code} (можно: {', '.join(allowed) or 'никакие'}).",
                  rel=rel, allowed=allowed)
 
     def stored_links(self, target: str, record_id: uuid.UUID) -> list[tuple[str, _Node]]:
@@ -414,7 +477,7 @@ def _path(loc) -> str:
 def _field(path: str, target: str) -> dict:
     """Описание последнего поля пути правила в схеме LinkML (range, multivalued)."""
     try:
-        return packs._check_path(path, target)
+        return packs.check_path(path, target)
     except packs.PackError:                     # пути шаблонов проверены при загрузке пакетов
         return {}
 
@@ -471,6 +534,11 @@ def _chain(selector) -> Iterator[str]:
     while isinstance(selector, dict):
         yield selector.get("type")
         selector = selector.get("refined_by")
+
+
+def _ends(link: _Link) -> list[tuple[_Node, _Node]]:
+    """(свой конец, другой конец) — у симметричной связи оба направления."""
+    return [(link.src, link.dst)] + ([(link.dst, link.src)] if link.symmetric else [])
 
 
 def _satisfies(rel: str, node: _Node, req: dict) -> bool:
