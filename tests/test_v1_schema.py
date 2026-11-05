@@ -10,7 +10,7 @@ from v1_support import JSON_SCHEMA, changed, example, json_errors, pydantic_erro
 SCHEMA_YAML = Path(__file__).resolve().parents[1] / "amem" / "schema" / "amem_v1.yaml"
 
 VALID = [
-    ("AtomPayload", "atom_arena_fact.yaml"),
+    ("AtomPayload", "atom_fact.yaml"),
     ("AtomPayload", "atom_formula_10_1.yaml"),
     ("AtomPayload", "atom_table_11_1.yaml"),
     ("EntityPayload", "entity_sp20.yaml"),
@@ -45,7 +45,7 @@ INVALID = {
     "дата числом": lambda d: d.update(valid_from=1496534400),
     "метка с объектом": lambda d: d.update(tags=["объект:кампус"]),
     "метка с объектом и пробелом": lambda d: d.update(tags=["объект: кампус"]),
-    "метка с другой приставкой": lambda d: d.update(tags=["prj:arena"]),
+    "метка с другой приставкой": lambda d: d.update(tags=["prj:campus"]),
 }
 
 
@@ -59,7 +59,7 @@ def test_invalid_atoms_rejected(change):
 def test_tags_with_designations_accepted():
     """Метка — свободный текст, в нём бывают обозначения норм с двоеточием; запрещена только приставка «объект:…»."""
     data = changed("atom_table_11_1.yaml",
-                   lambda d: d.update(tags=["ISO 6946:2017", "EN 1991-1-3:2003", "масштаб 1:100", "козырёк"]))
+                   lambda d: d.update(tags=["ISO 6946:2017", "EN 1991-1-3:2003", "масштаб 1:100", "навес"]))
     assert pydantic_errors("AtomPayload", data) == []
     assert json_errors("AtomPayload", data) == []
 
@@ -84,7 +84,7 @@ FOREIGN_PREFIX = {
                                   lambda d: d["sources"][0].update(edition=ATOM_V7)),
     "термин обозначения — сущность": ("AtomPayload", "atom_formula_10_1.yaml",
                                       lambda d: d["content"]["formula"]["symbols"][1].update(term="ent:sp20_13330")),
-    "объект в scope — атом": ("AtomPayload", "atom_arena_fact.yaml",
+    "объект в scope — атом": ("AtomPayload", "atom_fact.yaml",
                               lambda d: d["scope"].update(project=ATOM_V7)),
     "edition_of — атом": ("EntityPayload", "entity_sp20_2016.yaml",
                           lambda d: d.update(edition_of=ATOM_V7)),
@@ -105,7 +105,7 @@ def test_reference_with_wrong_prefix_rejected(class_name, name, change):
 PYDANTIC_ONLY = {
     "ключ с переводом строки в конце": ("EntityPayload", "entity_sp20.yaml",
                                         lambda d: d.update(key="sp20_13330\n")),
-    "число NaN": ("AtomPayload", "atom_arena_fact.yaml",
+    "число NaN": ("AtomPayload", "atom_fact.yaml",
                   lambda d: d["content"]["values"][0].update(amount=float("nan"))),
 }
 

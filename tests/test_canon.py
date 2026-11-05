@@ -110,7 +110,7 @@ def test_keys_merging_under_nfc_rejected():
 
 
 def test_nfc_and_nfd_hash_equal():
-    nfd = unicodedata.normalize("NFD", "Стойка витража — шаг до 2,5 м, ёлочный узел й")
+    nfd = unicodedata.normalize("NFD", "Стойка каркаса — шаг до 2,5 м, ёлочный узел й")
     nfc = unicodedata.normalize("NFC", nfd)
     assert nfd != nfc
     a = canon.canonical(atom(label={"ru": nfd}), "atom")
