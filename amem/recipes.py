@@ -431,7 +431,7 @@ def _path_evidence_role(path: dict, nodes: dict, roles: dict):
     return next(role for role, rank in _GRAPH_ROLE_RANK.items() if rank == weakest)
 
 
-def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 2, rel=None, status=None) -> dict:
+def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rel=None, status=None) -> dict:
     """Кратчайшие пути от записи по link/about/derived_from; узел посещается один раз."""
     if isinstance(depth, bool) or not isinstance(depth, int) or not 1 <= depth <= 3:
         raise records.RecordError("depth должен быть целым числом от 1 до 3")
