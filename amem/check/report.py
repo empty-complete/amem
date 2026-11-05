@@ -46,6 +46,18 @@ class Report:
     def violations(self) -> list[Issue]:
         return [i for i in self.issues if i.severity == "violation"]
 
+    def has_violations(self) -> bool:
+        return any(i.severity == "violation" for i in self.issues)
+
+    def summary(self) -> str:
+        """Краткая сводка для человека: число замечаний по важности, затем ошибки и предупреждения по строке."""
+        if not self.issues:
+            return "Замечаний нет"
+        count = {s: sum(i.severity == s for i in self.issues) for s in ("violation", "warning", "info")}
+        head = f"Ошибок: {count['violation']}, предупреждений: {count['warning']}, сведений: {count['info']}"
+        lines = [f"- {i.severity} {i.code} — {i.where}: {i.message}" for i in self.issues if i.severity != "info"]
+        return "\n".join([head, *lines])
+
     def for_label(self, label: str) -> list[Issue]:
         """Замечания записи: место — сама метка или метка и путь поля («@a1: sources[0]»), но не «@a10»."""
         return [i for i in self.issues if i.where == label or i.where.startswith(f"{label}:")]
