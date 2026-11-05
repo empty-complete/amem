@@ -13,7 +13,7 @@ by_locator  цитаты нет, страница найдена по локат
 unresolved  цитаты нет, локатор не помог
 not_found   цитата не найдена — новый атом не записывается
 no_file     путь похож на файл, но файла нет — новый атом не записывается
-no_text     у файла нет текста: скан, .docx, .pptx …
+no_text     у файла нет текста: скан, .doc, .pptx, повреждённый или слишком большой файл …
 external    источник — название, а не файл (письмо, сайт)
 error       сбой при чтении или сверке файла (ошибка PyMuPDF и т. п.) — фоновая сверка его больше не повторяет,
             заново — check-sources --all
@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from rapidfuzz import fuzz
+
+from . import extract
 
 MIN_QUOTE = 15            # цитата короче не находится однозначно
 FUZZY_MIN_LEN = 20        # нечёткий поиск — только для цитат не короче
@@ -96,6 +98,10 @@ def extract_pages(file: Path) -> list[str] | None:
     suffix = file.suffix.lower()
     if suffix in (".md", ".txt"):
         return [file.read_text(encoding="utf-8", errors="replace")]
+    if suffix in (".xlsx", ".xlsm"):
+        return extract.xlsx_pages(file)
+    if suffix == ".docx":
+        return extract.docx_pages(file)
     if suffix != ".pdf":
         return None
     import pymupdf
@@ -295,7 +301,7 @@ def _section(ref: str) -> list[str]:
 
 # (ссылка в локаторе, как это место выглядит в тексте документа: список шаблонов, пробуются по порядку);
 # группа «a» — текст для подсветки.
-# Проверено на СП 20.13330.2016 и СП 131.13330.2025: верные страницы для 19 из 20 локаторов базы.
+# Проверено на двух сводах правил: верные страницы почти для всех локаторов.
 _LOCATOR_RULES = [
     # заголовок таблицы: после номера тире или конец строки («Таблица 5.1, графа …» в ячейках — ссылка)
     (re.compile(rf"табл(?:ица|ицы|ице|ицу|ицей|\.)?\s*({_REF})", re.I),

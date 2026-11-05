@@ -39,3 +39,84 @@ def make_docs(root: Path) -> Path:
     (root / "Заметки" / "узел.md").write_text(NOTE_MD, encoding="utf-8")
     (root / "НД" / "скан.docx").write_bytes(b"PK\x03\x04 not a real docx")
     return root
+
+
+def make_xlsx(path: Path, sheets: dict[str, list[list]], formats: dict | None = None) -> Path:
+    """Книга xlsx: имя листа → строки значений; formats — number_format ячеек, {(лист, "B2"): "0.00"}."""
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    for name, rows in sheets.items():
+        ws = wb.create_sheet(name)
+        for row in rows:
+            ws.append(row)
+    for (sheet, ref), fmt in (formats or {}).items():
+        wb[sheet][ref].number_format = fmt
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(path)
+    return path
+
+
+_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+
+def _esc(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _runs(text: str) -> str:
+    """Текст с \\t как w:tab: «а\\tб» → два w:t и w:tab между ними."""
+    return "<w:tab/>".join(f"<w:t xml:space=\"preserve\">{_esc(part)}</w:t>" for part in text.split("\t"))
+
+
+def _docx_body(blocks: list) -> str:
+    out: list[str] = []
+    rendered = False                                 # ("rendered",) — метка в начале следующего абзаца
+    for block in blocks:
+        if isinstance(block, str):
+            mark = "<w:r><w:lastRenderedPageBreak/></w:r>" if rendered else ""
+            rendered = False
+            out.append(f"<w:p>{mark}<w:r>{_runs(block)}</w:r></w:p>")
+            continue
+        kind = block[0]
+        if kind == "table":
+            rows = "".join("<w:tr>" + "".join(f"<w:tc><w:p><w:r>{_runs(c)}</w:r></w:p></w:tc>" for c in row) + "</w:tr>"
+                           for row in block[1])
+            out.append(f"<w:tbl><w:tblPr/>{rows}</w:tbl>")
+        elif kind == "page":
+            out.append('<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
+        elif kind == "rendered":
+            rendered = True
+        elif kind == "del":
+            out.append(f"<w:p><w:del><w:r><w:delText>{_esc(block[1])}</w:delText></w:r></w:del></w:p>")
+        elif kind == "ins":
+            out.append(f"<w:p><w:ins><w:r>{_runs(block[1])}</w:r></w:ins></w:p>")
+        elif kind == "doctype":
+            pass                                     # обрабатывается в make_docx
+        else:
+            raise ValueError(f"неизвестный блок {kind!r}")
+    return "".join(out)
+
+
+def make_docx(path: Path, blocks: list) -> Path:
+    """Минимальный docx: абзацы, таблицы, разрывы страниц, правки; ("doctype",) — DOCTYPE в начале XML."""
+    import zipfile
+
+    doctype = '<!DOCTYPE w:document [<!ENTITY e "x">]>' if ("doctype",) in blocks else ""
+    document = (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>{doctype}'
+                f'<w:document xmlns:w="{_W}"><w:body>{_docx_body(blocks)}</w:body></w:document>')
+    content_types = ('<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/'
+                     'content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.'
+                     'relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/'
+                     'document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.'
+                     'main+xml"/></Types>')
+    rels = ('<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/'
+            'relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+            'relationships/officeDocument" Target="word/document.xml"/></Relationships>')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("[Content_Types].xml", content_types)
+        zf.writestr("_rels/.rels", rels)
+        zf.writestr("word/document.xml", document)
+    return path
