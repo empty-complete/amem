@@ -23,10 +23,14 @@ ENUM_COLUMNS = [
     ("object_status", "status", "ObjectStatus"),
     ("source", "role", "SourceRole"),
     ("source", "verdict", "SourceVerdict"),
+    ("review_item", "reason", "ReviewReason"),
+    ("review_item", "state", "ReviewItemState"),
+    ("verification", "method", "VerificationMethod"),
+    ("verification", "outcome", "VerificationOutcome"),
 ]
 # перечни, которых нет в схеме LinkML: служебные значения базы
 NOT_ENUM = {("status_log", "target"), ("search_document", "target"), ("search_code", "target"),
-            ("embedding", "target")}
+            ("embedding", "target"), ("review_item", "target")}
 
 # поля записей схемы, которых нет в теле ревизии, → где они хранятся (у концов связи — пара столбцов)
 RECORD_COLUMNS = {
