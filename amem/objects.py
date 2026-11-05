@@ -11,7 +11,8 @@
 id объекта в этих функциях и в lookup — UUID или ссылка obj:<UUID>, как её отдаёт lookup.object_by_path.
 
 Путь в папке документов — от её корня, как его прислали: «\\» читается как «/», имена сравниваются в NFC (имена
-файлов из архивов и macOS бывают в NFD). Ключ пути — этот путь в NFC, а не путь, куда ведёт ссылка. Путь к файлу без расширения,
+файлов из архивов и macOS бывают в NFD); абсолютный путь и «..» — ошибка. Ключ пути — этот путь в NFC, а не путь,
+куда ведёт ссылка; имя объекта — имя самого файла. Путь к файлу без расширения,
 к папке или в существующую папку — ошибка с подсказкой, а не переписка: иначе источник остался бы без копии
 и без сверки цитаты.
 
@@ -94,10 +95,11 @@ def _is(check, path: Path | None) -> bool:
         return False
 
 
-def _locate(docs: Path, path: str) -> Path | None:
-    """Файл по пути внутри папки документов или None. Не нашёлся как есть — ищется по частям пути с именами в NFC."""
+def _locate(docs: Path, path: str, check=Path.is_file) -> Path | None:
+    """Файл (или папка, check=Path.is_dir) по пути внутри папки документов или None. Не нашёлся как есть — ищется
+    по частям пути с именами в NFC."""
     file = sources.safe_join(docs, path)
-    if _is(Path.is_file, file):
+    if _is(check, file):
         return file
     current = docs
     for part in PurePosixPath(path).parts:
@@ -110,7 +112,15 @@ def _locate(docs: Path, path: str) -> Path | None:
         if current is None:
             return None
     file = sources.safe_join(docs, current.relative_to(docs).as_posix())
-    return file if _is(Path.is_file, file) else None
+    return file if _is(check, file) else None
+
+
+def _check_relative(path: str) -> None:
+    """Путь — от корня папки документов и вниз: ключ пути неизменен, выход выше корня дал бы чужой ключ."""
+    if PurePosixPath(path).is_absolute():
+        raise ObjectError(f"{path}: нужен путь от корня папки документов, а не абсолютный")
+    if ".." in PurePosixPath(path).parts:
+        raise ObjectError(f"{path}: «..» в пути не допускается — нужен путь от корня папки документов вниз")
 
 
 def _require_autocommit(conn: psycopg.Connection) -> None:
@@ -133,13 +143,12 @@ def ingest(conn: psycopg.Connection, store: ObjectStore, docs: Path, path: str, 
     _require_autocommit(conn)
     docs = Path(docs).resolve()
     path = _clean(path)
-    if PurePosixPath(path).is_absolute():
-        raise ObjectError(f"{path}: нужен путь от корня папки документов, а не абсолютный")
+    _check_relative(path)
     file = _locate(docs, path)
     if file is None:
         raise ObjectError(f"{path}: файла нет в папке документов")
     key = _nfc(posixpath.normpath(path))
-    name = _nfc(PurePosixPath(key).name)
+    name = _nfc(file.name)          # имя самого файла: у ссылки без расширения текст извлекался бы как у «без текста»
     try:
         with open(file, "rb") as f:
             digest = "sha256:" + hashlib.file_digest(f, "sha256").hexdigest()
@@ -205,22 +214,23 @@ def message(conn: psycopg.Connection, title: str) -> Version:
 def _resolve_path(conn, store, docs, path: str, agent: str) -> Version:
     """Существующий файл или путь, похожий на файл, — файл (нет файла — ошибка); адрес — сайт; иначе — переписка.
 
-    Не переписка, а ошибка с подсказкой: путь к файлу без расширения, папка, путь в существующую папку,
-    домен без схемы."""
+    Не переписка, а ошибка с подсказкой: путь к файлу без расширения, папка, путь в существующую папку (по первой
+    части пути, имена в NFC), домен без схемы. Проверки папок — раньше адреса: папка «example.org» — это папка."""
     docs, raw, path = Path(docs).resolve(), path.strip(), _clean(path)
+    _check_relative(path)
     if _locate(docs, path) is not None or sources.looks_like_file(path):
         return ingest(conn, store, docs, path, agent=agent)
+    for suffix in GUESS_SUFFIXES:
+        if _locate(docs, path + suffix) is not None:
+            raise ObjectError(f"{path}: файла нет в папке документов — возможно, «{path}{suffix}»?")
+    if _locate(docs, path, Path.is_dir) is not None:
+        raise ObjectError(f"{path}: это папка, а не файл")
+    if "/" in path and _locate(docs, PurePosixPath(path).parts[0], Path.is_dir) is not None:
+        raise ObjectError(f"{path}: файла нет в папке документов")
     if URL.search(raw):
         return web(conn, raw)
     if DOMAIN.fullmatch(raw):
         raise ObjectError(f"{raw}: похоже на адрес сайта — укажите его со схемой: https://{raw}")
-    for suffix in GUESS_SUFFIXES:
-        if _locate(docs, path + suffix) is not None:
-            raise ObjectError(f"{path}: файла нет в папке документов — возможно, «{path}{suffix}»?")
-    if _is(Path.is_dir, sources.safe_join(docs, path)):
-        raise ObjectError(f"{path}: это папка, а не файл")
-    if "/" in path and _is(Path.is_dir, sources.safe_join(docs, path.rsplit("/", 1)[0])):
-        raise ObjectError(f"{path}: файла нет в папке документов")
     return message(conn, raw)
 
 

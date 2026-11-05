@@ -96,10 +96,12 @@ def test_file_returned_to_old_content_reuses_old_version(kb, docs, store):
     assert store.head(first.object_id) == 2
 
 
-@pytest.mark.parametrize("path", ["НД/нет такого.pdf", "../outside.pdf", "НД"], ids=["нет файла", "наружу", "папка"])
-def test_missing_or_outside_file_rejected(kb, docs, store, path):
+@pytest.mark.parametrize("path, message", [
+    ("НД/нет такого.pdf", "файла нет в папке документов"), ("../outside.pdf", "«..» в пути не допускается"),
+    ("НД", "файла нет в папке документов")], ids=["нет файла", "наружу", "папка"])
+def test_missing_or_outside_file_rejected(kb, docs, store, path, message):
     (docs.parent / "outside.pdf").write_bytes(b"%PDF")
-    with pytest.raises(ObjectError, match="файла нет в папке документов"):
+    with pytest.raises(ObjectError, match=message):
         objects.ingest(kb, store, docs, path, agent=AGENT)
     assert kb.execute("SELECT count(*) FROM object").fetchone()[0] == 0
 
@@ -239,10 +241,23 @@ def test_resolve_sources_fills_object_version_and_digest(kb, docs, store):
     ("НД", "это папка, а не файл"),
     ("НД/СП 20.13330.2016", "файла нет в папке документов"),
     ("example.org", "похоже на адрес сайта — укажите его со схемой: https://example.org"),
-], ids=["без расширения", "папка", "точки в имени", "домен без схемы"])
+    ("НД/Архив/СП 99", "файла нет в папке документов"),
+    ("Йод/Письмо", "файла нет в папке документов"),
+    ("Йод", "это папка, а не файл"),
+    ("example.net/каталог", "файла нет в папке документов"),
+    ("example.net", "это папка, а не файл"),
+    ("manual.final", "файла нет в папке документов — возможно, «manual.final.pdf»?"),
+    ("НД/../НД/СП 99.pdf", "«..» в пути не допускается"),
+], ids=["без расширения", "папка", "точки в имени", "домен без схемы", "глубже существующей папки", "папка в NFD",
+        "папка в NFD целиком", "папка с именем сайта", "папка с именем сайта целиком", "расширение раньше домена",
+        "выход выше"])
 def test_source_that_looks_like_a_file_is_not_a_message(kb, docs, store, path, message):
     """Путь к файлу без расширения, папка, путь в существующую папку, домен — ошибка с подсказкой, а не переписка:
-    иначе источник остался бы без копии и без сверки цитаты."""
+    иначе источник остался бы без копии и без сверки цитаты. Папки ищутся по первой части пути с именами в NFC
+    и раньше адреса сайта."""
+    (docs / unicodedata.normalize("NFD", "Йод")).mkdir()
+    (docs / "example.net").mkdir()
+    shutil.copy(docs / PDF, docs / "manual.final.pdf")
     with pytest.raises(ObjectError, match=re.escape(f"sources[0]: {path}: {message}")):
         objects.resolve_sources(kb, store, docs, {"sources": [{"path": path}]}, agent=AGENT)
     assert kb.execute("SELECT count(*) FROM object").fetchone()[0] == 0
@@ -260,6 +275,22 @@ def test_path_forms(kb, docs, store):
     link = objects.ingest(kb, store, docs, "Ссылки/СП.pdf", agent=AGENT)
     assert (link.object_id, link.created) == (first.object_id, False)
     assert lookup.object_by_path(kb, "Ссылки/СП.pdf") == first.ref
+    for same in ("./НД/СП 99.pdf", "НД//СП 99.pdf"):                  # ключ — путь после normpath
+        again = objects.ingest(kb, store, docs, same, agent=AGENT)
+        assert (again.object_id, again.created) == (first.object_id, False)
+    assert lookup.get_object(kb, first.ref)["logical_paths"] == [PDF, "Ссылки/СП.pdf"]
+    for outside in ("../docs/" + PDF, "НД/../НД/СП 99.pdf"):         # «..» не даёт ключа выше корня
+        with pytest.raises(ObjectError, match="«..» в пути не допускается"):
+            objects.ingest(kb, store, docs, outside, agent=AGENT)
+
+
+def test_link_without_suffix_takes_the_file_name(kb, docs, store):
+    """Ссылка без расширения на PDF: имя объекта — имя самого файла, текст извлекается как у PDF."""
+    (docs / "Ссылки").mkdir()
+    (docs / "Ссылки" / "СП без расширения").symlink_to(docs / PDF)
+    version = objects.ingest(kb, store, docs, "Ссылки/СП без расширения", agent=AGENT)
+    assert lookup.get_object(kb, version.ref)["original_name"] == "СП 99.pdf"
+    assert objects.text(kb, store, version.object_id, 1)
 
 
 def test_nfd_file_name(kb, docs, store):
