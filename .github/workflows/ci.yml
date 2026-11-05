@@ -25,6 +25,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: PostgreSQL client 18 (pg_dump, pg_restore, psql) for backup tests
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          echo "AMEM_PG_BIN=/usr/lib/postgresql/18/bin" >> "$GITHUB_ENV"
       - run: pip install -e ".[dev]"
-      - run: pytest -q -p no:cacheprovider
+      - run: pytest -q -p no:cacheprovider -rA | tee pytest.log
+      - name: Restore tests ran once on PostgreSQL 18 and once on 16
+        run: |
+          for test in test_dump_restores_records_marks_and_search test_snapshot_restore_opens_the_old_file_version test_verify_restores_into_a_temporary_database_and_searches; do
+            for db in pg5433 pg5434; do
+              n=$(grep -c "^PASSED tests/test_backup_restore.py::${test}\[${db}\]" pytest.log || true)
+              [ "$n" = 1 ] || { echo "${test}[${db}]: passed $n times"; exit 1; }
+            done
+          done
       - run: python tools/gen_schema.py --check
