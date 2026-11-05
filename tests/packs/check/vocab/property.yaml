@@ -1,0 +1,20 @@
+scheme: property
+concepts:
+  - code: length
+    label: {ru: длина, en: length}
+    definition: {ru: "Длина, расстояние или размер."}
+    unit: m
+    plausible_min: 0
+    plausible_max: 1000
+  - code: pressure
+    label: {ru: давление, en: pressure}
+    definition: {ru: "Давление или нагрузка на площадь."}
+    unit: kPa
+    plausible_min: 0
+    plausible_max: 100
+  - code: temperature
+    label: {ru: температура, en: temperature}
+    definition: {ru: "Температура среды или поверхности."}
+    unit: Cel
+    plausible_min: -80
+    plausible_max: 200

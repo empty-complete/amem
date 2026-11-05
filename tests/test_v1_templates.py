@@ -1,5 +1,7 @@
 """Шаблоны пакетов: читаются строго, пути ведут на настоящие поля схемы, правила осмысленны и не повторяются,
-наследование без циклов. Движок проверяется на ядре и на пакете-примере tests/packs/example."""
+наследование без циклов. Движок проверяется на ядре и на пакете-примере tests/packs/example.
+
+Обход путей по схеме — packs._check_path: тот же, что проверяет шаблоны любого пакета при загрузке."""
 from pathlib import Path
 
 import pytest
@@ -8,46 +10,14 @@ import yaml
 from amem import packs
 
 SCHEMA = yaml.safe_load(packs.SCHEMA_FILE.read_text(encoding="utf-8"))
-ROOT = {"atom": "AtomPayload", "entity": "EntityPayload", "link": "LinkPayload"}
 REF_ENT = "^(ent:"          # так начинается шаблон поля-ссылки на сущность
 EXAMPLE = Path(__file__).with_name("packs") / "example"
-
-
-def _attrs(class_name: str) -> dict:
-    """Поля класса вместе с полями предков (is_a); поле потомка важнее."""
-    cls, attrs = SCHEMA["classes"][class_name], {}
-    while True:
-        attrs = {**(cls.get("attributes") or {}), **attrs}
-        if "is_a" not in cls:
-            return attrs
-        cls = SCHEMA["classes"][cls["is_a"]]
-
-
-def _resolve(path: str, class_name: str) -> dict:
-    """Пройти путь шаблона по полям LinkML; вернуть описание последнего поля или упасть.
-
-    [] — «каждый элемент списка, дальше вглубь»: стоит у промежуточных списков (sources[].edition)
-    и не ставится у последнего поля — правило тогда относится ко всему списку (sources[].selectors)."""
-    segments = path.split(".")
-    slot = {}
-    for i, segment in enumerate(segments):
-        name, each = segment.removesuffix("[]"), segment.endswith("[]")
-        assert class_name in SCHEMA["classes"], f"{path}: {class_name} — не класс, дальше по пути идти некуда"
-        attrs = _attrs(class_name)
-        assert name in attrs, f"{path}: у {class_name} нет поля {name}"
-        slot = attrs[name] or {}
-        if i == len(segments) - 1:
-            assert not each, f"{path}: [] у последнего поля не нужен"
-        else:
-            assert each == bool(slot.get("multivalued")), f"{path}: [] ставится ровно у промежуточных списков"
-        class_name = slot.get("range", "string")
-    return slot
 
 
 def _unit_paths(class_name: str, prefix: str = "", seen: tuple = ()) -> set[str]:
     """Все пути к полям unit, достижимые из класса, — чтобы has_value не пропустил ни одного."""
     out = set()
-    for name, slot in _attrs(class_name).items():
+    for name, slot in packs._attrs(class_name).items():
         slot = slot or {}
         rng = slot.get("range", "string")
         if name == "unit":
@@ -72,7 +42,7 @@ APPLIES_TO = {
 @pytest.mark.parametrize("t", TEMPLATES, ids=[t.code for t in TEMPLATES])
 def test_template_rules_point_to_real_fields(t):
     for rule in t.fields or []:
-        slot = _resolve(rule.path, ROOT[t.target])
+        slot = packs._check_path(rule.path, t.target)
         last = rule.path.split(".")[-1]
         assert rule.required or rule.min_count or rule.ucum or rule.selector_types or rule.entity_classes, \
             f"{t.code}: правило {rule.path} ничего не проверяет"
