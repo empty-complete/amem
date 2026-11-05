@@ -337,7 +337,8 @@ def _graph_node_rows(conn: psycopg.Connection, refs) -> dict:
             selected = cur.execute(
                 f"SELECT %(target)s AS target, rec.id, rec.key, rec.{kind} AS kind, rec.status, "
                 f"r.id AS revision_id, r.n AS revision FROM {target} rec "
-                f"JOIN {target}_current r ON r.{target}_id = rec.id WHERE rec.id = ANY(%(ids)s::uuid[])",
+                f"JOIN {target}_current r ON r.{target}_id = rec.id "
+                f"WHERE rec.id = ANY(%(ids)s::uuid[]) AND r.{target}_id = ANY(%(ids)s::uuid[])",
                 {"target": target, "ids": ids}).fetchall()
             rows.extend(selected)
     nodes = {}
@@ -351,14 +352,33 @@ def _graph_node_rows(conn: psycopg.Connection, refs) -> dict:
     return nodes
 
 
-def _graph_edges(conn: psycopg.Connection, frontier, rel) -> list[dict]:
+def _graph_rels(conn: psycopg.Connection, rels) -> frozenset[str] | None:
+    """Набор видов связей для обхода: None — все; иначе коды словаря rel (about и derived_from — тоже)."""
+    if rels is None:
+        return None
+    if isinstance(rels, str) or not hasattr(rels, "__iter__"):
+        raise records.RecordError("rels должен быть набором видов связей, не строкой")
+    values = frozenset(rels)
+    if not values:
+        raise records.RecordError("rels: пустой набор видов связей")
+    if not all(isinstance(value, str) for value in values):
+        raise records.RecordError("rels: виды связей — строки-коды")
+    known = {row[0] for row in conn.execute("SELECT code FROM concept WHERE scheme = 'rel'")}
+    unknown = values - known
+    if unknown:
+        raise records.RecordError(f"rels: неизвестные виды связей {', '.join(sorted(unknown))}")
+    return values
+
+
+def _graph_edges(conn: psycopg.Connection, frontier, rels: frozenset[str] | None) -> list[dict]:
     """Активные link и структурные ребра только текущих ревизий, прилегающие к frontier."""
     ids = [ref.split(":", 1)[1] for ref in frontier]
-    params = {"ids": ids, "rel": rel}
+    link_rels = None if rels is None else sorted(rels - _GRAPH_STRUCTURAL)
+    params = {"ids": ids, "rels": link_rels}
     edges = []
     with conn.cursor(row_factory=dict_row) as cur:
-        if rel is None or rel not in _GRAPH_STRUCTURAL:
-            condition = "AND l.rel = %(rel)s" if rel is not None else ""
+        if link_rels is None or link_rels:
+            condition = "AND l.rel = ANY(%(rels)s)" if link_rels is not None else ""
             rows = cur.execute(
                 "SELECT l.id, l.rel, coalesce(l.src_atom, l.src_entity) AS src, "
                 "CASE WHEN l.src_atom IS NULL THEN 'ent' ELSE 'atm' END AS src_prefix, "
@@ -376,16 +396,21 @@ def _graph_edges(conn: psycopg.Connection, frontier, rel) -> list[dict]:
                     "created_at": row["created_at"].isoformat(), "confidence": row["confidence"],
                     **({"qualifiers": row["qualifiers"]} if row["qualifiers"] is not None else {}),
                 })
-        for field in sorted(_GRAPH_STRUCTURAL & ({rel} if rel is not None else _GRAPH_STRUCTURAL)):
+        for field in sorted(_GRAPH_STRUCTURAL if rels is None else _GRAPH_STRUCTURAL & rels):
             table = "atom_about" if field == "about" else "atom_derived"
             other = "entity_id" if field == "about" else "atom_id"
             prefix = "ent" if field == "about" else "atm"
+            # исходящие (поле атома из frontier) и входящие (поле другого атома ведёт во frontier); условие
+            # на atom_id без OR — его PostgreSQL подставляет внутрь atom_current, а не читает все ревизии
+            select = (f"SELECT r.atom_id, f.{other} AS other_id, r.id AS revision_id, r.changeset_id, cs.agent, "
+                      f"r.recorded_at AS created_at FROM atom_current r JOIN {table} f ON f.revision_id = r.id "
+                      f"JOIN changeset cs ON cs.id = r.changeset_id ")
             rows = cur.execute(
-                f"SELECT r.atom_id, f.{other} AS other_id, r.id AS revision_id, r.changeset_id, cs.agent, "
-                f"r.recorded_at AS created_at FROM atom_current r JOIN {table} f ON f.revision_id = r.id "
-                f"JOIN changeset cs ON cs.id = r.changeset_id "
-                f"WHERE r.atom_id = ANY(%(ids)s::uuid[]) OR f.{other} = ANY(%(ids)s::uuid[]) "
-                "ORDER BY r.id, f." + other, params).fetchall()
+                f"{select} WHERE r.atom_id = ANY(%(ids)s::uuid[]) UNION "
+                f"{select} WHERE f.{other} = ANY(%(ids)s::uuid[]) AND r.atom_id = ANY(ARRAY("
+                f"SELECT ar.atom_id FROM {table} g JOIN atom_revision ar ON ar.id = g.revision_id "
+                f"WHERE g.{other} = ANY(%(ids)s::uuid[]))) "
+                "ORDER BY revision_id, other_id", params).fetchall()
             for row in rows:
                 edges.append({
                     "id": f"{field}:{row['revision_id']}:{row['other_id']}", "rel": field,
@@ -431,12 +456,17 @@ def _path_evidence_role(path: dict, nodes: dict, roles: dict):
     return next(role for role, rank in _GRAPH_ROLE_RANK.items() if rank == weakest)
 
 
-def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rel=None, status=None) -> dict:
-    """Кратчайшие пути от записи по link/about/derived_from; узел посещается один раз."""
+def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=None, statuses=None) -> dict:
+    """Кратчайшие пути от записи по link/about/derived_from; узел посещается один раз.
+
+    rels — набор видов связей (about и derived_from — тоже), statuses — статусы соседей, как у других рецептов.
+    При равной длине путь выбирается по последовательности id рёбер, затем по ref; рёбра вне дерева кратчайших
+    путей (параллельные связи, связи между уже найденными узлами) не возвращаются."""
     if isinstance(depth, bool) or not isinstance(depth, int) or not 1 <= depth <= 3:
         raise records.RecordError("depth должен быть целым числом от 1 до 3")
     _, _, start = _history_ref(conn, ref)
-    allowed_statuses = search._channel_statuses([status] if isinstance(status, str) else status)
+    allowed_statuses = search._channel_statuses(statuses)
+    rels = _graph_rels(conn, rels)
     nodes = _graph_node_rows(conn, [start])
     if start not in nodes:
         raise records.RecordError(f"{start}: у записи нет текущей ревизии")
@@ -447,19 +477,15 @@ def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rel=Non
     frontier = [start]
 
     for level in range(1, depth + 1):
-        adjacent = _graph_edges(conn, frontier, rel)
+        adjacent = _graph_edges(conn, frontier, rels)
         candidate_refs = {edge[end] for edge in adjacent for end in ("src", "dst")} - visited
         candidates_info = _graph_node_rows(conn, candidate_refs)
+        frontier_set = set(frontier)
         candidates = []
         for edge in adjacent:
-            for current in frontier:
-                if current == edge["src"]:
-                    neighbor, direction = edge["dst"], "forward"
-                elif current == edge["dst"]:
-                    neighbor, direction = edge["src"], "reverse"
-                else:
-                    continue
-                if neighbor in visited:
+            for current, neighbor, direction in ((edge["src"], edge["dst"], "forward"),
+                                                 (edge["dst"], edge["src"], "reverse")):
+                if current not in frontier_set or neighbor in visited:
                     continue
                 info = candidates_info.get(neighbor)
                 if info is None or info["status"] not in allowed_statuses:

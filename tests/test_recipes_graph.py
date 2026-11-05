@@ -105,8 +105,8 @@ def test_depth_rel_status_and_missing_start(kb):
     refs = written.refs
 
     default = around(kb, refs["@root"])
-    only_depends = around(kb, refs["@root"], rel="depends_on")
-    deprecated = around(kb, refs["@root"], status="deprecated")
+    only_depends = around(kb, refs["@root"], rels={"depends_on"})
+    deprecated = around(kb, refs["@root"], statuses=["deprecated"])
 
     assert {node["ref"] for node in default["nodes"]} == {refs["@root"], refs["@a"]}
     assert {node["ref"] for node in only_depends["nodes"]} == {refs["@root"], refs["@a"]}
@@ -240,3 +240,112 @@ def test_path_evidence_role_uses_current_atom_sources_and_ignores_usefulness(kb)
     current = around(kb, refs["@root"], depth=3)
     assert path_to(current, refs["@b"])["evidence_role"] is None
     json.dumps(current)
+
+
+def neighbours(result) -> set:
+    return {node["ref"] for node in result["nodes"]} - {result["start"]}
+
+
+def test_rels_filter_links_and_fields(kb):
+    """rels — набор видов: и связей link, и полей about / derived_from; неверный набор — ошибка, а не пустой ответ."""
+    refs = records.commit(kb, [entity("root"), atom("a", about=["@root"]), atom("b"), atom("c")], [
+        {"rel": "depends_on", "src": "@b", "dst": "@root"},
+        {"rel": "used_in", "src": "@c", "dst": "@root"},
+    ], agent=AGENT).refs
+    root = refs["@root"]
+
+    assert neighbours(around(kb, root)) == {refs["@a"], refs["@b"], refs["@c"]}
+    assert neighbours(around(kb, root, rels={"depends_on"})) == {refs["@b"]}
+    assert neighbours(around(kb, root, rels=["about"])) == {refs["@a"]}
+    assert neighbours(around(kb, root, rels=("depends_on", "used_in"))) == {refs["@b"], refs["@c"]}
+    assert neighbours(around(kb, root, rels=frozenset({"about", "used_in"}))) == {refs["@a"], refs["@c"]}
+    assert neighbours(around(kb, root, rels=["derived_from"])) == set()
+    for bad, message in [("depends_on", "не строкой"), (5, "не строкой"), ([], "пустой"),
+                         (["bogus"], "неизвестные виды связей bogus"), ([1], "строки")]:
+        with pytest.raises(RecordError, match=message):
+            around(kb, root, rels=bad)
+
+
+def test_equal_paths_and_parallel_links_pick_smallest_edge_ids(kb):
+    """Узел — один раз: из равных путей берётся путь с меньшей последовательностью id рёбер (а не с лучшей
+    уверенностью), из параллельных связей — связь с меньшим id; лишние рёбра в выдачу не попадают."""
+    refs = records.commit(kb, [entity("root"), atom("x"), atom("y"), atom("t"), atom("p")], agent=AGENT).refs
+
+    def link(rel, src, dst, confidence=None):
+        payload = {"rel": rel, "src": refs[src], "dst": refs[dst]}
+        if confidence is not None:
+            payload["confidence"] = confidence
+        return str(records.commit(kb, [], [payload], agent=AGENT).links[0])
+
+    # id связей растут со временем записи: root–y раньше root–x, а x–t раньше y–t
+    link("depends_on", "@y", "@root", 0.2)
+    link("depends_on", "@x", "@root", 0.9)
+    link("depends_on", "@t", "@x", 0.9)
+    y_t = link("depends_on", "@t", "@y", 0.2)
+    first_parallel = link("used_in", "@p", "@root", 0.95)
+    link("depends_on", "@p", "@root")
+
+    result = around(kb, refs["@root"], depth=2)
+
+    assert [edge["id"] for edge in result["edges"] if edge["to"] == refs["@t"]] == [y_t]
+    assert path_to(result, refs["@t"])["nodes"] == [refs["@root"], refs["@y"], refs["@t"]]
+    assert path_to(result, refs["@t"])["confidence"] == pytest.approx(0.2)
+    assert [edge["id"] for edge in result["edges"] if edge["to"] == refs["@p"]] == [first_parallel]
+    assert path_to(result, refs["@p"])["confidence"] == pytest.approx(0.95)
+    assert len(result["nodes"]) == len(neighbours(result)) + 1 == 5
+    assert len(result["edges"]) == len(result["paths"]) == 4
+
+
+def test_mixed_structural_and_scored_path_takes_the_link_score(kb):
+    """Структурное ребро не делает путь неизвестным: уверенность — минимум оценённых связей пути."""
+    refs = records.commit(kb, [entity("root"), atom("a", about=["@root"]), atom("b")], [
+        {"rel": "depends_on", "src": "@b", "dst": "@a", "confidence": 0.7},
+    ], agent=AGENT).refs
+
+    result = around(kb, refs["@root"], depth=2)
+
+    path = path_to(result, refs["@b"])
+    edges = {edge["id"]: edge for edge in result["edges"]}
+    assert [edges[edge_id]["rel"] for edge_id in path["edges"]] == ["about", "depends_on"]
+    assert path["confidence"] == pytest.approx(0.7)
+
+
+def test_pending_and_declined_revisions_do_not_traverse(kb):
+    """Поля ждущей проверки ревизии не ведут; запись без текущей ревизии (отклонена) — не сосед."""
+    written = records.commit(kb, [entity("old"), entity("new"), atom("a", about=["@old"])], agent=AGENT)
+    refs = written.refs
+    payload = {**atom("a").payload, "about": [refs["@new"]]}
+    payload.pop("ref")
+    records.commit(kb, [Item("atom", payload, record_id=refs["@a"].split(":", 1)[1], review_state="pending")],
+                   agent=AGENT)
+    ghost = records.commit(kb, [Item("atom", {**atom("ghost").payload}, review_state="pending")], agent=AGENT)
+    records.decide(kb, "atom", ghost.revisions[0].revision_id, False, agent="person:reviewer")
+    records.commit(kb, [], [{"rel": "depends_on", "src": ghost.refs["@ghost"], "dst": refs["@old"]}], agent=AGENT)
+
+    assert neighbours(around(kb, refs["@a"])) == {refs["@old"]}
+    assert neighbours(around(kb, refs["@new"])) == set()
+    assert neighbours(around(kb, refs["@old"])) == {refs["@a"]}
+
+
+def test_evidence_role_counts_start_atom_and_sources_without_role(kb):
+    """Источник без роли и стартовый атом без источников делают роль пути неизвестной, а не «primary»."""
+    primary = source_object(kb, "primary")
+    unrolled = source_object(kb, "unrolled")
+    refs = records.commit(kb, [
+        atom("start"), atom("strong", sources=[{**primary, "role": "primary"}]),
+        atom("mixed", sources=[{**primary, "role": "primary"}, unrolled]),
+        atom("plain", sources=[unrolled]), entity("hub"),
+        atom("anchor", sources=[{**primary, "role": "primary"}]),
+    ], [
+        {"rel": "depends_on", "src": "@strong", "dst": "@start", "confidence": 0.9},
+        {"rel": "used_in", "src": "@anchor", "dst": "@hub", "confidence": 0.9},
+        {"rel": "used_in", "src": "@mixed", "dst": "@hub", "confidence": 0.8},
+        {"rel": "used_in", "src": "@plain", "dst": "@hub", "confidence": 0.7},
+    ], agent=AGENT).refs
+
+    from_start = around(kb, refs["@start"])
+    assert path_to(from_start, refs["@strong"])["evidence_role"] is None          # у старта источников нет
+    from_anchor = around(kb, refs["@anchor"], depth=2)
+    assert path_to(from_anchor, refs["@hub"])["evidence_role"] == "primary"       # сущность роль не меняет
+    assert path_to(from_anchor, refs["@mixed"])["evidence_role"] is None
+    assert path_to(from_anchor, refs["@plain"])["evidence_role"] is None
