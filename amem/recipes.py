@@ -358,11 +358,12 @@ def _graph_rels(conn: psycopg.Connection, rels) -> frozenset[str] | None:
         return None
     if isinstance(rels, str) or not hasattr(rels, "__iter__"):
         raise records.RecordError("rels должен быть набором видов связей, не строкой")
-    values = frozenset(rels)
+    items = list(rels)
+    if not all(isinstance(value, str) for value in items):
+        raise records.RecordError("rels: виды связей — строки-коды")
+    values = frozenset(items)
     if not values:
         raise records.RecordError("rels: пустой набор видов связей")
-    if not all(isinstance(value, str) for value in values):
-        raise records.RecordError("rels: виды связей — строки-коды")
     known = {row[0] for row in conn.execute("SELECT code FROM concept WHERE scheme = 'rel'")}
     unknown = values - known
     if unknown:
