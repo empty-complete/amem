@@ -2,10 +2,10 @@ scheme: entity_class
 concepts:
 - code: project
   label:
-    ru: объект строительства
+    ru: проект
     en: project
   definition:
-    ru: Объект строительства целиком — Кампус, Пермь Арена.
+    ru: Работа с целью и сроками — продукт, исследование, стройка, кампания.
 - code: document
   label:
     ru: документ

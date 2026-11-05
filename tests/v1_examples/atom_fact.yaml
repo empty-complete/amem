@@ -1,0 +1,29 @@
+kind: fact
+key: pgvector.hnsw_max_dimensions
+label:
+  ru: "pgvector: индекс HNSW по типу vector строится для векторов до 2000 измерений"
+summary_plain:
+  ru: Для векторов длиннее 2000 измерений индекс HNSW по vector не построить — нужен halfvec, до 4000.
+body:
+  ru: "В README pgvector 0.8, раздел HNSW: vector — до 2000 измерений, halfvec — до 4000, bit — до 64 000."
+aliases: [предел размерности HNSW]
+codes: [hnsw, halfvec]
+content:
+  values:
+    - property: max_indexed_dimensions
+      label: {ru: "размерность vector, макс."}
+      amount: 2000
+      unit: "1"
+      quantity_kind: Dimensionless
+qualifiers:
+  - {property: software_version, value_text: "pgvector 0.8"}
+about: [ent:pgvector, "@hnsw"]
+sources:
+  - path: Документация/pgvector/README.md
+    selectors:
+      - {type: heading, value: HNSW, label: "раздел HNSW"}
+    quote: vector - up to 2,000 dimensions
+    role: primary
+rank: preferred
+scope: {project: ent:search_engine, discipline: [databases, search], visibility: department}
+tags: [поиск, индексы]

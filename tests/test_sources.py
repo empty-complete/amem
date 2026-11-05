@@ -20,16 +20,16 @@ def test_looks_like_file():
 
 def test_looks_like_file_suffixes():
     for name in ("Ресурсы/x/норматив · СП 131.2025.pdf", "узел.STEP", "деталь.SLDPRT",
-                 "Архив/Козырьки/Доп информация.txt"):
+                 "Архив/Навесы/Доп информация.txt"):
         assert looks_like_file(name), name
-    for name in ("alutech.by", "paroc.fi", "knauf.ru/docs/TS.pdf", "https://knauf.ru/x.pdf", "www.knauf.ru",
-                 "info@x.ru", "СП 20.13330.2016", "Спецификация кампус.pptx — итоговая презентация",
+    for name in ("example.by", "example.fi", "example.ru/docs/TS.pdf", "https://example.ru/x.pdf", "www.example.ru",
+                 "info@example.ru", "СП 20.13330.2016", "Спецификация кампус.pptx — итоговая презентация",
                  "Письмо производителя стеклопакетов, 12.09.2026"):
         assert not looks_like_file(name), name
 
 
 def test_looks_like_file_web():
-    for name in ("https://knauf.ru", "knauf.ru", "info@x.ru", "www.rehau.com/catalog", "сайт rehau.com"):
+    for name in ("https://example.ru", "example.ru", "info@example.ru", "www.example.com/catalog", "сайт example.com"):
         assert not looks_like_file(name), name
 
 
@@ -63,7 +63,7 @@ def test_safe_join_symlinks(tmp_path):
 
 def test_extract_pages(tmp_path, docs):
     pages = extract_pages(docs / "НД" / "СП 99.pdf")
-    assert len(pages) == 3 and "Пермь" in pages[2]
+    assert len(pages) == 3 and "Самара" in pages[2]
     assert extract_pages(docs / "Заметки" / "узел.md") == [NOTE_MD]
     assert extract_pages(docs / "НД" / "скан.docx") is None
     assert extract_pages(make_pdf(tmp_path / "скан.pdf", ["", ""])) is None
@@ -108,7 +108,7 @@ def test_normalize_soft_hyphen_and_invisible():
 def test_normalize_hyphens():
     assert normalize("культурно-\nдосуговой")[0] == normalize("культурно-досуговой")[0] == "культурнодосуговой"
     assert normalize("от 5-\n10 мм")[0] == "от 5-10 мм"
-    assert normalize("РСК-14")[0] == "рск-14"
+    assert normalize("КБ-14")[0] == "кб-14"
     assert normalize("район - II")[0] == "район - ii"
 
 
@@ -125,7 +125,7 @@ def test_normalize_dash_variants_and_spaces_after_hyphen():
 
 
 def test_normalize_latin_case():
-    assert normalize("ALUTECH ALT F50")[0] == normalize("Alutech Alt f50")[0]
+    assert normalize("ACME PRO X50")[0] == normalize("Acme Pro x50")[0]
 
 
 def test_normalize_position_map_invariant():
@@ -192,12 +192,12 @@ def test_find_quote_ok_across_hyphenation(sp):
 
 
 def test_find_quote_without_page(sp):
-    v = find_quote(sp, "Пермь относится ко II ветровому району")
+    v = find_quote(sp, "Самара относится ко II ветровому району")
     assert (v.verdict, v.page) == ("ok", 3)
 
 
 def test_find_quote_moved(sp):
-    v = find_quote(sp, "Пермь относится ко II ветровому району", page=1)
+    v = find_quote(sp, "Самара относится ко II ветровому району", page=1)
     assert (v.verdict, v.page) == ("moved", 3)
 
 
@@ -208,9 +208,9 @@ def test_find_quote_moved_to_nearest():
 
 
 def test_find_quote_fuzzy(sp):
-    v = find_quote(sp, "Пермь относится ко II ветровому раону", page=3)
+    v = find_quote(sp, "Самара относится ко II ветровому раону", page=3)
     assert (v.verdict, v.page) == ("fuzzy", 3)
-    assert v.score >= 85 and v.anchor == "Пермь относится ко II ветровому району"
+    assert v.score >= 85 and v.anchor == "Самара относится ко II ветровому району"
 
 
 def test_find_quote_compound_word_across_line():
@@ -240,7 +240,7 @@ def test_find_quote_not_found(sp):
     ("формула (1.1)", 2, "(1.1)"),
     ("приложение А", 3, "ПРИЛОЖЕНИЕ А"),                          # строка оглавления на стр. 1 пропущена
     ("карта 2 приложения А; табл. 1.1", 3, "ПРИЛОЖЕНИЕ А"),       # первая ссылка в локаторе — приложение
-    ("табл. 1.1, строка «Пермь»", 3, "Пермь"),                    # строка уточняет страницу внутри таблицы
+    ("табл. 1.1, строка «Самара»", 3, "Самара"),                    # строка уточняет страницу внутри таблицы
     ("таблицу 1.1", 2, "Т а б л и ц а 1 .1"),
     ("приложение а", 3, "ПРИЛОЖЕНИЕ А"),                          # строчная буква в локаторе (кириллица)
     ("приложение A", 3, "ПРИЛОЖЕНИЕ А"),                          # латинская A в локаторе
@@ -254,7 +254,7 @@ def test_find_locator(sp, locator, page, anchor):
 
 def test_find_locator_unresolved(sp):
     assert find_locator(sp, "п. 1.4").verdict == "unresolved"     # «1.4 соответственно» — не пункт
-    assert find_locator(sp, "разд. 7, строки «Пермь»").verdict == "unresolved"
+    assert find_locator(sp, "разд. 7, строки «Самара»").verdict == "unresolved"
 
 
 def test_find_locator_markdown_section():
@@ -272,30 +272,30 @@ def test_find_locator_section_prefers_heading_and_whole_words():
 
 def test_find_locator_row_stays_inside_table():
     doc = DocText.of(["Т а б л и ц а 1 .1 – Климат\nМосква 1\nКазань 2 и ещё немного текста строки",
-                      "Т а б л и ц а 2 .1 – Ветер\nПермь 2\nи ещё немного текста таблицы два"])
-    assert find_locator(doc, "табл. 1.1, строка «Пермь»") == Verdict("by_locator", 1, "Т а б л и ц а 1 .1")
+                      "Т а б л и ц а 2 .1 – Ветер\nСамара 2\nи ещё немного текста таблицы два"])
+    assert find_locator(doc, "табл. 1.1, строка «Самара»") == Verdict("by_locator", 1, "Т а б л и ц а 1 .1")
 
 
 def test_find_locator_row_after_caption_on_same_page():
-    doc = DocText.of(["Т а б л и ц а 5 .1 – Холод\nПермь -35\nи ещё немного текста таблицы пять",
-                      "Хвост таблицы 5.1\nПермь -30\nТ а б л и ц а 6 .1 – Тепло\nМосква 23",
-                      "Продолжение таблицы 6.1\nПермь 24\nи ещё немного текста таблицы шесть"])
-    assert find_locator(doc, "табл. 6.1, строка «Пермь»") == Verdict("by_locator", 3, "Пермь")
+    doc = DocText.of(["Т а б л и ц а 5 .1 – Холод\nСамара -35\nи ещё немного текста таблицы пять",
+                      "Хвост таблицы 5.1\nСамара -30\nТ а б л и ц а 6 .1 – Тепло\nМосква 23",
+                      "Продолжение таблицы 6.1\nСамара 24\nи ещё немного текста таблицы шесть"])
+    assert find_locator(doc, "табл. 6.1, строка «Самара»") == Verdict("by_locator", 3, "Самара")
     # строка ниже следующего заголовка на той же странице — уже не наша таблица
-    doc = DocText.of(["Т а б л и ц а 5 .1 – Холод\nМосква -25\nТ а б л и ц а 6 .1 – Тепло\nПермь 24",
+    doc = DocText.of(["Т а б л и ц а 5 .1 – Холод\nМосква -25\nТ а б л и ц а 6 .1 – Тепло\nСамара 24",
                       "и ещё немного текста таблицы шесть, страница вторая документа"])
-    assert find_locator(doc, "табл. 5.1, строка «Пермь»") == Verdict("by_locator", 1, "Т а б л и ц а 5 .1")
+    assert find_locator(doc, "табл. 5.1, строка «Самара»") == Verdict("by_locator", 1, "Т а б л и ц а 5 .1")
     # «Таблица В.3а» (СП 20, с. 70) — заголовок следующей таблицы, хоть после номера и буква
-    doc = DocText.of(["Т а б л и ц а В.3 – Коэффициенты\nМосква 1\nТаблица В.3а\nПермь 2",
+    doc = DocText.of(["Т а б л и ц а В.3 – Коэффициенты\nМосква 1\nТаблица В.3а\nСамара 2",
                       "и ещё немного текста таблицы, страница вторая документа"])
-    assert find_locator(doc, "табл. В.3, строка «Пермь»") == Verdict("by_locator", 1, "Т а б л и ц а В.3")
+    assert find_locator(doc, "табл. В.3, строка «Самара»") == Verdict("by_locator", 1, "Т а б л и ц а В.3")
 
 
 def test_find_locator_row_ignores_table_reference_at_line_start():
     # «Таблица 6.1, графа 3» в начале строки — ссылка в тексте (СП 131, с. 230), а не заголовок следующей таблицы
     doc = DocText.of(["Т а б л и ц а 5 .1 – Холод\nМосква -25\nТаблица 6.1, графа 3 — для тёплого периода",
-                      "Продолжение таблицы 5.1\nТаблица 6.1, графа 4\nПермь -35\nи ещё немного текста таблицы"])
-    assert find_locator(doc, "табл. 5.1, строка «Пермь»") == Verdict("by_locator", 2, "Пермь")
+                      "Продолжение таблицы 5.1\nТаблица 6.1, графа 4\nСамара -35\nи ещё немного текста таблицы"])
+    assert find_locator(doc, "табл. 5.1, строка «Самара»") == Verdict("by_locator", 2, "Самара")
 
 
 def test_find_locator_appendix_letter_is_not_preposition():
@@ -343,7 +343,7 @@ def test_find_locator_skips_table_of_contents_page():
 
 def test_judge(sp):
     assert judge(None, "что угодно").verdict == "no_text"
-    assert judge(sp, "Пермь относится ко II ветровому району").verdict == "ok"
+    assert judge(sp, "Самара относится ко II ветровому району").verdict == "ok"
     assert judge(sp, "", None, "табл. 1.1").verdict == "by_locator"
     assert judge(sp, "", None, "").verdict == "unresolved"
     assert judge(DocText.of([NOTE_MD]), "", None, "заметка") == Verdict("ok", 1)
