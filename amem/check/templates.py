@@ -10,7 +10,7 @@ path — так потомок заменяет предка, а из двух �
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -20,6 +20,9 @@ class Rules:
     allowed: frozenset[str] | None             # None — исходящие связи не ограничены
     required_links: tuple[dict, ...]           # RequiredLink (json), сведённые по rel
     high_risk: frozenset[str]
+    # чьё правило действует — замечание называет шаблон: path → code@version, rel обязательной связи → code@version
+    field_origins: dict[str, str] = field(default_factory=dict)
+    link_origins: dict[str, str] = field(default_factory=dict)
 
 
 def active(conn) -> dict[str, dict]:
@@ -51,17 +54,23 @@ def rules_for(active: dict[str, dict], target: str, code: str) -> Rules:
 
     fields: dict[str, dict] = {}
     required: dict[str, dict] = {}
+    field_origins: dict[str, str] = {}
+    link_origins: dict[str, str] = {}
     allowed: frozenset[str] | None = None
     high_risk: set[str] = set()
     for name in order:
         t = active[name]
+        applied = f"{name}@{t['version']}"
         for rule in t.get("fields") or []:
             fields[rule["path"]] = dict(rule)
+            field_origins[rule["path"]] = applied
         links = t.get("links") or {}
         if links.get("allowed") is not None:
             allowed = frozenset(links["allowed"])
         for req in links.get("required") or []:
             required[req["rel"]] = dict(req)
+            link_origins[req["rel"]] = applied
         high_risk.update(t.get("high_risk") or [])
     return Rules(templates=tuple(f"{name}@{active[name]['version']}" for name in order), fields=fields,
-                 allowed=allowed, required_links=tuple(required.values()), high_risk=frozenset(high_risk))
+                 allowed=allowed, required_links=tuple(required.values()), high_risk=frozenset(high_risk),
+                 field_origins=field_origins, link_origins=link_origins)
