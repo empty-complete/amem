@@ -124,13 +124,15 @@ def test_existing_copy_is_not_overwritten_and_partial_pairs_are_not_copies(pgdb,
         backup.create(src, folder, now=NOW)
     assert open(first["dump"], "rb").read() == before
 
-    def crash(path, data):
-        raise OSError("сбой процесса при записи манифеста")
+    def crash(path, data, **kwargs):
+        raise OSError("сбой при записи манифеста")
 
     monkeypatch.setattr(backup, "_write_json", crash)
     with pytest.raises(OSError):
-        backup.create(src, folder, now=NOW + timedelta(seconds=1))           # дамп есть, манифеста нет
+        backup.create(src, folder, now=NOW + timedelta(seconds=1))
     monkeypatch.undo()
+    assert not list(folder.glob("2026-11-05T08-00-01Z*"))                    # дамп без манифеста убран
+    (folder / "2026-11-05T08-00-01Z.dump").write_bytes(b"dump")               # дамп без манифеста после сбоя
     (folder / "2026-11-05T08-00-02Z.dump.tmp").write_bytes(b"half")             # оборванный дамп
     (folder / "2026-11-05T08-00-03Z.dump").write_bytes(b"x")
     (folder / "2026-11-05T08-00-03Z.json").write_text("{broken", encoding="utf-8")   # битый манифест

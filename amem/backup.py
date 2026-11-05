@@ -36,7 +36,6 @@ import json
 import os
 import re
 import shutil
-import signal
 import stat
 import subprocess
 import tempfile
@@ -120,26 +119,35 @@ def _close(stream) -> None:
 
 def _restore_via_sql(pg_restore: str, psql: str, dump: Path, conninfo: str, env: dict, password: str | None) -> None:
     """pg_restore 18 начинает восстановление с SET transaction_timeout — такого параметра нет у серверов до 17.
-    Поэтому для них: pg_restore пишет SQL, из его заголовка эта строка убирается, psql выполняет его в своей
-    транзакции и останавливается на первой ошибке. COMMIT пишется, только когда pg_restore завершился успешно:
-    оборванный на середине pg_restore оставляет psql без COMMIT, и сервер откатывает всё."""
+    Поэтому для них: pg_restore -1 пишет SQL одной транзакцией, из его заголовка эта строка убирается, psql выполняет
+    его и останавливается на первой ошибке. Все COMMIT вне данных COPY придерживаются, и один COMMIT пишется в конце,
+    только когда pg_restore завершился успешно: оборванный на середине pg_restore оставляет psql без COMMIT, и сервер
+    откатывает всё."""
     with tempfile.TemporaryFile() as restore_err, tempfile.TemporaryFile() as psql_err:
-        producer = subprocess.Popen([pg_restore, "--file=-", "--no-owner", "--no-privileges", str(dump)],
-                                    stdout=subprocess.PIPE, stderr=restore_err, env=env)
+        producer = subprocess.Popen([pg_restore, "--single-transaction", "--file=-", "--no-owner",
+                                     "--no-privileges", str(dump)], stdout=subprocess.PIPE, stderr=restore_err, env=env)
         consumer = subprocess.Popen([psql, "--no-psqlrc", "--quiet", "--no-password", "--set=ON_ERROR_STOP=1",
                                      f"--dbname={conninfo}"],
                                     stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=psql_err, env=env)
+        psql_stopped, in_copy = False, False
         try:
             try:
                 consumer.stdin.write(b"BEGIN;\n")
                 for number, line in enumerate(producer.stdout):
-                    if number < HEADER_LINES and line.strip() == b"SET transaction_timeout = 0;":
+                    stripped = line.strip()
+                    if in_copy:
+                        in_copy = stripped != b"\\."              # данные COPY — до строки «\.»
+                    elif stripped.startswith(b"COPY ") and stripped.endswith(b"FROM stdin;"):
+                        in_copy = True
+                    elif stripped == b"COMMIT;":
+                        continue                                  # фиксирует только наш COMMIT в конце
+                    elif number < HEADER_LINES and stripped == b"SET transaction_timeout = 0;":
                         continue
                     consumer.stdin.write(line)
                 if producer.wait() == 0:
                     consumer.stdin.write(b"COMMIT;\n")
             except BrokenPipeError:
-                pass                                      # psql остановился на ошибке — она в его stderr
+                psql_stopped = True                       # psql остановился на ошибке — она в его stderr
         except BaseException:                             # прерывание: оба процесса — сразу, без COMMIT
             producer.kill()
             consumer.kill()
@@ -148,10 +156,10 @@ def _restore_via_sql(pg_restore: str, psql: str, dump: Path, conninfo: str, env:
             _close(producer.stdout)
             _close(consumer.stdin)
             produced, consumed = producer.wait(), consumer.wait()
-        # причина — первой: если pg_restore упал сам, это он; если он лишь получил SIGPIPE — ошибка psql
+        # причина — первой: psql перестал читать — его ошибка; иначе упавший pg_restore
         failed = [(name, code, err) for name, code, err in
                   (("psql", consumed, psql_err), ("pg_restore", produced, restore_err)) if code != 0]
-        if produced not in (0, -signal.SIGPIPE):
+        if not psql_stopped and produced != 0:
             failed.sort(key=lambda item: item[0] != "pg_restore")
         parts = []
         for name, code, err in failed:
@@ -197,11 +205,32 @@ def _fsync(path: Path) -> None:
         os.close(fd)
 
 
-def _write_json(path: Path, data: dict) -> None:
-    """JSON атомарно: временный файл, fsync, переименование, fsync папки."""
+def _place(tmp: Path, final: Path) -> None:
+    """Готовый файл — на место без перезаписи: жёсткая ссылка не заменяет существующий файл (копию, только что
+    сделанную другим процессом в ту же секунду). На файловой системе без жёстких ссылок — переименование."""
+    try:
+        os.link(tmp, final)
+    except FileExistsError:
+        tmp.unlink(missing_ok=True)
+        raise BackupError(f"{final.name} уже есть — существующая копия не перезаписывается") from None
+    except OSError:
+        if final.exists():
+            tmp.unlink(missing_ok=True)
+            raise BackupError(f"{final.name} уже есть — существующая копия не перезаписывается") from None
+        os.replace(tmp, final)
+    else:
+        tmp.unlink()
+    _fsync(final.parent)
+
+
+def _write_json(path: Path, data: dict, *, exclusive: bool = False) -> None:
+    """JSON атомарно: временный файл, fsync, переименование (exclusive — без перезаписи), fsync папки."""
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     _fsync(tmp)
+    if exclusive:
+        _place(tmp, path)
+        return
     os.replace(tmp, path)
     _fsync(path.parent)
 
@@ -281,9 +310,9 @@ def _dump(dsn: str, backup_dir: Path, name: str, created_at: str, *, during=None
             if conn.info.server_version >= 170000:
                 conn.execute("SET LOCAL transaction_timeout = 0")
             snapshot = conn.execute("SELECT pg_export_snapshot()").fetchone()[0]
-            facts = _facts(conn)
             if during is not None:
-                during(conn)
+                during(conn)                                 # первым: снимок держит блокировку объектов как можно короче
+            facts = _facts(conn)
             _run([pg_dump, "--format=custom", f"--snapshot={snapshot}", "--no-password", f"--file={tmp}",
                   f"--dbname={conninfo}"], env, password, "pg_dump")
             try:
@@ -298,12 +327,15 @@ def _dump(dsn: str, backup_dir: Path, name: str, created_at: str, *, during=None
         raise
     _fsync(tmp)
     size, digest = tmp.stat().st_size, _sha256(tmp)
-    os.replace(tmp, dump)
-    _fsync(backup_dir)
+    _place(tmp, dump)
     data = {"format": FORMAT, "kind": "amem.pg_dump", "file": dump.name, "size": size, "sha256": digest,
             "created_at": created_at, "pg_dump_version": _version(pg_dump),
             "search_text_version": SEARCH_TEXT_VERSION, **facts}
-    _write_json(manifest, data)
+    try:
+        _write_json(manifest, data, exclusive=True)
+    except BaseException:
+        dump.unlink(missing_ok=True)                     # дамп наш: манифест на место не встал
+        raise
     try:
         check(manifest)                                  # новая пара проверена; не прошла — это не копия
     except BackupError:
@@ -462,6 +494,7 @@ def snapshot(dsn: str, objects_root: Path, snapshot_dir: Path, *, now: datetime 
         with psycopg.connect(dsn, autocommit=True) as lock:
             # блокировка записи объектов — до снимка транзакции: запись версии, начатая раньше, успеет
             # зафиксироваться и попадёт в снимок, а новая не начнётся, пока хранилище копируется
+            lock.execute("SET idle_session_timeout = 0")     # блокировка не пропадёт посреди долгой копии
             lock.execute("SELECT pg_advisory_lock(%s)", (OBJECTS_LOCK,))
             state["locked"] = True
             try:
@@ -519,7 +552,10 @@ def _read_snapshot(root: Path) -> tuple[dict, Path]:
             and isinstance(v.get("digest"), str) for v in versions):
         raise BackupError(f"{root}: в манифесте снимка нет списка версий файлов")
     listed = set()
-    for item in objects.get("files", []):
+    files = objects.get("files")
+    if not isinstance(files, list) or not all(isinstance(item, dict) for item in files):
+        raise BackupError(f"{root}: в манифесте снимка нет списка файлов хранилища")
+    for item in files:
         path = _inside(objects_dir, item.get("path"), f"{root}: objects")
         if not path.is_file() or path.stat().st_size != item.get("size") or _sha256(path) != item.get("sha256"):
             raise BackupError(f"{root}: файл хранилища {item.get('path')} не совпадает с манифестом")
@@ -552,7 +588,12 @@ def _require_empty_db(dsn: str) -> int:
             f"+ (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
             f"WHERE {system} AND {own('pg_proc', 'p')}) "
             f"+ (SELECT count(*) FROM pg_namespace n WHERE {system} AND n.nspname <> 'public' "
-            f"AND {own('pg_namespace', 'n')})").fetchone()
+            f"AND {own('pg_namespace', 'n')}) "
+            # свои домены, перечисления, диапазоны и составные типы (не строки таблиц и не массивы)
+            f"+ (SELECT count(*) FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace "
+            f"WHERE {system} AND {own('pg_type', 't')} AND (t.typtype IN ('d', 'e', 'r') "
+            f"OR (t.typtype = 'c' AND EXISTS (SELECT 1 FROM pg_class c WHERE c.oid = t.typrelid "
+            f"AND c.relkind = 'c'))))").fetchone()
     if row[0]:
         raise BackupError("целевая база не пустая — восстановление только в пустую базу")
     return version
@@ -636,10 +677,13 @@ def verify(source: Path, dsn: str, *, provider=None, scratch: Path | None = None
     temp_dsn = _with_db(dsn, name)
     _, _, password = _client(dsn)
     stage = "создание временной базы"
-    workdir, created, done = None, False, False
+    workdir, created, done, left = None, False, False, ""
     try:
         try:
-            workdir = Path(tempfile.mkdtemp(prefix="amem-verify-", dir=scratch))
+            try:
+                workdir = Path(tempfile.mkdtemp(prefix="amem-verify-", dir=scratch))
+            except OSError as e:
+                raise BackupError(f"временная папка не создаётся: {e}") from None
             with psycopg.connect(dsn, autocommit=True) as admin:
                 admin.execute(f'CREATE DATABASE "{name}"')
             created = True
@@ -678,13 +722,14 @@ def verify(source: Path, dsn: str, *, provider=None, scratch: Path | None = None
                         admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
                 except psycopg.Error as e:
                     cleanup = e
+                    left = f" (временная база {name} осталась: {type(e).__name__})"
             if workdir is not None:
                 shutil.rmtree(workdir, ignore_errors=True)
             if cleanup is not None and done:                 # при другой ошибке она важнее — не подменяем её
                 stage = "удаление временной базы"
                 raise cleanup
     except BackupError as e:
-        raise BackupError(f"verify: {stage}: {e}") from None
+        raise BackupError(f"verify: {stage}: {e}{left}") from None
     except psycopg.Error as e:
         detail = str(e).replace(password, "***") if password else str(e)
-        raise BackupError(f"verify: {stage}: {type(e).__name__}: {detail}") from None
+        raise BackupError(f"verify: {stage}: {type(e).__name__}: {detail}{left}") from None

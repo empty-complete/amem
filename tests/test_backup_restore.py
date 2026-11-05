@@ -298,7 +298,7 @@ def test_interrupted_restore_leaves_the_target_empty(pgdb, tmp_path, docs, monke
     # Прямой путь (17 и новее): без определения таблицы atom её данные падают посреди восстановления.
     broken = ('case "$*" in *--file=-*) "$REAL" "$@" | awk \'/^COPY /{exit} {print}\'; exit 1;; esac\n'
               'for a in "$@"; do last="$a"; done\n'
-              'list="$(mktemp)"; "$REAL" -l "$last" | grep -v " TABLE public atom " > "$list"\n'
+              'list="$0.list"; "$REAL" -l "$last" | grep -v " TABLE public atom " > "$list"\n'
               'exec "$REAL" -L "$list" "$@"')
     monkeypatch.setenv("AMEM_PG_BIN", str(tools(tmp_path, pg_restore=broken)))
     with pytest.raises(BackupError, match="pg_restore завершился с кодом 1"):
@@ -405,3 +405,44 @@ def test_restore_compares_database_file_versions_with_the_snapshot(pgdb, tmp_pat
     with pytest.raises(BackupError, match="версии файлов в базе не совпадают со снимком"):
         backup.restore(root, dst, objects_root=tmp_path / "restored")
     assert not (tmp_path / "restored").exists()
+
+
+def test_snapshot_releases_the_objects_lock_only_after_the_copy(pgdb, tmp_path, docs, monkeypatch):
+    """Блокировка записи объектов держится до конца копии: писатель, ждущий её, не успевает записать файл в хранилище
+    между снимком базы и копией — иначе в копии была бы версия, которой нет в дампе."""
+    import threading
+    from contextlib import contextmanager
+
+    src, dst = pgdb(), pgdb()
+    fill(src, tmp_path / "objects", docs)
+    store = ObjectStore(tmp_path / "objects")
+    (docs / PDF).write_bytes((docs / PDF).read_bytes() + b"\n% v2")
+    stored = threading.Event()
+    real_add, real_locked = ObjectStore.add_version, ObjectStore._locked
+    main = threading.current_thread()
+
+    def add_and_signal(self, *args, **kwargs):
+        real_add(self, *args, **kwargs)
+        stored.set()
+
+    @contextmanager
+    def locked_after_a_chance(self):
+        if threading.current_thread() is main and not stored.is_set():
+            def write():
+                with db.connect(src) as conn:
+                    objects.ingest(conn, store, docs, PDF, agent=AGENT)
+
+            threading.Thread(target=write, daemon=True).start()
+            stored.wait(1.0)                    # даём писателю шанс — он должен ждать блокировку снимка
+        with real_locked(self):
+            yield
+
+    monkeypatch.setattr(ObjectStore, "add_version", add_and_signal)
+    monkeypatch.setattr(ObjectStore, "_locked", locked_after_a_chance)
+    snap = backup.snapshot(src, tmp_path / "objects", tmp_path / "snap", now=NOW)
+    assert stored.wait(10)                      # писатель дописал файл уже после копии
+    monkeypatch.undo()
+    report = backup.restore(snap["path"], dst, objects_root=tmp_path / "restored")
+    assert report["objects"]["file_versions"] == 1
+    restored = ObjectStore(tmp_path / "restored")
+    assert restored.head(snap["objects"]["file_versions"][0]["object"]) == 1
