@@ -4,6 +4,9 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash          # явный bash — это bash -eo pipefail: упавший pytest | tee валит шаг
     services:
       # тестовые базы, как в docker-compose.yml: 18 на 5433, 16 на 5434
       db-test:
