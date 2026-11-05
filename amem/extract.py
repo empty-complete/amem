@@ -11,17 +11,25 @@ from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from xml.etree import ElementTree
 
-MAX_XML_BYTES = 256 * 2**20          # распакованный word/document.xml
+MAX_XML_BYTES = 64 * 2**20           # распакованный word/document.xml: ElementTree строит всё дерево в памяти
 MAX_TEXT_CHARS = 50_000_000
+MAX_CELLS = 5_000_000                # обойдённых ячеек xlsx, пустые тоже
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 _MC_FALLBACK = "{http://schemas.openxmlformats.org/markup-compatibility/2006}Fallback"
 
-_SKIP = {W + t for t in ("del", "delText", "instrText", "pPr", "rPr", "tblPr", "trPr", "tcPr", "sectPr")} | {_MC_FALLBACK}
+_SKIP = {W + t for t in ("del", "moveFrom", "delText", "instrText", "pPr", "rPr", "tblPr", "trPr", "tcPr", "sectPr")} | {_MC_FALLBACK}
 _NUMBER = re.compile(r"[#0?,]*0(?:\.([0#]+))?")
 _FORMAT_NOISE = re.compile(r'"[^"]*"|\[[^\]]*\]|\\.|_.|\*.')
 
 _BAD_FILE = (zipfile.BadZipFile, KeyError, ElementTree.ParseError, ValueError, NotImplementedError, RuntimeError,
-             RecursionError)
+             RecursionError, MemoryError)
+
+
+class _NoDoctype(ElementTree.TreeBuilder):
+    """Любое объявление DOCTYPE (а с ним и сущностей) отвергается при разборе, в любой кодировке и после комментариев."""
+
+    def doctype(self, name, pubid, system):
+        raise ValueError("DOCTYPE в XML")
 
 
 def _round(x: float, decimals: int) -> Decimal:
@@ -45,6 +53,7 @@ def _cell_text(value, number_format: str) -> str:
 
 
 def _number_text(x: int | float, number_format: str) -> str:
+    # Разделитель тысяч (#,##0.00) намеренно не ставится: в документах он разный (пробел, запятая, неразрывный пробел).
     section = _FORMAT_NOISE.sub("", number_format.split(";")[0])
     m = _NUMBER.search(section)
     if m and "E" not in section.upper().replace("\\", "") and x == x and abs(x) != float("inf"):
@@ -81,11 +90,15 @@ def xlsx_pages(file: Path) -> list[str] | None:
     pages: list[str] = []
     total = 0
     has_text = False
+    cell_count = 0
     try:
         for ws in wb.worksheets:
             ws.reset_dimensions()                       # заявленный размер листа в файле бывает неверным
             lines = [ws.title]
             for row in ws.iter_rows():
+                cell_count += len(row) or 1
+                if cell_count > MAX_CELLS:
+                    return None
                 cells = [_cell_text(c.value, getattr(c, "number_format", "")) for c in row]
                 line = "\t".join(cells).rstrip("\t")
                 if line.strip():
@@ -163,6 +176,10 @@ def _walk(el: ElementTree.Element, out: _Pages) -> None:
             out.text(child.text or "")
         elif tag == W + "tab":
             out.text("\t")
+        elif tag == W + "noBreakHyphen":
+            out.text("-")
+        elif tag == W + "cr":
+            out.end_paragraph()
         elif tag == W + "br":
             kind = child.get(W + "type")
             if kind == "page":
@@ -181,7 +198,8 @@ def _walk(el: ElementTree.Element, out: _Pages) -> None:
             out.line = ["".join(out.line).rstrip(" "), "\t"]
         elif tag == W + "tr":
             _walk(child, out)
-            out.end_line()
+            if not out.in_cell:                         # строка вложенной таблицы остаётся в строке внешней
+                out.end_line()
         else:
             _walk(child, out)
         if out.chars > MAX_TEXT_CHARS:
@@ -193,9 +211,11 @@ def docx_pages(file: Path) -> list[str] | None:
     try:
         with zipfile.ZipFile(file) as zf:
             data = _read_limited(zf, "word/document.xml")
-        if data is None or b"<!DOCTYPE" in data[:4096]:
+        if data is None:
             return None
-        root = ElementTree.fromstring(data)
+        parser = ElementTree.XMLParser(target=_NoDoctype())
+        parser.feed(data)
+        root = parser.close()
         out = _Pages()
         _walk(root, out)
         return out.result()
