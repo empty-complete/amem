@@ -85,3 +85,34 @@ def pg(request):
         conn.close()
         admin.execute(f'DROP SCHEMA "{schema}" CASCADE')
         admin.close()
+
+
+@pytest.fixture(params=TEST_DSNS, ids=lambda dsn: "pg" + dsn.rsplit(":", 1)[-1].split("/")[0])
+def pgdb(request):
+    """DSN своей временной базы на тестовом сервере (для pg_dump и pg_restore нужна целая база, а не схема);
+    база удаляется после теста, даже если к ней ещё подключены."""
+    import uuid
+
+    import psycopg
+    from psycopg.conninfo import conninfo_to_dict, make_conninfo
+
+    dsn = request.param
+    try:
+        admin = psycopg.connect(dsn, autocommit=True, connect_timeout=3)
+    except psycopg.OperationalError as e:
+        pytest.fail(f"нет тестовой базы {dsn} — запустите: docker compose --profile test up -d --wait "
+                    f"db-test db-test-pg16 ({e})", pytrace=False)
+    created = []
+
+    def new_database() -> str:
+        name = f"amem_t_{uuid.uuid4().hex[:12]}"
+        admin.execute(f'CREATE DATABASE "{name}"')
+        created.append(name)
+        return make_conninfo(**{**conninfo_to_dict(dsn), "dbname": name})
+
+    try:
+        yield new_database
+    finally:
+        for name in created:
+            admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        admin.close()
