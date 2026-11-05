@@ -223,3 +223,6 @@ def test_merge_follows_application_order(pg, monkeypatch, chain):
     assert rules.allowed == frozenset({"refines"})                          # последний задавший — note_a
     assert rules.required_links == ({"rel": "about", "to_classes": ["project"]}, {"rel": "see_also"})
     assert rules.high_risk == frozenset({"always", "numeric"})
+    # шаблон действующего правила — для замечаний: body и about заменил note_b, see_also остался от note_c
+    assert rules.field_origins["body"] == "note_b@1.0.0" and rules.field_origins["label"] == "has_label@1.0.0"
+    assert rules.link_origins == {"about": "note_b@1.0.0", "see_also": "note_c@1.0.0"}
