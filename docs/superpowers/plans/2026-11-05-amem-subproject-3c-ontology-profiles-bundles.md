@@ -1117,7 +1117,6 @@ def test_entity_without_profile_lists_extra(ready):
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 
 import psycopg
 
@@ -1168,17 +1167,16 @@ def _value_json(v: dict) -> dict:
     return {k: v[k] for k in ("amount", "unit", "value_text", "lower_bound", "upper_bound") if v.get(k) is not None}
 
 
-def _candidate(record: dict, v: dict) -> dict:
+def _candidate(conn, record: dict, v: dict) -> dict:
     p = record["payload"]
     return {"atom": f"atm:{record['atom_id']}", "value": _value_json(v), "status": record["status"],
             "by": record["agent"].split(":")[0], "basis": p.get("basis"), "rank": p.get("rank"),
             "confidence": p.get("confidence"),
             "source_role": next((s.get("role") for s in p.get("sources") or [] if s.get("role")), None),
-            "sources": lookup.revision_sources(record["payload_conn"], "atom", record["revision_id"])
-            if "payload_conn" in record else []}
+            "sources": lookup.revision_sources(conn, "atom", record["revision_id"])}
 
 
-def _field(rule: dict, params: list[dict], questions: list[dict], prop_unit: str | None, conn) -> dict:
+def _field(conn, rule: dict, params: list[dict], questions: list[dict], prop_unit: str | None) -> dict:
     prop = rule["property"]
     out = {"property": prop, "required": bool(rule.get("required")), "group": rule.get("group"),
            "origin": rule.get("origin"), "default": rule.get("default"), "ask": rule.get("ask"),
@@ -1196,10 +1194,8 @@ def _field(rule: dict, params: list[dict], questions: list[dict], prop_unit: str
     if not known:                                              # только unknown — документ величину не называет
         out["atoms"] = [f"atm:{r['atom_id']}" for r, _ in pairs]
         return out
-    for r, _ in known:
-        r["payload_conn"] = conn
-    candidates = [_candidate(r, v) for r, v in known if r["payload"].get("rank") != "deprecated"] or \
-                 [_candidate(r, v) for r, v in known]
+    candidates = [_candidate(conn, r, v) for r, v in known if r["payload"].get("rank") != "deprecated"] or \
+                 [_candidate(conn, r, v) for r, v in known]
     distinct = {_canonical(v, prop_unit) for r, v in known if r["payload"].get("rank") != "deprecated"} or \
                {_canonical(v, prop_unit) for _, v in known}
     preferred = [(r, v) for r, v in known if r["payload"].get("rank") == "preferred"]
@@ -1209,28 +1205,28 @@ def _field(rule: dict, params: list[dict], questions: list[dict], prop_unit: str
         out["state"], out["atoms"] = "conflict", [c["atom"] for c in candidates]
         return out
     r, v = chosen
-    c = _candidate(r, v)
+    c = _candidate(conn, r, v)
     out.update({"state": "known", "value": c["value"], "atoms": [c["atom"]], "status": c["status"], "by": c["by"],
                 "basis": c["basis"], "confidence": c["confidence"], "source_role": c["source_role"],
                 "sources": c["sources"]})
     return out
 
 
-def _one(conn, entity_id: uuid.UUID, at: datetime | None) -> dict:
-    record = lookup.get(conn, "entity", entity_id, at=at)
+def _one(conn, entity_id: uuid.UUID) -> dict:
+    record = lookup.get(conn, "entity", entity_id)      # поля тела + id, revision, content_hash, status, agent…
     if record is None:
         raise LookupError(f"ent:{entity_id}: нет такой сущности")
     rules = rules_for_entity(conn, record["entity_class"])
     prop_units = dict(conn.execute("SELECT code, data->>'unit' FROM concept WHERE scheme = 'property'").fetchall())
     params = _parameter_atoms(conn, entity_id, ("parameter",))
     questions = _parameter_atoms(conn, entity_id, ("question",))
-    fields = [_field(rule, params, questions, prop_units.get(rule["property"]), conn) for rule in rules.parameters]
+    fields = [_field(conn, rule, params, questions, prop_units.get(rule["property"])) for rule in rules.parameters]
     covered = {f["property"] for f in fields}
     extra = []
     for r in params:
         for v in (r["payload"].get("content") or {}).get("values") or []:
             if v.get("property") not in covered:
-                extra.append({"property": v["property"], **_candidate(r, v)})
+                extra.append({"property": v["property"], **_candidate(conn, r, v)})
     own = [name for name in rules.templates if name.split("@")[0] == record["entity_class"]]
     states = {}
     for f in fields:
@@ -1256,10 +1252,10 @@ def _parents(conn, entity_id: uuid.UUID) -> list[uuid.UUID]:
     return [r[0] for r in rows]
 
 
-def card(conn: psycopg.Connection, ref: str, *, at: datetime | None = None, ancestors: bool = True) -> dict:
+def card(conn: psycopg.Connection, ref: str, *, ancestors: bool = True) -> dict:
     """Карточка сущности формата amem.card/1; ancestors — карточки предков по part_of в порядке обхода в ширину."""
     root = _uuid(ref)
-    out = _one(conn, root, at)
+    out = _one(conn, root)
     if ancestors:
         seen, queue = {root}, _parents(conn, root)
         while queue:
@@ -1267,12 +1263,12 @@ def card(conn: psycopg.Connection, ref: str, *, at: datetime | None = None, ance
             if parent in seen:
                 continue
             seen.add(parent)
-            out["ancestors"].append(_one(conn, parent, at))
+            out["ancestors"].append(_one(conn, parent))
             queue.extend(_parents(conn, parent))
     return out
 ```
 
-Поправки по месту: `lookup.get` возвращает запись с `entity_class`, `label`, `status` (см. `lookup._record`) — если имена ключей иные, подставить; у `at` текущая ревизия выбирается через `lookup.get(..., at=at)`, а атомы — через `atom_current` (карточка «на момент» по атомам — следующим шагом, если `lookup` даёт функцию выбора ревизии на момент; иначе `at` относится к сущности и документируется). Хак с `payload_conn` заменить передачей `conn` в `_candidate` явно — показан здесь для компактности, в коде передать параметром.
+`lookup.get` возвращает поля тела ревизии (`entity_class`, `label`, `codes`…) вместе с техническими `id`, `revision`, `content_hash`, `status`, `review_state`, `agent`, `recorded_at` (`lookup._record`); `revision_id` в нём нет — для сущности он карточке не нужен, а у атомов берётся из `atom_current`. Карточка «на момент» (`at`) в подпроект не входит: `at` у `lookup.get` есть, у атомов выбора ревизии на момент нет — отложено до интерфейса истории (подпроект 5), в спецификации 3c параметра `at` нет.
 
 - [ ] **Step 4.** В `amem_v1.yaml` добавить классы `CardField` (поля карточки с типами: `property`, `state` — перечень `CardState` {`known`, `missing`, `asked`, `na`, `conflict`}, `required`, `value: Any`, `atoms`, `candidates: Any`, остальные — `string`/`LangString`) и `Card` (`format` с шаблоном `^amem\.card/1$`, `entity: Any`, `profile`, `fields: CardField[]`, `extra: Any[]`, `summary: Any`, `ancestors: Any[]`). Тест в `test_profile_card.py`: `model_v1.Card.model_validate(profile.card(...))` проходит. Перегенерировать.
 - [ ] **Step 5.** Focused, полный прогон. Commit: `profile: карточка amem.card/1 — состояния полей, признаки значения, конфликт и preferred, предки по part_of, extra; N новых тестов`.
@@ -1404,7 +1400,19 @@ def adopt(conn: psycopg.Connection, store: ObjectStore, record: dict, *, files: 
 
 **Files:** `amem/bundle.py`, `amem/schema/amem_v1.yaml` (`BundleManifest`), `tests/test_bundle_export.py`.
 
-- [ ] **Step 1: падающие тесты** `tests/test_bundle_export.py` (пакеты `quantities` + `ontology`; данные — через `check.submit`, чтобы были объекты и итоги сверки; подготовить проект `ent:` класса `project`, устройство с `part_of`, два атома с тегом `shared`, один с `visibility: private`, одну связь `see_also`):
+- [ ] **Step 1: фикстура `store`.** В `tests/conftest.py` (если её ещё не добавила часть 3a):
+
+```python
+@pytest.fixture
+def store(tmp_path):
+    s = ObjectStore(tmp_path / "objects")
+    s.init(create=True)
+    return s
+```
+
+с `from amem.ocfl_store import ObjectStore`. Тесты части C пишут атомы через `check.submit(conn, store, docs, …)`.
+
+- [ ] **Step 1а: падающие тесты** `tests/test_bundle_export.py` (пакеты `quantities` + `ontology`; данные — через `check.submit`, чтобы были объекты и итоги сверки; подготовить проект `ent:` класса `project`, устройство с `part_of`, два атома с тегом `shared`, один с `visibility: private`, одну связь `see_also`):
 
 ```python
 """Экспорт подборки: отбор, замыкание, части, манифест, inspect."""
@@ -1522,8 +1530,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg
+from psycopg.types.json import Jsonb
 
-from . import __version__, canon, lookup, packs
+from . import __version__, canon, lookup, objects, packs, records, review
 from .ids import uuid7
 
 FORMAT = "amem.bundle/1"
@@ -1643,21 +1652,18 @@ def _closure(conn, atoms: set[uuid.UUID], entities: set[uuid.UUID]) -> set[uuid.
 
 
 def _record_row(conn, target: str, record_id: uuid.UUID, with_history: bool) -> dict:
-    rec = lookup.get(conn, target, record_id)
-    row = {"id": str(record_id), "key": rec.get("key"), CODE_SCHEMES[target][0]: rec[CODE_SCHEMES[target][0]],
-           "status": rec["status"],
-           "revision": {"id": rec["revision_id"] if "revision_id" in rec else None, "n": rec["revision"],
-                        "content_hash": rec["content_hash"], "payload": _payload(rec), "agent": rec["agent"],
-                        "recorded_at": rec["recorded_at"], "review_state": rec["review_state"]}}
+    """Запись подборки: проекция записи и текущая ревизия как есть (каноническое тело из {target}_revision)."""
+    t = target
+    r = conn.execute(
+        f"SELECT r.revision_id, r.n, r.content_hash, r.payload, r.review_state, r.recorded_at, rec.key, rec.status, "
+        f"rec.{CODE_SCHEMES[t][0]}, cs.agent FROM {t}_current r JOIN {t} rec ON rec.id = r.{t}_id "
+        f"JOIN changeset cs ON cs.id = r.changeset_id WHERE r.{t}_id = %s", (record_id,)).fetchone()
+    row = {"id": str(record_id), "key": r[6], CODE_SCHEMES[t][0]: r[8], "status": r[7],
+           "revision": {"id": str(r[0]), "n": r[1], "content_hash": r[2], "payload": r[3], "agent": r[9],
+                        "recorded_at": r[5].isoformat(), "review_state": r[4]}}
     if with_history:
-        row["history"] = lookup.history(conn, target, record_id)
+        row["history"] = [h for h in lookup.history(conn, target, record_id) if h["n"] < r[1]]
     return row
-
-
-def _payload(rec: dict) -> dict:
-    technical = {"id", "schema_version", "revision", "content_hash", "status", "review_state", "created_at",
-                 "recorded_at", "changeset", "agent", "activity", "revision_id"}
-    return {k: v for k, v in rec.items() if k not in technical and v is not None}
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -1810,7 +1816,7 @@ def inspect(folder: Path) -> dict:
     return {**manifest, "ok": not damaged, "damaged": damaged, "root": str(root)}
 ```
 
-`__version__` — если в `amem/__init__.py` его нет, добавить `__version__ = "0.1.0.dev0"` (совпадает с `pyproject.toml`; тест сверяет). Форма `lookup.get` (есть ли `revision_id`, `agent`, `recorded_at` в записи) — проверить по `lookup._record` и подставить реальные ключи; при отсутствии `revision_id` взять его из `atom_current` отдельным запросом. Распаковка zip в `_open` — в `tempfile.mkdtemp` рядом, а не `with_suffix`, если папка назначения не должна оставаться: выбрать и задокументировать.
+`amem.__version__` уже есть (`amem/__init__.py`). Столбцы `{target}_current` (`revision_id`, `n`, `content_hash`, `payload`, `review_state`, `recorded_at`, `changeset_id`) — как в `0001_core.sql`; `lookup.history` отдаёт ревизии с ключами `n`, `content_hash`, `payload`, `recorded_at`, `agent` — если каких-то нет, расширить `history`, а не собирать историю в `bundle`. Распаковка zip в `_open` идёт в папку рядом с архивом (`<имя>.unzipped`) и остаётся после импорта — так `inspect` и `import_` видят одно и то же; `import_` удаляет её в конце, если создал сам.
 
 - [ ] **Step 4.** В `amem_v1.yaml` класс `BundleManifest` (поля манифеста; `format` с шаблоном `^amem\.bundle/1$`, `packs: Any[]`, `counts: Any`, `parts: Any`). Тест: `model_v1.BundleManifest.model_validate(manifest)` проходит. Перегенерировать.
 - [ ] **Step 5.** Focused, полный прогон. Commit: `bundle: отбор по тегам, проекту, ссылкам; замыкание; формат amem.bundle/1 с частями, файлами, пакетами и zip; inspect; N новых тестов`.
@@ -2006,7 +2012,8 @@ def _plan_record(conn, target: str, row: dict, origin_base: str, own_base: str) 
     origin_hash = (local.get("provenance") or {}).get("origin_revision_hash")
     if local_hash == incoming_hash or origin_hash == incoming_hash:
         return "unchanged", None
-    if canon.content_hash(canon.canonical({k: v for k, v in _strip(local).items() if k != "provenance"})) == incoming_hash:
+    without_provenance = {k: v for k, v in _strip(local).items() if k != "provenance"}
+    if canon.content_hash(canon.canonical(without_provenance, target)) == incoming_hash:
         return "unchanged", None
     return "pending", body
 
@@ -2135,7 +2142,7 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
 - `review.insert_item(...)` — сигнатура из части 3a (аргументы по спецификации 3, разд. 8.1); возвращает словарь пункта `{id, reason, record_id}`;
 - `records.commit` с `review_state="pending"` у существующей записи — как уже делает `submit` для правок `verified`;
 - итоги сверки `source.verdict` / `source.page` — имена столбцов из `0002_objects.sql`/`0006_check.sql`; триггер `amem_source_check` разрешает это обновление;
-- `_plan_record`: сравнение «тело без provenance даёт тот же хэш» использует `canon.canonical` и `canon.content_hash` — проверить имена в `amem/canon.py`.
+- `_plan_record`: сравнение «тело без provenance даёт тот же хэш» — `canon.canonical(payload, target)` и `canon.content_hash(body)`, как в `records._prepare_body`.
 
 - [ ] **Step 4.** Focused: `tests/test_bundle_import.py tests/test_bundle_export.py tests/test_bundle_lowlevel.py`. Полный прогон (бэкап считает `import_history`). Commit: `bundle: импорт — id сохраняются, повтор идемпотентен, расхождение pending с пунктом imported, trust, проверка пакетов и ключей до записи, dry_run, история в import_history; N новых тестов`.
 

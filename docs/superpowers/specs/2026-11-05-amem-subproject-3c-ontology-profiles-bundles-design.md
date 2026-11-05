@@ -172,7 +172,7 @@ concepts:
 ### 3.4. Карточка
 
 ```python
-profile.card(conn, ref, *, at=None, ancestors=True) -> dict   # формат amem.card/1
+profile.card(conn, ref, *, ancestors=True) -> dict   # формат amem.card/1
 ```
 
 Для сущности берётся сведённый профиль её класса (активные шаблоны). Для каждого правила ищутся действующие атомы `parameter` с этой величиной о сущности: текущая ревизия, статус не `rejected`, `deprecated`, `superseded`. Состояние поля:
@@ -336,7 +336,7 @@ bundle.import_(conn, store, folder, *, agent, trust="keep", dry_run=False) -> Im
 Профиль и карточка:
 - сведение `parameters` по `extends`: потомок заменяет правило предка с той же величиной, порядок — предки, затем свои;
 - `atom_property` совпадает с построчным разбором после записи и после `rebuild_projections`;
-- карточка: состояния `missing`, `asked`, `na`, `conflict`, `known` с `preferred`, `known` с `basis: default`; `by`, `source_role`, `confidence` в поле; `extra` у сущности без профиля; `ancestors` по `part_of` с обрывом цикла; сводка блокеров; `at` — карточка на момент.
+- карточка: состояния `missing`, `asked`, `na`, `conflict`, `known` с `preferred`, `known` с `basis: default`; `by`, `source_role`, `confidence` в поле; `extra` у сущности без профиля; `ancestors` по `part_of` с обрывом цикла; сводка блокеров. Карточка «на момент» — не в этом подпроекте (нет выбора ревизии атомов на момент; отложено до интерфейса истории).
 
 Подборки:
 - экспорт по тегу, по проекту (включая `part_of`-достижимые сущности), по явным ссылкам; замыкание сущностей и связей; `private` исключено по умолчанию; `with_files` раскладывает файлы по digest; `with_packs` отказывает при несовпадении digest папки и базы; `inspect` ловит подмену части;
