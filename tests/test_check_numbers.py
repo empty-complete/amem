@@ -87,3 +87,38 @@ def test_missing():
     assert missing(nums, ["0,30", "x 42"]) == [nums[2]]
     assert missing(nums, []) == nums
     assert missing([("a", D(str(0.3)), False)], ["0,30"]) == []
+
+
+@pytest.mark.parametrize("text", ["5\n–10", "5\t–10", "5 –\n10", "5\n– 10"])
+def test_range_dash_across_any_whitespace(text):
+    assert {D("5"), D("10"), D("-10")} <= text_numbers(text)
+
+
+def test_spaced_dash_after_newline_gives_both():
+    got = text_numbers("слово\n–\n10")
+    assert D("10") in got and D("-10") in got
+
+
+def test_digit_groups_only_with_plain_spaces():
+    assert D("1200") not in text_numbers("1\n200")
+    assert {D("1"), D("200")} <= text_numbers("1\n200")
+
+
+def test_no_thousands_reading_with_exponent():
+    got = text_numbers("1,200e2")
+    assert D("120") in got and D("1200") not in got and D("120000") not in got
+
+
+def test_date_and_letter_prefixed_number_do_not_fail():
+    assert D("31.01") in text_numbers("31.01.2026")
+    assert D("2026") in text_numbers("31.01.2026")
+    assert D("10") in text_numbers("болт м10")
+
+
+def test_groups_with_fraction_and_two_groups():
+    assert D("1200300") in text_numbers("1 200 300")
+    assert D("10200.5") in text_numbers("10 200,5")
+
+
+def test_minus_zero():
+    assert D("0") in text_numbers("−0")

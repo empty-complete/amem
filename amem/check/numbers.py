@@ -74,14 +74,14 @@ def _sign_variants(text: str, start: int) -> tuple[int, ...]:
     """Знаки, с которыми читается число, начинающееся в позиции start: (1,), (-1,) или (1, -1)."""
     i = start - 1
     spaced = False
-    while i >= 0 and text[i] == " ":
+    while i >= 0 and text[i].isspace():  # и перевод строки, и табуляция: в ячейках и переносах они обычны
         i -= 1
         spaced = True
     if i < 0 or text[i] not in _SIGNS:
         return (1,)
     # знак найден; смотрим, что стоит перед ним (пробелы пропускаем)
     j = i - 1
-    while j >= 0 and text[j] == " ":
+    while j >= 0 and text[j].isspace():
         j -= 1
     after_digit = j >= 0 and text[j].isdigit()
     if spaced or after_digit:
@@ -95,6 +95,8 @@ def _values(m: re.Match) -> list[Decimal]:
     frac = m.group(2)
     exp = m.group(3).replace("−", "-")
     reads = [whole + ("." + frac[1:] if frac else "")]
+    # len == 4: разделитель плюс ровно три цифры. Без экспоненты: «1,200e2» — только 120.
+    # «1.000.000» как миллион не читается: вторая группа с точкой — отдельное число.
     if frac and len(frac) == 4 and not exp:
         reads.append(whole + frac[1:])
     out = []
