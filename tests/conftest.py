@@ -45,6 +45,13 @@ class FakeProvider(EmbeddingProvider):
         return [self.vector(text) for text in texts]
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_backend(monkeypatch):
+    """AMEM_BACKEND из окружения разработчика не влияет на тесты: режим none тесты включают сами (monkeypatch).
+    Без него выбор — как в CI; fastembed в зависимостях разработки нет, поэтому скрытая загрузка модели упала бы."""
+    monkeypatch.delenv("AMEM_BACKEND", raising=False)
+
+
 @pytest.fixture
 def docs(tmp_path) -> Path:
     return make_docs(tmp_path / "docs")
