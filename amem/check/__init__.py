@@ -40,7 +40,9 @@ class Submitted:
     """Ответ записи (разд. 2.3): что сделано и что только поставлено в очередь — «в очереди» не значит «сделано»."""
     state: str                         # approved или rejected
     changeset_id: uuid.UUID
-    report: dict                       # отчёт amem.check/1, как он записан в changeset.check_report
+    # отчёт amem.check/1, как он записан в changeset.check_report: план до записи (planned_status, risk);
+    # итоговый статус — в records: при created = false он остаётся прежним и с планом расходится
+    report: dict
     # label, target, record_id, revision_id, created, status, review_state
     records: list[dict] = field(default_factory=list)
     queued: list[dict] = field(default_factory=list)     # id, reason, label, record_id
