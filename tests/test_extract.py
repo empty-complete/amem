@@ -148,3 +148,45 @@ def test_objects_text_docx_cached_by_digest(kb, docs, store, monkeypatch):
 
     monkeypatch.setattr(sources, "extract_pages", no_more)
     assert objects.text(kb, store, version.object_id, 1) == ["Первая", "Вторая"]
+
+
+def _docx_with_xml(path, xml: bytes):
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("word/document.xml", xml)
+    return path
+
+
+W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+
+def test_docx_doctype_cannot_be_hidden(tmp_path):
+    body = f'<w:document xmlns:w="{W_NS}"><w:body><w:p><w:r><w:t>&e;</w:t></w:r></w:p></w:body></w:document>'
+    dtd = '<!DOCTYPE w:document [<!ENTITY e "x">]>'
+    late = "<!--" + "а" * 5000 + "-->" + dtd + body                                  # после комментария больше 4 КиБ
+    assert extract.docx_pages(_docx_with_xml(tmp_path / "1.docx", ("<?xml version='1.0'?>" + late).encode())) is None
+    utf16 = ("<?xml version='1.0' encoding='UTF-16'?>" + dtd + body).encode("utf-16")
+    assert extract.docx_pages(_docx_with_xml(tmp_path / "2.docx", utf16)) is None
+
+
+def test_docx_extra_elements(tmp_path):
+    xml = (f'<w:document xmlns:w="{W_NS}" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><w:body>'
+           '<w:p><w:r><w:t>а</w:t><w:cr/><w:t>б</w:t><w:noBreakHyphen/><w:t>в</w:t></w:r></w:p>'
+           '<w:p><w:moveFrom><w:r><w:t>старое место</w:t></w:r></w:moveFrom><w:moveTo><w:r><w:t>новое</w:t></w:r></w:moveTo></w:p>'
+           '<w:p><mc:AlternateContent><mc:Choice><w:r><w:t>выбор</w:t></w:r></mc:Choice>'
+           '<mc:Fallback><w:r><w:t>запасной</w:t></w:r></mc:Fallback></mc:AlternateContent></w:p>'
+           '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>внешняя</w:t></w:r></w:p>'
+           '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>вложенная</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>2</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+           '</w:tc><w:tc><w:p><w:r><w:t>соседка</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+           '</w:body></w:document>')
+    pages = extract.docx_pages(_docx_with_xml(tmp_path / "x.docx", xml.encode()))
+    assert pages == ["а\nб-в\nновое\nвыбор\nвнешняя вложенная\t2\t\tсоседка"]
+
+
+def test_xlsx_cell_and_text_limits(tmp_path, monkeypatch):
+    path = make_xlsx(tmp_path / "к.xlsx", {"Лист": [["a", "b"], [], ["c", "d"]]})
+    assert extract.xlsx_pages(path) is not None
+    monkeypatch.setattr(extract, "MAX_CELLS", 3)
+    assert extract.xlsx_pages(path) is None
+    monkeypatch.undo()
+    monkeypatch.setattr(extract, "MAX_TEXT_CHARS", 3)
+    assert extract.xlsx_pages(path) is None
