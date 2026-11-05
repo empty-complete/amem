@@ -110,7 +110,7 @@ def test_conflict_with_stored_atom(kb):
     found, risks, report = new(kb, ids["@e"], value("pressure", 0.38, "kPa"))
     assert found == [("conflict", "@a1")]
     assert risks == {"@a1": ["conflict"]}
-    [issue] = [i for i in report.issues if i.code == "conflict"]
+    [issue] = [i for i in report.issues if i.code == "conflict" and i.where == "@x"]
     assert issue.details["atoms"] == [f"atm:{ids['@a0']}"]
 
 
@@ -165,3 +165,56 @@ def test_editing_atom_does_not_conflict_with_itself(kb):
     report = Report()
     batch = level1.check(kb, [Proposal("atom", body, ids["@a0"])], [], report)
     assert level3.check(kb, batch, report) == {}
+
+
+# --- формы ссылок, сроки, значения, единицы ---
+
+def test_about_by_uuid_and_by_key(kb):
+    ids = stored(kb, entity("@e", key="doc_a"), atom("@a0", **vals(value("pressure", 0.3, "kPa")), about=["@e"]))
+    for ref in (f"ent:{ids['@e']}", "ent:doc_a"):
+        found, _, _ = run(kb, one(value("pressure", 0.38, "kPa"), about=[ref]))
+        assert found == [("conflict", "@a1")], ref
+
+
+def test_open_ended_terms_overlap(kb):
+    ids = rival(kb, valid_from="2010-01-01")
+    assert new(kb, ids["@e"], value("pressure", 0.38, "kPa"), valid_to="2005-01-01")[0] == []
+    assert new(kb, ids["@e"], value("pressure", 0.38, "kPa"), valid_to="2030-01-01")[0] == [("conflict", "@a1")]
+    assert new(kb, ids["@e"], value("pressure", 0.38, "kPa"))[0] == [("conflict", "@a1")]
+
+
+def test_value_text_difference_is_conflict(kb):
+    zone = lambda t: value("wind_zone", None, None, value_text=t)       # noqa: E731
+    ids = stored(kb, entity("@e"), atom("@a0", **vals(zone("II")), about=["@e"]))
+    found = run(kb, one(zone("III"), about=[f"ent:{ids['@e']}"]))[0]
+    assert ("conflict", "@a1") in found
+    assert ("conflict", "@a1") not in run(kb, one(zone("II"), about=[f"ent:{ids['@e']}"]))[0]
+
+
+def test_celsius_and_kelvin_same_value_no_conflict(kb):
+    ids = stored(kb, entity("@e"), atom("@a0", **vals(value("temperature", 20, "Cel")), about=["@e"]))
+    ref = f"ent:{ids['@e']}"
+    assert "conflict" not in [c for c, _ in run(kb, one(value("temperature", 293.15, "K"), about=[ref]))[0]]
+
+
+def test_incomparable_units_no_conflict(kb):
+    ids = stored(kb, entity("@e"), atom("@a0", **vals(value("pressure", 0.3, "kPa")), about=["@e"]))
+    found = run(kb, one(value("pressure", 3, "m"), about=[f"ent:{ids['@e']}"]))[0]
+    assert ("conflict", "@a1") not in found
+
+
+def test_two_edits_of_different_atoms_in_one_batch(kb):
+    ids = stored(kb, entity("@e"), atom("@a0", **vals(value("pressure", 0.3, "kPa")), about=["@e"]),
+                 atom("@a5", **vals(value("pressure", 0.3, "kPa")), about=["@e"]))
+    ref = f"ent:{ids['@e']}"
+    report = Report()
+    batch = level1.check(kb, [Proposal("atom", atom("@x", **vals(value("pressure", 0.31, "kPa")), about=[ref]),
+                                       ids["@a0"]),
+                              Proposal("atom", atom("@y", **vals(value("pressure", 0.3, "kPa")), about=[ref]),
+                                       ids["@a5"])], [], report)
+    risks = level3.check(kb, batch, report)
+    [issue] = [i for i in report.issues if i.code == "conflict" and i.where == "@x"]
+    # старые ревизии обеих правок не соперники; конфликт только между новыми телами
+    assert issue.where == "@x" and issue.details["atoms"] == ["@y"]
+    assert risks == {"@x": ["conflict"], "@y": ["conflict"]}
+
