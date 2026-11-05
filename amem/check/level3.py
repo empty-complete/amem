@@ -7,10 +7,13 @@
 - согласие: атомы об одной сущности с той же величиной, теми же уточнениями и пересекающимися сроками, но другим
   значением, — conflict (замечание и риск). Соперники — текущие атомы базы в рабочих статусах и атомы пачки.
 
+Сущность в about: @имя пачки, ent:<uuid> или ent:<ключ> записи базы (у правки сущности пачки — её id). Новая
+сущность пачки по ent:<ключ> не ссылается: уровень 1 даёт ей ref_unknown. Ссылка, не нашедшая записи, пропускается.
 База только читается. Ссылки about, не нашедшие записи, пропускаются: ref_unknown уже дал уровень 1.
 """
 from __future__ import annotations
 
+import functools
 import json
 import uuid
 
@@ -112,23 +115,30 @@ class _Level3:
 
     def agreement(self) -> dict[str, list[str]]:
         mine = {it.label: self.about(it) for it in self.atoms}
+        facts = {it.label: _facts(it.payload) for it in self.atoms}
         entities = {e[1] for about in mine.values() for e in about if e[0] == "db"}
         rivals = self.stored(entities) if entities else []
         edited = {it.record_id for it in self.atoms if it.record_id}
+        by_entity: dict[tuple, list[int]] = {}               # сущность → номера соперников из базы
+        for n, (atom_id, _, about) in enumerate(rivals):
+            if atom_id not in edited:                        # правка заменяет текущую ревизию соперника
+                for e in about:
+                    by_entity.setdefault(e, []).append(n)
+        in_batch: dict[tuple, list[Prepared]] = {}           # сущность → атомы пачки о ней
+        for it in self.atoms:
+            for e in mine[it.label]:
+                in_batch.setdefault(e, []).append(it)
         risks: dict[str, list[str]] = {}
         for item in self.atoms:
-            if not mine[item.label]:
-                continue
-            own = _facts(item.payload)
             found: dict[str, None] = {}
-            for atom_id, payload, about in rivals:
-                if atom_id == item.record_id or atom_id in edited:
-                    continue                     # правка заменяет текущую ревизию: сама себе соперник не нужна
-                if mine[item.label] & about and _differ(own, _facts(payload)):
-                    found[f"{PREFIX['atom']}:{atom_id}"] = None
-            for other in self.atoms:
-                if other is not item and mine[item.label] & mine[other.label] and _differ(own, _facts(other.payload)):
-                    found[other.label] = None
+            for e in mine[item.label]:
+                for n in by_entity.get(e, []):
+                    atom_id, other, _ = rivals[n]
+                    if atom_id != item.record_id and _differ(facts[item.label], other):
+                        found[f"{PREFIX['atom']}:{atom_id}"] = None
+                for other in in_batch.get(e, []):
+                    if other is not item and _differ(facts[item.label], facts[other.label]):
+                        found[other.label] = None
             if found:
                 risks[item.label] = ["conflict"]
                 self.add("conflict", item.label,
@@ -137,7 +147,7 @@ class _Level3:
         return risks
 
     def stored(self, entities: set) -> list[tuple[uuid.UUID, dict, set]]:
-        """Текущие ревизии атомов в рабочих статусах об этих сущностях: (id атома, тело, их сущности)."""
+        """Текущие ревизии атомов в рабочих статусах об этих сущностях: (id атома, их величины, их сущности)."""
         rows = self.conn.execute(
             "SELECT c.atom_id, c.payload, ab.entity_id FROM atom_about ab "
             "JOIN atom_current c ON c.id = ab.revision_id JOIN atom a ON a.id = c.atom_id "
@@ -145,7 +155,12 @@ class _Level3:
         merged: dict[uuid.UUID, tuple[dict, set]] = {}
         for atom_id, payload, entity_id in rows:
             merged.setdefault(atom_id, (payload, set()))[1].add(("db", entity_id))
-        return [(atom_id, payload, about) for atom_id, (payload, about) in merged.items()]
+        return [(atom_id, _facts(payload), about) for atom_id, (payload, about) in merged.items()]
+
+
+@functools.lru_cache(maxsize=4096)
+def _convert(amount: float, unit: str, to: str) -> float | None:
+    return units.convert(amount, unit, to)
 
 
 def _canon(items) -> frozenset:
@@ -184,7 +199,7 @@ def _equal(a: tuple, b: tuple) -> bool | None:
     if a[1] != b[1] and any(n is not None for n in nums):
         if a[1] is None or b[1] is None:
             return None
-        converted = tuple(None if n is None else units.convert(n, b[1], a[1]) for n in nums)
+        converted = tuple(None if n is None else _convert(n, b[1], a[1]) for n in nums)
         if any(c is None for n, c in zip(nums, converted) if n is not None):
             return None
         nums = converted
