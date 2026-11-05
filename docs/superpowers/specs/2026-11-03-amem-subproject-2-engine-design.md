@@ -1,5 +1,7 @@
 # amem — подпроект 2: движок поиска, выдачи и бэкапа
 
+Редакция 2 (05.11.2026): уточнения по итогам реализации и ревью — `around_entity` принимает `rels` и `statuses` наборами; восстановление в PostgreSQL до 17 идёт через SQL от `pg_restore`; `backup.verify` ищет лексически без модели; тесты не зависят от `AMEM_BACKEND` окружения; разд. 9.6 связывает приёмку с тестами.
+
 Редакция 1 (03.11.2026).
 
 Продолжение спецификаций `2026-10-19-schema-v1-postgres-reatomize-design.md` (разд. 2, 6, 8) и `2026-10-25-amem-core-split-design.md` (разд. 1, 9). Учтены практики Graphiti и Graphify из разбора `2026-10-31-best-practices-graphiti-graphify.md`: именованные рецепты вместо одного непрозрачного поиска, уверенность цепочки по слабейшему звену, машиночитаемые ослабления выдачи и local-first без скрытых обращений наружу.
@@ -239,11 +241,12 @@ final_score = rrf * usefulness_multiplier
 
 Для ответа «что связано с этой записью и насколько надёжен путь».
 
-- вход: `atm:` или `ent:`, `depth` от 1 до 3 (по умолчанию 1), необязательные виды связей и статусы;
+- вход: `atm:` или `ent:`, `depth` от 1 до 3 (по умолчанию 1), необязательные `rels` — набор видов связей словаря `rel` (`about` и `derived_from` тоже) и `statuses` — набор статусов соседей, как у других рецептов; строка вместо набора, пустой набор и неизвестный код — ошибка, а не пустой ответ;
 - обходятся действующие `link` в обе стороны, а для текущих ревизий атомов также `atom_about` и `atom_derived`;
 - BFS возвращает кратчайшие пути, циклы обрезаются по посещённым записям; один и тот же узел не раздувает выдачу;
 - результат включает узлы, рёбра, направление, происхождение связи и весь путь от исходной записи;
 - никакого автоматического PPR или скрытого добавления соседей к текстовому поиску.
+- при равной длине путь выбирается по последовательности id рёбер, затем по ref; рёбра вне дерева кратчайших путей (параллельные связи, связи между уже найденными узлами) не возвращаются.
 
 Для каждого пути:
 
@@ -321,6 +324,11 @@ useful_score = Σ weight_i
 - не использует `--clean` против существующих данных и не перезаписывает рабочую базу;
 - после восстановления сверяет `base_id`, применённые миграции, число основных записей и целостность OCFL;
 - отдельный `backup.verify(...)` выполняет пробное восстановление во временную базу, а не только проверку хэша.
+- `pg_restore` 18 начинает восстановление с `SET transaction_timeout`, которого нет у серверов до 17: для них `pg_restore` выдаёт SQL, из его заголовка эта строка убирается, `psql` выполняет его в явной транзакции с остановкой на первой ошибке, а `COMMIT` дописывается, только когда `pg_restore` завершился успешно;
+- полный снимок берёт блокировку записи объектов, затем снимок транзакции, в нём копирует хранилище и список версий файлов, отпускает блокировку и запускает `pg_dump` с тем же снимком: копия и дамп знают ровно одни версии; таймауты простоя в транзакции снимка отключены;
+- копия хранилища и список версий из манифеста снимка сверяются до записи в базу; сверка после `pg_restore` при расхождении останавливает восстановление, а восстановленную базу надо пересоздать вручную;
+- объекты снимка сначала копируются во временную папку и встают на место переименованием, только когда база восстановлена и все её версии файлов найдены в копии;
+- `backup.verify` ищет пробный атом из манифеста лексически (модель и сеть не нужны); с переданным provider — ещё и полным `exact_fact`.
 
 Дамп включает поисковые проекции и вектора, но после восстановления `rebuild_search` и `sync_embeddings` остаются безопасными способами починить производные данные. Тест восстановления проверяет не только числа строк, но и фактический поиск.
 
@@ -385,6 +393,27 @@ useful_score = Σ weight_i
 - полный снимок восстанавливает OCFL-объект, и старая ссылка источника открывает прежнюю версию;
 - повреждённый файл, несовпадающий манифест, непустая база/папка и выход пути за целевой корень отклоняются;
 - `backup.verify` выполняет настоящее пробное восстановление и фактический поиск.
+
+### 9.6. Приёмка и тесты
+
+| Пункт | Тесты |
+|---|---|
+| 9.1 марки в разном написании; префикс ≠ точное | `test_search_text.py::test_code_normalization_*`, `test_search_lexical.py::test_code_exact_normalizes_query_and_returns_stable_candidates`, `::test_code_prefix_excludes_records_with_an_exact_code` |
+| 9.1 морфология, веса и пустой документ | `test_search_lexical.py::test_fts_uses_russian_websearch_and_empty_query_selects_nothing`, `test_search_text.py::test_atom_text_is_weighted_and_excludes_sources`, `::test_empty_document_is_valid_and_input_is_not_mutated` |
+| 9.1 статусы, pending / accepted / declined, перестройка | `test_search_lexical.py::test_default_and_explicit_status_filters`, `test_search_projection.py::test_pending_does_not_replace_current_until_accepted`, `::test_declined_revision_keeps_previous_projection`, `::test_rebuild_restores_exact_projection_and_is_idempotent` |
+| 9.2 halfvec + HNSW 384 и 1024; чужие вектора | `test_embed.py::test_halfvec_cosine_returns_expected_nearest_neighbour`, `::test_hnsw_1024_exists_and_rejects_384_dimensional_value`, `test_recipes_search.py::test_vector_channel_excludes_other_models_old_revisions_and_stale_hashes` |
+| 9.2 смена модели и покрытие; `AMEM_BACKEND=none` | `test_embed.py::test_activation_requires_full_coverage_and_switches_atomically`, `::test_backend_none_*`, `test_recipes_search.py::test_backend_none_ignores_old_vectors_and_explicit_provider` |
+| 9.2 RRF, веса, tie-break, фильтры до топ-50 | `test_rrf.py::*`, `test_search_lexical.py::test_filters_are_applied_before_channel_limit`, `test_recipes_search.py::test_vector_filters_are_applied_before_limit` |
+| 9.3 `exact_fact` и `similar` | `test_rrf.py::test_exact_fact_comparator_puts_exact_group_before_more_popular_candidates`, `test_recipes_search.py::test_exact_fact_returns_all_ambiguous_codes_without_hidden_best_answer`, `::test_similar_*` |
+| 9.3 `what_changed` | `test_recipes_history.py::*` |
+| 9.3 `around_entity`, уверенность и роль источников | `test_recipes_graph.py::*` |
+| 9.4 полезность | `test_usefulness.py::*` |
+| 9.5 атомарность, SHA-256, без перезаписи | `test_backup.py::test_dump_and_manifest_describe_one_snapshot`, `::test_existing_copy_is_not_overwritten_and_partial_pairs_are_not_copies`, `::test_password_is_only_in_the_process_environment` |
+| 9.5 ротация 14 копий, `.tmp` не копия | `test_backup.py::test_default_rotation_keeps_fourteen_ready_copies`, `::test_rotation_keeps_last_complete_pairs_and_runs_only_after_a_good_copy` |
+| 9.5 восстановление на 18 и 16 с поиском | `test_backup_restore.py::test_dump_restores_records_marks_and_search`, `::test_restored_counts_must_match_the_manifest` |
+| 9.5 полный снимок и старая версия файла | `test_backup.py::test_snapshot_links_dump_and_objects_by_base_id`, `test_backup_restore.py::test_snapshot_restore_opens_the_old_file_version`, `::test_failed_database_restore_leaves_no_objects_folder` |
+| 9.5 отказы: файл, манифест, непустая цель, пути | `test_backup_restore.py::test_restore_refuses_unsafe_targets_before_writing`, `test_backup.py::test_manifest_file_cannot_point_outside_its_folder`, `::test_snapshot_failure_leaves_no_ready_directory` |
+| 9.5 `backup.verify` | `test_backup_restore.py::test_verify_restores_into_a_temporary_database_and_searches` |
 
 **Подпроект готов**, когда эти проверки и все прежние тесты проходят на PostgreSQL 18 и 16, `tools/gen_schema.py --check` чист, а CI публичного репозитория зелёный.
 
