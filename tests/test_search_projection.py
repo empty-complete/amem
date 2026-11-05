@@ -22,7 +22,7 @@ def entity(**extra):
 def atom(**extra):
     return {"ref": "@fact", "kind": "fact", "key": "fact",
             "label": {"ru": "Ветровое давление"}, "summary_plain": {"ru": "Нормативное значение"},
-            "codes": ["Вн-45", "F50.0214"], "about": ["@project"], **extra}
+            "codes": ["Вн-45", "Z50.0214"], "about": ["@project"], **extra}
 
 
 def base(kb):
@@ -44,7 +44,7 @@ def test_commit_projects_atom_and_entity(kb):
         assert row[2] == item.content_hash
     atom_row = projection(kb)
     assert "Ветровое давление" in atom_row[3]
-    assert atom_row[4] == ["f50.0214", "вн-45"]
+    assert atom_row[4] == ["z50.0214", "вн-45"]
     assert {r[0] for r in kb.execute("SELECT code FROM search_code WHERE target = 'atom'")} == set(atom_row[4])
     assert kb.execute("SELECT search_vector @@ to_tsquery('russian', 'ветрового') "
                       "FROM search_document WHERE target = 'atom'").fetchone()[0]

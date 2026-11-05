@@ -55,14 +55,14 @@ def test_code_exact_normalizes_query_and_returns_stable_candidates(kb):
 
 def test_code_prefix_excludes_records_with_an_exact_code(kb):
     write(kb,
-          Item("atom", atom("@exact", ["F50.0214"])),
+          Item("atom", atom("@exact", ["Z50.0214"])),
           Item("atom", atom("@both", ["Вн-45", "Вн-45-А"])),
           Item("atom", atom("@prefix", ["Вн-45-Б"])))
 
-    exact = search._code_exact(kb, "f50.0214")
+    exact = search._code_exact(kb, "z50.0214")
     assert len(exact) == 1
-    assert search._code_exact(kb, "F50") == []
-    assert refs(search._code_prefix(kb, "F50.")) == refs(exact)
+    assert search._code_exact(kb, "Z50") == []
+    assert refs(search._code_prefix(kb, "Z50.")) == refs(exact)
 
     prefix = search._code_prefix(kb, "ВН–45")
     assert len(prefix) == 1
