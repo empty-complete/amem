@@ -319,7 +319,11 @@ def test_links_are_written(kb, store, docs):
 
 # --- тупики ---
 
-def test_two_new_agents_editing_one_record_do_not_deadlock(kb, store, docs):
+@pytest.mark.parametrize("mode", ["two_agents", "one_new_agent", "submit_and_status"])
+def test_new_agents_editing_one_record_do_not_deadlock(kb, store, docs, mode):
+    """Два писателя одной записи одновременно, 20 раз. one_new_agent — два пакета одного ещё не записанного агента;
+    submit_and_status — пакет и смена статуса (records.set_status) от одного нового агента: set_status вставляет
+    агента до блокировки записи, и если бы submit вставлял его после своей блокировки, они встали бы в тупик."""
     rec = first(kb, store, docs, wind())
     params = conninfo_to_dict(kb.info.dsn)
     params["password"] = kb.info.password
@@ -333,9 +337,14 @@ def test_two_new_agents_editing_one_record_do_not_deadlock(kb, store, docs):
             try:
                 with db.connect(dsn) as conn:
                     body = wind(summary_plain=lab(f"Пояснение {round_}-{k}: давление ветра района II."))
+                    agent = f"model:writer-{round_}" if mode != "two_agents" else f"model:writer-{round_}-{k}"
                     barrier.wait(timeout=30)
+                    if mode == "submit_and_status" and k == 1:
+                        records.set_status(conn, "atom", rec["record_id"], "needs_review", agent=agent)
+                        states.append("approved")
+                        return
                     result = check.submit(conn, store, docs, [Proposal("atom", body, rec["record_id"])],
-                                          agent=f"model:writer-{round_}-{k}")
+                                          agent=agent)
                     states.append(result.state)
             except BaseException as e:                     # noqa: BLE001 — ошибку потока проверяет тест
                 errors.append(e)
@@ -362,3 +371,54 @@ def test_report_has_violations_and_summary():
     assert report.has_violations() is True
     assert report.summary() == ("Ошибок: 1, предупреждений: 0, сведений: 1\n"
                                 "- violation template — @b: sources: У атома нет источника.")
+
+
+def test_new_agent_is_inserted_before_record_lock(kb, store, docs, monkeypatch):
+    """Порядок шага 1 разд. 7.5 — детерминированно. Пакет нового агента держит запись (после блокировки ждёт),
+    тем временем тот же агент меняет статус записи: set_status вставляет агента, затем ждёт запись. Если бы submit
+    вставлял агента после блокировки записи, он ждал бы незафиксированного агента, а тот — запись: тупик.
+    При правильном порядке вставка агента в set_status ждёт фиксации пакета, и оба доходят до конца."""
+    rec = first(kb, store, docs, wind())
+    params = conninfo_to_dict(kb.info.dsn)
+    params["password"] = kb.info.password
+    dsn = make_conninfo(**params)
+    agent = "model:writer-new"
+    locked, inserted = threading.Event(), threading.Event()
+    errors: list[BaseException] = []
+    decide, ensure = check._decide, records._ensure_agent
+
+    def decide_and_wait(plan, status):
+        decide(plan, status)
+        if threading.current_thread().name == "submit":
+            locked.set()
+            inserted.wait(timeout=2)        # при правильном порядке не дождётся: вставка агента ждёт этот пакет
+
+    def ensure_and_signal(conn, who):
+        ensure(conn, who)
+        if threading.current_thread().name == "status":
+            inserted.set()
+
+    monkeypatch.setattr(check, "_decide", decide_and_wait)
+    monkeypatch.setattr(records, "_ensure_agent", ensure_and_signal)
+
+    def run(name: str) -> None:
+        try:
+            with db.connect(dsn) as conn:
+                if name == "submit":
+                    body = wind(summary_plain=lab("Пояснение: давление ветра района II."))
+                    result = check.submit(conn, store, docs, [Proposal("atom", body, rec["record_id"])], agent=agent)
+                    assert result.state == "approved", result.report["issues"]
+                else:
+                    assert locked.wait(timeout=60)
+                    records.set_status(conn, "atom", rec["record_id"], "needs_review", agent=agent)
+        except BaseException as e:                         # noqa: BLE001 — ошибку потока проверяет тест
+            errors.append(e)
+
+    threads = [threading.Thread(target=run, args=(n,), name=n) for n in ("submit", "status")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=120)
+    assert not any(isinstance(e, psycopg.errors.DeadlockDetected) for e in errors), errors
+    assert errors == []
+    assert status(kb, "atom", rec["record_id"]) == "needs_review"
