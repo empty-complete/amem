@@ -2,7 +2,7 @@ scheme: entity_class
 concepts:
 - code: project
   label:
-    ru: объект строительства
+    ru: проект
     en: project
   definition:
     ru: Работа с целью и сроками — продукт, исследование, стройка, кампания.

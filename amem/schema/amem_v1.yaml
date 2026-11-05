@@ -418,7 +418,7 @@ classes:
       aliases:
         multivalued: true
       codes:
-        description: Марки, обозначения, символы целиком — вн-45, рск-14, w0, 10.1.
+        description: Марки, обозначения, символы целиком — m10, dn50, w0, 10.1.
         multivalued: true
       retrieval_context:
         description: Фраза агента к контексту поиска; остальное сервер собирает сам.

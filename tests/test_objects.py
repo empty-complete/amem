@@ -172,8 +172,8 @@ def test_web_and_message_have_one_version_without_file(kb, monkeypatch):
             return date(2026, 1, 2)
 
     monkeypatch.setattr(objects, "date", Today)            # дата обращения — сегодня по часам сервера, а не UTC
-    page = objects.web(kb, "https://example.org/catalog/f50")
-    assert objects.web(kb, "https://example.org/catalog/f50") == \
+    page = objects.web(kb, "https://example.org/catalog/item-1")
+    assert objects.web(kb, "https://example.org/catalog/item-1") == \
         objects.Version(page.object_id, 1, None, "web", created=False)
     title = "Письмо ООО «Ромашка» от 12.03.2024, й"
     letter = objects.message(kb, unicodedata.normalize("NFD", title))
@@ -182,7 +182,7 @@ def test_web_and_message_have_one_version_without_file(kb, monkeypatch):
     assert lookup.get_object(kb, letter.object_id)["original_name"] == title
     record = lookup.get_object(kb, page.object_id)
     model_v1.ObjectRecord.model_validate_json(json.dumps(record), strict=True)
-    assert record["url"] == "https://example.org/catalog/f50" and record["retrieved_at"] == "2026-01-02"
+    assert record["url"] == "https://example.org/catalog/item-1" and record["retrieved_at"] == "2026-01-02"
     assert record["versions"] == [{"n": 1, "recorded_at": record["versions"][0]["recorded_at"]}]
     with pytest.raises(ObjectError, match="пустой"):
         objects.message(kb, "  ")
