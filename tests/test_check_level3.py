@@ -110,7 +110,7 @@ def test_conflict_with_stored_atom(kb):
     found, risks, report = new(kb, ids["@e"], value("pressure", 0.38, "kPa"))
     assert found == [("conflict", "@a1")]
     assert risks == {"@a1": ["conflict"]}
-    [issue] = [i for i in report.issues if i.code == "conflict" and i.where == "@x"]
+    [issue] = [i for i in report.issues if i.code == "conflict" and i.where == "@a1"]
     assert issue.details["atoms"] == [f"atm:{ids['@a0']}"]
 
 
