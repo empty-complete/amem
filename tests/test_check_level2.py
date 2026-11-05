@@ -362,3 +362,75 @@ def test_unparsed_item_skipped(kb, store, docs):
     batch, results, issues, _ = run(kb, store, docs, atom("@a", label=None, kind=5))
     assert not batch.items[0].ok
     assert results == {} and issues == []
+
+
+# --- по ревью ---
+
+def test_resolve_store_error_raises(kb, store, docs, monkeypatch):
+    def broken(*a, **kw):
+        raise StoreError("том хранилища не подключён")
+
+    monkeypatch.setattr(objects, "ingest", broken)
+    with pytest.raises(StoreError, match=r"^@a: sources\[0\]: том хранилища"):
+        run(kb, store, docs, pdf_atom(2, PAGE2))
+
+
+def test_judge_bug_raises(kb, store, docs, monkeypatch):
+    def broken(*a, **kw):
+        raise TypeError("ошибка кода сверки")
+
+    monkeypatch.setattr(sources, "judge", broken)
+    with pytest.raises(TypeError, match="ошибка кода сверки"):
+        run(kb, store, docs, pdf_atom(2, PAGE2))
+
+
+def test_txt_one_page_ok(kb, store, docs):
+    (docs / "Заметки" / "узел.txt").write_text("Кронштейн КБ-14 крепится анкером М10.", encoding="utf-8")
+    check, issues, _, _ = one(kb, store, docs, atom("@a", sources=[{"path": "Заметки/узел.txt"}]))
+    assert (check.verdict, check.page, issues) == ("ok", 1, [])
+    assert "М10" in check.fragments[0]
+
+
+def test_text_quote_selector(kb, store, docs):
+    src = {"path": PDF, "selectors": [{"type": "page", "value": "2", "refined_by": {"type": "text_quote",
+                                                                                    "value": PAGE2}}]}
+    check, issues, _, _ = one(kb, store, docs, atom("@a", sources=[src]))
+    assert (check.verdict, check.page, check.anchor, issues) == ("ok", 2, PAGE2, [])
+
+
+def test_md_heading_exact(kb, store, docs):
+    """Значение heading — локатор как есть: правил локатора для него нет, итог — одностраничное ok заметки."""
+    check, issues, _, _ = one(kb, store, docs, atom("@a", sources=[source_md(MD)]))
+    assert (check.verdict, check.page, check.anchor, issues) == ("ok", 1, None, [])
+
+
+def test_xlsx_quote_on_other_sheet_moved(kb, store, more):
+    src = {"path": XLSX, "selectors": [{"type": "sheet", "value": "Сводка"}], "quote": "Ветровой район II"}
+    check, issues, _, report = one(kb, store, more, atom("@a", sources=[src]))
+    assert (check.verdict, check.page) == ("moved", 2)
+    assert issues == [("page_moved", "info", "@a: sources[0]")]
+    assert l2(report, "page_moved")[0].details == {"page": 2, "expected": 1}
+
+
+def test_entity_page_only_no_issue(kb, store, docs):
+    check, issues, _, _ = one(kb, store, docs, entity("@a", sources=[source_pdf(PDF, 2, None)]))
+    assert (check.verdict, issues) == (None, [])
+
+
+def test_entity_numbers_not_checked(kb, store, docs, monkeypatch):
+    def forbidden(payload):
+        raise AssertionError("у сущности числа не сверяются")
+
+    monkeypatch.setattr(level2.numbers, "atom_numbers", forbidden)
+    check, issues, _, _ = one(kb, store, docs, entity("@a", sources=[source_pdf(PDF, 3, PAGE3)]))
+    assert (check.verdict, issues) == ("ok", [])
+
+
+def test_external_edition_not_looked_up(kb, store, docs):
+    v = objects.web(kb, "https://example.org/norms")
+    body = objects.resolve_sources(kb, store, docs, entity("@ed", cls="edition", sources=[
+        {"object": v.ref, "object_version": 1}]), agent=AGENT)
+    records.commit(kb, [records.Item("entity", body)], agent=AGENT)
+    _, issues, body, _ = one(kb, store, docs, atom("@a", sources=[{"object": v.ref, "object_version": 1}]))
+    assert "edition" not in body["sources"][0]
+    assert issues == [("external_source", "warning", "@a: sources[0]")]

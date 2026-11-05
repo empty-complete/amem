@@ -20,6 +20,7 @@ fuzzy и not_found здесь тоже есть, но в строки source о�
 """
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -34,6 +35,7 @@ from .level1 import Batch, Prepared
 from .report import Report
 
 LEVEL = 2
+log = logging.getLogger(__name__)
 # итоги, которые может вернуть уровень 2 (подмножество SourceVerdict; no_file сюда не входит: путь без файла —
 # source_unresolved)
 VERDICTS = frozenset({"ok", "moved", "fuzzy", "by_locator", "unresolved", "not_found", "no_text", "external",
@@ -45,6 +47,10 @@ RANGE = re.compile(r"^\s*(\d+)\s*[-–—‒]\s*(\d+)\s*$")
 MAX_RANGE = 50                             # страниц в диапазоне селектора page: больше — это не фрагмент
 RETIRED = ("rejected", "deprecated", "superseded")
 FILE_KINDS = ("file",)
+
+
+class _ExtractError(Exception):
+    """Сбой извлечения текста файла: итог error и warning source_error."""
 
 
 @dataclass
@@ -66,8 +72,8 @@ class Place:
 
     @property
     def given(self) -> bool:
-        """Место хоть как-то указано: цитата, страница, диапазон, локатор или лист."""
-        return bool(self.quote.strip() or self.page or self.pages or self.locator or self.sheet)
+        """Место у источника сущности: цитата, локатор или лист. Одна страница без них — ссылка на сам документ."""
+        return bool(self.quote or self.locator or self.sheet)
 
 
 def _chain(selector):
@@ -146,7 +152,7 @@ class _Level2:
                 out.append(SourceCheck(i, None, None, None))
                 continue
             info = self.version(src)
-            if is_atom and not src.get("edition"):
+            if is_atom and info[0] in FILE_KINDS and not src.get("edition"):
                 self.fill_edition(src, where)
             resolved.append(src)
             out.append(self.judge(i, src, info, where, is_atom))
@@ -205,12 +211,18 @@ class _Level2:
     # --- место ---
 
     def text(self, src: dict, where: str) -> sources.DocText | None:
+        """Текст версии; сбой извлечения — _ExtractError (итог error). StoreError и ошибки базы — наружу."""
         key = (src["object"], src["object_version"])
         if key not in self.texts:
             try:
                 pages = objects.text(self.conn, self.store, src["object"], src["object_version"])
             except FileNotFoundError as e:             # копии версии нет — хранилище не в порядке, а не данные
                 raise StoreError(f"{where}: копии файла нет в хранилище ({e})") from e
+            except (StoreError, psycopg.Error):
+                raise
+            except Exception as e:                     # сбой разбора файла (PyMuPDF, openpyxl …) — не ошибка данных
+                log.exception("%s: сбой извлечения текста %s v%s", where, src["object"], src["object_version"])
+                raise _ExtractError(f"{type(e).__name__}: {e}") from e
             self.texts[key] = sources.DocText.of(pages) if pages is not None else None
         return self.texts[key]
 
@@ -238,20 +250,18 @@ class _Level2:
             return SourceCheck(i, None, None, None)              # источник сущности-документа — сам файл
         try:
             doc = self.text(src, where)
-            if doc is None:
-                self.add("warning", "no_text", where, f"У файла «{name}» нет текста: место не сверяется")
-                return SourceCheck(i, "no_text", None, None)
-            v = self.locate(doc, p, name)
-        except (StoreError, psycopg.Error):
-            raise
-        except Exception as e:                               # сбой извлечения или сверки — не ошибка данных агента
-            self.add("warning", "source_error", where, f"Сбой при сверке источника: {type(e).__name__}: {e}",
-                     error=type(e).__name__)
+        except _ExtractError as e:
+            self.add("warning", "source_error", where, f"Сбой при извлечении текста: {e}",
+                     error=type(e.__cause__).__name__)
             return SourceCheck(i, "error", None, None)
+        if doc is None:
+            self.add("warning", "no_text", where, f"У файла «{name}» нет текста: место не сверяется")
+            return SourceCheck(i, "no_text", None, None)
+        v, expected = self.locate(doc, p, name)              # ошибка сверки — ошибка кода: она уходит наружу
         if v.verdict in ("ok", "moved", "by_locator"):
             if v.verdict == "moved":
-                self.add("info", "page_moved", where, f"Цитата найдена на странице {v.page}, а не {p.page}",
-                         page=v.page, expected=p.page)
+                self.add("info", "page_moved", where, f"Цитата найдена на странице {v.page}, а не {expected}",
+                         page=v.page, expected=expected)
             found = sorted({v.page, *(n for n in p.pages if n <= len(doc.pages))})
             return SourceCheck(i, v.verdict, v.page, v.anchor or None, [doc.pages[n - 1] for n in found])
         if v.verdict == "fuzzy":
@@ -266,18 +276,19 @@ class _Level2:
         return SourceCheck(i, "unresolved", None, None)
 
     @staticmethod
-    def locate(doc: sources.DocText, p: Place, name: str) -> sources.Verdict:
-        """Итог sources.judge с правилами уровня 2: лист xlsx и одностраничное ok только у .md и .txt."""
+    def locate(doc: sources.DocText, p: Place, name: str) -> tuple[sources.Verdict, int | None]:
+        """Итог sources.judge с правилами уровня 2 (лист xlsx, одностраничное ok только у .md и .txt)
+        и ожидаемая страница: селектора page или листа."""
         page = p.page
         if p.sheet:
             sheet = _sheet_page(doc.pages, p.sheet)
             if not p.quote:
-                return sources.Verdict("by_locator", sheet, p.sheet) if sheet else sources.Verdict("unresolved")
+                return (sources.Verdict("by_locator", sheet, p.sheet) if sheet else sources.Verdict("unresolved")), sheet
             page = sheet or page
         v = sources.judge(doc, p.quote, page, p.locator)
         if v.verdict == "ok" and not p.quote and not name.lower().endswith(ONE_PAGE_OK):
-            return sources.Verdict("unresolved")             # docx без разрывов и книга из одного листа — не место
-        return v
+            return sources.Verdict("unresolved"), page       # docx без разрывов и книга из одного листа — не место
+        return v, page
 
     # --- числа ---
 
