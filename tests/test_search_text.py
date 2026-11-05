@@ -12,9 +12,9 @@ def test_code_normalization_unifies_spelling(value):
 
 
 def test_code_normalization_keeps_letter_hyphen_and_punctuation():
-    assert normalize_code("РСК - 14") == "рск-14"
-    assert normalize_code("РСК-14") != normalize_code("рск14")
-    assert normalize_code(" F50 . 0214 ") == "f50.0214"
+    assert normalize_code("КБ - 14") == "кб-14"
+    assert normalize_code("КБ-14") != normalize_code("кб14")
+    assert normalize_code(" Z50 . 0214 ") == "z50.0214"
     assert normalize_code("Ёлка") == "елка"
 
 
@@ -73,13 +73,13 @@ def test_entity_description_is_content_and_aliases_are_context():
         "label": {"ru": "СП 20"},
         "description": {"ru": "Нагрузки и воздействия"},
         "aliases": ["Свод правил"],
-        "codes": ["F50.0214"],
+        "codes": ["Z50.0214"],
     }, "entity")
     assert text.weighted["A"] == ("СП 20",)
     assert text.weighted["B"] == ()
     assert text.weighted["C"] == ("Нагрузки и воздействия",)
-    assert text.weighted["D"] == ("Свод правил", "F50.0214")
-    assert text.codes == ("f50.0214",)
+    assert text.weighted["D"] == ("Свод правил", "Z50.0214")
+    assert text.codes == ("z50.0214",)
 
 
 def test_empty_document_is_valid_and_input_is_not_mutated():
