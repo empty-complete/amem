@@ -9,18 +9,25 @@
   verify(source, dsn) — настоящее пробное восстановление во временную базу того же сервера и поиск; база удаляется.
 
 Дамп и числа записей в манифесте берутся из одного снимка транзакции (pg_export_snapshot → pg_dump --snapshot):
-манифест описывает ровно то, что лежит в дампе. pg_dump и pg_restore запускаются без shell, параметры — списком;
+манифест описывает ровно то, что лежит в дампе; таймауты простоя в этой транзакции отключены — долгий pg_dump её
+не обрывает. pg_dump и pg_restore запускаются без shell, параметры — списком;
 пароль из DSN передаётся через окружение процесса (PGPASSWORD) и не попадает ни в argv, ни в манифест, ни в ошибку.
 Нужен клиент PostgreSQL 18: каталог с pg_dump и pg_restore — в AMEM_PG_BIN или в PATH.
 
 Готовая копия — это пара «дамп + манифест», у которой манифест читается и размер дампа сходится. Пишется она так:
-дамп во временный файл → fsync → переименование; затем манифест так же. Сбой по дороге оставляет .tmp или дамп без
-манифеста — ни то, ни другое копией не считается и последнюю хорошую копию не вытесняет. Существующая копия
-не перезаписывается.
+временный файл занимается атомарно (O_EXCL — два процесса в одну секунду его не делят), pg_dump пишет в него →
+fsync → переименование; затем манифест так же; новая пара проверяется по SHA-256, не прошла — удаляется. Сбой
+по дороге оставляет .tmp или дамп без манифеста — ни то, ни другое копией не считается и последнюю хорошую копию
+не вытесняет; такие остатки сами не удаляются. Существующая копия не перезаписывается, ротация не трогает новую.
 
-Снимок копирует хранилище объектов после дампа и под блокировкой записи объектов: объекты пишутся до строк базы,
-поэтому все версии файлов, известные дампу, в копии есть — это проверяется по digest. В снимок входят только дамп,
-его манифест и корень OCFL: настройки, .env, кэш моделей и журналы — нет.
+Снимок берёт блокировку записи объектов, затем снимок транзакции; в нём читает список версий файлов и копирует
+хранилище, отпускает блокировку и только потом запускает pg_dump с тем же снимком: в копии ровно версии, известные
+дампу, — это проверяется по digest. В снимок входят только дамп, его манифест и корень OCFL: настройки, .env, кэш
+моделей и журналы — нет.
+
+Восстановление снимка сверяет копию хранилища и список версий файлов из манифеста до записи в базу. Если сверка
+после pg_restore (base_id, миграции, числа записей, версии) не сошлась, восстановление останавливается, но
+восстановленная база остаётся: её нужно пересоздать вручную.
 """
 from __future__ import annotations
 
@@ -29,7 +36,10 @@ import json
 import os
 import re
 import shutil
+import signal
+import stat
 import subprocess
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -101,36 +111,57 @@ def _run(argv: list[str], env: dict, password: str | None, stage: str) -> None:
         raise BackupError(f"{stage}: {Path(argv[0]).name} завершился с кодом {result.returncode}: {detail}")
 
 
+def _close(stream) -> None:
+    try:
+        stream.close()
+    except OSError:
+        pass
+
+
 def _restore_via_sql(pg_restore: str, psql: str, dump: Path, conninfo: str, env: dict, password: str | None) -> None:
     """pg_restore 18 начинает восстановление с SET transaction_timeout — такого параметра нет у серверов до 17.
-    Поэтому для них: pg_restore пишет SQL, из его заголовка эта строка убирается, psql выполняет его одной
-    транзакцией и останавливается на первой ошибке."""
-    import tempfile
-
+    Поэтому для них: pg_restore пишет SQL, из его заголовка эта строка убирается, psql выполняет его в своей
+    транзакции и останавливается на первой ошибке. COMMIT пишется, только когда pg_restore завершился успешно:
+    оборванный на середине pg_restore оставляет psql без COMMIT, и сервер откатывает всё."""
     with tempfile.TemporaryFile() as restore_err, tempfile.TemporaryFile() as psql_err:
         producer = subprocess.Popen([pg_restore, "--file=-", "--no-owner", "--no-privileges", str(dump)],
                                     stdout=subprocess.PIPE, stderr=restore_err, env=env)
         consumer = subprocess.Popen([psql, "--no-psqlrc", "--quiet", "--no-password", "--set=ON_ERROR_STOP=1",
-                                     "--single-transaction", f"--dbname={conninfo}"],
+                                     f"--dbname={conninfo}"],
                                     stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=psql_err, env=env)
         try:
-            for number, line in enumerate(producer.stdout):
-                if number < HEADER_LINES and line.strip() == b"SET transaction_timeout = 0;":
-                    continue
-                consumer.stdin.write(line)
-            consumer.stdin.close()
-        except BrokenPipeError:
-            pass                                          # psql остановился на ошибке — она в его stderr
+            try:
+                consumer.stdin.write(b"BEGIN;\n")
+                for number, line in enumerate(producer.stdout):
+                    if number < HEADER_LINES and line.strip() == b"SET transaction_timeout = 0;":
+                        continue
+                    consumer.stdin.write(line)
+                if producer.wait() == 0:
+                    consumer.stdin.write(b"COMMIT;\n")
+            except BrokenPipeError:
+                pass                                      # psql остановился на ошибке — она в его stderr
+        except BaseException:                             # прерывание: оба процесса — сразу, без COMMIT
+            producer.kill()
+            consumer.kill()
+            raise
         finally:
-            producer.stdout.close()
+            _close(producer.stdout)
+            _close(consumer.stdin)
             produced, consumed = producer.wait(), consumer.wait()
-        for code, err, name in ((produced, restore_err, "pg_restore"), (consumed, psql_err, "psql")):
-            if code != 0:
-                err.seek(0)
-                detail = err.read().decode("utf-8", "replace").strip()[-2000:]
-                if password:
-                    detail = detail.replace(password, "***")
-                raise BackupError(f"pg_restore: {name} завершился с кодом {code}: {detail}")
+        # причина — первой: если pg_restore упал сам, это он; если он лишь получил SIGPIPE — ошибка psql
+        failed = [(name, code, err) for name, code, err in
+                  (("psql", consumed, psql_err), ("pg_restore", produced, restore_err)) if code != 0]
+        if produced not in (0, -signal.SIGPIPE):
+            failed.sort(key=lambda item: item[0] != "pg_restore")
+        parts = []
+        for name, code, err in failed:
+            err.seek(0)
+            detail = err.read().decode("utf-8", "replace").strip()[-2000:]
+            if password:
+                detail = detail.replace(password, "***")
+            parts.append(f"{name} завершился с кодом {code}: {detail}")
+        if parts:
+            raise BackupError("pg_restore: " + "; ".join(parts))
 
 
 def _with_db(dsn: str, dbname: str) -> str:
@@ -214,10 +245,15 @@ def _facts(conn: psycopg.Connection) -> dict:
     migrations = [{"name": name, "sha256": digest} for name, digest in
                   conn.execute("SELECT name, sha256 FROM schema_migrations ORDER BY name")]
     counts = {table: conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] for table in COUNTED}
+    # пробный атом — тот, чья подпись даёт непустой полнотекстовый запрос и находит его поисковый документ
     probe = conn.execute(
         "SELECT r.atom_id, r.payload->'label'->>'ru' FROM atom_current r JOIN atom a ON a.id = r.atom_id "
+        "JOIN search_document d ON d.target = 'atom' AND d.record_id = r.atom_id "
         "WHERE a.status IN ('draft', 'needs_review', 'auto_verified', 'verified') "
-        "AND coalesce(r.payload->'label'->>'ru', '') <> '' ORDER BY r.recorded_at DESC, r.atom_id LIMIT 1").fetchone()
+        "AND coalesce(r.payload->'label'->>'ru', '') <> '' "
+        "AND numnode(websearch_to_tsquery('russian', r.payload->'label'->>'ru')) > 0 "
+        "AND d.search_vector @@ websearch_to_tsquery('russian', r.payload->'label'->>'ru') "
+        "ORDER BY r.recorded_at DESC, r.atom_id LIMIT 1").fetchone()
     return {
         "base_id": row[0], "migrations": migrations, "counts": counts,
         "server_version": conn.execute("SHOW server_version").fetchone()[0],
@@ -225,27 +261,35 @@ def _facts(conn: psycopg.Connection) -> dict:
     }
 
 
-def create(dsn: str, backup_dir: Path, *, keep: int | None = KEEP, now: datetime | None = None) -> dict:
-    """Дамп с манифестом; после проверки новой пары — ротация до keep полных пар (None — без ротации)."""
-    if keep is not None and (isinstance(keep, bool) or not isinstance(keep, int) or keep < 1):
-        raise BackupError("keep: нужно целое от 1 или None")
-    name, created_at = _stamp(now)
-    backup_dir = Path(backup_dir)
+def _dump(dsn: str, backup_dir: Path, name: str, created_at: str, *, during=None) -> dict:
+    """Пара дамп + манифест; during(conn) вызывается в транзакции снимка до pg_dump (так снимок копирует объекты)."""
     backup_dir.mkdir(parents=True, exist_ok=True)
     dump, manifest = backup_dir / f"{name}.dump", backup_dir / f"{name}.json"
     tmp = backup_dir / f"{name}.dump.tmp"
-    if any(p.exists() for p in (dump, manifest, tmp, manifest.with_name(manifest.name + ".tmp"))):
+    if dump.exists() or manifest.exists() or manifest.with_name(manifest.name + ".tmp").exists():
         raise BackupError(f"копия {name} уже есть — существующая копия не перезаписывается")
     pg_dump = _tool("pg_dump")
     conninfo, env, password = _client(dsn)
     try:
+        os.close(os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))     # временный файл — только наш
+    except FileExistsError:
+        raise BackupError(f"копия {name} уже пишется или осталась от сбоя ({tmp.name})") from None
+    try:
         with psycopg.connect(dsn) as conn:                   # не autocommit: снимок живёт, пока жива транзакция
             conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            conn.execute("SET LOCAL idle_in_transaction_session_timeout = 0")       # pg_dump может идти долго
+            if conn.info.server_version >= 170000:
+                conn.execute("SET LOCAL transaction_timeout = 0")
             snapshot = conn.execute("SELECT pg_export_snapshot()").fetchone()[0]
             facts = _facts(conn)
+            if during is not None:
+                during(conn)
             _run([pg_dump, "--format=custom", f"--snapshot={snapshot}", "--no-password", f"--file={tmp}",
                   f"--dbname={conninfo}"], env, password, "pg_dump")
-            conn.rollback()
+            try:
+                conn.rollback()
+            except psycopg.Error:
+                pass                                         # pg_dump уже прочитал снимок — дамп цел
     except psycopg.Error as e:
         tmp.unlink(missing_ok=True)
         raise BackupError(f"база: {type(e).__name__}: {str(e).replace(password, '***') if password else e}") from None
@@ -260,10 +304,25 @@ def create(dsn: str, backup_dir: Path, *, keep: int | None = KEEP, now: datetime
             "created_at": created_at, "pg_dump_version": _version(pg_dump),
             "search_text_version": SEARCH_TEXT_VERSION, **facts}
     _write_json(manifest, data)
-    check(manifest)                                      # новая пара проверена — только теперь ротация
-    if keep is not None:
-        rotate(backup_dir, keep)
+    try:
+        check(manifest)                                  # новая пара проверена; не прошла — это не копия
+    except BackupError:
+        manifest.unlink(missing_ok=True)
+        dump.unlink(missing_ok=True)
+        raise
     return {**data, "dump": str(dump), "manifest": str(manifest)}
+
+
+def create(dsn: str, backup_dir: Path, *, keep: int | None = KEEP, now: datetime | None = None) -> dict:
+    """Дамп с манифестом; после проверки новой пары — ротация до keep полных пар (None — без ротации).
+    Новая копия ротацией не удаляется, даже если часы ушли назад и её имя — не самое позднее."""
+    if keep is not None and (isinstance(keep, bool) or not isinstance(keep, int) or keep < 1):
+        raise BackupError("keep: нужно целое от 1 или None")
+    name, created_at = _stamp(now)
+    made = _dump(dsn, Path(backup_dir), name, created_at)
+    if keep is not None:
+        rotate(backup_dir, keep, protect=name)
+    return made
 
 
 def check(manifest: Path) -> dict:
@@ -301,19 +360,23 @@ def backups(backup_dir: Path) -> list[dict]:
         dump = manifest.with_suffix(".dump")
         if (data.get("kind") == "amem.pg_dump" and data.get("file") == dump.name and dump.is_file()
                 and not dump.is_symlink() and dump.stat().st_size == data.get("size")):
-            out.append({"name": manifest.stem, "manifest": manifest, "dump": dump})
+            out.append({"name": manifest.stem, "manifest": str(manifest), "dump": str(dump)})
     return out
 
 
-def rotate(backup_dir: Path, keep: int = KEEP) -> list[str]:
-    """Удалить готовые копии старше последних keep; .tmp, битые и неполные не трогаются и не считаются."""
+def rotate(backup_dir: Path, keep: int = KEEP, *, protect: str | None = None) -> list[str]:
+    """Удалить готовые копии сверх последних keep; .tmp, битые и неполные не трогаются и не считаются.
+    Копия protect (только что сделанная) остаётся всегда и входит в keep."""
     if isinstance(keep, bool) or not isinstance(keep, int) or keep < 1:
         raise BackupError("keep: нужно целое от 1")
     ready = backups(backup_dir)
+    kept = [item for item in ready if item["name"] == protect]
+    others = [item for item in ready if item["name"] != protect]
+    room = keep - len(kept)
     removed = []
-    for item in ready[:-keep]:
-        item["manifest"].unlink()                        # сначала манифест: дамп без него — уже не копия
-        item["dump"].unlink(missing_ok=True)
+    for item in (others[:-room] if room > 0 else others):
+        Path(item["manifest"]).unlink(missing_ok=True)   # сначала манифест: дамп без него — уже не копия
+        Path(item["dump"]).unlink(missing_ok=True)
         removed.append(item["name"])
     if removed:
         _fsync(Path(backup_dir))
@@ -323,19 +386,30 @@ def rotate(backup_dir: Path, keep: int = KEEP) -> list[str]:
 # Полный снимок
 
 
+def _check_entries(folder: Path, names: list[str]) -> None:
+    """В хранилище — только папки и обычные файлы: ссылки, FIFO и устройства — ошибка (FIFO повесил бы чтение)."""
+    for name in names:
+        mode = os.lstat(folder / name).st_mode
+        if stat.S_ISLNK(mode):
+            raise BackupError(f"{folder / name}: символическая ссылка в хранилище объектов")
+        if not (stat.S_ISREG(mode) or stat.S_ISDIR(mode)):
+            raise BackupError(f"{folder / name}: не файл и не папка")
+
+
 def _copy_tree(src: Path, dst: Path) -> list[dict]:
-    """Копия дерева без ссылок; у каждого файла — путь, размер и SHA-256 копии, сверенный с источником."""
+    """Копия дерева без ссылок и особых файлов; у каждого файла — путь, размер и SHA-256 копии; файлы и папки
+    сброшены на диск."""
     files = []
     dst.mkdir(parents=True)
+    copied_dirs = [dst]
     for folder, dirs, names in os.walk(src, followlinks=False):
         folder = Path(folder)
-        for name in sorted(dirs + names):
-            if (folder / name).is_symlink():
-                raise BackupError(f"{folder / name}: символическая ссылка в хранилище объектов")
+        _check_entries(folder, sorted(dirs + names))
         dirs.sort()
         rel_folder = folder.relative_to(src)
         for d in dirs:
             (dst / rel_folder / d).mkdir()
+            copied_dirs.append(dst / rel_folder / d)
         for name in sorted(names):
             source, target = folder / name, dst / rel_folder / name
             h = hashlib.sha256()
@@ -347,21 +421,24 @@ def _copy_tree(src: Path, dst: Path) -> list[dict]:
                 os.fsync(fout.fileno())
             files.append({"path": (rel_folder / name).as_posix(), "size": target.stat().st_size,
                           "sha256": h.hexdigest()})
+    for folder in reversed(copied_dirs):
+        _fsync(folder)
     return files
 
 
-def _file_versions(conn: psycopg.Connection) -> list[tuple]:
-    return conn.execute("SELECT object_id, n, digest FROM object_version WHERE digest IS NOT NULL "
-                        "ORDER BY object_id, n").fetchall()
+def _file_versions(conn: psycopg.Connection) -> list[dict]:
+    return [{"object": str(object_id), "n": n, "digest": digest} for object_id, n, digest in conn.execute(
+        "SELECT object_id, n, digest FROM object_version WHERE digest IS NOT NULL ORDER BY object_id, n")]
 
 
-def _check_store(root: Path, versions: list[tuple], what: str) -> None:
-    """Каждая версия файла из базы есть в хранилище, и её содержимое — тот же digest."""
+def _check_store(root: Path, versions: list[dict], what: str) -> None:
+    """Каждая версия файла из списка есть в хранилище, и её содержимое — тот же digest."""
     store = ObjectStore(root)
-    for object_id, n, digest in versions:
+    for version in versions:
+        object_id, n, digest = version["object"], version["n"], version["digest"]
         try:
             path = store.content(object_id, n)
-        except (StoreError, OSError, ValueError) as e:
+        except (StoreError, OSError, ValueError, KeyError, TypeError) as e:
             raise BackupError(f"{what}: нет версии {n} объекта obj:{object_id} ({e})") from None
         if not path.is_file() or "sha256:" + _sha256(path) != digest:
             raise BackupError(f"{what}: версия {n} объекта obj:{object_id} не совпадает с digest")
@@ -374,31 +451,44 @@ def snapshot(dsn: str, objects_root: Path, snapshot_dir: Path, *, now: datetime 
     target, tmp = snapshot_dir / name, snapshot_dir / f"{name}.tmp"
     if target.exists() or tmp.exists():
         raise BackupError(f"снимок {name} уже есть — существующий снимок не перезаписывается")
+    if objects_root.is_symlink() or (objects_root.exists() and not objects_root.is_dir()):
+        raise BackupError(f"{objects_root}: не папка хранилища объектов")
+    if objects_root.exists() and any(objects_root.iterdir()) and not (objects_root / "0=ocfl_1.1").is_file():
+        raise BackupError(f"{objects_root}: не корень OCFL (нет 0=ocfl_1.1) — в снимок попало бы чужое")
     snapshot_dir.mkdir(parents=True, exist_ok=True)
     tmp.mkdir()
+    state = {}
     try:
-        dump = create(dsn, tmp / "pg", keep=None, now=now)
-        with psycopg.connect(dsn, autocommit=True) as conn:
-            # под блокировкой записи объектов: копия хранилища не застанет запись версии на середине
-            conn.execute("SELECT pg_advisory_lock(%s)", (OBJECTS_LOCK,))
+        with psycopg.connect(dsn, autocommit=True) as lock:
+            # блокировка записи объектов — до снимка транзакции: запись версии, начатая раньше, успеет
+            # зафиксироваться и попадёт в снимок, а новая не начнётся, пока хранилище копируется
+            lock.execute("SELECT pg_advisory_lock(%s)", (OBJECTS_LOCK,))
+            state["locked"] = True
             try:
-                versions = _file_versions(conn)
-                if objects_root.exists():
-                    with ObjectStore(objects_root)._locked():
-                        files = _copy_tree(objects_root, tmp / "objects")
-                elif versions:
-                    raise BackupError(f"{objects_root}: корня хранилища нет, а в базе {len(versions)} версий файлов")
-                else:
-                    (tmp / "objects").mkdir()
-                    files = []
+                def copy_objects(conn):
+                    versions = _file_versions(conn)      # в снимке дампа
+                    if objects_root.exists():
+                        with ObjectStore(objects_root)._locked():
+                            files = _copy_tree(objects_root, tmp / "objects")
+                    elif versions:
+                        raise BackupError(f"{objects_root}: корня хранилища нет, а в базе {len(versions)} "
+                                          "версий файлов")
+                    else:
+                        (tmp / "objects").mkdir()
+                        files = []
+                    lock.execute("SELECT pg_advisory_unlock(%s)", (OBJECTS_LOCK,))   # pg_dump читает тот же снимок
+                    state.update(locked=False, versions=versions, files=files)
+
+                dump = _dump(dsn, tmp / "pg", name, created_at, during=copy_objects)
             finally:
-                conn.execute("SELECT pg_advisory_unlock(%s)", (OBJECTS_LOCK,))
-        if versions:
-            _check_store(tmp / "objects", versions, "снимок")
+                if state.get("locked"):
+                    lock.execute("SELECT pg_advisory_unlock(%s)", (OBJECTS_LOCK,))
+        if state["versions"]:
+            _check_store(tmp / "objects", state["versions"], "снимок")
         data = {"format": FORMAT, "kind": "amem.snapshot", "created_at": created_at, "base_id": dump["base_id"],
                 "dump": {"manifest": f"pg/{Path(dump['manifest']).name}",
                          "sha256": _sha256(Path(dump["manifest"]))},
-                "objects": {"root": "objects", "files": files, "file_versions": len(versions)}}
+                "objects": {"root": "objects", "files": state["files"], "file_versions": state["versions"]}}
         _write_json(tmp / "manifest.json", data)
         os.replace(tmp, target)
         _fsync(snapshot_dir)
@@ -421,13 +511,20 @@ def _read_snapshot(root: Path) -> tuple[dict, Path]:
     if dump.get("base_id") != data.get("base_id"):
         raise BackupError(f"{root}: base_id дампа и снимка разные")
     objects_dir = _inside(root, objects.get("root"), f"{root}: objects")
+    for folder, dirs, names in os.walk(objects_dir, followlinks=False):
+        _check_entries(Path(folder), dirs + names)
+    versions = objects.get("file_versions")
+    if not isinstance(versions, list) or not all(
+            isinstance(v, dict) and isinstance(v.get("object"), str) and isinstance(v.get("n"), int)
+            and isinstance(v.get("digest"), str) for v in versions):
+        raise BackupError(f"{root}: в манифесте снимка нет списка версий файлов")
     listed = set()
     for item in objects.get("files", []):
         path = _inside(objects_dir, item.get("path"), f"{root}: objects")
         if not path.is_file() or path.stat().st_size != item.get("size") or _sha256(path) != item.get("sha256"):
             raise BackupError(f"{root}: файл хранилища {item.get('path')} не совпадает с манифестом")
         listed.add(path.relative_to(objects_dir).as_posix())
-    actual = {p.relative_to(objects_dir).as_posix() for p in objects_dir.rglob("*") if p.is_file() or p.is_symlink()}
+    actual = {p.relative_to(objects_dir).as_posix() for p in objects_dir.rglob("*") if not p.is_dir()}
     if actual != listed:
         raise BackupError(f"{root}: в копии хранилища лишние или недостающие файлы: "
                           f"{', '.join(sorted(actual ^ listed)[:5])}")
@@ -438,15 +535,24 @@ def _read_snapshot(root: Path) -> tuple[dict, Path]:
 
 
 def _require_empty_db(dsn: str) -> int:
-    """Пустая база — без своих таблиц и представлений (объекты расширений не в счёт); вернуть server_version_num."""
+    """Пустая база — без своих таблиц, представлений, функций и схем (объекты расширений не в счёт);
+    вернуть server_version_num."""
+    system = ("n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg\\_toast%%' "
+              "AND n.nspname NOT LIKE 'pg\\_temp%%'")
+
+    def own(catalog: str, alias: str) -> str:
+        return (f"NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = '{catalog}'::regclass "
+                f"AND d.objid = {alias}.oid AND d.deptype = 'e')")
+
     with psycopg.connect(dsn, autocommit=True) as conn:
         version = int(conn.execute("SHOW server_version_num").fetchone()[0])
         row = conn.execute(
-            "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
-            "WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg\\_toast%%' "
-            "AND n.nspname NOT LIKE 'pg\\_temp%%' "
-            "AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_class'::regclass "
-            "AND d.objid = c.oid AND d.deptype = 'e')").fetchone()
+            f"SELECT (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+            f"WHERE {system} AND {own('pg_class', 'c')}) "
+            f"+ (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+            f"WHERE {system} AND {own('pg_proc', 'p')}) "
+            f"+ (SELECT count(*) FROM pg_namespace n WHERE {system} AND n.nspname <> 'public' "
+            f"AND {own('pg_namespace', 'n')})").fetchone()
     if row[0]:
         raise BackupError("целевая база не пустая — восстановление только в пустую базу")
     return version
@@ -463,25 +569,31 @@ def restore(source: Path, dsn: str, *, objects_root: Path | None = None) -> dict
     if source.is_dir():
         snap, manifest = _read_snapshot(source)
         objects_src = source / snap["objects"]["root"]
+        if objects_root is None:
+            raise BackupError(f"{source}: для снимка нужен objects_root — куда восстановить хранилище объектов")
     else:
         snap, manifest, objects_src = None, source, None
+        if objects_root is not None:
+            raise BackupError(f"{source}: в дампе без снимка нет хранилища объектов")
     dump = check(manifest)
     if objects_root is not None:
-        if objects_src is None:
-            raise BackupError(f"{source}: в дампе без снимка нет хранилища объектов")
         objects_root = Path(objects_root)
         _require_empty_dir(objects_root)
     pg_restore = _tool("pg_restore")
-    psql = _tool("psql")
     server = _require_empty_db(dsn)
+    psql = _tool("psql") if server < 170000 else None
     conninfo, env, password = _client(dsn)
-    # объекты — во временную папку рядом с целью; на место они встают одним переименованием, когда база
-    # восстановлена и все её версии файлов найдены в копии: сбой по дороге не оставляет полусобранной папки
-    tmp = objects_root.with_name(objects_root.name + ".restore.tmp") if objects_root is not None else None
+    # объекты — во временную папку рядом с целью; копия сверяется с манифестом и списком версий до записи в базу,
+    # на место встаёт одним переименованием, когда база восстановлена и сверена: сбой не оставляет полусобранной папки
+    tmp = (objects_root.parent / f".{objects_root.name}.restore-{uuid.uuid4().hex[:12]}.tmp"
+           if objects_root is not None else None)
     try:
         if tmp is not None:
-            shutil.rmtree(tmp, ignore_errors=True)
-            _copy_tree(objects_src, tmp)
+            copied = _copy_tree(objects_src, tmp)
+            if sorted(copied, key=lambda item: item["path"]) != sorted(snap["objects"]["files"],
+                                                                         key=lambda item: item["path"]):
+                raise BackupError(f"{source}: копия хранилища не совпадает с манифестом снимка")
+            _check_store(tmp, snap["objects"]["file_versions"], "восстановление")
         if server >= 170000:
             _run([pg_restore, "--exit-on-error", "--single-transaction", "--no-owner", "--no-privileges",
                   "--no-password", f"--dbname={conninfo}", str(manifest.parent / dump["file"])], env, password,
@@ -497,8 +609,8 @@ def restore(source: Path, dsn: str, *, objects_root: Path | None = None) -> dict
         report = {"base_id": facts["base_id"], "migrations": [m["name"] for m in facts["migrations"]],
                   "counts": facts["counts"], "objects": None}
         if tmp is not None:
-            if versions:
-                _check_store(tmp, versions, "восстановление")
+            if versions != snap["objects"]["file_versions"]:
+                raise BackupError("восстановление: версии файлов в базе не совпадают со снимком")
             if objects_root.exists():
                 objects_root.rmdir()
             os.replace(tmp, objects_root)
@@ -510,13 +622,13 @@ def restore(source: Path, dsn: str, *, objects_root: Path | None = None) -> dict
     return report
 
 
-def verify(source: Path, dsn: str, *, provider=None) -> dict:
-    """Пробное восстановление во временную базу того же сервера и поиск; база и временная папка удаляются.
+def verify(source: Path, dsn: str, *, provider=None, scratch: Path | None = None) -> dict:
+    """Пробное восстановление во временную базу того же сервера и поиск; база и временная папка удаляются
+    при любом исходе. Копия хранилища снимка — во временной папке внутри scratch (по умолчанию — системная).
 
-    Поиск — лексический (полнотекст по подписи пробного атома из манифеста): он не требует модели и сети.
-    С provider ещё и полный exact_fact с векторами. Рабочая база не меняется."""
-    import tempfile
-
+    Поиск — полнотекстовый по подписи пробного атома из манифеста: его поисковый документ должен находиться этим
+    запросом, а сам запрос — давать выдачу; модель и сеть не нужны. С provider ещё и полный exact_fact с векторами.
+    Рабочая база не меняется."""
     from . import recipes, search
 
     source = Path(source)
@@ -524,11 +636,13 @@ def verify(source: Path, dsn: str, *, provider=None) -> dict:
     temp_dsn = _with_db(dsn, name)
     _, _, password = _client(dsn)
     stage = "создание временной базы"
-    workdir = Path(tempfile.mkdtemp(prefix="amem-verify-"))
+    workdir, created, done = None, False, False
     try:
-        with psycopg.connect(dsn, autocommit=True) as admin:
-            admin.execute(f'CREATE DATABASE "{name}"')
         try:
+            workdir = Path(tempfile.mkdtemp(prefix="amem-verify-", dir=scratch))
+            with psycopg.connect(dsn, autocommit=True) as admin:
+                admin.execute(f'CREATE DATABASE "{name}"')
+            created = True
             stage = "восстановление"
             report = restore(source, temp_dsn, objects_root=workdir / "objects" if source.is_dir() else None)
             stage = "поиск"
@@ -540,20 +654,35 @@ def verify(source: Path, dsn: str, *, provider=None) -> dict:
             found = None
             if probe:
                 with psycopg.connect(temp_dsn, autocommit=True) as conn:
-                    hits = search._fts(conn, probe["query"], target="atom")
-                    found = probe["ref"] in {hit["ref"] for hit in hits}
+                    row = conn.execute(
+                        "SELECT d.search_vector @@ websearch_to_tsquery('russian', %s) FROM search_document d "
+                        "WHERE d.target = 'atom' AND d.record_id = %s",
+                        (probe["query"], probe["ref"].split(":", 1)[1])).fetchone()
+                    found = bool(row and row[0])
                     if not found:
                         raise BackupError(f"атом {probe['ref']} не находится по своей подписи")
+                    if not search._fts(conn, probe["query"], target="atom"):
+                        raise BackupError("полнотекстовый поиск по пробной подписи ничего не вернул")
                     if provider is not None:
                         result = recipes.exact_fact(conn, probe["query"], agent=VERIFY_AGENT, provider=provider)
-                        if probe["ref"] not in {item["ref"] for item in result["items"]}:
-                            raise BackupError(f"exact_fact не находит {probe['ref']}")
+                        if not result["items"]:
+                            raise BackupError("exact_fact по пробной подписи ничего не вернул")
             report["search"] = {"probe": probe, "found": found}
+            done = True
             return report
         finally:
-            with psycopg.connect(dsn, autocommit=True) as admin:
-                admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
-            shutil.rmtree(workdir, ignore_errors=True)
+            cleanup = None
+            if created:
+                try:
+                    with psycopg.connect(dsn, autocommit=True) as admin:
+                        admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+                except psycopg.Error as e:
+                    cleanup = e
+            if workdir is not None:
+                shutil.rmtree(workdir, ignore_errors=True)
+            if cleanup is not None and done:                 # при другой ошибке она важнее — не подменяем её
+                stage = "удаление временной базы"
+                raise cleanup
     except BackupError as e:
         raise BackupError(f"verify: {stage}: {e}") from None
     except psycopg.Error as e:

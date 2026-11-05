@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import psycopg
 import pytest
@@ -159,8 +160,9 @@ def test_rotation_keeps_last_complete_pairs_and_runs_only_after_a_good_copy(pgdb
     with pytest.raises(BackupError, match="не прошла проверку"):
         backup.create(src, folder, keep=1, now=NOW + timedelta(seconds=10))
     monkeypatch.undo()
-    assert len(backup.backups(folder)) == 4          # старые копии не тронуты, новая — лишь дописана
-    assert backup.rotate(folder, keep=2) == ["2026-11-05T08-00-01Z", "2026-11-05T08-00-02Z"]
+    assert len(backup.backups(folder)) == 3          # старые копии не тронуты, не прошедшая проверку — удалена
+    assert not list(folder.glob("2026-11-05T08-00-10Z*"))
+    assert backup.rotate(folder, keep=2) == ["2026-11-05T08-00-01Z"]
     assert junk.exists()
     for keep in (0, -1, True, "2"):
         with pytest.raises(BackupError, match="keep"):
@@ -182,7 +184,10 @@ def test_snapshot_links_dump_and_objects_by_base_id(pgdb, tmp_path, docs):
     assert data["kind"] == "amem.snapshot" and data["base_id"] == filled["base_id"]
     assert data["dump"]["manifest"] == "pg/2026-11-05T08-00-00Z.json"
     assert backup.check(root / "pg" / "2026-11-05T08-00-00Z.json")["base_id"] == filled["base_id"]
-    assert data["objects"]["file_versions"] == 1
+    with psycopg.connect(src) as conn:
+        versions = [{"object": str(o), "n": n, "digest": d} for o, n, d in
+                    conn.execute("SELECT object_id, n, digest FROM object_version WHERE digest IS NOT NULL")]
+    assert data["objects"]["file_versions"] == versions and len(versions) == 1
     files = {item["path"] for item in data["objects"]["files"]}
     assert files == {p.relative_to(root / "objects").as_posix() for p in (root / "objects").rglob("*") if p.is_file()}
     assert "0=ocfl_1.1" in files and not any(".env" in f or "models" in f for f in files)
@@ -230,3 +235,108 @@ def test_tool_must_be_postgresql_18(tmp_path, monkeypatch):
     monkeypatch.setenv("AMEM_PG_BIN", str(tmp_path / "нет"))
     with pytest.raises(BackupError, match="нужен клиент PostgreSQL 18"):
         backup._tool("pg_dump")
+
+
+def test_default_rotation_keeps_fourteen_ready_copies(tmp_path):
+    """По умолчанию остаются 14 последних готовых пар; .tmp и манифест без дампа в счёт не идут."""
+    for i in range(16):
+        name = (NOW + timedelta(minutes=i)).strftime("%Y-%m-%dT%H-%M-%SZ")
+        (tmp_path / f"{name}.dump").write_bytes(b"x" * i)
+        (tmp_path / f"{name}.json").write_text(json.dumps({"kind": "amem.pg_dump", "format": 1,
+                                                           "file": f"{name}.dump", "size": i}), encoding="utf-8")
+    (tmp_path / "2026-11-05T09-00-00Z.dump.tmp").write_bytes(b"half")
+    (tmp_path / "2026-11-05T09-01-00Z.json").write_text(json.dumps({"kind": "amem.pg_dump", "format": 1,
+                                                                    "file": "2026-11-05T09-01-00Z.dump", "size": 1}))
+    removed = backup.rotate(tmp_path)
+    assert removed == ["2026-11-05T08-00-00Z", "2026-11-05T08-01-00Z"]
+    assert len(backup.backups(tmp_path)) == backup.KEEP == 14
+    assert (tmp_path / "2026-11-05T09-00-00Z.dump.tmp").exists() and (tmp_path / "2026-11-05T09-01-00Z.json").exists()
+
+
+def tools(tmp_path, **scripts) -> Path:
+    """Папка с обёртками клиента PostgreSQL: по умолчанию — настоящие, scripts — свои тела shell для pg_dump и т. п.
+    В теле $REAL — путь к настоящей программе."""
+    real = Path(os.environ["AMEM_PG_BIN"]) if os.environ.get("AMEM_PG_BIN") else None
+    folder = tmp_path / "pgbin"
+    folder.mkdir()
+    for name in ("pg_dump", "pg_restore", "psql"):
+        path = real / name if real else Path(shutil.which(name))
+        body = scripts.get(name, 'exec "$REAL" "$@"')
+        (folder / name).write_text(f'#!/bin/sh\nREAL="{path}"\n'
+                                   f'case "$1" in --version) exec "$REAL" "$@";; esac\n{body}\n', encoding="utf-8")
+        (folder / name).chmod(0o755)
+    return folder
+
+
+def test_rotation_never_removes_the_new_copy_when_the_clock_went_back(pgdb, tmp_path, docs):
+    src = pgdb()
+    fill(src, tmp_path / "objects", docs)
+    backup.create(src, tmp_path / "bk", keep=1, now=NOW + timedelta(days=1))
+    made = backup.create(src, tmp_path / "bk", keep=1, now=NOW)
+    assert os.path.exists(made["dump"]) and os.path.exists(made["manifest"])
+    assert [item["name"] for item in backup.backups(tmp_path / "bk")] == ["2026-11-05T08-00-00Z"]
+
+
+def test_truncated_dump_is_not_a_ready_copy(pgdb, tmp_path, docs):
+    src = pgdb()
+    fill(src, tmp_path / "objects", docs)
+    made = backup.create(src, tmp_path / "bk", now=NOW)
+    with open(made["dump"], "r+b") as f:
+        f.truncate(os.path.getsize(made["dump"]) - 1)
+    assert backup.backups(tmp_path / "bk") == []
+
+
+def test_dump_survives_idle_in_transaction_timeout(pgdb, tmp_path, docs, monkeypatch):
+    """Транзакция снимка ждёт pg_dump дольше таймаута простоя базы — и не обрывается."""
+    src = pgdb()
+    fill(src, tmp_path / "objects", docs)
+    with psycopg.connect(src, autocommit=True) as conn:
+        dbname = conn.info.dbname
+        conn.execute(f'ALTER DATABASE "{dbname}" SET idle_in_transaction_session_timeout = \'1s\'')
+    monkeypatch.setenv("AMEM_PG_BIN", str(tools(tmp_path, pg_dump='sleep 3; exec "$REAL" "$@"')))
+    made = backup.create(src, tmp_path / "bk", now=NOW)
+    assert backup.check(made["manifest"])["counts"]["atom"] == 2
+
+
+def test_dump_and_counts_come_from_one_snapshot(pgdb, tmp_path, docs, monkeypatch):
+    """Атом, записанный после снимка, но до pg_dump, не попадает ни в дамп, ни в числа манифеста."""
+    src, dst = pgdb(), pgdb()
+    fill(src, tmp_path / "objects", docs)
+    real_facts = backup._facts
+
+    def facts_then_write(conn):
+        found = real_facts(conn)
+        with db.connect(src) as other:
+            records.commit(other, [Item("atom", {"kind": "fact", "label": {"ru": "Позже снимка"}})], agent=AGENT)
+        return found
+
+    monkeypatch.setattr(backup, "_facts", facts_then_write)
+    made = backup.create(src, tmp_path / "bk", now=NOW)
+    monkeypatch.undo()
+    assert made["counts"]["atom"] == 2
+    assert backup.restore(made["manifest"], dst)["counts"]["atom"] == 2
+
+
+def test_snapshot_refuses_a_folder_that_is_not_an_ocfl_root(pgdb, tmp_path, docs):
+    src = pgdb()
+    fill(src, tmp_path / "data" / "objects", docs)
+    (tmp_path / "data" / ".env").write_text("SECRET=1\n", encoding="utf-8")
+    with pytest.raises(BackupError, match="не корень OCFL"):
+        backup.snapshot(src, tmp_path / "data", tmp_path / "snap", now=NOW)
+    assert not (tmp_path / "snap").exists()
+
+
+def test_snapshot_refuses_special_files_and_missing_versions(pgdb, tmp_path, docs):
+    src = pgdb()
+    fill(src, tmp_path / "objects", docs)
+    fifo = tmp_path / "objects" / "pipe"
+    os.mkfifo(fifo)
+    with pytest.raises(BackupError, match="не файл и не папка"):
+        backup.snapshot(src, tmp_path / "objects", tmp_path / "snap", now=NOW)
+    fifo.unlink()
+    with psycopg.connect(src) as conn:
+        object_id, n = conn.execute("SELECT object_id, n FROM object_version WHERE digest IS NOT NULL").fetchone()
+    ObjectStore(tmp_path / "objects").content(object_id, n).unlink()          # копия версии пропала из хранилища
+    with pytest.raises(BackupError, match=f"снимок: (нет )?верси[яи] {n} объекта obj:{object_id}"):
+        backup.snapshot(src, tmp_path / "objects", tmp_path / "snap", now=NOW)
+    assert list((tmp_path / "snap").iterdir()) == []
