@@ -39,13 +39,13 @@ def test_origin_base_accepted_and_stored(pg):
 
 
 def test_origin_base_validated_by_schema():
-    good = changed("atom_arena_fact.yaml", lambda d: d.update(provenance={"origin_base": str(uuid7())}))
+    good = changed("atom_fact.yaml", lambda d: d.update(provenance={"origin_base": str(uuid7())}))
     assert pydantic_errors("AtomPayload", good) == []
     assert json_errors("AtomPayload", good) == []
-    bad = changed("atom_arena_fact.yaml", lambda d: d.update(provenance={"origin_base": "не-uuid"}))
+    bad = changed("atom_fact.yaml", lambda d: d.update(provenance={"origin_base": "не-uuid"}))
     assert pydantic_errors("AtomPayload", bad)
     assert json_errors("AtomPayload", bad)
     # origin_base — строка-идентификатор, а не ссылка: префикс ent:/atm: не принимается
-    ref = changed("atom_arena_fact.yaml", lambda d: d.update(provenance={"origin_base": f"ent:{uuid7()}"}))
+    ref = changed("atom_fact.yaml", lambda d: d.update(provenance={"origin_base": f"ent:{uuid7()}"}))
     assert pydantic_errors("AtomPayload", ref)
     assert json_errors("AtomPayload", ref)
