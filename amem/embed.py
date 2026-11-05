@@ -87,14 +87,24 @@ class FastembedProvider(EmbeddingProvider):
                 if e.name != "fastembed":
                     raise
                 raise EmbeddingError("fastembed не установлен: установите optional extra amem[embed]") from e
-            self._model = module.TextEmbedding(
-                model_name=self.name,
-                cache_dir=self.cache_dir,
-                lazy_load=True,
-                local_files_only=not self.allow_download,
-            )
-        return [vector.tolist() if hasattr(vector, "tolist") else vector
-                for vector in self._model.embed(texts)]
+            try:
+                self._model = module.TextEmbedding(
+                    model_name=self.name,
+                    cache_dir=self.cache_dir,
+                    lazy_load=True,
+                    local_files_only=not self.allow_download,
+                )
+            except ModuleNotFoundError:
+                raise                       # чужая зависимость не установлена — ошибка окружения, как при импорте
+            except Exception as e:          # нет файлов модели в кэше, повреждённая модель: provider недоступен
+                raise EmbeddingError(f"fastembed: модель {self.name} не создаётся: {type(e).__name__}: {e}") from e
+        try:
+            return [vector.tolist() if hasattr(vector, "tolist") else vector
+                    for vector in self._model.embed(texts)]
+        except ModuleNotFoundError:
+            raise
+        except Exception as e:              # lazy_load: файлы модели читаются при первом embed
+            raise EmbeddingError(f"fastembed: модель {self.name} не считает вектора: {type(e).__name__}: {e}") from e
 
 
 def get_provider(explicit: EmbeddingProvider | None = None) -> EmbeddingProvider | None:
