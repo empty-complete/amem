@@ -261,9 +261,11 @@ def test_rels_filter_links_and_fields(kb):
     assert neighbours(around(kb, root, rels=frozenset({"about", "used_in"}))) == {refs["@a"], refs["@c"]}
     assert neighbours(around(kb, root, rels=["derived_from"])) == set()
     for bad, message in [("depends_on", "не строкой"), (5, "не строкой"), ([], "пустой"),
-                         (["bogus"], "неизвестные виды связей bogus"), ([1], "строки")]:
+                         (["bogus"], "неизвестные виды связей bogus"), ([1], "строки"), ([["about"]], "строки")]:
         with pytest.raises(RecordError, match=message):
             around(kb, root, rels=bad)
+    with pytest.raises(ValueError, match="не строкой"):                 # statuses — набор, как у других рецептов
+        around(kb, root, statuses="deprecated")
 
 
 def test_equal_paths_and_parallel_links_pick_smallest_edge_ids(kb):
@@ -349,3 +351,15 @@ def test_evidence_role_counts_start_atom_and_sources_without_role(kb):
     assert path_to(from_anchor, refs["@hub"])["evidence_role"] == "primary"       # сущность роль не меняет
     assert path_to(from_anchor, refs["@mixed"])["evidence_role"] is None
     assert path_to(from_anchor, refs["@plain"])["evidence_role"] is None
+
+
+def test_order_within_a_level_follows_path_edge_ids(kb):
+    """Порядок узлов уровня — по id рёбер пути, а не по ref соседа: у b ребро about новой ревизии позже, чем у a."""
+    b = atom("b", about=["@root"])
+    refs = records.commit(kb, [entity("root"), b, atom("a", about=["@root"])], agent=AGENT).refs
+    revise(kb, b, refs["@b"], label={"ru": "b2"}, about=[refs["@root"]])
+
+    result = around(kb, refs["@root"])
+
+    assert [node["ref"] for node in result["nodes"][1:]] == [refs["@a"], refs["@b"]]
+    assert [path["nodes"][-1] for path in result["paths"]] == [refs["@a"], refs["@b"]]
