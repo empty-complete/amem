@@ -5,7 +5,6 @@ import zipfile
 import pytest
 
 from amem import db, extract, objects, sources
-from amem.ocfl_store import ObjectStore
 from amem.sources import extract_pages
 from samples import make_docs, make_docx, make_xlsx
 
@@ -21,11 +20,6 @@ def kb(pg):
 @pytest.fixture
 def docs(tmp_path):
     return make_docs(tmp_path / "docs")
-
-
-@pytest.fixture
-def store(tmp_path):
-    return ObjectStore(tmp_path / "objects")
 
 
 def xlsx(tmp_path, rows, fmt=None, name="книга.xlsx"):
