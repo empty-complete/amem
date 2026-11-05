@@ -1,7 +1,7 @@
 """Шаблоны пакетов: читаются строго, пути ведут на настоящие поля схемы, правила осмысленны и не повторяются,
 наследование без циклов. Движок проверяется на ядре и на пакете-примере tests/packs/example.
 
-Обход путей по схеме — packs._check_path: тот же, что проверяет шаблоны любого пакета при загрузке."""
+Обход путей по схеме — packs.check_path: тот же, что проверяет шаблоны любого пакета при загрузке."""
 from pathlib import Path
 
 import pytest
@@ -17,7 +17,7 @@ EXAMPLE = Path(__file__).with_name("packs") / "example"
 def _unit_paths(class_name: str, prefix: str = "", seen: tuple = ()) -> set[str]:
     """Все пути к полям unit, достижимые из класса, — чтобы has_value не пропустил ни одного."""
     out = set()
-    for name, slot in packs._attrs(class_name).items():
+    for name, slot in packs.field_attrs(class_name).items():
         slot = slot or {}
         rng = slot.get("range", "string")
         if name == "unit":
@@ -42,7 +42,7 @@ APPLIES_TO = {
 @pytest.mark.parametrize("t", TEMPLATES, ids=[t.code for t in TEMPLATES])
 def test_template_rules_point_to_real_fields(t):
     for rule in t.fields or []:
-        slot = packs._check_path(rule.path, t.target)
+        slot = packs.check_path(rule.path, t.target)
         last = rule.path.split(".")[-1]
         assert rule.required or rule.min_count or rule.ucum or rule.selector_types or rule.entity_classes, \
             f"{t.code}: правило {rule.path} ничего не проверяет"

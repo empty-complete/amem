@@ -15,7 +15,7 @@ skills/*.md (тексты для агентов — раздаёт устано�
 - один code шаблона — не больше чем в одном пакете, одна пара (target, applies_to) — не больше чем у одного шаблона;
 - код applies_to есть в словаре загружаемых пакетов (kind, entity_class или rel — по target);
 - extends ведёт на шаблон того же target, наследование без циклов;
-- пути правил ведут на настоящие поля схемы (_check_path), коды selector_types, entity_classes, links — из словарей.
+- пути правил ведут на настоящие поля схемы (check_path), коды selector_types, entity_classes, links — из словарей.
 
 Служебные перечни (Status, Rank, ValueState, SourceRole, Visibility) остаются закрытыми
 перечислениями amem/schema/amem_v1.yaml и грузятся в concept с origin='schema' — как раньше.
@@ -105,7 +105,7 @@ def _classes(schema_file: Path) -> dict:
     return _read(schema_file)["classes"]
 
 
-def _attrs(class_name: str) -> dict:
+def field_attrs(class_name: str) -> dict:
     """Поля класса схемы вместе с полями предков (is_a); поле потомка важнее."""
     classes = _classes(SCHEMA_FILE)
     cls, attrs = classes[class_name], {}
@@ -116,7 +116,7 @@ def _attrs(class_name: str) -> dict:
         cls = classes[cls["is_a"]]
 
 
-def _check_path(path: str, target: str) -> dict:
+def check_path(path: str, target: str) -> dict:
     """Пройти путь правила шаблона по полям LinkML от тела записи target; вернуть описание последнего поля.
 
     [] — «каждый элемент списка, дальше вглубь»: стоит у промежуточных списков (sources[].edition)
@@ -129,7 +129,7 @@ def _check_path(path: str, target: str) -> dict:
         name, each = segment.removesuffix("[]"), segment.endswith("[]")
         if class_name not in classes:
             raise PackError(f"{path}: поле {field} — {class_name}, а не класс; дальше по пути идти некуда")
-        attrs = _attrs(class_name)
+        attrs = field_attrs(class_name)
         if name not in attrs:
             raise PackError(f"{path}: у {class_name} нет поля {name}")
         slot = attrs[name] or {}
@@ -159,7 +159,7 @@ def _check_template(t: Template, file: Path, by_code: dict[str, Template], codes
 
     for rule in t.fields or []:
         try:
-            _check_path(rule.path, target)
+            check_path(rule.path, target)
         except PackError as e:
             raise PackError(f"{file}: {e}") from e
         for attr, scheme in (("selector_types", "selector_type"), ("entity_classes", "entity_class")):
