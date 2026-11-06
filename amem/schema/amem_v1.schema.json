@@ -711,7 +711,7 @@
     },
     "CardField": {
       "additionalProperties": false,
-      "description": "Поле карточки: правило профиля и выведенное по действующим атомам parameter состояние. У known — значение и признаки (status, by, basis, rank, confidence, source_role, sources); candidates — остальные значения. Карточка не хранится — класс только описывает формат (JSON Schema).",
+      "description": "Поле карточки: правило профиля и выведенное по действующим атомам parameter состояние. У known — значение и признаки (status, by, basis, rank, confidence, source_role, sources) — у лучшего из атомов с этим значением (verified, затем человек, затем новее); candidates — остальные значения, кроме rank deprecated. Карточка не хранится — класс только описывает формат (JSON Schema).",
       "properties": {
         "ask": {
           "anyOf": [
