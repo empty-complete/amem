@@ -444,7 +444,7 @@ PDF — объект с `media_type = application/pdf` или с именем н
 | Сущность `auto_verified`, попавшая в выборку | `audit` |
 | Источник ссылается не на последнюю версию объекта | `source_changed` (разд. 7.5, шаг 6) |
 
-`details` пункта — коды замечаний записи, риск, кандидаты уровней 3 и 4.
+`details` пункта — коды замечаний записи, риск, кандидаты уровней 3 и 4; у `source_changed` — своя форма (разд. 8.8).
 
 ### 7.3. Устаревание
 
@@ -584,7 +584,9 @@ review.resolve(conn, item_id, outcome, *, agent, confidence=None, note=None, now
 | `semantic` (модель) | иначе | `draft` | `needs_review`, пункт `semantic_doubt` |
 | `semantic` (человек) | `confirmed` / `refuted` | любой, кроме выведенных из оборота | `verified` / `rejected` |
 | `edit` | `confirmed` / `refuted` | `verified` | `records.decide(accept=True / False)`; его `transaction()` — точка сохранения |
-| Остальные | `confirmed` / `refuted` | любой, кроме выведенных из оборота | `verified` / `rejected` |
+| Кроме `edit`, у ждущей ревизии (`review_state = pending`) | `confirmed` | любой | Только вердикт: статус не меняется, другие пункты не закрываются — о правке решает её пункт `edit` |
+| Кроме `edit`, у ждущей ревизии | `refuted` | любой | `records.decide(accept=False)` для этой ревизии; статус записи не меняется, пункт `edit` устаревает (разд. 7.3) |
+| Остальные (текущая ревизия) | `confirmed` / `refuted` | любой, кроме выведенных из оборота | `verified` / `rejected` |
 
 Итоговое решение человека закрывает остальные открытые пункты этой ревизии как `obsolete`, кроме `source_changed` (разд. 7.3). Статус меняется через `records.set_status_locked` с агентом решающего и причиной `review:<reason>`. Ответ — id вердикта, статус, новые пункты.
 
@@ -614,7 +616,9 @@ review.resolve(conn, item_id, outcome, *, agent, confidence=None, note=None, now
 
 `objects.ingest` создаёт версию `n > 1` существующего объекта и в той же транзакции (под исключительной блокировкой объектов) вызывает `review.on_new_version(conn, object_id, n, *, agent, at)`.
 
-Пункты `source_changed` получают текущие и ждущие решения ревизии атомов и сущностей, которые ссылаются на объект с версией меньше `n`: ждущая правка, принятая позже, иначе осталась бы со ссылкой на старую версию без пересмотра. Записи со статусом `rejected`, `deprecated` и `superseded` пропускаются. `details`: объект, старые версии, новая.
+Пункты `source_changed` получают текущие и ждущие решения ревизии атомов и сущностей, которые ссылаются на объект с версией меньше `n`: ждущая правка, принятая позже, иначе осталась бы со ссылкой на старую версию без пересмотра. Записи со статусом `rejected`, `deprecated` и `superseded` пропускаются.
+
+`details` у `source_changed` — одна форма и у пакета (разд. 7.5, шаг 6), и у новой версии: `{"objects": [{"object": "obj:…", "from": [старые версии по возрастанию], "to": n}]}` — по одному элементу на объект, `to` — последняя версия на момент постановки. Тело пункта неизменяемо: версия, появившаяся при открытом пункте, его не меняет и второго не ставит. Замечаний, риска и кандидатов пакета в этих `details` нет.
 
 Открытый пункт той же ревизии не дублируется. Пакет, разобравший путь в старую версию до появления новой, ставит пункт сам (разд. 7.5, шаг 6). Пункт устаревает по общему правилу 7.3 — например, когда запись получает ревизию со ссылкой на новую версию.
 
@@ -728,7 +732,7 @@ review.resolve(conn, item_id, outcome, *, agent, confidence=None, note=None, now
 | Порядок блокировок | Параллельные `submit` двух новых агентов по одной записи не встают в тупик; `resolve` и `submit` по одной записи — тоже; `ingest` новой версии во время `submit` даёт пункт `source_changed` ровно один раз | `test_check_submit.py::test_new_agents_editing_one_record_do_not_deadlock`; `test_review.py::test_resolve_and_submit_on_one_record_do_not_deadlock`; `test_review_sources.py::test_ingest_during_write_waits_and_does_not_duplicate`, `::test_ingest_between_resolve_and_write_gives_one_item` |
 | Захват и аренда (3b) | Два параллельных захвата не берут один пункт; истёкшую аренду забирает другой; `release` чужого — ошибка | `test_review.py::test_parallel_claims_get_different_items`, `::test_expired_lease_goes_to_another`, `::test_release` |
 | Права (3b) | Автор не решает `semantic` своего пакета; модель не решает `warning`; человек решает всё, в том числе свою правку | `test_review.py::test_model_gets_only_semantic_and_not_its_own`, `::test_author_model_cannot_resolve_its_semantic`, `::test_warning_rights_and_refute`, `::test_person_author_gets_own_semantic`, `::test_person_may_confirm_own_edit`, `::test_person_gets_everything` |
-| Решение (3b) | `semantic confirmed` 0,9 → `auto_verified`; 0,5 → `needs_review` и `semantic_doubt`; `refuted` человека → `rejected`; решение человека закрывает остальные пункты ревизии; модель по `semantic` после решения человека статус не меняет | `test_review.py::test_model_confirms_semantic_with_high_confidence`, `::test_semantic_threshold_is_inclusive`, `::test_model_doubt_goes_to_person`, `::test_person_on_semantic`, `::test_person_decision_closes_other_items_of_revision`, `::test_model_verdict_without_status_change_when_status_moved` |
+| Решение (3b) | `semantic confirmed` 0,9 → `auto_verified`; 0,5 → `needs_review` и `semantic_doubt`; `refuted` человека → `rejected`; решение человека закрывает остальные пункты ревизии; модель по `semantic` после решения человека статус не меняет | `test_review.py::test_model_confirms_semantic_with_high_confidence`, `::test_semantic_threshold_is_inclusive`, `::test_model_doubt_goes_to_person`, `::test_person_on_semantic`, `::test_person_decision_closes_other_items_of_revision`, `::test_model_verdict_without_status_change_when_status_moved`, `::test_edit_verdict_without_decision_when_status_moved`; `test_review_sources.py::test_confirmed_source_changed_on_pending_edit_is_only_a_verdict`, `::test_refuted_source_changed_on_pending_edit_declines_the_edit` |
 | Устаревание (3b) | Новая ревизия закрывает пункты старой; решение по устаревшему пункту — `ReviewError` | `test_check_submit.py::test_edit_of_draft_replaces_semantic_item`; `test_review.py::test_stale_item_is_closed_on_claim`, `::test_stale_item_is_closed_on_resolve` |
 | Аудит | При `AUDIT_RATE = 1.0` пункт `audit` появляется у сущности (3a) и у атома после уровня 5 (3b); при `0.0` — нет | `test_check_submit.py::test_entity_audit_sample`, `::test_clean_entity_is_auto_verified_and_complete`; `test_review.py::test_auto_verified_atom_may_go_to_audit`, `::test_model_confirms_semantic_with_high_confidence` |
 | Метрики (3b) | `stats` на подготовленных данных считает очередь, возраст, решённое, отклонённые коды, источники и аудит; пустая база — нули | `test_review_stats.py::test_stats_all_sections`, `::test_empty_base_gives_zeros_and_none` |
