@@ -133,6 +133,19 @@ def check(conn: psycopg.Connection, store: ObjectStore, docs: Path, batch: Batch
     return results
 
 
+def judge_source(conn: psycopg.Connection, store: ObjectStore, target: str, source: dict, position: int,
+                 report: Report) -> SourceCheck:
+    """Сверка одного разобранного источника (object, object_version, digest) с копией версии в хранилище — те же
+    resolve и judge, что у check, без разбора путей, подстановки редакции и сверки чисел. Для импорта подборки:
+    тело уже записано, итог — в его строку source. Копии файла нет — StoreError (вызывающий проверяет заранее)."""
+    run = _Level2(conn, store, Path("."), report, None)
+    where = f"sources[{position}]"
+    src = run.resolve(source, where)
+    if src is None:
+        return SourceCheck(position, None, None, None)
+    return run.judge(position, src, run.version(src), where, target == "atom")
+
+
 class _Level2:
     def __init__(self, conn, store, docs, report: Report, agent: str):
         self.conn, self.store, self.docs, self.report, self.agent = conn, store, docs, report, agent
