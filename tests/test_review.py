@@ -219,6 +219,14 @@ def test_model_doubt_goes_to_person(kb, store, docs, outcome, confidence):
     assert details["outcome"] == outcome and details["confidence"] == confidence
 
 
+@pytest.mark.parametrize("confidence,expected", [(0.8, "auto_verified"), (0.79, "needs_review")])
+def test_semantic_threshold_is_inclusive(kb, store, docs, confidence, expected):
+    """Порог SEMANTIC_MIN_CONFIDENCE = 0,8 включается: ровно 0,8 — подтверждение, чуть меньше — сомнение."""
+    s = send(kb, store, docs, wind())
+    out = review.resolve(kb, queued(s, "semantic"), "confirmed", confidence=confidence, agent=MODEL)
+    assert out["status"] == expected
+
+
 def test_model_without_confidence_is_error(kb, store, docs):
     s = send(kb, store, docs, wind())
     with pytest.raises(review.ReviewError, match="confidence"):
@@ -318,6 +326,19 @@ def test_person_may_confirm_own_edit(kb, store, docs):
     assert out["status"] == "verified"
     assert kb.execute("SELECT id FROM atom_current WHERE atom_id = %s",
                       (rec["record_id"],)).fetchone()[0] == result.records[0]["revision_id"]
+
+
+def test_edit_verdict_without_decision_when_status_moved(kb, store, docs):
+    """Ожидаемый статус edit — verified: если запись успела уйти в needs_review, вердикт пишется, а правка
+    остаётся ждать решения — records.decide не вызывается."""
+    rec, result = edited(kb, store, docs)
+    records.set_status(kb, "atom", rec["record_id"], "needs_review", agent=PERSON)
+    item_id = queued(result, "edit")
+    out = review.resolve(kb, item_id, "confirmed", agent=PERSON)
+    assert out["status"] == "needs_review"
+    assert kb.execute("SELECT review_state FROM atom_revision WHERE id = %s",
+                      (result.records[0]["revision_id"],)).fetchone()[0] == "pending"
+    assert verification(kb, item_id)[:2] == ("human", "confirmed") and state(kb, item_id) == "done"
 
 
 def test_edit_by_model_is_error(kb, store, docs):

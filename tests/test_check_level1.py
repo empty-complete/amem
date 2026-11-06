@@ -423,6 +423,19 @@ def test_pack_rule(memo_kb, case):
     assert issues == ([expected] if expected else [])
 
 
+def test_inactive_template_rule_does_not_fire(pg, monkeypatch, tmp_path):
+    """Пакет убран из AMEM_PACKS и load_vocab повторён: правило его шаблона больше не срабатывает (разд. 13)."""
+    extra = pack(tmp_path / "extra", "extra", {"fact_codes": {
+        "code": "fact_codes", "version": "1.0.0", "target": "atom", "applies_to": "fact",
+        "fields": [{"path": "codes", "required": True, "severity": "warning"}]}})
+    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(CHECK_PACK), str(extra)]))
+    db.prepare(pg)
+    assert run(pg, atom("@a"))[1] == [("template", "warning", "@a: codes")]
+    monkeypatch.setenv("AMEM_PACKS", str(CHECK_PACK))
+    db.load_vocab(pg)
+    assert run(pg, atom("@a"))[1] == []
+
+
 def test_rule_message_and_link_template(memo_kb):
     batch, _, report = run(memo_kb, memo(codes=["w0"]), DOC, note(), atom("@a"), links=[SEE])
     [issue] = report.issues
