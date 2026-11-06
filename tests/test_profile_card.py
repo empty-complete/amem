@@ -167,3 +167,88 @@ def test_two_preferred_disagree_and_deprecated_rank_ignored(ready):
     _param(ready, dev, "mass", 14, "kg", rank="preferred")
     _param(ready, dev, "mass", 15, "kg", rank="preferred")
     assert _field(profile.card(ready, dev), "mass")["state"] == "conflict"
+
+
+def test_same_value_takes_signs_from_verified_person(ready):
+    dev = _entity(ready, "Насос", "device")
+    _param(ready, dev, "mass", 12, "kg")                                        # черновик модели
+    b = _param(ready, dev, "mass", 12, "kg", agent=PERSON, status="verified")
+    _param(ready, dev, "mass", 12, "kg")                                        # новее, но черновик модели
+    f = _field(profile.card(ready, dev), "mass")
+    assert f["state"] == "known" and f["by"] == "person" and f["status"] == "verified" and f["atoms"] == [b]
+    assert len(f["candidates"]) == 2 and b not in {c["atom"] for c in f["candidates"]}
+
+
+def test_small_values_compared_relatively(ready):
+    dev = _entity(ready, "Насос", "device")
+    _param(ready, dev, "mass", 1e-12, "kg")
+    _param(ready, dev, "mass", 2e-12, "kg")
+    assert _field(profile.card(ready, dev), "mass")["state"] == "conflict"
+
+
+def test_none_with_unknown_is_na(ready):
+    dev = _entity(ready, "Насос", "device")
+    _param(ready, dev, "mass", None, None, value_extra={"value_state": "none"})
+    _param(ready, dev, "mass", None, None, value_extra={"value_state": "unknown"})
+    assert _field(profile.card(ready, dev), "mass")["state"] == "na"
+
+
+def test_none_with_known_is_conflict(ready):
+    dev = _entity(ready, "Насос", "device")
+    a = _param(ready, dev, "mass", None, None, value_extra={"value_state": "none"})
+    b = _param(ready, dev, "mass", 12, "kg")
+    f = _field(profile.card(ready, dev), "mass")
+    assert f["state"] == "conflict" and {c["atom"] for c in f["candidates"]} == {a, b}
+
+
+def _question(conn, about, prop, **value_extra):
+    q = atom("Какова величина?", kind="question", about=[about], sources=[], basis="author",
+             content={"values": [{"property": prop, **value_extra}]})
+    return f"atm:{records.commit(conn, [Item('atom', q)], agent=PERSON).revisions[0].record_id}"
+
+
+def test_unknown_with_question_is_asked(ready):
+    dev = _entity(ready, "Насос", "device")
+    _param(ready, dev, "mass", None, None, value_extra={"value_state": "unknown"})
+    q = _question(ready, dev, "mass", value_state="unknown")
+    f = _field(profile.card(ready, dev), "mass")
+    assert f["state"] == "asked" and q in f["atoms"]
+
+
+def test_question_counts_only_with_unknown_value(ready):
+    dev = _entity(ready, "Насос", "device")
+    _question(ready, dev, "mass", amount=12, unit="kg")         # не вопрос о неизвестной величине
+    assert _field(profile.card(ready, dev), "mass")["state"] == "missing"
+
+
+@pytest.fixture
+def interface(ready, tmp_path, monkeypatch):
+    """Профиль только из интерфейса (без applies_to) с величиной, которой нет в словаре."""
+    from check_support import pack
+    extra = pack(tmp_path / "iface", "iface", {"weighted": {
+        "code": "weighted", "version": "1.0.0", "target": "entity",
+        "parameters": [{"property": "load", "required": True}]}})
+    (extra / "vocab").mkdir()
+    (extra / "vocab" / "property.yaml").write_text(
+        "scheme: property\nconcepts:\n  - {code: load, label: {ru: нагрузка, en: load}, "
+        "definition: {ru: \"Нагрузка без единицы в словаре.\"}}\n", encoding="utf-8")
+    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(PACKS / "ontology"), str(extra)]))
+    db.prepare(ready)
+    return ready
+
+
+def test_profile_from_interface_only(interface):
+    doc = _entity(interface, "Паспорт", "document")
+    card = profile.card(interface, doc)
+    assert card["profile"] == "weighted@1.0.0" and [f["property"] for f in card["fields"]] == ["load"]
+    sensor = profile.card(interface, _entity(interface, "Датчик", "sensor"))
+    assert sensor["profile"] == "sensor@1.0.0"
+
+
+def test_unit_of_first_value_when_vocab_has_none(interface):
+    doc = _entity(interface, "Паспорт", "document")
+    _param(interface, doc, "load", 12, "kg")
+    _param(interface, doc, "load", 12000, "g")
+    assert _field(profile.card(interface, doc), "load")["state"] == "known"
+    _param(interface, doc, "load", 13, "kg")
+    assert _field(profile.card(interface, doc), "load")["state"] == "conflict"

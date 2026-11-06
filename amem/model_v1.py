@@ -1785,7 +1785,7 @@ class ParameterDefault(ConfiguredBaseModel):
 
 class CardField(ConfiguredBaseModel):
     """
-    Поле карточки: правило профиля и выведенное по действующим атомам parameter состояние. У known — значение и признаки (status, by, basis, rank, confidence, source_role, sources); candidates — остальные значения. Карточка не хранится — класс только описывает формат (JSON Schema).
+    Поле карточки: правило профиля и выведенное по действующим атомам parameter состояние. У known — значение и признаки (status, by, basis, rank, confidence, source_role, sources) — у лучшего из атомов с этим значением (verified, затем человек, затем новее); candidates — остальные значения, кроме rank deprecated. Карточка не хранится — класс только описывает формат (JSON Schema).
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
 
