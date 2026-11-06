@@ -643,6 +643,257 @@
       "title": "Bundle",
       "type": "object"
     },
+    "Card": {
+      "additionalProperties": false,
+      "description": "Карточка сущности amem.card/1 (profile.card): поля профиля её класса, величины вне профиля (extra), сводка и карточки предков по part_of. Вычисляется, не хранится.",
+      "properties": {
+        "ancestors": {
+          "items": {
+            "$ref": "#/$defs/Any"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "entity": {
+          "$ref": "#/$defs/Any"
+        },
+        "extra": {
+          "items": {
+            "$ref": "#/$defs/Any"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/CardField"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "format": {
+          "pattern": "^amem\\.card/1$",
+          "type": "string"
+        },
+        "profile": {
+          "description": "Шаблон класса с профилем (code@version) или пусто, если профиля нет.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "$ref": "#/$defs/Any"
+        },
+        "templates": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "format",
+        "entity",
+        "summary"
+      ],
+      "title": "Card",
+      "type": "object"
+    },
+    "CardField": {
+      "additionalProperties": false,
+      "description": "Поле карточки: правило профиля и выведенное по действующим атомам parameter состояние. У known — значение и признаки (status, by, basis, rank, confidence, source_role, sources); candidates — остальные значения. Карточка не хранится — класс только описывает формат (JSON Schema).",
+      "properties": {
+        "ask": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "atoms": {
+          "items": {
+            "pattern": "^atm:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "basis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Basis"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "by": {
+          "pattern": "^(person|model)$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/Any"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Any"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "group": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "origin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "property": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rank"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "rule": {
+          "description": "Шаблон, чьё правило действует (code@version).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceRole"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Any"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/CardState"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Status"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Any"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "property",
+        "required",
+        "state"
+      ],
+      "title": "CardField",
+      "type": "object"
+    },
+    "CardState": {
+      "description": "Состояние поля карточки amem.card/1 (спецификация 3c, разд. 3.4).",
+      "enum": [
+        "known",
+        "missing",
+        "asked",
+        "na",
+        "conflict"
+      ],
+      "title": "CardState",
+      "type": "string"
+    },
     "Changeset": {
       "additionalProperties": false,
       "description": "",
