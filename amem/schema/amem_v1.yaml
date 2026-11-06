@@ -274,7 +274,9 @@ enums:
       bundle_pack_missing:
         annotations: {label_ru: "нет пакета подборки", label_en: "bundle pack missing", definition_ru: "Пакет подборки не загружен или digest иной."}
       bundle_key_collision:
-        annotations: {label_ru: "ключ занят", label_en: "bundle key collision", definition_ru: "key записи подборки принадлежит другой записи."}
+        annotations: {label_ru: "ключ занят", label_en: "bundle key collision", definition_ru: "key записи подборки принадлежит другой записи, или id связи подборки занят связью с другими rel или концами."}
+      bundle_object_conflict:
+        annotations: {label_ru: "объект не сопоставлен", label_en: "bundle object conflict", definition_ru: "Файл подборки известен базе под другим id лишь частично: не все версии, на которые ссылаются источники, найдены по digest, или версии ведут на разные локальные объекты."}
 
   ReviewReason:
     description: Почему запись попала в очередь проверки.
@@ -1004,6 +1006,35 @@ classes:
       extra: {range: Any, multivalued: true}
       summary: {range: Any, required: true}
       ancestors: {range: Any, multivalued: true}
+
+  BundleManifest:
+    description: >-
+      Манифест подборки amem.bundle/1 (bundle.export, файл manifest.json): откуда и что отобрано, пакеты, состав
+      и sha256 каждого файла подборки (parts). Пишется последним; bundle.inspect сверяет части без базы.
+    attributes:
+      format: {required: true, pattern: '^amem\.bundle/1$'}
+      created_at: {range: datetime, required: true}
+      base_id:
+        required: true
+        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      agent:
+        required: true
+        pattern: '^(person|model):[a-z0-9_.-]+$'
+      amem_version: {required: true}
+      selection: {range: Any, required: true}
+      packs:
+        description: Пакеты, которым принадлежат коды записей, с зависимостями — name, version, digest, requires.
+        range: Any
+        multivalued: true
+        required: true
+      counts: {range: Any, required: true}
+      parts:
+        description: Путь файла в подборке → sha256 (hex); все файлы, кроме самого манифеста.
+        range: Any
+        required: true
+      with_files: {range: boolean, required: true}
+      with_history: {range: boolean, required: true}
+      with_packs: {range: boolean, required: true}
 
   Template:
     description: >-

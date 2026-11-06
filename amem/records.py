@@ -12,7 +12,8 @@
 - всё в одной транзакции: ошибка — и в базе ничего не появилось.
 
 Порядок внутри commit:
-1. id новым записям — заранее, чтобы @имена работали в любом порядке;
+1. id новым записям — заранее, чтобы @имена работали в любом порядке; с keep_ids (подборки) новая запись может
+   прийти и со своим record_id;
 2. автор — до блокировок, как во всех функциях записи: иначе первый пакет нового автора мог бы встать в тупик
    с его же решением проверки по той же записи;
 3. существующие записи блокируются (FOR NO KEY UPDATE) по возрастанию id: два писателя одной записи идут по очереди,
@@ -95,6 +96,7 @@ class _Planned:
     item: Item
     record_id: uuid.UUID
     label: str                         # как назвать запись в ошибке
+    new: bool = True                   # строки записи ещё нет: её вставляет commit
     body: dict | None = None
     content_hash: str | None = None
 
@@ -136,6 +138,14 @@ def _new_changeset(conn, *, agent, activity, reason, state, check_report, at) ->
                  "VALUES (%s, %s, %s, %s, %s, %s, %s)",
                  (cs, agent, activity, reason, state, Jsonb(check_report) if check_report is not None else None, at))
     return cs
+
+
+def new_changeset(conn, *, agent: str, reason: str | None, at: datetime | None = None) -> uuid.UUID:
+    """Пакет изменений без ревизий (approved) в уже открытой транзакции вызывающего — для строк, которые ссылаются
+    на пакет, когда записей в нём нет (история подборки в import_history)."""
+    _ensure_agent(conn, agent)
+    return _new_changeset(conn, agent=agent, activity=None, reason=reason, state="approved", check_report=None,
+                          at=at or _now())
 
 
 def _lock(conn, target: Target, record_id: uuid.UUID) -> datetime:
@@ -212,12 +222,26 @@ def _ids(body: dict, path: str) -> list[str]:
     return list(dict.fromkeys(ref.split(":", 1)[1] for _, ref in canon.values_at(body, path)))
 
 
+def _check_new_id(conn, target: Target, record_id: uuid.UUID, label: str) -> None:
+    """Заданный id новой записи: UUIDv7, как у CHECK таблиц, и не id записи другого вида — ссылки atm:/ent:
+    в подборке не должны указать не туда."""
+    if not UUID7.fullmatch(str(record_id)):
+        raise RecordError(f"{label}: id новой записи — не UUIDv7")
+    other = "entity" if target == "atom" else "atom"
+    if conn.execute(f"SELECT 1 FROM {other} WHERE id = %s", (record_id,)).fetchone() is not None:
+        raise RecordError(f"{label}: id уже занят записью {PREFIX[other]}:{record_id}")
+
+
 def _insert_record(conn, item: Item, record_id: uuid.UUID, agent: str, at: datetime) -> None:
     target = item.target
     kind_column = "kind" if target == "atom" else "entity_class"
     status = item.status or "draft"
-    conn.execute(f"INSERT INTO {target} (id, {kind_column}, status, created_at, status_changed_at) "
-                 "VALUES (%s, %s, %s, %s, %s)", (record_id, item.payload[kind_column], status, at, at))
+    cur = conn.execute(f"INSERT INTO {target} (id, {kind_column}, status, created_at, status_changed_at) "
+                       "VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
+                       (record_id, item.payload[kind_column], status, at, at))
+    if cur.rowcount == 0:
+        # только при keep_ids: запись с этим id создал соседний писатель после проверки — повтор её увидит
+        raise RecordError(f"{PREFIX[target]}:{record_id}: запись с этим id появилась одновременно — повторите пачку")
     _log_status(conn, target, record_id, status, agent, None, at)
 
 
@@ -301,7 +325,7 @@ def rebuild_projections(conn: psycopg.Connection) -> int:
 def _write_revision(conn, plan: _Planned, cs: uuid.UUID, agent: str, reason: str | None, at: datetime) -> Revision:
     item, record_id, body, content_hash = plan.item, plan.record_id, plan.body, plan.content_hash
     target = item.target
-    if item.record_id is not None and item.status is not None:
+    if not plan.new and item.status is not None:
         set_status_locked(conn, target, record_id, item.status, agent=agent, reason=reason, at=at)
     same = _unchanged(conn, plan)
     if same is not None:
@@ -409,12 +433,25 @@ def _plan_link(conn, payload: dict, refs: dict, label: str) -> _LinkPlan:
     return _LinkPlan(payload, src_kind, src, dst_kind, dst, ends)
 
 
-def _write_link(conn, plan: _LinkPlan, cs: uuid.UUID, agent: str, at: datetime) -> uuid.UUID:
+def _link_id(conn, payload: dict, keep_id: bool, label: str) -> uuid.UUID:
+    """id новой связи: свой, или — с keep_ids — id связи из подборки (UUIDv7, не занятый другой связью)."""
+    if not keep_id or payload.get("id") is None:
+        return uuid7()
+    link_id = as_uuid(payload["id"], f"{label}.id")
+    if not UUID7.fullmatch(str(link_id)):
+        raise RecordError(f"{label}: id связи — не UUIDv7")
+    if conn.execute("SELECT 1 FROM link WHERE id = %s", (link_id,)).fetchone() is not None:
+        raise RecordError(f"{label}: id связи {link_id} уже занят")
+    return link_id
+
+
+def _write_link(conn, plan: _LinkPlan, cs: uuid.UUID, agent: str, at: datetime, keep_id: bool = False,
+                label: str = "") -> uuid.UUID:
     payload, rel = plan.payload, plan.payload["rel"]
     existing = _active_link(conn, rel, plan.ends)
     if existing is not None:
         return existing
-    link_id = uuid7()
+    link_id = _link_id(conn, payload, keep_id, label)
     try:
         with conn.transaction():             # точка сохранения: одновременный дубль не обрывает весь пакет
             conn.execute(
@@ -444,8 +481,13 @@ def _active_link(conn, rel: str, ends: list[tuple[str, str]]) -> uuid.UUID | Non
 
 
 def commit(conn: psycopg.Connection, items: Sequence[Item], links: Sequence[dict] = (), *, agent: str,
-           activity: uuid.UUID | None = None, reason: str | None = None, check_report: dict | None = None) -> Committed:
-    """Записать принятый пакет изменений целиком или не записать ничего (порядок — в описании модуля)."""
+           activity: uuid.UUID | None = None, reason: str | None = None, check_report: dict | None = None,
+           keep_ids: bool = False) -> Committed:
+    """Записать принятый пакет изменений целиком или не записать ничего (порядок — в описании модуля).
+
+    keep_ids — для подборок из другой базы: record_id, которого здесь нет, — новая запись с этим id (UUIDv7, не
+    занятый записью другого вида), а не ошибка; новая связь с полем id — связь с этим id. Без него record_id —
+    только существующая запись, а id связи не читается."""
     _require_autocommit(conn)
     if not items and not links:
         raise RecordError("пустая пачка")
@@ -454,9 +496,15 @@ def commit(conn: psycopg.Connection, items: Sequence[Item], links: Sequence[dict
     for i, item in enumerate(items):
         check_target(item.target)
         ref = item.payload.get("ref")
-        if item.record_id is not None:
+        new = item.record_id is None
+        if not new:
             record_id = as_uuid(item.record_id, f"items[{i}].record_id")
             label = ref or f"{PREFIX[item.target]}:{record_id}"
+            if conn.execute(f"SELECT 1 FROM {item.target} WHERE id = %s", (record_id,)).fetchone() is None:
+                if not keep_ids:
+                    raise RecordError(f"{label}: такой записи нет")
+                _check_new_id(conn, item.target, record_id, label)
+                new = True
         else:
             record_id, label = uuid7(), ref or f"items[{i}]"
         if ref:
@@ -468,10 +516,13 @@ def commit(conn: psycopg.Connection, items: Sequence[Item], links: Sequence[dict
         if code is not None and conn.execute("SELECT 1 FROM concept WHERE scheme = %s AND code = %s",
                                              (scheme, code)).fetchone() is None:
             raise RecordError(f"{label}: {scheme} {code!r} — кода нет в загруженных пакетах")
-        planned.append(_Planned(item, record_id, label))
+        planned.append(_Planned(item, record_id, label, new))
+    created = [p.record_id for p in planned if p.new]
+    if len(set(created)) < len(created):
+        raise RecordError("новая запись с одним id два раза в одной пачке")
     with conn.transaction():
         _ensure_agent(conn, agent)
-        existing = sorted({(p.item.target, p.record_id) for p in planned if p.item.record_id is not None},
+        existing = sorted({(p.item.target, p.record_id) for p in planned if not p.new},
                           key=lambda pair: pair[1])
         marks = [_lock(conn, target, record_id) for target, record_id in existing]
         at = max([_now(), *marks])                   # часы — после блокировок: ожидание чужой записи не в счёт
@@ -479,7 +530,7 @@ def commit(conn: psycopg.Connection, items: Sequence[Item], links: Sequence[dict
                             check_report=check_report, at=at)
         result = Committed(cs, refs=refs)
         for p in planned:
-            if p.item.record_id is None:
+            if p.new:
                 _insert_record(conn, p.item, p.record_id, agent, at)
         for p in planned:
             _prepare_body(conn, p, refs)
@@ -487,7 +538,8 @@ def commit(conn: psycopg.Connection, items: Sequence[Item], links: Sequence[dict
         for p in planned:
             result.revisions.append(_write_revision(conn, p, cs, agent, reason, at))
         order = sorted(range(len(link_plans)), key=lambda i: (link_plans[i].payload["rel"], min(link_plans[i].ends)))
-        written = {i: _write_link(conn, link_plans[i], cs, agent, at) for i in order}
+        written = {i: _write_link(conn, link_plans[i], cs, agent, at, keep_ids, f"links[{i}]")
+                   for i in order}
         result.links = [written[i] for i in range(len(link_plans))]          # id — в порядке пачки
     return result
 

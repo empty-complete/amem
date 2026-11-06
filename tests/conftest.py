@@ -1,4 +1,5 @@
 """Общие фикстуры: тестовые документы и соединения с тестовыми базами схемы v1."""
+import contextlib
 import hashlib
 import os
 from pathlib import Path
@@ -64,16 +65,13 @@ TEST_DSNS = os.environ.get(
     "postgresql://test:test@localhost:5433/test,postgresql://test:test@localhost:5434/test").split(",")
 
 
-@pytest.fixture(params=TEST_DSNS, ids=lambda dsn: "pg" + dsn.rsplit(":", 1)[-1].split("/")[0])
-def pg(request):
-    """Соединение со своей чистой схемой в тестовой базе; схема удаляется после теста.
-
-    Базы недоступны — тест падает с подсказкой, а не пропускается: без них хранилище не проверено."""
+@contextlib.contextmanager
+def _schema(dsn: str):
+    """Соединение со своей чистой схемой в тестовой базе dsn; схема удаляется на выходе."""
     import uuid
 
     import psycopg
 
-    dsn = request.param
     try:
         admin = psycopg.connect(dsn, autocommit=True, connect_timeout=3)
     except psycopg.OperationalError as e:
@@ -92,6 +90,22 @@ def pg(request):
         conn.close()
         admin.execute(f'DROP SCHEMA "{schema}" CASCADE')
         admin.close()
+
+
+@pytest.fixture(params=TEST_DSNS, ids=lambda dsn: "pg" + dsn.rsplit(":", 1)[-1].split("/")[0])
+def pg(request):
+    """Соединение со своей чистой схемой в тестовой базе; схема удаляется после теста.
+
+    Базы недоступны — тест падает с подсказкой, а не пропускается: без них хранилище не проверено."""
+    with _schema(request.param) as conn:
+        yield conn
+
+
+@pytest.fixture
+def pg2(request, pg):
+    """Вторая чистая схема на том же сервере, что и pg, — «другая база» для подборок."""
+    with _schema(request.node.callspec.params["pg"]) as conn:
+        yield conn
 
 
 @pytest.fixture(params=TEST_DSNS, ids=lambda dsn: "pg" + dsn.rsplit(":", 1)[-1].split("/")[0])
@@ -131,3 +145,11 @@ def store(tmp_path):
     from amem.ocfl_store import ObjectStore
 
     return ObjectStore(tmp_path / "objects")
+
+
+@pytest.fixture
+def store2(tmp_path):
+    """Хранилище объектов второй базы (pg2)."""
+    from amem.ocfl_store import ObjectStore
+
+    return ObjectStore(tmp_path / "objects2")
