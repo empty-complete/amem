@@ -1,0 +1,4 @@
+scheme: entity_class
+concepts:
+  - {code: device, label: {ru: устройство, en: device}, definition: {ru: "Устройство для теста."}, broader: artifact}
+  - {code: sensor, label: {ru: датчик, en: sensor}, definition: {ru: "Датчик — частный случай устройства."}, broader: device}

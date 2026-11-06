@@ -110,8 +110,14 @@ def test_model_gets_only_semantic_and_not_its_own(kb, store, docs):
 
 def test_person_author_gets_own_semantic(kb, store, docs):
     own = send(kb, store, docs, wind(), agent=PERSON)
+    assert own.queued == []                           # запись человека в очередь не ставится (спецификация 3c, разд. 5)
+    rec = own.records[0]
+    with kb.transaction():                              # пункт на ревизию человека — как поставил бы его submit до 3c
+        item = review.insert_item(kb, "atom", rec["record_id"], rec["revision_id"], "semantic",
+                                  changeset_id=own.changeset_id, details={}, agent=PERSON,
+                                  at=datetime.now(timezone.utc))
     [got] = review.claim(kb, agent=PERSON)              # исключение автора — только для модели (разд. 8.2)
-    assert got["id"] == queued(own, "semantic") and got["author"] == PERSON
+    assert got["id"] == item["id"] and got["author"] == PERSON
 
 
 def test_claim_rejects_unknown_reasons(kb, store, docs):
@@ -320,24 +326,25 @@ def test_edit_refuted_is_declined(kb, store, docs):
                       (rec["record_id"],)).fetchone()[0] == rec["revision_id"]
 
 
-def test_person_may_confirm_own_edit(kb, store, docs):
+def test_person_edit_of_verified_needs_no_confirmation(kb, store, docs):
+    """Правка человеком проверенной записи (спецификация 3c, разд. 5): сразу текущая, пункта edit нет."""
     rec, result = edited(kb, store, docs, agent=PERSON)
-    out = review.resolve(kb, queued(result, "edit"), "confirmed", agent=PERSON)
-    assert out["status"] == "verified"
+    assert result.queued == [] and result.records[0]["review_state"] == "none"
+    assert status(kb, rec["record_id"]) == "verified"
     assert kb.execute("SELECT id FROM atom_current WHERE atom_id = %s",
                       (rec["record_id"],)).fetchone()[0] == result.records[0]["revision_id"]
 
 
-def test_edit_verdict_without_decision_when_status_moved(kb, store, docs):
-    """Ожидаемый статус edit — verified: если запись успела уйти в needs_review, вердикт пишется, а правка
-    остаётся ждать решения — records.decide не вызывается."""
+def test_edit_decided_even_when_status_moved(kb, store, docs):
+    """О правке решает состояние ревизии (pending), а не статус записи (спецификация 3c, разд. 5): запись успела
+    уйти в needs_review — confirmed всё равно делает правку текущей, статус записи не меняется."""
     rec, result = edited(kb, store, docs)
     records.set_status(kb, "atom", rec["record_id"], "needs_review", agent=PERSON)
     item_id = queued(result, "edit")
     out = review.resolve(kb, item_id, "confirmed", agent=PERSON)
     assert out["status"] == "needs_review"
     assert kb.execute("SELECT review_state FROM atom_revision WHERE id = %s",
-                      (result.records[0]["revision_id"],)).fetchone()[0] == "pending"
+                      (result.records[0]["revision_id"],)).fetchone()[0] == "accepted"
     assert verification(kb, item_id)[:2] == ("human", "confirmed") and state(kb, item_id) == "done"
 
 

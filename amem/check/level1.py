@@ -5,7 +5,11 @@
    отдельное замечание schema; тело, которое не разобралось, дальше не проверяется (Prepared.ok = False);
 2. ссылки — @имена пачки, ключи и UUID записей базы: вид и код цели; у правки — статус записи;
 3. коды словаря (kind, entity_class, rel, тип селектора с цепочкой refined_by), правила полей шаблонов, жёсткие
-   правила величин (разд. 3.3), концы связей (pairs) и правила связей шаблонов (allowed, required).
+   правила величин (разд. 3.3), правила основания basis и уверенности confidence по агенту (спецификация 3c,
+   разд. 2.1–2.2), концы связей (pairs) и правила связей шаблонов (allowed, required).
+
+Правило поля со skip_if_set не применяется, если поле по этому пути у тела непусто (has_source: при basis источник
+не обязателен).
 
 Связи для правил шаблонов считаются вместе: связи пачки, поля тела, через которые выражается вид связи (via_field
 понятия: about, derived_from), и — для required — действующие связи записи в базе. Симметричная связь исходит
@@ -92,11 +96,12 @@ class _Link:
     symmetric: bool
 
 
-def check(conn, proposals: Sequence, links: Sequence[dict], report: Report) -> Batch:
+def check(conn, proposals: Sequence, links: Sequence[dict], report: Report, *, agent: str | None = None) -> Batch:
     """Уровень 1 над пачкой: замечания — в report, разобранная пачка — уровням 2–4. В базу ничего не пишет.
 
-    proposals — check.Proposal (target, payload, record_id), links — тела связей LinkPayload."""
-    run = _Level1(conn, report)
+    proposals — check.Proposal (target, payload, record_id), links — тела связей LinkPayload. agent — кто пишет
+    (model:…, person:…): от него зависят правила basis author и confidence; без agent они не применяются."""
+    run = _Level1(conn, report, agent)
     for i, proposal in enumerate(proposals):
         run.prepare(i, proposal)
     for item in run.items:
@@ -109,8 +114,8 @@ def check(conn, proposals: Sequence, links: Sequence[dict], report: Report) -> B
 
 
 class _Level1:
-    def __init__(self, conn, report: Report):
-        self.conn, self.report = conn, report
+    def __init__(self, conn, report: Report, agent: str | None = None):
+        self.conn, self.report, self.agent = conn, report, agent
         self.vocab: dict[str, dict[str, dict]] = {"kind": {}, "entity_class": {}, "rel": {}, "selector_type": {}}
         for scheme, code, data in conn.execute("SELECT scheme, code, data FROM concept WHERE scheme = ANY(%s)",
                                                (list(self.vocab),)).fetchall():
@@ -265,6 +270,8 @@ class _Level1:
                     self.resolve(ref, f"{label}: {where}", TARGET[prefix])
         self.field_rules(label, target, body, item.rules)
         self.hard_rules(label, target, body)
+        if target == "atom":
+            self.basis_rules(label, body)
 
     def selector_codes(self, label: str, where: str, selector) -> None:
         while isinstance(selector, dict):
@@ -277,6 +284,8 @@ class _Level1:
     def field_rules(self, label: str, target: str, body: dict, rules: Rules) -> None:
         """Правила полей FieldRule — по каждому месту пути; важность — из правила, по умолчанию violation."""
         for path, rule in rules.fields.items():
+            if rule.get("skip_if_set") and _is_set(body, rule["skip_if_set"]):
+                continue
             range_ = _field(path, target).get("range")
             for where, value in _slots(body, path):
                 slot = _Slot(rule, rules.field_origins.get(path), label, where, value, range_)
@@ -351,6 +360,24 @@ class _Level1:
                 elif amount is not None and (low is not None and amount < low or high is not None and amount > high):
                     self.add("violation", "bounds_order", f"{label}: {where}",
                              f"Значение {amount} вне границ: {_span(low, high)}.", **bounds)
+
+    def basis_rules(self, label: str, body: dict) -> None:
+        """Основание и уверенность (спецификация 3c, разд. 2.1–2.2): author — слово человека, confidence — оценка
+        модели; умолчанию и допущению нужно правило методики в derived_from, чтобы было видно, откуда они."""
+        basis = body.get("basis")
+        model = self.agent is not None and self.agent.startswith("model:")
+        person = self.agent is not None and self.agent.startswith("person:")
+        if basis == "author" and model:
+            self.add("violation", "basis_author_model", f"{label}: basis",
+                     "Основание basis author («утверждение автора») может поставить только человек (агент person:).",
+                     basis=basis, agent=self.agent)
+        if basis in ("default", "assumed") and not body.get("derived_from"):
+            self.add("warning", "basis_without_rule", f"{label}: basis",
+                     f"Основание basis {basis} без derived_from: не видно правила методики, по которому оно принято.",
+                     basis=basis)
+        if body.get("confidence") is not None and person:
+            self.add("violation", "confidence_person", f"{label}: confidence",
+                     "Поле confidence заполняет только модель: у записи человека его нет.", agent=self.agent)
 
     # --- связи ---
 
@@ -480,6 +507,16 @@ def _field(path: str, target: str) -> dict:
         return packs.check_path(path, target)
     except packs.PackError:                     # пути шаблонов проверены при загрузке пакетов
         return {}
+
+
+def _is_set(body: dict, path: str) -> bool:
+    """Поле по пути (через точку, без []) есть и непусто — условие skip_if_set."""
+    node = body
+    for part in path.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return False
+        node = node[part]
+    return node not in (None, "", [], {})
 
 
 def _slots(body: dict, path: str) -> Iterator[tuple[str, object]]:

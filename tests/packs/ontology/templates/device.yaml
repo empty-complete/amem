@@ -1,0 +1,8 @@
+code: device
+version: 1.0.0
+target: entity
+applies_to: device
+description: {ru: "Профиль устройства: масса обязательна, рабочая температура по умолчанию."}
+parameters:
+  - {property: mass, required: true, group: body, origin: datasheet, ask: {ru: "изготовитель"}, hint: {ru: "паспорт, табличка"}}
+  - {property: temperature, required: false, group: environment, origin: method, default: {amount: 20, unit: Cel}, when: {ru: "если не задано заданием"}}

@@ -15,6 +15,7 @@ dependencies = [
   "ucumvert==0.3.2",
   "pint>=0.25,<0.26",
   "openpyxl>=3.1",
+  "packaging>=23",
 ]
 
 [project.optional-dependencies]

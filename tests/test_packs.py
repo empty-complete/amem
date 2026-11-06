@@ -38,8 +38,8 @@ def _commit_atom(pg, kind):
 
 def test_core_vocabulary_sizes():
     counts = Counter(c.scheme for c in packs.load_pack(packs.CORE_PACK).concepts)
-    assert counts["kind"] == 8 and counts["entity_class"] == 8
-    assert counts["rel"] == 12 and counts["selector_type"] == 12
+    assert counts["kind"] == 9 and counts["entity_class"] == 9
+    assert counts["rel"] == 12 and counts["selector_type"] == 13
     assert Counter(c.scheme for c in packs.service_concepts())["status"] == 7
 
 
@@ -148,7 +148,7 @@ def test_same_version_other_content_is_rejected(pg, monkeypatch, tmp_path):
 def test_pack_table_stores_version_and_digest(pg):
     db.prepare(pg)
     rows = pg.execute("SELECT name, version, digest FROM pack").fetchall()
-    assert [(r[0], r[1]) for r in rows] == [("core", "1.1.0")]
+    assert [(r[0], r[1]) for r in rows] == [("core", "1.2.0")]
     assert all(len(r[2]) == 64 for r in rows)
     db.prepare(pg)                                             # повторно — без ошибок и дублей
     assert pg.execute("SELECT count(*) FROM pack").fetchone()[0] == 1

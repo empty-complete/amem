@@ -1,0 +1,6 @@
+scheme: property
+concepts:
+  - {code: mass, label: {ru: масса, en: mass}, definition: {ru: "Масса тела."}, unit: kg, plausible_min: 0, plausible_max: 100000}
+  - {code: length, label: {ru: длина, en: length}, definition: {ru: "Длина или размер."}, unit: m, plausible_min: 0, plausible_max: 1000}
+  - {code: temperature, label: {ru: температура, en: temperature}, definition: {ru: "Температура."}, unit: Cel, plausible_min: -80, plausible_max: 200}
+  - {code: width, label: {ru: ширина, en: width}, definition: {ru: "Ширина."}, unit: m, broader: length, plausible_min: 0, plausible_max: 1000}

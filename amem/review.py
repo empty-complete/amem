@@ -362,7 +362,9 @@ def _apply(conn, item: dict, outcome: str, method: str, *, agent: str, confidenc
                 put("semantic_doubt", {**item["details"], "verification": str(verification_id),
                                        "outcome": outcome, "confidence": confidence, "note": note})
     elif reason == "edit":
-        if status == "verified" and _review_state(conn, t, revision_id) == "pending":
+        # о правке решает состояние ревизии, а не статус записи: pending бывает и у записи человека не в verified
+        # (спецификация 3c, разд. 5); статус записи решение не меняет
+        if _review_state(conn, t, revision_id) == "pending":
             # records.decide — в нашей транзакции: его transaction() становится точкой сохранения
             records.decide(conn, t, revision_id, outcome == "confirmed", agent=agent)
             final = True
