@@ -83,6 +83,16 @@ def test_resolve_unknown_record_is_not_found(kb):
             records.resolve(kb, ref)
 
 
+def test_resolve_finds_current_key_not_old_one(kb):
+    """Ключ — проекция текущей ревизии: после смены ключа старый запись не находит."""
+    a = commit(kb, atom("Ветровая нагрузка", key="wind_old")).revisions[0]
+    commit(kb, atom("Ветровая нагрузка", key="wind_new", record_id=a.record_id))
+    assert records.resolve(kb, "atm:wind_new") == ("atom", a.record_id)
+    with pytest.raises(RecordNotFound, match="нет записи с ключом wind_old"):
+        records.resolve(kb, "atm:wind_old")
+    assert lookup.get(kb, "atom", "atm:wind_old") is None
+
+
 def test_resolve_key_pattern_matches_schema():
     """Ключ в ссылке — по тому же шаблону, что поле key атома и сущности: другой разбор ключа разошёлся бы с записью."""
     for cls in ("AtomPayload", "EntityPayload"):
@@ -271,6 +281,27 @@ def test_list_records_cursor_pages_without_gaps_or_repeats(kb):
     order = [(datetime.fromisoformat(item["recorded_at"]), item["ref"].split(":", 1)[1]) for item in seen]
     assert order == sorted(order, reverse=True)
     assert lookup.list_records(kb, limit=50, cursor="")["items"] == seen[:50]      # пустой курсор — с начала
+
+
+def test_list_records_cursor_skips_record_lifted_by_new_revision(kb):
+    """Курсор — по recorded_at показанной ревизии: запись, поднятая новой ревизией выше курсора, на следующих
+    страницах не встречается (так и описано в list_records)."""
+    old, middle, new = (commit(kb, atom(label)).revisions[0] for label in ("Старый", "Средний", "Новый"))
+    first = lookup.list_records(kb, limit=1)
+    assert [i["ref"] for i in first["items"]] == [ref_of(new)]
+    commit(kb, atom("Старый, правка", record_id=old.record_id))             # теперь он самый новый
+    second = lookup.list_records(kb, limit=1, cursor=first["next_cursor"])
+    assert [i["ref"] for i in second["items"]] == [ref_of(middle)] and second["next_cursor"] is None
+    assert [i["ref"] for i in lookup.list_records(kb)["items"]] == [ref_of(old), ref_of(new), ref_of(middle)]
+
+
+def test_list_records_inside_outer_transaction(kb):
+    """Внутри транзакции вызывающего list_records читает её снимок и уровень изоляции не меняет."""
+    commit(kb, atom("Ветер", tags=["ветер"]))
+    with kb.transaction():
+        kb.execute("SELECT 1")
+        result = lookup.list_records(kb, tag="ветер")
+    assert result["total"] == 1 and len(result["items"]) == 1
 
 
 def test_list_records_agrees_with_folder_tree(kb):

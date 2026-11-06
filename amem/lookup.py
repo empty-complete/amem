@@ -134,11 +134,16 @@ LIST_LIMIT = 200            # записей на страницу списка,
 
 
 def _shown(t: Target) -> str:
-    """Ревизия, по которой запись показывается в списке и в подписях: текущая (как {t}_current — последняя none
-    или accepted, иначе последняя pending), а у записи без текущей (её единственная ревизия отклонена) —
-    последняя. Без этого такая запись выпала бы из списка, хотя дерево папок (folders.tree) её считает."""
-    return (f"(SELECT x.id, x.payload, x.recorded_at, x.changeset_id FROM {t}_revision x WHERE x.{t}_id = rec.id "
-            "ORDER BY x.review_state = 'declined', x.review_state = 'pending', x.n DESC LIMIT 1)")
+    """Условие «ревизия r — та, по которой запись показывается в списке и в подписях»: у её записи нет ревизии
+    лучше. Лучше — не отклонённая, затем не ждущая проверки, затем с большим n: это текущая ревизия ({t}_current —
+    последняя none или accepted, иначе последняя pending), а у записи без текущей (её единственная ревизия
+    отклонена) — последняя. Без этого такая запись выпала бы из списка, хотя дерево папок (folders.tree) её считает.
+
+    Условие на одну ревизию, а не подзапрос на запись: страница идёт по индексу {t}_revision_recorded
+    (миграция 0009) и проверяет только ревизии, дошедшие до неё; для подсчёта соединение выбирает PostgreSQL."""
+    return (f"NOT EXISTS (SELECT 1 FROM {t}_revision y WHERE y.{t}_id = r.{t}_id AND "
+            "(y.review_state <> 'declined', y.review_state <> 'pending', y.n) > "
+            "(r.review_state <> 'declined', r.review_state <> 'pending', r.n))")
 
 
 def _codes(values, name: str) -> list[str] | None:
@@ -175,35 +180,57 @@ def _after(cursor) -> tuple[datetime, uuid.UUID] | None:
         raise RecordError(f"cursor {cursor!r}: не курсор списка записей — нужен next_cursor прошлой страницы") from e
 
 
-def _list_branch(t: Target, *, path: str | None, kinds, statuses, tag, about_id) -> str:
-    """SELECT сводок записей вида t под фильтром; значения фильтров — параметры запроса list_records."""
-    kind = "kind" if t == "atom" else "entity_class"
+def _record_filters(t: Target, path: str | None, kinds, statuses) -> list[str]:
+    """Условия фильтра на строку записи rec (папка, вид или класс, статус) — им не нужна ревизия."""
     where = []
     if path == folders.NO_FOLDER:
         where.append("rec.folder IS NULL")
     elif path:
         where.append("(rec.folder = %(folder)s OR starts_with(rec.folder, %(folder)s || '/'))")
     if kinds:
-        where.append(f"rec.{kind} = ANY(%(kinds)s::text[])")
+        where.append(f"rec.{'kind' if t == 'atom' else 'entity_class'} = ANY(%(kinds)s::text[])")
     if statuses:
         where.append("rec.status = ANY(%(statuses)s::text[])")
+    return where
+
+
+def _revision_filters(tag, about_id) -> list[str]:
+    """Условия фильтра на показанную ревизию атома r: тег и about."""
+    where = []
     if tag:
         where.append("r.payload->'tags' @> %(tag)s")
     if about_id:
-        # сначала атомы, у которых сущность была в about любой ревизии (по индексу atom_about_entity), затем —
-        # есть ли она в показанной: условие на rec.id без этого PostgreSQL проверял бы все атомы базы
-        where.append("rec.id = ANY(ARRAY(SELECT ar.atom_id FROM atom_about g "
-                     "JOIN atom_revision ar ON ar.id = g.revision_id WHERE g.entity_id = %(about)s)) "
-                     "AND EXISTS (SELECT 1 FROM atom_about ab WHERE ab.revision_id = r.id "
-                     "AND ab.entity_id = %(about)s)")
-    if t == "atom":
-        about, tags = "coalesce(r.payload->'about', '[]')", "coalesce(r.payload->'tags', '[]')"
-    else:
-        about = tags = "'[]'::jsonb"
-    return (f"SELECT '{t}' AS target, rec.id, rec.{kind} AS kind_or_class, rec.status, rec.folder, "
-            f"r.payload->'label'->>'ru' AS label, {about} AS about, {tags} AS tags, r.recorded_at, cs.agent "
-            f"FROM {t} rec CROSS JOIN LATERAL {_shown(t)} r JOIN changeset cs ON cs.id = r.changeset_id "
-            f"WHERE {' AND '.join(where) or 'TRUE'}")
+        where.append("EXISTS (SELECT 1 FROM atom_about ab WHERE ab.revision_id = r.id AND ab.entity_id = %(about)s)")
+    return where
+
+
+def _list_page(t: Target, where: list[str], after) -> str:
+    """Страница записей вида t: показанные ревизии под фильтром, по индексу (recorded_at, id записи) с конца."""
+    kind = "kind" if t == "atom" else "entity_class"
+    lists = ("coalesce(r.payload->'about', '[]') AS about, coalesce(r.payload->'tags', '[]') AS tags" if t == "atom"
+             else "'[]'::jsonb AS about, '[]'::jsonb AS tags")
+    if after:
+        where = [*where, f"(r.recorded_at, r.{t}_id) < (%(after_at)s::timestamptz, %(after_id)s::uuid)"]
+    return (f"(SELECT '{t}' AS target, r.{t}_id AS id, rec.{kind} AS kind_or_class, rec.status, rec.folder, "
+            f"r.payload->'label'->>'ru' AS label, {lists}, r.recorded_at, cs.agent "
+            f"FROM {t}_revision r JOIN {t} rec ON rec.id = r.{t}_id JOIN changeset cs ON cs.id = r.changeset_id "
+            f"WHERE {' AND '.join([_shown(t), *where])} "
+            f"ORDER BY r.recorded_at DESC, r.{t}_id DESC LIMIT %(take)s)")
+
+
+def _list_total(targets: list[Target], path, kinds, statuses, revision_where: list[str]) -> str:
+    """Сколько записей под фильтром. Без фильтров по ревизии — по строкам записей (у каждой записи ровно одна
+    показанная ревизия, и искать её не нужно), иначе — по показанным ревизиям атомов."""
+    if revision_where:
+        record_where = _record_filters("atom", path, kinds, statuses)
+        join = "JOIN atom rec ON rec.id = r.atom_id " if record_where else ""     # без фильтров записи — не нужна
+        return (f"SELECT count(*) FROM atom_revision r {join}"
+                f"WHERE {' AND '.join([_shown('atom'), *record_where, *revision_where])}")
+    counts = []
+    for t in targets:
+        where = _record_filters(t, path, kinds, statuses)
+        counts.append(f"(SELECT count(*) FROM {t} rec WHERE {' AND '.join(where) or 'TRUE'})")
+    return f"SELECT {' + '.join(counts)}"
 
 
 def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: Iterable[str] | None = None,
@@ -220,8 +247,13 @@ def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: 
     Пустой набор kinds или statuses — без фильтра, как None.
 
     Порядок — recorded_at показанной ревизии по убыванию, затем id; cursor — next_cursor прошлой страницы
-    (непрозрачная строка), страницы идут без пропусков и повторов. Ответ: items, next_cursor (None — страница
-    последняя), total — сколько записей под фильтром, в том же снимке, что и страница.
+    (непрозрачная строка). Пока записи не меняются, страницы идут без пропусков и повторов. Курсор держится за
+    recorded_at показанной ревизии, поэтому запись, у которой она сменилась, при листании переезжает: новая
+    ревизия поднимает запись наверх — ещё не пролистанная, она пропадёт из оставшихся страниц, — а отклонение
+    ревизии, ждущей проверки, может вернуть запись к прежней, более старой ревизии, и тогда она повторится.
+
+    Ответ: items, next_cursor (None — страница последняя), total — сколько записей под фильтром. Страница
+    и total читаются в одной транзакции REPEATABLE READ — из одного снимка базы.
     Сводка: ref, target, label (ru), kind_or_class, status, folder, about (ссылки ent:), tags, recorded_at, agent."""
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= LIST_LIMIT:
         raise RecordError(f"limit {limit!r}: нужно целое число от 1 до {LIST_LIMIT}")
@@ -233,35 +265,42 @@ def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: 
     if tag is not None and not isinstance(tag, str):
         raise RecordError(f"tag {tag!r}: нужна строка")
     tag = unicodedata.normalize("NFC", tag) if tag else None          # теги в теле ревизии — в NFC (canon)
-    about_id = None
-    if about is not None and about != "":
-        if parse_ref(about)[0] != "entity":
-            raise RecordError(f"about {about!r}: нужна ссылка на сущность ent:<UUID или ключ>")
-        about_id = resolve(conn, about)[1]
     after = _after(cursor)
     path = folder if folder in (None, "", folders.NO_FOLDER) else folders.check(folder)
-
-    filters = {"path": path, "kinds": kinds, "statuses": statuses, "tag": tag, "about_id": about_id}
-    branches = [_list_branch(t, **filters) for t in TARGET.values() if t == "atom" or not (tag or about_id)]
-    page_filter = "(b.recorded_at, b.id) < (%(after_at)s::timestamptz, %(after_id)s::uuid)" if after else "TRUE"
-    # один запрос — один снимок: total и страница не расходятся; LEFT JOIN — total есть и у пустой страницы
-    sql = (f"WITH base AS ({' UNION ALL '.join(branches)}) "
-           "SELECT t.total, p.* FROM (SELECT count(*) AS total FROM base) t LEFT JOIN LATERAL ("
-           f"SELECT * FROM base b WHERE {page_filter} ORDER BY b.recorded_at DESC, b.id DESC LIMIT %(take)s) p ON TRUE")
     params = {"folder": path, "kinds": kinds, "statuses": statuses, "tag": Jsonb([tag]) if tag else None,
-              "about": about_id, "take": limit + 1,
-              "after_at": after[0] if after else None, "after_id": after[1] if after else None}
-    with conn.cursor(row_factory=dict_row) as cur:
-        rows = cur.execute(sql, params).fetchall()
-    page = [r for r in rows if r["id"] is not None]
-    more = len(page) > limit
-    page = page[:limit]
+              "take": limit + 1, "after_at": after[0] if after else None, "after_id": after[1] if after else None}
+
+    # своя транзакция — REPEATABLE READ: страница и total из одного снимка; внутри чужой — её снимок
+    own = conn.info.transaction_status == psycopg.pq.TransactionStatus.IDLE
+    with conn.transaction():
+        if own:
+            conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        about_id = None
+        if about is not None and about != "":
+            if parse_ref(about)[0] != "entity":
+                raise RecordError(f"about {about!r}: нужна ссылка на сущность ent:<UUID или ключ>")
+            about_id = resolve(conn, about)[1]
+        params["about"] = about_id
+        revision_where = _revision_filters(tag, about_id)
+        # у сущностей нет ни тегов, ни about: с этими фильтрами — только атомы
+        targets = ["atom"] if revision_where else list(TARGET.values())
+        pages = [_list_page(t, [*_record_filters(t, path, kinds, statuses), *revision_where], after) for t in targets]
+        # prepare=False: план — под значения фильтров. Подготовленный запрос PostgreSQL со временем исполняет общим
+        # планом, а редкому тегу или маленькой папке нужен другой путь (индекс фильтра), чем частому (обход по времени)
+        with conn.cursor(row_factory=dict_row) as cur:
+            rows = cur.execute(f"SELECT * FROM ({' UNION ALL '.join(pages)}) p "
+                               "ORDER BY p.recorded_at DESC, p.id DESC LIMIT %(take)s", params,
+                               prepare=False).fetchall()
+        total = conn.execute(_list_total(targets, path, kinds, statuses, revision_where), params,
+                             prepare=False).fetchone()[0]
+    more = len(rows) > limit
+    page = rows[:limit]
     items = [{"ref": f"{PREFIX[r['target']]}:{r['id']}", "target": r["target"], "label": r["label"],
               "kind_or_class": r["kind_or_class"], "status": r["status"], "folder": r["folder"],
               "about": r["about"], "tags": r["tags"], "recorded_at": r["recorded_at"].isoformat(),
               "agent": r["agent"]} for r in page]
     return {"items": items, "next_cursor": _cursor(page[-1]["recorded_at"], page[-1]["id"]) if more else None,
-            "total": rows[0]["total"]}
+            "total": total}
 
 
 def labels(conn: psycopg.Connection, refs: Iterable[str]) -> dict[str, dict]:
@@ -290,7 +329,7 @@ def labels(conn: psycopg.Connection, refs: Iterable[str]) -> dict[str, dict]:
         params[f"{t}_keys"] = [key for target, key in by_key if target == t]
         kind = "kind" if t == "atom" else "entity_class"
         branches.append(f"SELECT '{t}', rec.id, rec.key, rec.{kind}, rec.status, r.payload->'label'->>'ru' "
-                        f"FROM {t} rec CROSS JOIN LATERAL {_shown(t)} r "
+                        f"FROM {t} rec JOIN {t}_revision r ON r.{t}_id = rec.id AND {_shown(t)} "
                         f"WHERE rec.id = ANY(%({t}_ids)s::uuid[]) OR rec.key = ANY(%({t}_keys)s::text[])")
     out: dict[str, dict] = {}
     for target, record_id, key, code, status, label in conn.execute(" UNION ALL ".join(branches), params):
