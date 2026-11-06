@@ -443,3 +443,48 @@ def object_status(conn: psycopg.Connection, object_id: uuid.UUID | str) -> dict 
         return None
     return {"status": row["status"], **({"note": row["note"]} if row["note"] else {}), "agent": row["agent"],
             "changed_at": row["changed_at"].isoformat()}
+
+
+_SHEET_SUFFIXES = (".xlsx", ".xlsm")
+
+
+def _citations(conn: psycopg.Connection, object_id: str) -> list[dict]:
+    """Источники текущих ревизий, ссылающиеся на объект: запись, версия объекта, селекторы, цитата, итог сверки."""
+    out = []
+    with conn.cursor(row_factory=dict_row) as cur:
+        for target in ("atom", "entity"):
+            rows = cur.execute(
+                f"SELECT r.{target}_id AS record_id, s.object_version, s.selectors, s.quote, s.verdict "
+                f"FROM source s JOIN {target}_current r ON r.id = s.{target}_revision_id "
+                f"WHERE s.object_id = %s ORDER BY r.{target}_id, s.object_version, s.position", (object_id,))
+            for r in rows:
+                item = {"record": f"{PREFIX[target]}:{r['record_id']}", "version": r["object_version"]}
+                item |= {k: r[k] for k in ("selectors", "quote", "verdict") if r[k] is not None}
+                out.append(item)
+    return out
+
+
+def object_view(conn: psycopg.Connection, object_id: uuid.UUID | str) -> dict | None:
+    """Карточка объекта для сайта: get_object и поля status, cited_by, pages, sheets; None — объекта нет.
+
+    status — строка последней отметки или None; cited_by — источники текущих ревизий; pages — число страниц
+    из кэша текста последней версии или None, если текст не извлекали или его нет (на чтении не извлекаем);
+    sheets — имена листов xlsx/xlsm (первая строка страницы извлечённого текста), у остальных None."""
+    view = get_object(conn, object_id)
+    if view is None:
+        return None
+    mark = object_status(conn, view["id"])
+    view["status"] = mark["status"] if mark else None
+    view["cited_by"] = _citations(conn, view["id"])
+    pages = None
+    digest = next((v["digest"] for v in reversed(view["versions"]) if "digest" in v), None)
+    if digest:
+        cached = conn.execute("SELECT page, text FROM object_text WHERE digest = %s ORDER BY page",
+                              (digest,)).fetchall()
+        if cached and cached[0][0] != 0:
+            pages = [t for _, t in cached]
+    view["pages"] = len(pages) if pages is not None else None
+    names = [view.get("original_name", ""), *view.get("logical_paths", [])]
+    is_book = any(n.lower().endswith(_SHEET_SUFFIXES) for n in names)
+    view["sheets"] = [p.split("\n", 1)[0] for p in pages] if is_book and pages is not None else None
+    return view

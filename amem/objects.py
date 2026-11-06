@@ -40,7 +40,7 @@ from pathlib import Path, PurePosixPath
 
 import psycopg
 
-from . import model_v1, review, sources
+from . import extract, model_v1, review, sources
 from .ids import uuid7
 from .ocfl_store import ObjectStore, StoreError
 from .records import as_uuid
@@ -55,7 +55,11 @@ STATUSES = {s.value for s in model_v1.ObjectStatus}
 
 
 class ObjectError(ValueError):
-    pass
+    """Ошибка данных объекта; code (если есть) — машинный признак для службы: not_found, invalid, too_large."""
+
+    def __init__(self, *args, code: str | None = None):
+        super().__init__(*args)
+        self.code = code
 
 
 @dataclass
@@ -423,3 +427,81 @@ def mark(conn: psycopg.Connection, object_id: uuid.UUID | str, status: str, *, a
                      "VALUES (%s, %s, %s, %s, %s, %s)",
                      (uuid7(), object_id, status, note, agent,
                       max(_now(), last + timedelta(microseconds=1)) if last else _now()))
+
+
+SHEET_MAX_CELLS = 10_000                  # лист отдаётся окном: больше ячеек за раз не читаем
+_RANGE = re.compile(r"^([A-Z]{1,3})([0-9]{1,7})(?::([A-Z]{1,3})([0-9]{1,7}))?$")
+
+
+def _a1(cell_range: str) -> tuple[int, int, int, int]:
+    """Диапазон A1 («B2:D10», «C3») → (первая строка, первый столбец, последняя строка, последний столбец)."""
+    from openpyxl.utils import column_index_from_string
+
+    m = _RANGE.match(cell_range.strip().replace("$", "").upper())
+    if m is None:
+        raise ObjectError(f"диапазон {cell_range!r}: нужна запись A1, например B2:D10", code="invalid")
+    c1, r1, c2, r2 = m.group(1), int(m.group(2)), m.group(3) or m.group(1), int(m.group(4) or m.group(2))
+    c1, c2 = column_index_from_string(c1), column_index_from_string(c2)
+    if min(r1, r2) < 1 or max(r1, r2) > 1_048_576 or max(c1, c2) > 16_384 or r1 > r2 or c1 > c2:
+        raise ObjectError(f"диапазон {cell_range!r}: ячейки вне листа или начало правее и ниже конца", code="invalid")
+    return r1, c1, r2, c2
+
+
+def sheet(conn: psycopg.Connection, store: ObjectStore, object_id: uuid.UUID | str, n: int, name: str,
+          cell_range: str | None = None) -> dict:
+    """Ячейки листа xlsx версии n: {name, range, rows}; значения — как в тексте для сверки (extract._cell_text).
+
+    cell_range в нотации A1; без него — весь лист. Больше SHEET_MAX_CELLS ячеек — ObjectError(code="too_large");
+    нет версии или листа — "not_found"; не книга xlsx или неверный диапазон — "invalid"."""
+    from openpyxl import load_workbook
+    from openpyxl.utils import get_column_letter
+    from openpyxl.utils.exceptions import InvalidFileException
+
+    object_id = object_uuid(object_id)
+    box = _a1(cell_range) if cell_range else None
+    if box and (box[2] - box[0] + 1) * (box[3] - box[1] + 1) > SHEET_MAX_CELLS:
+        raise ObjectError(f"диапазон {cell_range!r}: больше {SHEET_MAX_CELLS} ячеек", code="too_large")
+    row = conn.execute("SELECT digest FROM object_version WHERE object_id = %s AND n = %s", (object_id, n)).fetchone()
+    if row is None:
+        raise ObjectError(f"obj:{object_id}: нет версии {n}", code="not_found")
+    if row[0] is None:
+        raise ObjectError(f"obj:{object_id}: у версии {n} нет файла", code="invalid")
+    try:
+        wb = load_workbook(store.content(object_id, n), read_only=True, data_only=True)
+    except (InvalidFileException, *extract._BAD_FILE) as e:
+        raise ObjectError(f"obj:{object_id}: версия {n} не книга xlsx", code="invalid") from e
+    try:
+        wanted = _nfc(name).casefold()
+        found = [ws for ws in wb.worksheets if ws.title == name] or \
+                [ws for ws in wb.worksheets if _nfc(ws.title).casefold() == wanted]
+        if not found:
+            raise ObjectError(f"obj:{object_id}: в версии {n} нет листа {name!r}", code="not_found")
+        ws = found[0]
+        ws.reset_dimensions()                       # заявленный размер листа в файле бывает неверным
+        rows: list[list[str]] = []
+        cells = 0
+        try:
+            if box:
+                r1, c1, r2, c2 = box
+                grid = ws.iter_rows(min_row=r1, max_row=r2, min_col=c1, max_col=c2)
+            else:
+                r1, c1, r2, c2 = 1, 1, 0, 0
+                grid = ws.iter_rows()
+            for line in grid:
+                cells += len(line)
+                if cells > SHEET_MAX_CELLS:
+                    raise ObjectError(f"лист {name!r}: больше {SHEET_MAX_CELLS} ячеек, нужен диапазон", code="too_large")
+                rows.append([extract._cell_text(c.value, getattr(c, "number_format", "")) for c in line])
+        except (InvalidFileException, *extract._BAD_FILE) as e:
+            raise ObjectError(f"obj:{object_id}: версия {n} не читается как xlsx", code="invalid") from e
+    finally:
+        wb.close()
+    if box:                                         # окно целиком, даже за краем данных: пустые ячейки — ""
+        width, height = c2 - c1 + 1, r2 - r1 + 1
+        rows = [(r + [""] * width)[:width] for r in rows[:height]] + [[""] * width] * max(0, height - len(rows))
+        shown = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
+    else:
+        width = max((len(r) for r in rows), default=1)
+        rows = [r + [""] * (width - len(r)) for r in rows]
+        shown = f"A1:{get_column_letter(width)}{max(len(rows), 1)}"
+    return {"name": ws.title, "range": shown, "rows": rows}
