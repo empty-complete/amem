@@ -28,6 +28,7 @@ import os
 import re
 import shutil
 import tempfile
+import unicodedata
 import uuid
 import zipfile
 from dataclasses import dataclass, field, fields
@@ -565,6 +566,9 @@ CONCEPT_SCHEMES = ("property",)              # понятия агентов, к
 SHAKY = ("fuzzy", "not_found", "unresolved", "no_text", "error")     # итоги своей сверки — предупреждение
 UNCONFIRMED = ("fuzzy", "not_found", "no_file")   # своя сверка атома не подтвердила место — запись на проверку
 _NAME = re.compile(r"@b\d+")
+# коды отказа импорта без своего CheckCode: в отчёт amem.check/1 они не попадают, это коды BundleError.code
+DAMAGED = "bundle_damaged"          # нет части или sha256 не совпал с манифестом
+LEVEL1 = "bundle_level1"            # тела не прошли уровень 1 (details["report"] — отчёт amem.check/1)
 
 SourceKey = tuple[str, int]                  # (obj:<UUID>, номер версии)
 
@@ -747,9 +751,26 @@ def _local_versions(conn, o: dict) -> dict[int, tuple[uuid.UUID, int]]:
     return found
 
 
-def _plan_objects(conn, rows: list[dict], referenced: set[SourceKey],
+def _known(conn, store, object_id: uuid.UUID, o: dict, files: dict[str, Path]) -> bool:
+    """Объект базы, которому подборка ничего не добавляет: все версии есть с тем же digest, все пути записаны,
+    копии файлов подборки уже в хранилище. Его adopt не нужен — и не нужна исключительная блокировка объектов,
+    которая держала бы submit и ingest до конца импорта."""
+    have = dict(conn.execute("SELECT n, digest FROM object_version WHERE object_id = %s", (object_id,)).fetchall())
+    versions = o.get("versions") or []
+    if not all(isinstance(v, dict) and v.get("n") in have and have[v["n"]] == v.get("digest") for v in versions):
+        return False                    # новая версия или расхождение digest — решает adopt (с отказом при расхождении)
+    paths = sorted({unicodedata.normalize("NFC", p) for p in o.get("logical_paths") or [] if isinstance(p, str)})
+    if paths and conn.execute("SELECT count(*) FROM object_path WHERE path = ANY(%s)",
+                              (paths,)).fetchone()[0] < len(paths):
+        return False
+    with_copy = [v["n"] for v in versions if o.get("kind") == "file" and v.get("digest") in files]
+    return not with_copy or store.head(object_id) >= max(with_copy)
+
+
+def _plan_objects(conn, store, rows: list[dict], referenced: set[SourceKey], files: dict[str, Path],
                   warnings: list[str]) -> tuple[list[dict], dict[SourceKey, SourceKey], int]:
     """Объекты подборки: что принимать (adopt), какие источники перевести на локальные объекты и сколько новых.
+    Известный объект без новых версий, путей и копий не принимается заново (_known).
 
     Объект, известный базе под другим id (тот же файл по digest, тот же адрес сайта или название переписки), — тот же
     источник: ссылки на него переводятся на локальный (предупреждение), иначе уникальные индексы отвергли бы его.
@@ -764,7 +785,8 @@ def _plan_objects(conn, rows: list[dict], referenced: set[SourceKey],
         ref = f"obj:{object_id}"
         record = {k: v for k, v in o.items() if k != "status"}
         if conn.execute("SELECT 1 FROM object WHERE id = %s", (object_id,)).fetchone() is not None:
-            adopt.append(record)
+            if not _known(conn, store, object_id, o, files):
+                adopt.append(record)
             continue
         found = _local_versions(conn, o)
         if not found:
@@ -820,35 +842,61 @@ def _plan_record(conn, rec: _Rec, vmap: dict[SourceKey, SourceKey], *, origin_ba
     details = {"origin_base": origin_base, "origin_status": rec.row["status"]}
     if local is None:
         rec.action, rec.body = "created", body
-        rec.status, why = _created_status(rec.row["status"], trust, person)
-        rec.reasons = [(w, {**details, "action": "created"}) for w in why]
+        rec.status, reasons, why = _created_status(rec.row, trust, person)
+        rec.reasons = [(w, {**details, "action": "created", **({"why": why} if why else {})}) for w in reasons]
         return
     if local[0] in RETIRED:
         rec.action = "skipped"
         warnings.append(f"{rec.ref}: локально {local[0]} — подборка её не меняет: вывод из оборота решается здесь")
         return
-    seen = conn.execute(f"SELECT 1 FROM {t}_revision WHERE {t}_id = %s AND (content_hash = ANY(%s) "
-                        "OR payload->'provenance'->>'origin_revision_hash' = ANY(%s)) LIMIT 1",
-                        (rec.record_id, list(keys), list(keys))).fetchone()
-    if seen is not None:
+    if keys & _local_keys(conn, t, rec.record_id):
         rec.action = "unchanged"
         return
     rec.action, rec.body = "pending", body
     rec.reasons = [("imported", {**details, "action": "pending"})]
 
 
-def _created_status(status: str, trust: str, person: bool) -> tuple[str, list[str]]:
-    """Статус новой записи и причины пунктов (шаг 7). trust=review — needs_review и imported. trust=keep — статус
-    подборки; но проверенное (verified, auto_verified) остаётся проверенным, только если вливает человек (person:):
-    модель не может сделать запись проверенной в этой базе, даже чужой проверкой, — needs_review и imported
-    (исходный статус — в details пункта). Черновик ждёт проверки смысла (semantic), как после submit."""
-    if trust == "review" or (status in TRUSTED and not person):
-        return "needs_review", ["imported"]
+def _local_keys(conn, target: Target, record_id: uuid.UUID) -> set[str]:
+    """Чем база узнаёт уже виденное содержание записи: у каждой её ревизии — content_hash,
+    provenance.origin_revision_hash и хэш тела без полей происхождения (сравнение без них — с обеих сторон: обмен
+    A → B → A → B без правок не зависит от того, чьи поля происхождения сейчас в теле)."""
+    out: set[str] = set()
+    for content_hash, origin_hash, payload in conn.execute(
+            f"SELECT content_hash, payload->'provenance'->>'origin_revision_hash', "
+            f"CASE WHEN payload ? 'provenance' THEN payload END FROM {target}_revision WHERE {target}_id = %s",
+            (record_id,)).fetchall():
+        out |= {content_hash, *([origin_hash] if origin_hash else [])}
+        if payload is not None:
+            out.add(canon.content_hash(_without_origin(payload)))
+    return out
+
+
+def _created_status(row: dict, trust: str, person: bool) -> tuple[str, list[str], list[str]]:
+    """Статус новой записи, причины пунктов и почему она на проверке (шаг 7).
+
+    trust=review — needs_review и imported. trust=keep — статус подборки, но модель (не person:) не обходит
+    политику записей человека и проверки: запись проверенная или решённая в чужой базе (verified, auto_verified,
+    rejected, deprecated, superseded), с basis author или написанная человеком (агент ревизии или
+    provenance.origin_agent — person:) — needs_review и imported, а не черновик с проверкой смысла моделью.
+    Иначе черновик ждёт проверки смысла (semantic), needs_review — пункта imported, как после submit."""
+    status, rev = row["status"], row["revision"]
+    payload = rev["payload"]
+    why = ["trust=review"] if trust == "review" else []
+    if not person:
+        if status in (*TRUSTED, "rejected", *RETIRED):
+            why.append(f"origin_status {status}")
+        if payload.get("basis") == "author":
+            why.append("basis author")
+        for who in dict.fromkeys([rev.get("agent"), (payload.get("provenance") or {}).get("origin_agent")]):
+            if isinstance(who, str) and who.startswith("person:"):
+                why.append(f"origin_agent {who}")
+    if why:
+        return "needs_review", ["imported"], why
     if status == "draft":
-        return status, ["semantic"]
+        return status, ["semantic"], []
     if status == "needs_review":
-        return status, ["imported"]
-    return status, []
+        return status, ["imported"], []
+    return status, [], []
 
 
 def _link_ends(conn, link: dict) -> tuple[str, uuid.UUID, uuid.UUID, bool]:
@@ -866,8 +914,10 @@ def _plan_links(conn, rows: list[dict], warnings: list[str],
     """Связи (шаг 8): какие создать (тело с id подборки) и какие действующие локальные вывести из оборота.
 
     Своя связь ищется по id — и тогда обязана совпасть по rel и концам (у симметричной — в любую сторону), иначе
-    коллизия bundle_key_collision: id занят другой связью; без id — действующая с теми же rel и концами.
-    Выведенная в подборке и действующая локально — выводится; выведенная локально остаётся выведенной."""
+    коллизия bundle_key_collision: id занят другой связью. Выведенная в подборке и действующая локально —
+    выводится, только если это та же связь (id, rel, концы): связь с теми же rel и концами под другим id — чужая
+    локальная запись, и подборка её не выводит (предупреждение). Новая связь не создаётся, если действующая с теми
+    же rel и концами уже есть; выведенная локально остаётся выведенной."""
     create, retire = [], []
     for link in rows:
         rel, src, dst, symmetric = _link_ends(conn, link)
@@ -886,7 +936,12 @@ def _plan_links(conn, rows: list[dict], warnings: list[str],
                 "SELECT id, retired_at FROM link WHERE rel = %s AND coalesce(src_atom, src_entity) = %s "
                 "AND coalesce(dst_atom, dst_entity) = %s ORDER BY retired_at NULLS FIRST", (rel, a, b)).fetchall()]
             active = [r for r in same if r[1] is None]
-            mine = active[0] if active else same[0] if same else None
+            other = active[0] if active else same[0] if same else None
+            if other is not None and retired and other[1] is None:
+                warnings.append(f"{where}: в подборке выведена, но локальная связь с теми же rel и концами — под "
+                                f"другим id ({other[0]}): не выводится")
+                continue
+            mine = other
         if mine is None:
             if not retired:
                 create.append({"id": link["id"], **{k: link[k] for k in ("rel", "src", "dst", "note", "qualifiers",
@@ -994,6 +1049,20 @@ def _unconfirmed(conn, rec: _Rec, verdicts: list[dict], *, agent: str, origin_ba
     return [("imported", details), *((why, d) for why, d in rec.reasons if why not in ("imported", "semantic"))]
 
 
+def _concept_problem(concept: dict) -> str | None:
+    """Понятие величины из подборки — по схеме Concept и с единицей UCUM; ответ — что не так, или None."""
+    from .check import units
+
+    try:
+        model_v1.Concept.model_validate_json(json.dumps(concept, ensure_ascii=False), strict=True)
+    except ValidationError as e:
+        return f"не по схеме Concept ({e.error_count()} ошибок: {e.errors()[0]['msg']})"
+    unit = concept.get("unit")
+    if unit is not None and not units.is_ucum(unit):
+        return f"единица {unit!r} — не код UCUM"
+    return None
+
+
 def _stale_sources(conn, rec: _Rec) -> dict | None:
     """Источники созданной ревизии на не последнюю локальную версию объекта — details пункта source_changed."""
     rows = conn.execute(
@@ -1013,12 +1082,20 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
     (bundle_key_collision) → уровень 1 → одна транзакция: объекты и их отметки, понятия агентов (величины),
     записи и связи одним records.commit (keep_ids), статусы и пункты очереди, своя сверка источников, вывод связей
     из оборота, import_history. Отказ — BundleError (code и details), и в базе ничего не появилось; файлы, уже
-    скопированные в хранилище до отказа, повторный импорт примет как есть (objects.adopt).
+    скопированные в хранилище до отказа, повторный импорт примет как есть (objects.adopt). Коды отказа:
+    bundle_damaged (DAMAGED), bundle_pack_missing, bundle_object_conflict, bundle_key_collision, bundle_level1
+    (LEVEL1); ошибка самих данных строки (не JSON, неверный хэш тела) — без кода.
 
-    trust=keep — статус записи из подборки (проверенное остаётся проверенным, только если вливает person:);
-    review — новые записи needs_review с пунктом imported. Расхождение с локальной записью — ревизия pending
-    с пунктом imported, текущая не меняется. dry_run — план без записи: счётчики, предупреждения, коллизии
-    (вместо отказа) и отчёт уровня 1."""
+    Блокировка: объект с новыми версиями, путями или файлами принимается objects.adopt, а он берёт исключительную
+    блокировку объектов (OBJECTS_LOCK) до конца транзакции импорта, вместе с копированием файлов в хранилище.
+    Пока такой импорт идёт, submit, objects.ingest и снимок backup.snapshot ждут его; импорт без нового в объектах
+    (повтор той же подборки) блокировку не берёт. Вынести копирование до транзакции нельзя без переделки adopt:
+    версия и её копия в нём связаны одной проверкой «подряд» (store.head).
+
+    trust=keep — статус записи из подборки; модель (не person:) не сохраняет проверенное и решённое в чужой базе,
+    basis author и записи человека — они needs_review с пунктом imported. review — все новые записи needs_review
+    с пунктом imported. Расхождение с локальной записью — ревизия pending с пунктом imported, текущая не
+    меняется. dry_run — план без записи: счётчики, предупреждения, коллизии (вместо отказа) и отчёт уровня 1."""
     if trust not in TRUST:
         raise BundleError(f"trust: {trust!r} — ожидается keep или review")
     folder = Path(folder)
@@ -1026,7 +1103,8 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
         manifest = _manifest(root, folder)
         damaged = _damaged(root, manifest)
         if damaged:
-            raise BundleError(f"{folder}: повреждены части подборки: {', '.join(damaged)}")
+            raise BundleError(f"{folder}: повреждены части подборки: {', '.join(damaged)}", code=DAMAGED,
+                              damaged=damaged)
         _check_packs(conn, manifest, root, folder)
         own = conn.execute("SELECT value FROM meta WHERE key = 'base_id'").fetchone()
         if own is None:
@@ -1041,7 +1119,7 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
                  if n.startswith("objects/sha256/")}
         warnings: list[str] = []
         collisions: list[str] = []
-        adopt, vmap, new_objects = _plan_objects(conn, object_rows, _referenced(recs), warnings)
+        adopt, vmap, new_objects = _plan_objects(conn, store, object_rows, _referenced(recs), files, warnings)
         person = agent.startswith("person:")
         for rec in recs:
             _plan_record(conn, rec, vmap, origin_base=origin_base, own_base=own_base, trust=trust, person=person,
@@ -1058,7 +1136,8 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
                               collisions=collisions)
         if report.has_violations():
             text = _NAME.sub(lambda m: names.get(m[0], m[0]), report.summary())
-            raise BundleError("подборка не прошла уровень 1:\n" + text, report=_report_json(report, names))
+            raise BundleError("подборка не прошла уровень 1:\n" + text, code=LEVEL1,
+                              report=_report_json(report, names))
         # история — только у подборки with_history и только чужая: своя история и так в базе
         history = (_history_rows(conn, recs, origin_base) if manifest["with_history"] and origin_base != own_base
                    else [])
@@ -1070,9 +1149,13 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
         except objects.ObjectError as e:
             raise BundleError(f"подборка не принята: {e}") from e
         except RecordError as e:
-            raise BundleError(f"подборка не записана: {e}") from e
+            # ключ, занятый между планом и записью (records ловит UniqueViolation ключа и называет его)
+            taken = isinstance(e.__cause__, psycopg.errors.UniqueViolation)
+            raise BundleError(f"подборка не записана: {e}", code="bundle_key_collision" if taken else None) from e
         except psycopg.errors.IntegrityError as e:            # ограничение таблицы, которое план не предвидел
-            raise BundleError(f"подборка не записана: {e.diag.message_primary}") from e
+            taken = isinstance(e, psycopg.errors.UniqueViolation)
+            raise BundleError(f"подборка не записана: {e.diag.message_primary}",
+                              code="bundle_key_collision" if taken else None) from e
     return Imported(cs, counts, queued=queued, warnings=warnings, report=_report_json(report, names),
                     complete=not queued)
 
@@ -1105,6 +1188,10 @@ def _write(conn, store, recs: list[_Rec], new_links: list[dict], retire: list[uu
         if scheme not in CONCEPT_SCHEMES:
             # виды, классы, связи — словари пакетов: подборка их не ставит, иначе обошла бы проверку пакетов
             warnings.append(f"понятие {scheme}.{code}: схема {scheme} не принимается из подборки — пропущено")
+            continue
+        problem = _concept_problem(c)
+        if problem:
+            warnings.append(f"понятие {scheme}.{code}: {problem} — пропущено")
             continue
         row = conn.execute("SELECT data FROM concept WHERE scheme = %s AND code = %s", (scheme, code)).fetchone()
         if row is None:
