@@ -19,6 +19,7 @@ import { Route as SearchRouteImport } from './routes/search'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as AtomRefRouteImport } from './routes/atom/$ref'
 import { Route as EntityRefRouteImport } from './routes/entity/$ref'
+import { Route as ObjectIdRouteImport } from './routes/object/$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -70,6 +71,11 @@ const EntityRefRoute = EntityRefRouteImport.update({
   path: '/entity/$ref',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ObjectIdRoute = ObjectIdRouteImport.update({
+  id: '/object/$id',
+  path: '/object/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -82,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/atom/$ref': typeof AtomRefRoute
   '/entity/$ref': typeof EntityRefRoute
+  '/object/$id': typeof ObjectIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -94,6 +101,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/atom/$ref': typeof AtomRefRoute
   '/entity/$ref': typeof EntityRefRoute
+  '/object/$id': typeof ObjectIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -107,6 +115,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/atom/$ref': typeof AtomRefRoute
   '/entity/$ref': typeof EntityRefRoute
+  '/object/$id': typeof ObjectIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -121,6 +130,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/atom/$ref'
     | '/entity/$ref'
+    | '/object/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -133,6 +143,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/atom/$ref'
     | '/entity/$ref'
+    | '/object/$id'
   id:
     | '__root__'
     | '/'
@@ -145,6 +156,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/atom/$ref'
     | '/entity/$ref'
+    | '/object/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -158,6 +170,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   AtomRefRoute: typeof AtomRefRoute
   EntityRefRoute: typeof EntityRefRoute
+  ObjectIdRoute: typeof ObjectIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -232,6 +245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EntityRefRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/object/$id': {
+      id: '/object/$id'
+      path: '/object/$id'
+      fullPath: '/object/$id'
+      preLoaderRoute: typeof ObjectIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -246,6 +266,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   AtomRefRoute: AtomRefRoute,
   EntityRefRoute: EntityRefRoute,
+  ObjectIdRoute: ObjectIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

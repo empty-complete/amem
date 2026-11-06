@@ -76,7 +76,10 @@ export function recordToDocument(
 
 export function documentToRecord(doc: string): DocRecord {
   const m = doc.match(/^---\n([\s\S]*?)\n?---\n([\s\S]*)$/);
-  const rawHead = (m?.[1] ?? "").replace(/^(\w+): (\[\[.*\]\])\s*$/gm, (_, k, v) => `${k}: ${JSON.stringify(v)}`);
+  const rawHead = (m?.[1] ?? "").replace(
+    /^(\w+): (\[\[.*\]\])\s*$/gm,
+    (_, k, v) => `${k}: ${JSON.stringify(v)}`,
+  );
   const head = ((m ? parse(rawHead) : null) ?? {}) as Record<string, unknown>;
   const lines = (m ? (m[2] ?? "") : doc).replace(/^\n+/, "").split("\n");
   const label = (lines[0] ?? "").replace(/^#\s+/, "").trim();

@@ -9,12 +9,15 @@ const html = async (src: string, resolve?: (l: string) => string) => {
 test("HTML в тексте не исполняется и не попадает в DOM", async () => {
   const out = await html("<img src=x onerror=alert(1)> **жирно** [x](javascript:alert(1))");
   expect(out).not.toContain("<img");
-  expect(out).not.toContain("href=\"javascript");
+  expect(out).not.toContain('href="javascript');
   expect(out).toContain("<strong>жирно</strong>");
 });
 
 test("[[ссылка]] — ссылка на запись по подписи", async () => {
-  const out = await html("см. [[Нужен ли обогрев В-2 зимой?]]", (l) => `/ui/search?q=${encodeURIComponent(l)}`);
+  const out = await html(
+    "см. [[Нужен ли обогрев В-2 зимой?]]",
+    (l) => `/ui/search?q=${encodeURIComponent(l)}`,
+  );
   expect(out).toMatch(/<a class="wiki" href="\/ui\/search\?q=[^"]+">Нужен ли обогрев В-2 зимой\?<\/a>/);
 });
 

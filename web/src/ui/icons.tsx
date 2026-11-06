@@ -86,6 +86,43 @@ const paths = {
       <path d="M8 5.2V8l2 1.2" />
     </>
   ),
+  pencil: <path d="m10.6 2.6 2.8 2.8L6 12.8l-3.4.6.6-3.4Z" />,
+  code: <path d="M5.6 4.4 2 8l3.6 3.6M10.4 4.4 14 8l-3.6 3.6" />,
+  more: (
+    <>
+      <circle cx="3.6" cy="8" r=".6" fill="currentColor" />
+      <circle cx="8" cy="8" r=".6" fill="currentColor" />
+      <circle cx="12.4" cy="8" r=".6" fill="currentColor" />
+    </>
+  ),
+  file: (
+    <>
+      <path d="M4 2h5l3 3v9H4Z" />
+      <path d="M9 2v3h3" />
+    </>
+  ),
+  link: (
+    <>
+      <path d="M6.6 9.4a2.6 2.6 0 0 0 3.7 0l2.2-2.2a2.6 2.6 0 0 0-3.7-3.7l-.9.9" />
+      <path d="M9.4 6.6a2.6 2.6 0 0 0-3.7 0L3.5 8.8a2.6 2.6 0 0 0 3.7 3.7l.9-.9" />
+    </>
+  ),
+  copy: (
+    <>
+      <rect x="5.4" y="5.4" width="8" height="8" rx="1.4" />
+      <path d="M10.6 5.4V3.6a1 1 0 0 0-1-1H3.6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h1.8" />
+    </>
+  ),
+  external: <path d="M9 3h4v4M13 3 7.4 8.6M11 9.6V13H3V5h3.4" />,
+  hash: <path d="M5.6 2.4 4.4 13.6M11.6 2.4l-1.2 11.2M2.6 5.8h11M2 10.2h11" />,
+  calendar: (
+    <>
+      <rect x="2.4" y="3.4" width="11.2" height="10" rx="1.4" />
+      <path d="M2.4 6.6h11.2M5.4 2v2.6M10.6 2v2.6" />
+    </>
+  ),
+  ruler: <path d="m2.4 10.6 8.2-8.2 3 3-8.2 8.2Zm2.6-2.6 1.4 1.4M7 6l1.4 1.4M9 4l1.4 1.4" />,
+  shield: <path d="M8 2 3 4v4c0 3 2.2 5 5 6 2.8-1 5-3 5-6V4Z" />,
 } as const;
 
 export type IconName = keyof typeof paths;

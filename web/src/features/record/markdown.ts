@@ -30,8 +30,8 @@ function mathInline(state: StateInline, silent: boolean) {
   const pos = state.pos;
   if (src.charCodeAt(pos) !== 0x24 || src.charCodeAt(pos + 1) === 0x24) return false;
   if (/\s/.test(src[pos + 1] ?? " ")) return false;
-  let end = pos + 1;
-  while ((end = src.indexOf("$", end)) >= 0 && src[end - 1] === "\\") end++;
+  let end = src.indexOf("$", pos + 1);
+  while (end >= 0 && src[end - 1] === "\\") end = src.indexOf("$", end + 1);
   if (end < 0 || /\s/.test(src[end - 1] ?? " ") || /\d/.test(src[end + 1] ?? "")) return false;
   if (!silent) state.push("math_inline", "", 0).content = src.slice(pos + 1, end);
   state.pos = end + 1;
@@ -39,7 +39,8 @@ function mathInline(state: StateInline, silent: boolean) {
 }
 
 function mathBlock(state: StateBlock, startLine: number, endLine: number, silent: boolean) {
-  const lineText = (n: number) => state.src.slice(state.bMarks[n]! + state.tShift[n]!, state.eMarks[n]);
+  const lineText = (n: number) =>
+    state.src.slice((state.bMarks[n] ?? 0) + (state.tShift[n] ?? 0), state.eMarks[n]);
   const first = lineText(startLine);
   if (!first.startsWith("$$")) return false;
   if (silent) return true;
@@ -77,15 +78,39 @@ function build(resolve: Resolve, katex: Katex | null) {
     katex
       ? katex.renderToString(src, { displayMode, throwOnError: false, output: "htmlAndMathml" })
       : `<code class="tex">${esc(src)}</code>`;
+  const content = (t: { content: string }[], i: number) => t[i]?.content ?? "";
   md.renderer.rules.wiki_link = (t, i) =>
-    `<a class="wiki" href="${esc(resolve(t[i]!.content))}">${esc(t[i]!.content)}</a>`;
-  md.renderer.rules.math_inline = (t, i) => tex(t[i]!.content, false);
-  md.renderer.rules.math_block = (t, i) => `${tex(t[i]!.content, true)}\n`;
+    `<a class="wiki" href="${esc(resolve(content(t, i)))}">${esc(content(t, i))}</a>`;
+  md.renderer.rules.math_inline = (t, i) => tex(content(t, i), false);
+  md.renderer.rules.math_block = (t, i) => `${tex(content(t, i), true)}\n`;
   md.renderer.rules.blockquote_open = () => '<blockquote class="quote">\n';
   return md;
 }
 
-const MATHML = ["math", "semantics", "annotation", "mrow", "mi", "mo", "mn", "msub", "msup", "msubsup", "mfrac", "msqrt", "mroot", "mspace", "mtext", "mover", "munder", "mstyle", "mpadded", "mtable", "mtr", "mtd"];
+const MATHML = [
+  "math",
+  "semantics",
+  "annotation",
+  "mrow",
+  "mi",
+  "mo",
+  "mn",
+  "msub",
+  "msup",
+  "msubsup",
+  "mfrac",
+  "msqrt",
+  "mroot",
+  "mspace",
+  "mtext",
+  "mover",
+  "munder",
+  "mstyle",
+  "mpadded",
+  "mtable",
+  "mtr",
+  "mtd",
+];
 
 /** Markdown → очищенный DocumentFragment. KaTeX грузится, только если в тексте есть «$». */
 export async function renderMarkdown(src: string, resolve: Resolve = (l) => `#${encodeURIComponent(l)}`) {
@@ -94,6 +119,21 @@ export async function renderMarkdown(src: string, resolve: Resolve = (l) => `#${
   return DOMPurify.sanitize(html, {
     RETURN_DOM_FRAGMENT: true,
     ADD_TAGS: MATHML,
-    ADD_ATTR: ["aria-hidden", "encoding", "mathvariant", "stretchy", "fence", "separator", "lspace", "rspace", "width", "height", "depth", "columnalign", "displaystyle", "scriptlevel"],
+    ADD_ATTR: [
+      "aria-hidden",
+      "encoding",
+      "mathvariant",
+      "stretchy",
+      "fence",
+      "separator",
+      "lspace",
+      "rspace",
+      "width",
+      "height",
+      "depth",
+      "columnalign",
+      "displaystyle",
+      "scriptlevel",
+    ],
   });
 }
