@@ -5,11 +5,18 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { parse } from "yaml";
 import base from "../src/mocks/fixtures/base.json";
+import card from "../src/mocks/fixtures/card-e3.json";
+import changes from "../src/mocks/fixtures/changes.json";
 import folders from "../src/mocks/fixtures/folders.json";
+import history from "../src/mocks/fixtures/history-a3.json";
+import links from "../src/mocks/fixtures/links-a3.json";
+import objects from "../src/mocks/fixtures/objects-b.json";
 import records from "../src/mocks/fixtures/records.json";
+import recordsB from "../src/mocks/fixtures/records-b.json";
 import search from "../src/mocks/fixtures/search.json";
 import searchOff from "../src/mocks/fixtures/search-semantic-off.json";
 import session from "../src/mocks/fixtures/session.json";
+import similar from "../src/mocks/fixtures/similar-a3.json";
 import vocabClass from "../src/mocks/fixtures/vocab-entity_class.json";
 import vocabKind from "../src/mocks/fixtures/vocab-kind.json";
 
@@ -33,3 +40,19 @@ test("search-semantic-off.json — SearchResult", () => check("SearchResult", se
 test("vocab-kind.json — VocabEntry[]", () => {
   for (const v of [...vocabKind, ...vocabClass]) check("VocabEntry", v);
 });
+
+test("records-b.json — RecordView", () => {
+  for (const v of Object.values(recordsB)) check("RecordView", v);
+});
+test("card-e3.json — Card", () => check("Card", card));
+test("objects-b.json — ObjectView", () => {
+  for (const o of Object.values(objects)) check("ObjectView", o);
+});
+test("changes.json, history-a3.json — ChangesResult", () => {
+  check("ChangesResult", changes);
+  check("ChangesResult", history);
+});
+test("links-a3.json — LinkView[]", () => {
+  for (const l of links) check("LinkView", l);
+});
+test("similar-a3.json — SearchResult", () => check("SearchResult", similar));

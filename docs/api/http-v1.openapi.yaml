@@ -82,6 +82,7 @@ paths:
         - { $ref: "#/components/parameters/Kind" }
         - { $ref: "#/components/parameters/StatusFilter" }
         - { name: tag, in: query, schema: { type: string } }
+        - { name: about, in: query, schema: { type: string }, description: "Записи о сущности или объекте (ent:… или id объекта)" }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
         - { name: cursor, in: query, schema: { type: string } }
       responses:
@@ -218,6 +219,31 @@ paths:
                 type: object
                 required: [pages]
                 properties: { pages: { type: array, items: { type: string } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /objects/{id}/versions/{n}/sheet:
+    get:
+      tags: [objects]
+      operationId: getObjectSheet
+      summary: "Ячейки листа таблицы: превью и подсветка цитируемых диапазонов"
+      parameters:
+        - { $ref: "#/components/parameters/ObjectId" }
+        - { $ref: "#/components/parameters/VersionN" }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: range, in: query, schema: { type: string }, description: "A1:F40; по умолчанию — первые 40 строк и 12 столбцов" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [name, range, rows]
+                properties:
+                  name: { type: string }
+                  range: { type: string }
+                  rows: { type: array, items: { type: array, items: { type: [string, number, "null"] } } }
+        "413": { $ref: "#/components/responses/Problem" }
         default: { $ref: "#/components/responses/Problem" }
 
   /review/items:
@@ -631,6 +657,8 @@ components:
         recorded_at: { type: string, format: date-time }
         agent: { type: string }
         folder: { type: [string, "null"] }
+        about: { type: array, items: { $ref: "#/components/schemas/RefLabel" }, description: "payload.about с подписями и классами — для строки пути и свойств" }
+        ancestors: { type: array, items: { $ref: "#/components/schemas/RefLabel" }, description: "Цепочка part_of первой сущности about, от корня" }
         sources: { type: array, items: { $ref: "#/components/schemas/SourceView" } }
         open_items: { type: array, items: { $ref: "#/components/schemas/ReviewItem" } }
         usefulness: { type: [number, "null"] }
@@ -757,7 +785,19 @@ components:
         logical_paths: { type: array, items: { type: string } }
         versions: { type: array, items: { $ref: "#/components/schemas/ObjectVersionView" } }
         status: { type: [string, "null"], enum: [parsed, partial, skipped, null] }
-        cited_by: { type: array, items: { $ref: "#/components/schemas/RefLabel" } }
+        pages: { type: [integer, "null"], description: "Число страниц из кэша текста; null, пока текст не извлекался" }
+        sheets: { type: [array, "null"], items: { type: string }, description: "Имена листов — только xlsx/xlsm" }
+        cited_by: { type: array, items: { $ref: "#/components/schemas/ObjectCitation" } }
+
+    ObjectCitation:
+      type: object
+      required: [record, version, selectors]
+      properties:
+        record: { $ref: "#/components/schemas/RefLabel" }
+        version: { type: integer }
+        selectors: { type: array, items: { type: object } }
+        quote: { type: [string, "null"] }
+        verdict: { type: [string, "null"], enum: [ok, moved, fuzzy, by_locator, unresolved, not_found, no_file, no_text, external, error, null] }
 
     ReviewItem:
       type: object

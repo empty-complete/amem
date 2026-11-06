@@ -259,6 +259,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/objects/{id}/versions/{n}/sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ячейки листа таблицы: превью и подсветка цитируемых диапазонов */
+        get: operations["getObjectSheet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/review/items": {
         parameters: {
             query?: never;
@@ -626,6 +643,10 @@ export interface components {
             recorded_at: string;
             agent: string;
             folder?: string | null;
+            /** @description payload.about с подписями и классами — для строки пути и свойств */
+            about?: components["schemas"]["RefLabel"][];
+            /** @description Цепочка part_of первой сущности about, от корня */
+            ancestors?: components["schemas"]["RefLabel"][];
             sources: components["schemas"]["SourceView"][];
             open_items: components["schemas"]["ReviewItem"][];
             usefulness?: number | null;
@@ -735,7 +756,19 @@ export interface components {
             versions: components["schemas"]["ObjectVersionView"][];
             /** @enum {string|null} */
             status?: "parsed" | "partial" | "skipped" | null;
-            cited_by?: components["schemas"]["RefLabel"][];
+            /** @description Число страниц из кэша текста; null, пока текст не извлекался */
+            pages?: number | null;
+            /** @description Имена листов — только xlsx/xlsm */
+            sheets?: string[] | null;
+            cited_by?: components["schemas"]["ObjectCitation"][];
+        };
+        ObjectCitation: {
+            record: components["schemas"]["RefLabel"];
+            version: number;
+            selectors: Record<string, never>[];
+            quote?: string | null;
+            /** @enum {string|null} */
+            verdict?: "ok" | "moved" | "fuzzy" | "by_locator" | "unresolved" | "not_found" | "no_file" | "no_text" | "external" | "error" | null;
         };
         ReviewItem: {
             /** Format: uuid */
@@ -955,6 +988,8 @@ export interface operations {
                 kind?: components["parameters"]["Kind"];
                 status?: components["parameters"]["StatusFilter"];
                 tag?: string;
+                /** @description Записи о сущности или объекте (ent:… или id объекта) */
+                about?: string;
                 limit?: number;
                 cursor?: string;
             };
@@ -1233,6 +1268,39 @@ export interface operations {
                     };
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getObjectSheet: {
+        parameters: {
+            query: {
+                name: string;
+                /** @description A1:F40; по умолчанию — первые 40 строк и 12 столбцов */
+                range?: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ObjectId"];
+                n: components["parameters"]["VersionN"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        range: string;
+                        rows: (string | number | null)[][];
+                    };
+                };
+            };
+            413: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
