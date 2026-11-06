@@ -119,6 +119,11 @@ def load_vocab(conn: psycopg.Connection) -> None:
                         (t.code, t.version, t.target, t.applies_to, Jsonb(body), body_hash, now))
                 elif row[0] != body_hash:
                     raise MigrationError(f"шаблон {t.code} {t.version}: уже загружен с другим содержимым — поднимите version")
+        # действующие версии шаблонов — те, что принесли загруженные сейчас пакеты; старые версии остаются в template
+        conn.execute("DELETE FROM template_active")
+        for p in loaded:
+            for t in p.templates:
+                conn.execute("INSERT INTO template_active (code, version) VALUES (%s, %s)", (t.code, t.version))
         # осиротевшие понятия: код исчез из пакета или пакет больше не загружается;
         # используемые записями удалить нельзя — внешний ключ, ошибка называет пакет и код
         keep = {(c.scheme, c.code) for p in loaded for c in p.concepts}

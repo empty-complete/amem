@@ -123,3 +123,11 @@ def pgdb(request):
         for name in created:
             admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
         admin.close()
+
+
+@pytest.fixture
+def store(tmp_path):
+    """Хранилище объектов OCFL во временной папке теста (корень создаёт первая запись файла)."""
+    from amem.ocfl_store import ObjectStore
+
+    return ObjectStore(tmp_path / "objects")

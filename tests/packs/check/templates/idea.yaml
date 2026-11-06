@@ -1,0 +1,7 @@
+code: idea
+version: 1.0.0
+target: atom
+applies_to: idea
+description: {ru: "Идея: пояснение желательно."}
+fields:
+  - {path: body, required: true, severity: warning}

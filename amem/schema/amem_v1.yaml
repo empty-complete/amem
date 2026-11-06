@@ -196,6 +196,133 @@ enums:
       info:
         annotations: {label_ru: "информация", label_en: "info", definition_ru: "Только сообщение."}
 
+  CheckCode:
+    description: Код замечания автопроверки; уровень и важность — в спецификации.
+    permissible_values:
+      schema:
+        annotations: {label_ru: "схема", label_en: "schema", definition_ru: "Тело не проходит схему записи."}
+      unknown_code:
+        annotations: {label_ru: "неизвестный код", label_en: "unknown code", definition_ru: "Нет кода вида, класса, связи или типа селектора в загруженных пакетах."}
+      ref_unknown:
+        annotations: {label_ru: "ссылка в никуда", label_en: "unknown reference", definition_ru: "Ссылка на запись, которой нет."}
+      template:
+        annotations: {label_ru: "правило шаблона", label_en: "template", definition_ru: "Не выполнено правило поля шаблона."}
+      ucum:
+        annotations: {label_ru: "не код UCUM", label_en: "ucum", definition_ru: "Единица — не код UCUM."}
+      unit_required:
+        annotations: {label_ru: "нужна единица", label_en: "unit required", definition_ru: "Есть значение или границы, но нет единицы."}
+      bounds_order:
+        annotations: {label_ru: "порядок границ", label_en: "bounds order", definition_ru: "Нижняя граница больше верхней или значение вне границ."}
+      link_not_allowed:
+        annotations: {label_ru: "связь не разрешена", label_en: "link not allowed", definition_ru: "У шаблона нет такого вида исходящей связи."}
+      link_required:
+        annotations: {label_ru: "нет обязательной связи", label_en: "link required", definition_ru: "Нет обязательной связи шаблона."}
+      link_pair:
+        annotations: {label_ru: "концы связи не подходят", label_en: "link pair", definition_ru: "Концы связи не из пар её вида."}
+      retired_record:
+        annotations: {label_ru: "запись снята", label_en: "retired record", definition_ru: "Правка записи со статусом deprecated или superseded."}
+      record_error:
+        annotations: {label_ru: "отказ записи", label_en: "record error", definition_ru: "Поздний отказ записи пакета."}
+      source_unresolved:
+        annotations: {label_ru: "источник не разобран", label_en: "source unresolved", definition_ru: "Путь источника не разобрался."}
+      version_missing:
+        annotations: {label_ru: "нет версии", label_en: "version missing", definition_ru: "У объекта нет указанной версии."}
+      digest_mismatch:
+        annotations: {label_ru: "не тот digest", label_en: "digest mismatch", definition_ru: "Digest не совпадает с версией объекта."}
+      pdf_page_required:
+        annotations: {label_ru: "нужна страница PDF", label_en: "pdf page required", definition_ru: "У источника из PDF нет селектора страницы."}
+      pdf_quote_required:
+        annotations: {label_ru: "нужна цитата из PDF", label_en: "pdf quote required", definition_ru: "У источника из PDF нет цитаты или она слишком короткая."}
+      quote_not_found:
+        annotations: {label_ru: "цитата не найдена", label_en: "quote not found", definition_ru: "Цитата задана, но в тексте её нет."}
+      quote_fuzzy:
+        annotations: {label_ru: "цитата приблизительно", label_en: "quote fuzzy", definition_ru: "Цитата найдена только нечётким поиском."}
+      number_not_found:
+        annotations: {label_ru: "числа нет во фрагменте", label_en: "number not found", definition_ru: "Числа атома нет во фрагменте источника."}
+      page_moved:
+        annotations: {label_ru: "страница исправлена", label_en: "page moved", definition_ru: "Цитата на другой странице; номер исправлен."}
+      place_unresolved:
+        annotations: {label_ru: "место не найдено", label_en: "place unresolved", definition_ru: "Цитаты нет, и место не найдено."}
+      no_text:
+        annotations: {label_ru: "нет текста", label_en: "no text", definition_ru: "У файла нет извлекаемого текста."}
+      external_source:
+        annotations: {label_ru: "сайт или переписка", label_en: "external source", definition_ru: "Источник — страница сайта или переписка."}
+      source_error:
+        annotations: {label_ru: "сбой источника", label_en: "source error", definition_ru: "Сбой извлечения или сверки."}
+      numbers_unchecked:
+        annotations: {label_ru: "числа не сверены", label_en: "numbers unchecked", definition_ru: "Числа не с чем сверить: нет фрагментов."}
+      edition_filled:
+        annotations: {label_ru: "редакция подставлена", label_en: "edition filled", definition_ru: "Редакция подставлена по файлу."}
+      unknown_property:
+        annotations: {label_ru: "неизвестная величина", label_en: "unknown property", definition_ru: "Кода величины нет в словаре величин."}
+      out_of_range:
+        annotations: {label_ru: "вне диапазона", label_en: "out of range", definition_ru: "Значение вне правдоподобного диапазона величины."}
+      unit_mismatch:
+        annotations: {label_ru: "единица не сходится", label_en: "unit mismatch", definition_ru: "Единицу значения нельзя перевести в единицу величины."}
+      conflict:
+        annotations: {label_ru: "конфликт значений", label_en: "conflict", definition_ru: "Другое значение той же величины у той же сущности при тех же условиях."}
+      duplicate:
+        annotations: {label_ru: "дубль", label_en: "duplicate", definition_ru: "Похоже на существующую запись или запись той же пачки."}
+      related:
+        annotations: {label_ru: "похожие записи", label_en: "related", definition_ru: "Похожие записи ниже порога дубля."}
+
+  ReviewReason:
+    description: Почему запись попала в очередь проверки.
+    permissible_values:
+      semantic:
+        annotations: {label_ru: "смысл", label_en: "semantic", definition_ru: "Атом draft ждёт смысловой проверки."}
+      warning:
+        annotations: {label_ru: "предупреждение", label_en: "warning", definition_ru: "Предупреждения уровней 1–4."}
+      high_risk:
+        annotations: {label_ru: "высокий риск", label_en: "high risk", definition_ru: "Риск записи требует человека."}
+      semantic_doubt:
+        annotations: {label_ru: "сомнение модели", label_en: "semantic doubt", definition_ru: "Смысловая проверка не подтвердила."}
+      edit:
+        annotations: {label_ru: "правка", label_en: "edit", definition_ru: "Правка записи, уже проверенной человеком."}
+      source_changed:
+        annotations: {label_ru: "источник изменился", label_en: "source changed", definition_ru: "Ссылка на старую версию объекта."}
+      audit:
+        annotations: {label_ru: "аудит", label_en: "audit", definition_ru: "Выборка аудита."}
+      calibration:
+        annotations: {label_ru: "калибровка", label_en: "calibration", definition_ru: "Поставлен вручную."}
+
+  ReviewItemState:
+    permissible_values:
+      queued:
+        annotations: {label_ru: "в очереди", label_en: "queued", definition_ru: "Ждёт проверяющего."}
+      claimed:
+        annotations: {label_ru: "захвачен", label_en: "claimed", definition_ru: "Захвачен проверяющим на время аренды."}
+      done:
+        annotations: {label_ru: "решён", label_en: "done", definition_ru: "Есть вердикт."}
+      obsolete:
+        annotations: {label_ru: "устарел", label_en: "obsolete", definition_ru: "Закрыт без вердикта: запись изменилась."}
+
+  VerificationMethod:
+    permissible_values:
+      llm_judge:
+        annotations: {label_ru: "модель", label_en: "llm judge", definition_ru: "Вердикт модели (агент model:)."}
+      human:
+        annotations: {label_ru: "человек", label_en: "human", definition_ru: "Вердикт человека (агент person:)."}
+
+  VerificationOutcome:
+    permissible_values:
+      confirmed:
+        annotations: {label_ru: "подтверждено", label_en: "confirmed", definition_ru: "Запись верна."}
+      partial:
+        annotations: {label_ru: "частично", label_en: "partial", definition_ru: "Верна частично."}
+      refuted:
+        annotations: {label_ru: "опровергнуто", label_en: "refuted", definition_ru: "Запись неверна."}
+      uncertain:
+        annotations: {label_ru: "неясно", label_en: "uncertain", definition_ru: "Проверяющий не смог решить."}
+
+  HighRiskRule:
+    description: Правило шаблона, по которому запись считается рискованной.
+    permissible_values:
+      always:
+        annotations: {label_ru: "всегда", label_en: "always", definition_ru: "Записи этого вида всегда уходят к человеку."}
+      numeric:
+        annotations: {label_ru: "числовой", label_en: "numeric", definition_ru: "Записи с числовыми значениями уходят к человеку."}
+
   TemplateTarget:
     permissible_values:
       atom: {}
@@ -785,6 +912,9 @@ classes:
       links:
         range: LinkRules
         inlined: true
+      high_risk:
+        range: HighRiskRule
+        multivalued: true
 
   Agent:
     attributes:
@@ -825,3 +955,52 @@ classes:
         range: Any
       created_at:
         range: datetime
+
+  CheckIssue:
+    description: Замечание автопроверки.
+    attributes:
+      level: {range: integer, required: true, minimum_value: 1, maximum_value: 4}
+      severity: {range: Severity, required: true}
+      code: {range: CheckCode, required: true}
+      where: {required: true}
+      message: {required: true}
+      details: {range: Any}
+
+  CheckReport:
+    description: Отчёт пакета; пишется в changeset.check_report до записи ревизий.
+    attributes:
+      format: {required: true, pattern: '^amem\.check/1$'}
+      levels: {range: Any, required: true}
+      issues: {range: CheckIssue, multivalued: true, inlined_as_list: true}
+      degraded: {range: Any, multivalued: true}
+      templates: {multivalued: true}
+      records: {range: Any, multivalued: true}
+
+  ReviewItem:
+    description: Пункт очереди проверки. Ревизия — атома или сущности, по target.
+    attributes:
+      id: {identifier: true, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'}
+      target: {required: true, pattern: '^(atom|entity)$'}
+      record_id: {required: true, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'}
+      revision_id: {required: true, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'}
+      reason: {range: ReviewReason, required: true}
+      state: {range: ReviewItemState, required: true}
+      changeset_id: {pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'}
+      details: {range: Any}
+      created_at: {range: datetime, required: true}
+      created_by: {required: true, pattern: '^(person|model):[a-z0-9_.-]+$'}
+      claimed_by: {pattern: '^(person|model):[a-z0-9_.-]+$'}
+      claimed_until: {range: datetime}
+      closed_at: {range: datetime}
+
+  Verification:
+    description: Вердикт по пункту очереди; неизменяемый.
+    attributes:
+      id: {identifier: true, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'}
+      review_item_id: {required: true, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'}
+      method: {range: VerificationMethod, required: true}
+      outcome: {range: VerificationOutcome, required: true}
+      confidence: {range: float, minimum_value: 0, maximum_value: 1}
+      agent: {required: true, pattern: '^(person|model):[a-z0-9_.-]+$'}
+      note: {}
+      created_at: {range: datetime, required: true}

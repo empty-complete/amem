@@ -258,3 +258,32 @@ def test_fastembed_preserves_transitive_module_not_found(monkeypatch):
     with pytest.raises(ModuleNotFoundError) as caught:
         embed.FastembedProvider().embed(["one"])
     assert caught.value.name == "transitive_dependency"
+
+
+@pytest.mark.parametrize("stage", ["create", "embed"])
+def test_fastembed_model_failure_is_embedding_error(monkeypatch, stage):
+    """Нет файлов модели в локальном кэше — EmbeddingError, а не сырое исключение fastembed: неявный провайдер
+    автопроверки тогда объявляет ослабление (provider_error), а не роняет запись."""
+    class TextEmbedding:
+        def __init__(self, **kwargs):
+            if stage == "create":
+                raise ValueError("Could not find model files in the local cache")
+
+        def embed(self, texts):
+            raise RuntimeError("onnx model file is missing")
+            yield  # pragma: no cover — генератор, как у fastembed
+
+    monkeypatch.setitem(sys.modules, "fastembed", types.SimpleNamespace(TextEmbedding=TextEmbedding))
+    with pytest.raises(embed.EmbeddingError, match="fastembed"):
+        embed.FastembedProvider().embed(["one"])
+
+
+def test_fastembed_model_creation_keeps_transitive_module_not_found(monkeypatch):
+    class TextEmbedding:
+        def __init__(self, **kwargs):
+            raise ModuleNotFoundError("No module named 'onnxruntime'", name="onnxruntime")
+
+    monkeypatch.setitem(sys.modules, "fastembed", types.SimpleNamespace(TextEmbedding=TextEmbedding))
+    with pytest.raises(ModuleNotFoundError) as caught:
+        embed.FastembedProvider().embed(["one"])
+    assert caught.value.name == "onnxruntime"
