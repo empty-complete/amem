@@ -2,7 +2,8 @@
 
   ingest(conn, store, docs, path, agent=…) — файл из папки документов → объект и версия:
     - такое содержимое (digest) уже есть — та же версия; путь запоминается за её объектом, если он ещё ничей;
-    - путь известен, содержимое новое — следующая версия объекта этого пути;
+    - путь известен, содержимое новое — следующая версия объекта этого пути; ревизии со ссылкой на прежние
+      версии получают пункт source_changed (review.on_new_version) в той же транзакции;
     - иначе — новый объект. Файл копируется в хранилище один раз.
   web(conn, url) / message(conn, title) — объект без файла: одна версия без digest.
   resolve_sources(conn, store, docs, payload, agent=…) — path источников тела → object, object_version, digest.
@@ -38,7 +39,7 @@ from pathlib import Path, PurePosixPath
 
 import psycopg
 
-from . import model_v1, sources
+from . import model_v1, review, sources
 from .ids import uuid7
 from .ocfl_store import ObjectStore, StoreError
 from .records import as_uuid
@@ -47,6 +48,7 @@ OBJECTS_LOCK = 0x616D656D00000002          # ключ pg_advisory_xact_lock за
 # адрес сайта: схема, www. или первый сегмент — домен латиницей («example.org/docs/TS.pdf»)
 URL = re.compile(r"^(?:[a-z][a-z0-9+.-]*://|www\.)|^[a-z0-9-]+(?:\.[a-z0-9-]+)+/", re.I)
 DOMAIN = re.compile(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}", re.I)     # «example.org» без схемы и пути
+AGENT = re.compile(r"^(person|model):[a-z0-9_.-]+$")         # как CHECK таблицы agent
 GUESS_SUFFIXES = (".pdf", ".md", ".txt")       # расширения, которые проверяются у пути без расширения
 STATUSES = {s.value for s in model_v1.ObjectStatus}
 
@@ -123,6 +125,14 @@ def _check_relative(path: str) -> None:
         raise ObjectError(f"{path}: «..» в пути не допускается — нужен путь от корня папки документов вниз")
 
 
+def _check_agent(agent: str) -> None:
+    """Агент пишется в базу (ingest записывает его до блокировки объектов): неверный — ObjectError, а не сбой
+    ограничения таблицы agent."""
+    if not isinstance(agent, str) or not AGENT.fullmatch(agent):
+        raise ObjectError(f"агент {agent!r}: нужен person:<имя> или model:<имя> (строчные латинские буквы, цифры, "
+                          "«_», «.», «-»)")
+
+
 def _require_autocommit(conn: psycopg.Connection) -> None:
     if not conn.autocommit:
         raise ObjectError("нужно соединение с autocommit=True (db.connect): иначе запись не фиксируется")
@@ -141,6 +151,7 @@ def _add_path(conn, path: str, object_id: uuid.UUID, at: datetime) -> None:
 def ingest(conn: psycopg.Connection, store: ObjectStore, docs: Path, path: str, *, agent: str) -> Version:
     """Файл из папки документов → объект и версия (правила — в описании модуля)."""
     _require_autocommit(conn)
+    _check_agent(agent)
     docs = Path(docs).resolve()
     path = _clean(path)
     _check_relative(path)
@@ -156,6 +167,8 @@ def ingest(conn: psycopg.Connection, store: ObjectStore, docs: Path, path: str, 
     except OSError as e:
         raise ObjectError(f"{path}: файл не читается ({e.strerror or e})") from e
     with conn.transaction():
+        # агент — до блокировки объектов, как в submit (разд. 7.5, шаг 1): пункты новой версии пишутся от его имени
+        conn.execute("INSERT INTO agent (id) VALUES (%s) ON CONFLICT (id) DO NOTHING", (agent,))
         at = _lock(conn)
         # под блокировкой: корень создаёт и чинит после сбоя один процесс. Создаётся он, только пока в базе нет
         # файлов: пустая папка при файлах в базе — неподключённый том, а не новое хранилище
@@ -176,6 +189,9 @@ def ingest(conn: psycopg.Connection, store: ObjectStore, docs: Path, path: str, 
             _add_path(conn, key, object_id, at)
         conn.execute("INSERT INTO object_version (object_id, kind, n, digest, size, recorded_at) "
                      "VALUES (%s, 'file', %s, %s, %s, %s)", (object_id, n, digest, size, at))
+        if n > 1:
+            # в той же транзакции: версия и пункты пересмотра фиксируются вместе (разд. 8.8)
+            review.on_new_version(conn, object_id, n, agent=agent, at=at)
         store.add_version(object_id, n, file, name, digest, user=agent, message=f"amem: {key}")
     return Version(object_id, n, digest, "file", created=True)
 
@@ -239,6 +255,7 @@ def resolve_sources(conn: psycopg.Connection, store: ObjectStore, docs: Path, pa
 
     Источник, у которого уже есть object, не трогается — его версию и digest проверяет запись (records.commit).
     Входное тело не меняется; ошибка — ObjectError с местом (sources[i])."""
+    _check_agent(agent)
     if not payload.get("sources"):
         return payload
     out = []

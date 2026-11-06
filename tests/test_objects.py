@@ -432,3 +432,13 @@ def test_mark_errors(kb, docs, store, call, message):
     version = objects.ingest(kb, store, docs, PDF, agent=AGENT)
     with pytest.raises((ObjectError, ValueError), match=message):
         call(kb, version.object_id)
+
+
+@pytest.mark.parametrize("agent", ["claude", "Model:Claude", "person:", "model:клод", "model:a b", None])
+def test_bad_agent_is_object_error(kb, docs, store, agent):
+    """Агент пишется в базу: неверный формат — ObjectError до любой записи, а не сбой ограничения agent."""
+    with pytest.raises(objects.ObjectError, match="person:<имя> или model:<имя>"):
+        objects.ingest(kb, store, docs, "Заметки/узел.md", agent=agent)
+    with pytest.raises(objects.ObjectError, match="person:<имя> или model:<имя>"):
+        objects.resolve_sources(kb, store, docs, {"sources": [{"path": "Заметки/узел.md"}]}, agent=agent)
+    assert kb.execute("SELECT count(*) FROM object").fetchone()[0] == 0

@@ -444,14 +444,14 @@ PDF — объект с `media_type = application/pdf` или с именем н
 | Сущность `auto_verified`, попавшая в выборку | `audit` |
 | Источник ссылается не на последнюю версию объекта | `source_changed` (разд. 7.5, шаг 6) |
 
-`details` пункта — коды замечаний записи, риск, кандидаты уровней 3 и 4.
+`details` пункта — коды замечаний записи, риск, кандидаты уровней 3 и 4; у `source_changed` — своя форма (разд. 8.8).
 
 ### 7.3. Устаревание
 
 Открытый пункт становится `obsolete`, когда его ревизия больше не та, о которой спрашивают:
 - ревизия не текущая и не ждёт решения;
 - или ревизия ждёт решения, но старше текущей — после неё принята более новая;
-- или по записи принято итоговое решение человека (`verified` или `rejected`) — тогда все остальные открытые пункты ревизии закрываются;
+- или по записи принято итоговое решение человека (`verified` или `rejected`) — тогда остальные открытые пункты ревизии закрываются, кроме `source_changed`: новую версию файла решавший не видел, это отдельный вопрос;
 - или запись получила статус `rejected`, `deprecated` или `superseded`.
 
 Закрывается он:
@@ -549,7 +549,7 @@ queued ──resolve──▶ done              (решение без захв�
 review.claim(conn, *, agent, reasons=None, limit=1, lease=timedelta(minutes=15), now=None) -> list[dict]
 ```
 
-`claim` выдаёт самые старые пункты, которые агент вправе решать: в состоянии `queued` или `claimed` с истёкшей арендой. Пункт `semantic` не достаётся автору его пакета. Выборка — `FOR UPDATE SKIP LOCKED`: параллельные проверяющие не берут один пункт. Записи `claim` не блокирует. Устаревший пункт (разд. 7.3) закрывается `obsolete` и не выдаётся.
+`claim` выдаёт самые старые пункты, которые агент вправе решать: в состоянии `queued` или `claimed` с истёкшей арендой. Пункт `semantic` не достаётся модели — автору его пакета; человек свои пункты получает (разд. 8.2). Выборка — `FOR UPDATE SKIP LOCKED`: параллельные проверяющие не берут один пункт. Записи `claim` не блокирует. Устаревший пункт (разд. 7.3) закрывается `obsolete` и не выдаётся.
 
 Возвращённый пункт содержит:
 - поля пункта;
@@ -584,9 +584,11 @@ review.resolve(conn, item_id, outcome, *, agent, confidence=None, note=None, now
 | `semantic` (модель) | иначе | `draft` | `needs_review`, пункт `semantic_doubt` |
 | `semantic` (человек) | `confirmed` / `refuted` | любой, кроме выведенных из оборота | `verified` / `rejected` |
 | `edit` | `confirmed` / `refuted` | `verified` | `records.decide(accept=True / False)`; его `transaction()` — точка сохранения |
-| Остальные | `confirmed` / `refuted` | любой, кроме выведенных из оборота | `verified` / `rejected` |
+| Кроме `edit`, у ждущей ревизии (`review_state = pending`) | `confirmed` | любой | Только вердикт: статус не меняется, другие пункты не закрываются — о правке решает её пункт `edit` |
+| Кроме `edit`, у ждущей ревизии | `refuted` | любой | `records.decide(accept=False)` для этой ревизии; статус записи не меняется, пункт `edit` устаревает (разд. 7.3) |
+| Остальные (текущая ревизия) | `confirmed` / `refuted` | любой, кроме выведенных из оборота | `verified` / `rejected` |
 
-Итоговое решение человека закрывает остальные открытые пункты этой ревизии как `obsolete`. Статус меняется через `records.set_status_locked` с агентом решающего и причиной `review:<reason>`. Ответ — id вердикта, статус, новые пункты.
+Итоговое решение человека закрывает остальные открытые пункты этой ревизии как `obsolete`, кроме `source_changed` (разд. 7.3). Статус меняется через `records.set_status_locked` с агентом решающего и причиной `review:<reason>`. Ответ — id вердикта, статус, новые пункты.
 
 ### 8.6. Ручная постановка
 
@@ -614,7 +616,9 @@ review.resolve(conn, item_id, outcome, *, agent, confidence=None, note=None, now
 
 `objects.ingest` создаёт версию `n > 1` существующего объекта и в той же транзакции (под исключительной блокировкой объектов) вызывает `review.on_new_version(conn, object_id, n, *, agent, at)`.
 
-Пункты `source_changed` получают текущие и ждущие решения ревизии атомов и сущностей, которые ссылаются на объект с версией меньше `n`: ждущая правка, принятая позже, иначе осталась бы со ссылкой на старую версию без пересмотра. Записи со статусом `rejected`, `deprecated` и `superseded` пропускаются. `details`: объект, старые версии, новая.
+Пункты `source_changed` получают текущие и ждущие решения ревизии атомов и сущностей, которые ссылаются на объект с версией меньше `n`: ждущая правка, принятая позже, иначе осталась бы со ссылкой на старую версию без пересмотра. Записи со статусом `rejected`, `deprecated` и `superseded` пропускаются.
+
+`details` у `source_changed` — одна форма и у пакета (разд. 7.5, шаг 6), и у новой версии: `{"objects": [{"object": "obj:…", "from": [старые версии по возрастанию], "to": n}]}` — по одному элементу на объект, `to` — последняя версия на момент постановки. Тело пункта неизменяемо: версия, появившаяся при открытом пункте, его не меняет и второго не ставит. Замечаний, риска и кандидатов пакета в этих `details` нет.
 
 Открытый пункт той же ревизии не дублируется. Пакет, разобравший путь в старую версию до появления новой, ставит пункт сам (разд. 7.5, шаг 6). Пункт устаревает по общему правилу 7.3 — например, когда запись получает ревизию со ссылкой на новую версию.
 
@@ -702,37 +706,39 @@ review.resolve(conn, item_id, outcome, *, agent, confidence=None, note=None, now
 
 ## 13. Приёмка
 
-| Требование | Как проверяется |
-|---|---|
-| Ошибка уровня 1 или 2 отклоняет пакет целиком | Пакет из двух атомов, у одного нет источника: записей нет, `changeset.state = rejected`, отчёт с `where` |
-| Шаблоны: сведение, наследование, правила | Пакет-пример с интерфейсами и `extends`: позднее правило заменяет раннее; `required`, `min_count`, `selector_types` через `refined_by`, `entity_classes`, `ucum`; `allowed` и `required` у связей, в том числе через `about` |
-| Неактивный шаблон не действует | Пакет убран из `AMEM_PACKS` и `load_vocab` повторён — правило его шаблона больше не срабатывает |
-| Шаблоны проверяются при загрузке | Цикл `extends`, неизвестный `applies_to`, путь на несуществующее поле, один код в двух пакетах — `PackError` с файлом |
-| UCUM | `kPa`, `W/(m2.K)`, `Cel`, `1`, `%` проходят; `кПа`, `KPA`, `m/s/` — нет |
-| PDF: страница и цитата | PDF без `page`, без цитаты или с короткой цитатой — отклонён; цитата на соседней странице — `moved`, номер исправлен в `source.page` |
-| Таблица на настоящей странице | Тестовый PDF: числа таблицы на её странице находятся; при ссылке на соседнюю страницу — `number_not_found`; при диапазоне «2–3» — находятся |
-| Числа | `0,17` / `0.17`, «1 200», `−5` и `–5` находятся; «5–10» и «5 – 10» находят 10; число условия не найдено — предупреждение; `role: derived` — предупреждение вместо ошибки |
-| Нечёткая цитата | Атом отклонён, `details` — точный текст документа; у сущности — предупреждение |
-| Предупреждение → `needs_review` | Источник-переписка: атом `needs_review`, пункт `warning` |
-| Высокий риск всегда к человеку | `decision` без замечаний — `needs_review` и пункт `high_risk`; правило `numeric` пакета-примера; сущность с риском — `needs_review` |
-| Диапазон и противоречие | Значение вне диапазона — `out_of_range`; другое значение той же величины у той же сущности при тех же условиях — `conflict` и риск; при других условиях — нет |
-| Дубли | Похожий атом — `duplicate` с кандидатом; без провайдера — только текст и `degraded`; дубль внутри пачки находится |
-| Сущности | Без замечаний — `auto_verified`; похожая — `needs_review` с предложением `same_as` |
-| Тело без изменений | Отклонённый атом прислан тем же телом — статус остаётся `rejected`, пунктов нет, итоги сверки обновлены |
-| Правка проверенного | Ревизия `pending`, текущая прежняя, пункт `edit`; решение `confirmed` делает её текущей; две ждущие правки — после принятия новой пункт старой устаревает |
-| Итоги сверки в `source` | `verdict`, `page`, `anchor`, `checked_at` записаны; все значения входят в `SourceVerdict` |
-| xlsx и docx | Цитата на листе и в docx находится; селектор `sheet` даёт страницу; формат `0.00` даёт «0,19», а не `0.18700000000000003`; разрыв страницы в docx — новая страница, ручной разрыв рядом с отметкой Word — одна; `DOCTYPE` — нет текста; кэш страницы 0 у старого docx сброшен миграцией |
-| «В очереди» ≠ «сделано» | У атома `complete: false`, `levels["5"] = "queued"`, пункт `queued`; у пакета из одной сущности без выборки — `complete: true`, `levels["5"] = "not_applicable"` |
-| Порядок блокировок | Параллельные `submit` двух новых агентов по одной записи не встают в тупик; `resolve` и `submit` по одной записи — тоже; `ingest` новой версии во время `submit` даёт пункт `source_changed` ровно один раз |
-| Захват и аренда (3b) | Два параллельных захвата не берут один пункт; истёкшую аренду забирает другой; `release` чужого — ошибка |
-| Права (3b) | Автор не решает `semantic` своего пакета; модель не решает `warning`; человек решает всё, в том числе свою правку |
-| Решение (3b) | `semantic confirmed` 0,9 → `auto_verified`; 0,5 → `needs_review` и `semantic_doubt`; `refuted` человека → `rejected`; решение человека закрывает остальные пункты ревизии; модель по `semantic` после решения человека статус не меняет |
-| Устаревание (3b) | Новая ревизия закрывает пункты старой; решение по устаревшему пункту — `ReviewError` |
-| Аудит | При `AUDIT_RATE = 1.0` пункт `audit` появляется у сущности (3a) и у атома после уровня 5 (3b); при `0.0` — нет |
-| Метрики (3b) | `stats` на подготовленных данных считает очередь, возраст, решённое, отклонённые коды, источники и аудит; пустая база — нули |
-| Новая версия объекта (3b) | Изменённый файл → пункты `source_changed` у текущих ревизий со ссылкой на старую версию; повторный приём не дублирует их |
-| Неизменяемость | `verification` нельзя изменить или удалить; у `review_item` запрещённый переход отвергает триггер |
-| PostgreSQL 18 и 16 | Все тесты базы — на обеих версиях |
+Файлы тестов — в `tests/`; `::имя` — тест того же файла, что и предыдущий. Тесты базы идут на обеих версиях PostgreSQL.
+
+| Требование | Как проверяется | Тест |
+|---|---|---|
+| Ошибка уровня 1 или 2 отклоняет пакет целиком | Пакет из двух атомов, у одного нет источника: записей нет, `changeset.state = rejected`, отчёт с `where` | `test_check_submit.py::test_rejected_batch_writes_nothing_and_is_complete` |
+| Шаблоны: сведение, наследование, правила | Пакет-пример с интерфейсами и `extends`: позднее правило заменяет раннее; `required`, `min_count`, `selector_types` через `refined_by`, `entity_classes`, `ucum`; `allowed` и `required` у связей, в том числе через `about` | `test_check_templates.py::test_descendant_rule_replaces_interface_rule`, `::test_extends_unfolds_left_to_right_once`, `::test_merge_follows_application_order`; `test_check_level1.py::test_one_issue`, `::test_pack_rule`, `::test_existing_links_count_for_required_link` |
+| Неактивный шаблон не действует | Пакет убран из `AMEM_PACKS` и `load_vocab` повторён — правило его шаблона больше не срабатывает | `test_check_level1.py::test_inactive_template_rule_does_not_fire`; `test_check_sql.py::test_active_templates_follow_loaded_packs` |
+| Шаблоны проверяются при загрузке | Цикл `extends`, неизвестный `applies_to`, путь на несуществующее поле, один код в двух пакетах — `PackError` с файлом | `test_check_templates.py::test_bad_template_is_rejected_with_file`, `::test_template_code_in_two_packs_is_rejected` |
+| UCUM | `kPa`, `W/(m2.K)`, `Cel`, `1`, `%` проходят; `кПа`, `KPA`, `m/s/` — нет | `test_check_units.py::test_ucum_codes_accepted`, `::test_not_ucum_rejected` |
+| PDF: страница и цитата | PDF без `page`, без цитаты или с короткой цитатой — отклонён; цитата на соседней странице — `moved`, номер исправлен в `source.page` | `test_check_level2.py::test_pdf_page_required`, `::test_pdf_quote_required`, `::test_quote_moved`; `test_check_submit.py::test_moved_quote_fixes_page_in_source` |
+| Таблица на настоящей странице | Тестовый PDF: числа таблицы на её странице находятся; при ссылке на соседнюю страницу — `number_not_found`; при диапазоне «2–3» — находятся | `test_check_level2.py::test_number_found_on_page`, `::test_number_not_found_violation`, `::test_number_on_page_of_range` |
+| Числа | `0,17` / `0.17`, «1 200», `−5` и `–5` находятся; «5–10» и «5 – 10» находят 10; число условия не найдено — предупреждение; `role: derived` — предупреждение вместо ошибки | `test_check_numbers.py::test_decimal_separators`, `::test_digit_groups`, `::test_negative_flush_after_non_digit`, `::test_range_dash_gives_both`, `::test_spaced_dash_gives_both`; `test_check_level2.py::test_number_only_in_qualifiers_warning`, `::test_number_not_found_derived_warning` |
+| Нечёткая цитата | Атом отклонён, `details` — точный текст документа; у сущности — предупреждение | `test_check_level2.py::test_quote_fuzzy`, `::test_entity_fuzzy_warning_and_kept` |
+| Предупреждение → `needs_review` | Источник-переписка: атом `needs_review`, пункт `warning` | `test_check_submit.py::test_message_source_goes_to_person` |
+| Высокий риск всегда к человеку | `decision` без замечаний — `needs_review` и пункт `high_risk`; правило `numeric` пакета-примера; сущность с риском — `needs_review` | `test_check_submit.py::test_decision_is_high_risk`, `::test_rule_with_number_is_numeric_risk`, `::test_entity_with_risk_goes_to_person` |
+| Диапазон и противоречие | Значение вне диапазона — `out_of_range`; другое значение той же величины у той же сущности при тех же условиях — `conflict` и риск; при других условиях — нет | `test_check_level3.py::test_range_and_units`, `::test_conflict_with_stored_atom`, `::test_other_qualifiers_no_conflict`; `test_check_submit.py::test_conflict_is_risk_and_goes_to_person` |
+| Дубли | Похожий атом — `duplicate` с кандидатом; без провайдера — только текст и `degraded`; дубль внутри пачки находится | `test_check_level4.py::test_text_duplicate_with_candidate`, `::test_backend_disabled`, `::test_duplicate_inside_batch` |
+| Сущности | Без замечаний — `auto_verified`; похожая — `needs_review` с предложением `same_as` | `test_check_submit.py::test_clean_entity_is_auto_verified_and_complete`, `::test_similar_entity_goes_to_person_with_same_as` |
+| Тело без изменений | Отклонённый атом прислан тем же телом — статус остаётся `rejected`, пунктов нет, итоги сверки обновлены | `test_check_submit.py::test_same_body_keeps_status_and_refreshes_verdicts` |
+| Правка проверенного | Ревизия `pending`, текущая прежняя, пункт `edit`; решение `confirmed` делает её текущей; две ждущие правки — после принятия новой пункт старой устаревает | `test_check_submit.py::test_edit_of_verified_waits_for_person`; `test_review.py::test_edit_confirmed_becomes_current`, `::test_accepting_newer_edit_through_queue_closes_older`, `::test_two_pending_edits_newer_accepted_closes_older_on_claim` |
+| Итоги сверки в `source` | `verdict`, `page`, `anchor`, `checked_at` записаны; все значения входят в `SourceVerdict` | `test_check_submit.py::test_moved_quote_fixes_page_in_source`; `test_check_level2.py::test_verdicts_are_from_schema`, `::test_all_returned_verdicts_in_schema` |
+| xlsx и docx | Цитата на листе и в docx находится; селектор `sheet` даёт страницу; формат `0.00` даёт «0,19», а не `0.18700000000000003`; разрыв страницы в docx — новая страница, ручной разрыв рядом с отметкой Word — одна; `DOCTYPE` — нет текста; кэш страницы 0 у старого docx сброшен миграцией | `test_check_level2.py::test_xlsx_sheet_quote_ok`, `::test_xlsx_sheet_by_locator`, `::test_docx_quote_on_second_page`; `test_extract.py::test_xlsx_numbers_as_shown`, `::test_docx_pages`, `::test_docx_doctype_cannot_be_hidden`; `test_check_sql.py::test_migration_drops_text_cache_of_docx_and_xlsx` |
+| «В очереди» ≠ «сделано» | У атома `complete: false`, `levels["5"] = "queued"`, пункт `queued`; у пакета из одной сущности без выборки — `complete: true`, `levels["5"] = "not_applicable"` | `test_check_submit.py::test_clean_pdf_atom_is_draft_and_queued_for_level5`, `::test_clean_entity_is_auto_verified_and_complete` |
+| Порядок блокировок | Параллельные `submit` двух новых агентов по одной записи не встают в тупик; `resolve` и `submit` по одной записи — тоже; `ingest` новой версии во время `submit` даёт пункт `source_changed` ровно один раз | `test_check_submit.py::test_new_agents_editing_one_record_do_not_deadlock`; `test_review.py::test_resolve_and_submit_on_one_record_do_not_deadlock`; `test_review_sources.py::test_ingest_during_write_waits_and_does_not_duplicate`, `::test_ingest_between_resolve_and_write_gives_one_item` |
+| Захват и аренда (3b) | Два параллельных захвата не берут один пункт; истёкшую аренду забирает другой; `release` чужого — ошибка | `test_review.py::test_parallel_claims_get_different_items`, `::test_expired_lease_goes_to_another`, `::test_release` |
+| Права (3b) | Автор не решает `semantic` своего пакета; модель не решает `warning`; человек решает всё, в том числе свою правку | `test_review.py::test_model_gets_only_semantic_and_not_its_own`, `::test_author_model_cannot_resolve_its_semantic`, `::test_warning_rights_and_refute`, `::test_person_author_gets_own_semantic`, `::test_person_may_confirm_own_edit`, `::test_person_gets_everything` |
+| Решение (3b) | `semantic confirmed` 0,9 → `auto_verified`; 0,5 → `needs_review` и `semantic_doubt`; `refuted` человека → `rejected`; решение человека закрывает остальные пункты ревизии; модель по `semantic` после решения человека статус не меняет | `test_review.py::test_model_confirms_semantic_with_high_confidence`, `::test_semantic_threshold_is_inclusive`, `::test_model_doubt_goes_to_person`, `::test_person_on_semantic`, `::test_person_decision_closes_other_items_of_revision`, `::test_model_verdict_without_status_change_when_status_moved`, `::test_edit_verdict_without_decision_when_status_moved`; `test_review_sources.py::test_confirmed_source_changed_on_pending_edit_is_only_a_verdict`, `::test_refuted_source_changed_on_pending_edit_declines_the_edit` |
+| Устаревание (3b) | Новая ревизия закрывает пункты старой; решение по устаревшему пункту — `ReviewError` | `test_check_submit.py::test_edit_of_draft_replaces_semantic_item`; `test_review.py::test_stale_item_is_closed_on_claim`, `::test_stale_item_is_closed_on_resolve` |
+| Аудит | При `AUDIT_RATE = 1.0` пункт `audit` появляется у сущности (3a) и у атома после уровня 5 (3b); при `0.0` — нет | `test_check_submit.py::test_entity_audit_sample`, `::test_clean_entity_is_auto_verified_and_complete`; `test_review.py::test_auto_verified_atom_may_go_to_audit`, `::test_model_confirms_semantic_with_high_confidence` |
+| Метрики (3b) | `stats` на подготовленных данных считает очередь, возраст, решённое, отклонённые коды, источники и аудит; пустая база — нули | `test_review_stats.py::test_stats_all_sections`, `::test_empty_base_gives_zeros_and_none` |
+| Новая версия объекта (3b) | Изменённый файл → пункты `source_changed` у текущих ревизий со ссылкой на старую версию; повторный приём не дублирует их | `test_review_sources.py::test_new_version_queues_current_atom_and_entity`, `::test_pending_edit_on_old_version_is_queued_too`, `::test_closed_record_is_skipped`, `::test_repeated_ingest_and_third_version_do_not_duplicate` |
+| Неизменяемость | `verification` нельзя изменить или удалить; у `review_item` запрещённый переход отвергает триггер | `test_check_sql.py::test_verification_constraints`, `::test_item_body_cannot_change`, `::test_closed_item_stays_closed`, `::test_allowed_transitions`, `::test_delete_and_truncate_are_forbidden` |
+| PostgreSQL 18 и 16 | Все тесты базы — на обеих версиях | фикстура `pg` в conftest.py — параметры по `AMEM_TEST_DSNS`; CI — оба сервера |
 
 ## 14. Риски
 
