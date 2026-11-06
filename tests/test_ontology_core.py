@@ -1,5 +1,6 @@
 """Ядро 1.2.0: заметка, изделие, прямоугольник и has_source со skip_if_set."""
 from amem import packs
+from amem.check import templates
 
 CORE = packs.load_pack(packs.CORE_PACK)
 
@@ -29,4 +30,9 @@ def test_note_template():
     assert t.applies_to == "note" and t.extends == ["has_label"]
     body = next(r for r in t.fields if r.path == "body")
     assert body.required is True and body.severity == "warning"
+    assert body.message.ru == "У заметки нет текста."
     assert t.links is None
+    active = {x.code: x.model_dump(mode="json", exclude_none=True) for x in CORE.templates}
+    rules = templates.rules_for(active, "atom", "note")
+    assert rules.templates[-1] == "note@1.0.0" and "has_label@1.0.0" in rules.templates
+    assert {"label", "summary_plain", "body"} <= set(rules.fields)

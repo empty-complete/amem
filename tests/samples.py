@@ -18,6 +18,8 @@ SP_PAGES = [
 ]
 
 NOTE_MD = "# Узел крепления\n\n## Кронштейн\n\nКронштейн КБ-14 крепится к закладной анкером М10.\n"
+# Заметка с величинами для тестов basis и confidence: по фразе на строку, раздел — тот же «Кронштейн».
+VALUES_MD = "# Величины\n\n## Кронштейн\n\nМасса 3 кг.\n\nМасса 4 кг.\n\nТемпература 20 °C.\n"
 
 
 def make_pdf(path: Path, pages: list[str]) -> Path:
@@ -33,10 +35,11 @@ def make_pdf(path: Path, pages: list[str]) -> Path:
 
 
 def make_docs(root: Path) -> Path:
-    """Папка документов: норматив PDF, заметка .md, «документ» .docx без извлекаемого текста."""
+    """Папка документов: норматив PDF, заметки .md, «документ» .docx без извлекаемого текста."""
     make_pdf(root / "НД" / "СП 99.pdf", SP_PAGES)
     (root / "Заметки").mkdir(parents=True, exist_ok=True)
     (root / "Заметки" / "узел.md").write_text(NOTE_MD, encoding="utf-8")
+    (root / "заметка.md").write_text(VALUES_MD, encoding="utf-8")
     (root / "НД" / "скан.docx").write_bytes(b"PK\x03\x04 not a real docx")
     return root
 
