@@ -407,7 +407,9 @@ VERDICTS = ("ok", "moved", "fuzzy", "by_locator", "unresolved", "not_found", "no
 def stats(conn: psycopg.Connection, *, days: int = 7, now: datetime | None = None) -> dict:
     """Метрики очереди и проверки (разд. 8.7) одним словарём, который сериализуется в JSON.
 
-    Окно days считается назад от now и относится к разделам done и changesets; остальные разделы — на now.
+    Окно days считается назад от now и относится только к done и changesets (closed_at и created_at в (now-days, now]);
+    остальные разделы — на now, audit — за всё время. error_codes считает замечания violation (а не пакеты):
+    пакет с двумя одинаковыми замечаниями даёт 2.
     queue: claimed — аренда действует, expired — истекла (claimed_until < now), эти два числа не пересекаются.
     Пустые разделы — нули и None (нет данных для времени или возраста), а не пропуски: так проще читать."""
     now = _now(now)
@@ -441,7 +443,7 @@ def stats(conn: psycopg.Connection, *, days: int = 7, now: datetime | None = Non
     records_by = {}
     for target in ("atom", "entity"):
         counts = dict(conn.execute(f"SELECT status, count(*) FROM {target} GROUP BY status").fetchall())
-        records_by[f"{target}s"] = {s: counts.get(s, 0) for s in STATUSES}
+        records_by["atoms" if target == "atom" else "entities"] = {s: counts.get(s, 0) for s in STATUSES}
 
     verdicts = dict(conn.execute(
         "SELECT coalesce(verdict, 'unchecked'), count(*) FROM source "
