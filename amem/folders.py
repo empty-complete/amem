@@ -4,17 +4,20 @@
 прежний; каждый перенос — строка неизменяемого журнала folder_log (откуда, куда, кто, когда). Пустые папки живут
 в реестре folder; путь записи и его родители попадают в реестр при переносе. Переносить вправе и модель.
 
-Путь — сегменты через «/»; каждый сегмент непустой после обрезки пробелов, без «/» и управляющих символов,
-не «.» и не «..», в NFC, до 100 знаков; уровней — до 8. Регистр сохраняется, сравнение — как есть. Путь «-» запрещён:
-в контракте HTTP он означает «без папки». Префикс в SQL — folder = p OR starts_with(folder, p || '/'), без LIKE:
-«_» и «%» в имени папки — обычные знаки.
+Путь — сегменты через «/»; каждый сегмент непустой после обрезки пробелов, без «/», управляющих и невидимых знаков
+форматирования (кроме ZWJ и ZWNJ — они нужны письменностям), не «.», «..» и не «-», в NFC, до 100 знаков; уровней —
+до 8. Сегмент «-» запрещён в любом месте: путь «-» в контракте HTTP означает «без папки», а папку «-/x» нельзя было бы
+ни показать, ни удалить. Регистр сохраняется, сравнение — как есть (столбцы путей — COLLATE "C"). Префикс в SQL —
+folder = p OR starts_with(folder, p || '/'), без LIKE: «_» и «%» в имени папки — обычные знаки; при COLLATE "C" он идёт
+по индексу.
 
 Блокировки:
 1. автор — до блокировок, как во всех функциях записи (amem/records.py);
 2. блокировка папок (рекомендательная, на транзакцию): перенос и создание берут её разделяемой и идут
    параллельно, удаление и переименование — исключительной. Иначе запись могла бы лечь в папку, которую в тот же
    миг удаляют (проверка «пусто» прошла до переноса), и остаться вне реестра;
-3. записи — FOR NO KEY UPDATE (records._lock), у переименования — все записи папки по возрастанию id;
+3. записи — FOR NO KEY UPDATE (records._lock), у переименования — все записи папки по возрастанию id одним
+   проходом конвейера (records._lock_many), а перенос записей и журнал — пакетными запросами;
 4. время — после блокировок и не раньше последнего изменения записи: журнал папки идёт по порядку, даже если
    часы ушли назад.
 Соединение — только в режиме autocommit (db.connect). Ответы — словари, совместимые с JSON.
@@ -23,6 +26,7 @@ from __future__ import annotations
 
 import unicodedata
 import uuid
+from collections.abc import Iterable
 from datetime import datetime, timezone
 
 import psycopg
@@ -36,8 +40,10 @@ NO_FOLDER = "-"                     # в контракте HTTP — «без п
 DEFAULTS = ("Проекты", "Области", "Ресурсы", "Архив")
 INIT_AGENT = "model:amem-init"      # автор папок новой базы: их создаёт программа, а не человек
 FOLDERS_LOCK = 0x616D656D00000003   # ключ pg_advisory_xact_lock папок: «amem» + 3
-# управляющие символы, суррогаты, разделители строк и абзацев: в имени папки они невидимы или ломают строку
-_FORBIDDEN = {"Cc", "Cs", "Zl", "Zp"}
+# управляющие символы, знаки форматирования, суррогаты, разделители строк и абзацев: в имени папки они невидимы,
+# меняют направление письма или ломают строку. ZWNJ и ZWJ (U+200C, U+200D) — часть написания слов и эмодзи
+_FORBIDDEN = {"Cc", "Cf", "Cs", "Zl", "Zp"}
+_ALLOWED = {"\u200c", "\u200d"}
 
 
 class FolderError(ValueError):
@@ -65,14 +71,14 @@ def check(path) -> str:
             raise FolderError(f"{where}: пустой (лишний «/» или одни пробелы)", code="invalid")
         if segment in (".", ".."):
             raise FolderError(f"{where}: «{segment}» — не имя папки", code="invalid")
-        if any(unicodedata.category(ch) in _FORBIDDEN for ch in segment):
-            raise FolderError(f"{where}: управляющий символ или перевод строки", code="invalid")
+        if segment == NO_FOLDER:
+            raise FolderError(f"{where}: «-» означает «без папки» и именем папки быть не может", code="invalid")
+        bad = next((ch for ch in segment if ch not in _ALLOWED and unicodedata.category(ch) in _FORBIDDEN), None)
+        if bad is not None:
+            raise FolderError(f"{where}: невидимый или управляющий знак U+{ord(bad):04X}", code="invalid")
         if len(segment) > MAX_SEGMENT:
             raise FolderError(f"{where}: {len(segment)} знаков, можно до {MAX_SEGMENT}", code="invalid")
-    normalized = "/".join(segments)
-    if normalized == NO_FOLDER:
-        raise FolderError(f"папка {path!r}: «-» означает «без папки» и именем папки быть не может", code="invalid")
-    return normalized
+    return "/".join(segments)
 
 
 def _ancestors(path: str) -> list[str]:
@@ -90,22 +96,29 @@ def _lock_folders(conn: psycopg.Connection, *, exclusive: bool) -> None:
     conn.execute(sql, (FOLDERS_LOCK,))
 
 
-def _register(conn: psycopg.Connection, path: str, agent: str, at: datetime) -> bool:
-    """Путь и его родители — в реестр; уже известные не трогаются. True — если появился сам путь."""
-    *parents, leaf = _ancestors(path)
-    for parent in parents:                  # от корня: два переноса с общим началом пути не встают в тупик
-        conn.execute("INSERT INTO folder (path, created_at, created_by) VALUES (%s, %s, %s) "
-                     "ON CONFLICT (path) DO NOTHING", (parent, at, agent))
-    return conn.execute("INSERT INTO folder (path, created_at, created_by) VALUES (%s, %s, %s) "
-                        "ON CONFLICT (path) DO NOTHING RETURNING path", (leaf, at, agent)).fetchone() is not None
+def _register(conn: psycopg.Connection, paths: Iterable[str], agent: str, at: datetime) -> set[str]:
+    """Пути и их родители — в реестр одним запросом; уже известные не трогаются. Вернуть пути, которые появились.
+
+    Каждый путь и каждый родитель проходят check: в реестр в обход него не попадёт ни «-», ни невидимый знак."""
+    wanted = set()
+    for path in paths:
+        for p in _ancestors(path):
+            if check(p) != p:
+                raise FolderError(f"папка {p!r}: путь не нормализован — сначала check", code="invalid")
+            wanted.add(p)
+    # от корня и в одном порядке для всех: два переноса с общим началом пути не встают в тупик
+    ordered = sorted(wanted, key=lambda p: (p.count("/"), p))
+    rows = conn.execute(
+        "INSERT INTO folder (path, created_at, created_by) SELECT u.path, %s, %s "
+        "FROM unnest(%s::text[]) WITH ORDINALITY AS u(path, n) ORDER BY u.n "
+        "ON CONFLICT (path) DO NOTHING RETURNING path", (at, agent, ordered)).fetchall()
+    return {row[0] for row in rows}
 
 
 def seed_defaults(conn: psycopg.Connection, at: datetime | None = None) -> None:
     """Четыре папки новой базы — в транзакции вызывающего (db.prepare: там же, где впервые ставится base_id)."""
     records._ensure_agent(conn, INIT_AGENT)
-    at = at or _now()
-    for path in DEFAULTS:
-        _register(conn, path, INIT_AGENT, at)
+    _register(conn, DEFAULTS, INIT_AGENT, at or _now())
 
 
 def _records_in(conn: psycopg.Connection, path: str) -> list[tuple[str, uuid.UUID, str]]:
@@ -146,6 +159,7 @@ def _record(conn: psycopg.Connection, ref) -> tuple[str, uuid.UUID]:
 
 def _log(conn, target: str, record_id: uuid.UUID, before: str | None, after: str | None, agent: str,
          at: datetime) -> None:
+    """Перенос одной записи: столбец folder и строка журнала (у переименования — те же два шага пакетно)."""
     conn.execute(f"UPDATE {target} SET folder = %s WHERE id = %s", (after, record_id))
     conn.execute("INSERT INTO folder_log (id, target, record_id, folder_from, folder_to, agent, changed_at) "
                  "VALUES (%s, %s, %s, %s, %s, %s, %s)", (uuid7(), target, record_id, before, after, agent, at))
@@ -164,7 +178,7 @@ def move(conn: psycopg.Connection, ref: str, folder: str | None, *, agent: str) 
         before = conn.execute(f"SELECT folder FROM {target} WHERE id = %s", (record_id,)).fetchone()[0]
         if before != path:
             if path is not None:
-                _register(conn, path, agent, at)
+                _register(conn, [path], agent, at)
             _log(conn, target, record_id, before, path, agent, at)
     return {"ref": f"{records.PREFIX[target]}:{record_id}", "from": before, "to": path, "moved": before != path}
 
@@ -178,7 +192,7 @@ def create(conn: psycopg.Connection, path: str, *, agent: str) -> dict:
         _lock_folders(conn, exclusive=False)
         at = _now()
         # RETURNING ловит и папку, которую в этот миг создал соседний create
-        if _known(conn, path) or not _register(conn, path, agent, at):
+        if _known(conn, path) or path not in _register(conn, [path], agent, at):
             raise FolderError(f"папка {path!r} уже есть", code="exists")
     return {"path": path, "name": _name(path), "created_at": at.isoformat(), "created_by": agent}
 
@@ -224,20 +238,35 @@ def rename(conn: psycopg.Connection, path: str, new_path: str, *, agent: str) ->
                 raise FolderError(f"переименование {old!r} → {new!r}: папка {before!r} стала бы {after!r} — {e}",
                                   code="invalid") from e
         # записи — по возрастанию id, как в records.commit: с пакетами по тем же записям тупика нет
-        marks = [records._lock(conn, target, record_id) for target, record_id, _ in found]
-        at = max([_now(), *marks])
-        for before in listed:
-            conn.execute("UPDATE folder SET path = %s WHERE path = %s", (renamed[before], before))
-        for after in sorted({new, *renamed.values()}, key=_order):
-            _register(conn, after, agent, at)    # родители нового пути и пути записей, которых не было в реестре
-        for target, record_id, before in found:
-            _log(conn, target, record_id, before, renamed[before], agent, at)
+        last = records._lock_many(conn, [(target, record_id) for target, record_id, _ in found])
+        at = max(_now(), last) if last is not None else _now()
+        if listed:
+            # новые пути не пересекаются ни с прежними, ни с занятыми (проверено выше): уникальность не мешает
+            conn.execute("UPDATE folder AS f SET path = u.new FROM unnest(%s::text[], %s::text[]) AS u(old, new) "
+                         "WHERE f.path = u.old", (listed, [renamed[p] for p in listed]))
+        _register(conn, [new, *renamed.values()], agent, at)   # родители нового пути; пути записей вне реестра
+        for target in records.PREFIX:
+            rows = [(record_id, before) for t, record_id, before in found if t == target]
+            if rows:
+                conn.execute(f"UPDATE {target} AS r SET folder = u.folder "
+                             f"FROM unnest(%s::uuid[], %s::text[]) AS u(id, folder) WHERE r.id = u.id",
+                             ([record_id for record_id, _ in rows], [renamed[before] for _, before in rows]))
+        if found:
+            conn.execute(
+                "INSERT INTO folder_log (id, target, record_id, folder_from, folder_to, agent, changed_at) "
+                "SELECT u.id, u.target, u.record_id, u.f, u.t, %s, %s "
+                "FROM unnest(%s::uuid[], %s::text[], %s::uuid[], %s::text[], %s::text[]) "
+                "AS u(id, target, record_id, f, t)",
+                (agent, at, [uuid7() for _ in found], [target for target, _, _ in found],
+                 [record_id for _, record_id, _ in found], [before for _, _, before in found],
+                 [renamed[before] for _, _, before in found]))
     return {"from": old, "to": new, "folders": len(listed), "records": len(found)}
 
 
 def _order(path: str) -> tuple:
-    """Порядок по имени: без учёта регистра, при равенстве — как есть; родитель раньше детей."""
-    return tuple((segment.casefold(), segment) for segment in path.split("/"))
+    """Порядок по имени: без учёта регистра и ё как е (как в поиске, amem/sources.py), при равенстве — как есть;
+    родитель раньше детей."""
+    return tuple((segment.casefold().replace("ё", "е"), segment) for segment in path.split("/"))
 
 
 def tree(conn: psycopg.Connection) -> dict:
