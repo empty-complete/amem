@@ -1,4 +1,3 @@
-import time
 import types
 import uuid
 
@@ -17,12 +16,14 @@ def _freeze(monkeypatch, now_ns: int) -> list[int]:
     return now
 
 
-def test_uuid7_version_variant_and_time():
-    before = time.time_ns() // 1_000_000
+def test_uuid7_version_variant_and_time(monkeypatch):
+    # не по настоящим часам: счётчик общий на процесс, и если часы ушли назад, пока шли предыдущие тесты
+    # (на WSL2 — несколько раз в час), генератор их обгоняет — время id больше часов (см. докстринг uuid7)
+    t = 1_800_000_000_000
+    _freeze(monkeypatch, t * 1_000_000 + 999_999)       # счётчик сброшен — генератор не впереди часов
     u = uuid7()
-    after = time.time_ns() // 1_000_000
     assert u.version == 7 and u.variant == uuid.RFC_4122
-    assert before <= u.int >> 80 <= after + 1
+    assert u.int >> 80 == t                              # время — мс часов в момент вызова
 
 
 def test_uuid7_sorted_in_creation_order_and_unique():
@@ -37,6 +38,9 @@ def test_uuid7_monotonic_when_clock_steps_back(monkeypatch):
     now[0] -= 10_000 * 1_000_000               # NTP или WSL перевели часы на 10 с назад
     b = uuid7()
     assert b > a and b.int >> 80 == a.int >> 80
+    now[0] += 10_001 * 1_000_000               # часы догнали генератор — время id снова по часам
+    c = uuid7()
+    assert c > b and c.int >> 80 == 1_800_000_000_001
 
 
 def test_uuid7_counter_overflow_borrows_next_ms(monkeypatch):
