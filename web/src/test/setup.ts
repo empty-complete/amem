@@ -14,6 +14,20 @@ if (typeof window !== "undefined" && !window.matchMedia) {
     }) as MediaQueryList;
 }
 
+if (typeof window !== "undefined" && typeof globalThis.ResizeObserver === "undefined") {
+  // jsdom не знает ResizeObserver; вкладкам HeroUI он нужен только для индикатора
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+
+if (typeof Element !== "undefined" && !Element.prototype.getAnimations) {
+  // jsdom без Web Animations; React Aria ждёт окончания анимаций при смене вкладок
+  Element.prototype.getAnimations = () => [];
+}
+
 import { setupI18n } from "../app/i18n";
 
 if (typeof document !== "undefined") await setupI18n("ru");

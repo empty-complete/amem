@@ -1,0 +1,124 @@
+{
+  "0193b7c2-5e1a-7d40-9f2e-0000000000a1": {
+    "id": "0193b7c2-5e1a-7d40-9f2e-0000000000a1",
+    "kind": "file",
+    "original_name": "Руководство_МС-1.pdf",
+    "media_type": "application/pdf",
+    "url": null,
+    "logical_paths": ["~/Документы/Метео/Руководство_МС-1.pdf"],
+    "status": "partial",
+    "pages": 2,
+    "sheets": null,
+    "versions": [
+      {
+        "n": 1,
+        "digest": "sha256:9a1c…e04",
+        "size": 38211,
+        "recorded_at": "2026-10-28T09:00:00Z",
+        "cited_by": 0
+      },
+      {
+        "n": 2,
+        "digest": "sha256:4be7…a91",
+        "size": 40666,
+        "recorded_at": "2026-11-03T11:30:00Z",
+        "cited_by": 3
+      }
+    ],
+    "cited_by": [
+      {
+        "record": {
+          "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+          "label": "Погрешность влажности В-2: ±2 %",
+          "kind": "parameter"
+        },
+        "version": 2,
+        "selectors": [
+          {
+            "type": "page",
+            "value": "2",
+            "label": "12"
+          }
+        ],
+        "quote": "Погрешность ±2 % в диапазоне от 10 до 90 %",
+        "verdict": "ok"
+      },
+      {
+        "record": {
+          "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000016",
+          "label": "В-2 завышает влажность при обмерзании",
+          "kind": "lesson"
+        },
+        "version": 2,
+        "selectors": [
+          {
+            "type": "page",
+            "value": "2",
+            "label": "12"
+          }
+        ],
+        "quote": "вне его погрешность не нормируется",
+        "verdict": "fuzzy"
+      },
+      {
+        "record": {
+          "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000009",
+          "label": "Диапазон температуры Т-1: −40…+60 °C",
+          "kind": "parameter"
+        },
+        "version": 2,
+        "selectors": [
+          {
+            "type": "page",
+            "value": "2",
+            "label": "12"
+          }
+        ],
+        "quote": "в диапазоне от −40 до +60 °C",
+        "verdict": "ok"
+      }
+    ]
+  },
+  "0193b7c2-5e1a-7d40-9f2e-0000000000a2": {
+    "id": "0193b7c2-5e1a-7d40-9f2e-0000000000a2",
+    "kind": "file",
+    "original_name": "Наблюдения_ноябрь.xlsx",
+    "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "url": null,
+    "logical_paths": ["~/Документы/Метео/Наблюдения_ноябрь.xlsx"],
+    "status": "partial",
+    "pages": 3,
+    "sheets": ["Т-1", "В-2", "Д-3"],
+    "versions": [
+      {
+        "n": 1,
+        "digest": "sha256:77d0…3c2",
+        "size": 18432,
+        "recorded_at": "2026-11-06T08:30:00Z",
+        "cited_by": 1
+      }
+    ],
+    "cited_by": [
+      {
+        "record": {
+          "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000016",
+          "label": "В-2 завышает влажность при обмерзании",
+          "kind": "lesson"
+        },
+        "version": 1,
+        "selectors": [
+          {
+            "type": "sheet",
+            "value": "В-2"
+          },
+          {
+            "type": "range",
+            "value": "B4:C9"
+          }
+        ],
+        "quote": null,
+        "verdict": "by_locator"
+      }
+    ]
+  }
+}

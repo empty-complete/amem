@@ -1,0 +1,38 @@
+[
+  {
+    "id": "ln-1",
+    "rel": "see_also",
+    "direction": "out",
+    "other": {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000018",
+      "label": "Нужен ли обогрев В-2 зимой?",
+      "kind": "question"
+    },
+    "note": null,
+    "confidence": null
+  },
+  {
+    "id": "ln-2",
+    "rel": "see_also",
+    "direction": "in",
+    "other": {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000016",
+      "label": "В-2 завышает влажность при обмерзании",
+      "kind": "lesson"
+    },
+    "note": null,
+    "confidence": null
+  },
+  {
+    "id": "ln-3",
+    "rel": "related",
+    "direction": "out",
+    "other": {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000014",
+      "label": "Точка росы",
+      "kind": "term"
+    },
+    "note": null,
+    "confidence": 0.7
+  }
+]

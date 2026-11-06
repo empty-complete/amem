@@ -1,0 +1,83 @@
+{
+  "ref": null,
+  "since": null,
+  "until": null,
+  "events": [
+    {
+      "type": "revision",
+      "id": "ev-1",
+      "at": "2026-11-07T09:14:00Z",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000016",
+      "label": "В-2 завышает влажность при обмерзании",
+      "agent": "person:anna",
+      "revision": 2
+    },
+    {
+      "type": "link_created",
+      "id": "ev-2",
+      "at": "2026-11-07T09:15:00Z",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000016",
+      "label": "В-2 завышает влажность при обмерзании",
+      "agent": "person:anna",
+      "rel": "see_also",
+      "src": "atm:0193b7c2-5e1a-7d40-9f2e-000000000016",
+      "dst": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b"
+    },
+    {
+      "type": "review",
+      "id": "ev-3",
+      "at": "2026-11-07T08:02:00Z",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000010",
+      "label": "Степень защиты МС-1: IP65",
+      "agent": "person:anna",
+      "review_state": "accepted"
+    },
+    {
+      "type": "revision",
+      "id": "ev-4",
+      "at": "2026-11-06T20:11:00Z",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000018",
+      "label": "Нужен ли обогрев В-2 зимой?",
+      "agent": "model:extractor",
+      "revision": 1
+    },
+    {
+      "type": "status",
+      "id": "ev-5",
+      "at": "2026-11-06T19:40:00Z",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+      "label": "Погрешность влажности В-2: ±2 %",
+      "agent": "model:checker",
+      "status": "needs_review"
+    },
+    {
+      "type": "link_retired",
+      "id": "ev-6",
+      "at": "2026-11-06T12:00:00Z",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+      "label": "Погрешность влажности В-2: ±2 %",
+      "agent": "model:linker",
+      "rel": "see_also",
+      "src": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+      "dst": "atm:0193b7c2-5e1a-7d40-9f2e-000000000014"
+    },
+    {
+      "type": "revision",
+      "id": "ev-7",
+      "at": "2026-11-04T17:02:00Z",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001e",
+      "label": "Проверить крепление мачты после ветра",
+      "agent": "person:anna",
+      "revision": 1
+    },
+    {
+      "type": "revision",
+      "id": "ev-8",
+      "at": "2026-11-04T08:30:00Z",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+      "label": "Погрешность влажности В-2: ±2 %",
+      "agent": "model:extractor",
+      "revision": 1
+    }
+  ]
+}
