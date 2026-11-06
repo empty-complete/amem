@@ -1,4 +1,4 @@
-"""Схема автопроверки: коды, перечни очереди, отчёт и шаблон decision в ядре 1.1.0."""
+"""Схема автопроверки: коды, перечни очереди, отчёт и шаблон decision в ядре 1.2.0."""
 import json
 
 import pytest
@@ -77,7 +77,7 @@ def test_issue_rejects_unknown_code_and_level():
 
 def test_core_pack_has_decision_template():
     pack = packs.load_pack(packs.CORE_PACK)
-    assert pack.version == "1.1.0"
+    assert pack.version == "1.2.0"
     decision = {t.code: t for t in pack.templates}["decision"]
     assert decision.applies_to == "decision"
     assert decision.high_risk == [model_v1.HighRiskRule.always]

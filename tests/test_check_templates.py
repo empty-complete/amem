@@ -13,7 +13,7 @@ from amem import db, packs
 from amem.check import templates
 
 CHECK = Path(__file__).with_name("packs") / "check"
-INTERFACES = ("has_label@1.0.0", "has_source@1.0.0", "has_value@1.0.0")
+INTERFACES = ("has_label@1.0.0", "has_source@1.1.0", "has_value@1.0.0")
 
 
 def _t(code, **extra):
@@ -139,16 +139,16 @@ def _prepare(pg, monkeypatch, *extra: Path) -> dict[str, dict]:
 
 def test_active_reads_bodies_of_active_versions(pg, monkeypatch):
     active = _prepare(pg, monkeypatch)
-    assert set(active) == {"has_label", "has_source", "has_value", "decision", "rule", "idea"}
+    assert set(active) == {"has_label", "has_source", "has_value", "decision", "note", "rule", "idea"}
     assert active["rule"]["version"] == "1.0.0" and active["rule"]["applies_to"] == "rule"
     monkeypatch.delenv("AMEM_PACKS")
     db.prepare(pg)
-    assert set(templates.active(pg)) == {"has_label", "has_source", "has_value", "decision"}
+    assert set(templates.active(pg)) == {"has_label", "has_source", "has_value", "decision", "note"}
 
 
 def test_rules_of_kind_with_own_template(pg, monkeypatch):
     rules = templates.rules_for(_prepare(pg, monkeypatch), "atom", "rule")
-    assert rules.templates == ("has_label@1.0.0", "has_source@1.0.0", "has_value@1.0.0", "rule@1.0.0")
+    assert rules.templates == ("has_label@1.0.0", "has_source@1.1.0", "has_value@1.0.0", "rule@1.0.0")
     assert rules.high_risk == frozenset({"numeric"})
     assert rules.allowed == frozenset({"refines", "see_also", "about"})
     assert rules.fields["content.values"]["severity"] == "violation"
