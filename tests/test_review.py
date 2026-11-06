@@ -110,8 +110,14 @@ def test_model_gets_only_semantic_and_not_its_own(kb, store, docs):
 
 def test_person_author_gets_own_semantic(kb, store, docs):
     own = send(kb, store, docs, wind(), agent=PERSON)
+    assert own.queued == []                           # запись человека в очередь не ставится (спецификация 3c, разд. 5)
+    rec = own.records[0]
+    with kb.transaction():                              # пункт на ревизию человека — как поставил бы его submit до 3c
+        item = review.insert_item(kb, "atom", rec["record_id"], rec["revision_id"], "semantic",
+                                  changeset_id=own.changeset_id, details={}, agent=PERSON,
+                                  at=datetime.now(timezone.utc))
     [got] = review.claim(kb, agent=PERSON)              # исключение автора — только для модели (разд. 8.2)
-    assert got["id"] == queued(own, "semantic") and got["author"] == PERSON
+    assert got["id"] == item["id"] and got["author"] == PERSON
 
 
 def test_claim_rejects_unknown_reasons(kb, store, docs):
@@ -320,10 +326,11 @@ def test_edit_refuted_is_declined(kb, store, docs):
                       (rec["record_id"],)).fetchone()[0] == rec["revision_id"]
 
 
-def test_person_may_confirm_own_edit(kb, store, docs):
+def test_person_edit_of_verified_needs_no_confirmation(kb, store, docs):
+    """Правка человеком проверенной записи (спецификация 3c, разд. 5): сразу текущая, пункта edit нет."""
     rec, result = edited(kb, store, docs, agent=PERSON)
-    out = review.resolve(kb, queued(result, "edit"), "confirmed", agent=PERSON)
-    assert out["status"] == "verified"
+    assert result.queued == [] and result.records[0]["review_state"] == "none"
+    assert status(kb, rec["record_id"]) == "verified"
     assert kb.execute("SELECT id FROM atom_current WHERE atom_id = %s",
                       (rec["record_id"],)).fetchone()[0] == result.records[0]["revision_id"]
 

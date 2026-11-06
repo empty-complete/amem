@@ -65,3 +65,30 @@ def test_parameters_merge_by_property(pg, monkeypatch):
     assert rules.parameter_origins["temperature"] == "sensor@1.0.0"
     assert rules.parameter_origins["mass"] == "device@1.0.0"
     assert templates.rules_for(active, "entity", "document").parameters == ()
+
+
+def _with_properties(tmp_path, parameters):
+    """Пакет со своими величинами: abs_temperature в K и ratio без единицы."""
+    root = _with_template(tmp_path, _entity_template(parameters=parameters))
+    (root / "vocab").mkdir()
+    (root / "vocab" / "property.yaml").write_text(yaml.safe_dump({"scheme": "property", "concepts": [
+        {"code": "abs_temperature", "label": {"ru": "абсолютная температура", "en": "absolute temperature"},
+         "definition": {"ru": "Температура по шкале Кельвина."}, "unit": "K"},
+        {"code": "ratio", "label": {"ru": "доля", "en": "ratio"}, "definition": {"ru": "Доля без единицы в словаре."}},
+    ]}, allow_unicode=True), encoding="utf-8")
+    return root
+
+
+def test_default_in_cel_for_kelvin_property_is_accepted(tmp_path):
+    root = _with_properties(tmp_path, [{"property": "abs_temperature", "default": {"amount": 20, "unit": "Cel"}}])
+    loaded = packs.load_packs([packs.CORE_PACK, QUANTITIES, root])
+    [t] = loaded[-1].templates
+    assert t.parameters[0].default.unit == "Cel"
+
+
+def test_default_of_property_without_unit_is_checked_only_for_ucum(tmp_path):
+    ok = _with_properties(tmp_path / "ok", [{"property": "ratio", "default": {"amount": 0.5, "unit": "1"}}])
+    assert packs.load_packs([packs.CORE_PACK, QUANTITIES, ok])[-1].templates[0].parameters[0].default.amount == 0.5
+    bad = _with_properties(tmp_path / "bad", [{"property": "ratio", "default": {"amount": 1, "unit": "kilos"}}])
+    with pytest.raises(packs.PackError, match="default.unit kilos — не код UCUM"):
+        packs.load_packs([packs.CORE_PACK, QUANTITIES, bad])
