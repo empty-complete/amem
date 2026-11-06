@@ -6,6 +6,7 @@ import pytest
 
 from amem import db, lookup, objects, records
 from amem.ids import uuid7
+from amem.ocfl_store import ObjectStore, StoreError
 from amem.records import Item
 
 AGENT = "person:alice"
@@ -157,3 +158,78 @@ def test_adopt_without_files_then_ingest_works(pg, store, docs, tmp_path):
     _, digest = _file(tmp_path, "a.txt", b"remote")
     objects.adopt(pg, store, _record(uuid7(), (1, digest, 6)), files={}, agent=AGENT)
     assert objects.ingest(pg, store, docs, "Заметки/узел.md", agent=AGENT).created
+
+
+def test_keep_ids_same_new_id_twice_is_error(pg):
+    db.prepare(pg)
+    rid = uuid7()
+    with pytest.raises(records.RecordError, match="два раза"):
+        records.commit(pg, [Item("atom", note(), record_id=rid), Item("atom", note("Другой."), record_id=rid)],
+                       agent=AGENT, keep_ids=True)
+    assert pg.execute("SELECT count(*) FROM atom").fetchone()[0] == 0
+
+
+def test_adopt_retry_after_failed_copy(pg, store, tmp_path, monkeypatch):
+    """Сбой копии второй версии: строки базы откатываются, копия первой остаётся в хранилище. Повтор сверяет её
+    заново: то же содержимое принимается, иное (другая подборка) заменяет копию, файл не по digest — отказ."""
+    db.prepare(pg)
+    oid = uuid7()
+    file1, d1 = _file(tmp_path, "v1.txt", b"one")
+    file2, d2 = _file(tmp_path, "v2.txt", b"two!")
+    record = _record(oid, (1, d1, 3), (2, d2, 4))
+    original = ObjectStore.add_version
+
+    def failing(self, object_id, n, *args, **kwargs):
+        if n == 2:
+            raise OSError("диск переполнен")
+        return original(self, object_id, n, *args, **kwargs)
+
+    monkeypatch.setattr(ObjectStore, "add_version", failing)
+    with pytest.raises(OSError):
+        objects.adopt(pg, store, record, files={d1: file1, d2: file2}, agent=AGENT)
+    monkeypatch.undo()
+    assert lookup.get_object(pg, oid) is None and store.head(oid) == 1
+    bad = tmp_path / "bad.txt"
+    bad.write_bytes(b"not one")                                   # файл не соответствует digest версии 1
+    other, d_other = _file(tmp_path, "other.txt", "другое".encode())
+    with pytest.raises(StoreError):
+        objects.adopt(pg, store, _record(oid, (1, d_other, len("другое".encode()))), files={d_other: bad},
+                      agent=AGENT)
+    assert lookup.get_object(pg, oid) is None
+    assert objects.adopt(pg, store, _record(oid, (1, d_other, 12)), files={d_other: other}, agent=AGENT) == []
+    assert store.content(oid, 1).read_bytes() == "другое".encode()     # копия прошлой попытки откачена
+    oid2 = uuid7()
+    monkeypatch.setattr(ObjectStore, "add_version", failing)
+    record2 = {**_record(oid2, (1, d1, 3), (2, d2, 4)), "logical_paths": []}
+    with pytest.raises(OSError):
+        objects.adopt(pg, store, record2, files={d1: file1, d2: file2}, agent=AGENT)
+    monkeypatch.undo()
+    assert objects.adopt(pg, store, record2, files={d1: file1, d2: file2}, agent=AGENT) == []
+    assert store.head(oid2) == 2 and store.content(oid2, 1).read_bytes() == b"one"
+
+
+def test_adopt_checks_paths_numbers_and_id(pg, store, tmp_path):
+    db.prepare(pg)
+    _, digest = _file(tmp_path, "a.txt", b"a")
+    for path in ("/etc/a.txt", "../a.txt", "notes/../../a.txt"):
+        with pytest.raises(objects.ObjectError, match="путь|«..»"):
+            objects.adopt(pg, store, {**_record(uuid7(), (1, digest, 1)), "logical_paths": [path]}, files={},
+                          agent=AGENT)
+    for n in ("1", None, 0, True):
+        with pytest.raises(objects.ObjectError, match="номер версии"):
+            objects.adopt(pg, store, _record(uuid7(), (n, digest, 1)), files={}, agent=AGENT)
+    with pytest.raises(objects.ObjectError, match="UUID"):
+        objects.adopt(pg, store, _record("не-uuid", (1, digest, 1)), files={}, agent=AGENT)
+    assert pg.execute("SELECT count(*) FROM object").fetchone()[0] == 0
+
+
+def test_adopt_warns_about_other_metadata(pg, store, tmp_path):
+    db.prepare(pg)
+    oid = uuid7()
+    _, digest = _file(tmp_path, "a.txt", b"a")
+    record = _record(oid, (1, digest, 1))
+    objects.adopt(pg, store, record, files={}, agent=AGENT)
+    warnings = objects.adopt(pg, store, {**record, "original_name": "renamed.txt", "media_type": "text/markdown"},
+                             files={}, agent=AGENT)
+    assert len(warnings) == 2 and "original_name" in warnings[0] and "media_type" in warnings[1]
+    assert lookup.get_object(pg, oid)["original_name"] == "hello.txt"
