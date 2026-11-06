@@ -1,214 +1,261 @@
 # amem — подпроект 4: служба, CLI и память агентов
 
-Редакция 1 (07.11.2026).
+Редакция 1 (07.11.2026), с правками по ревью спецификации:
+- доверие локальной службе (Host, Origin, cookie человека);
+- задача (`activity`) для отметки пользы;
+- таблица соответствия контракту;
+- правки библиотеки вынесены в часть 4.0;
+- хук `Stop` отложен;
+- хук не пишет запросы пользователя;
+- безопасность раздачи файлов и загрузок.
 
-Продолжение спецификации ядра (подпроект 4 «Сервер и память агентов»), библиотечных подпроектов 2–3c и спецификации веб-интерфейса `2026-11-06-amem-subproject-5-web-ui-design.md`. Веб-интерфейс уже описал HTTP-контракт `docs/api/http-v1.openapi.yaml`: служба реализует его как есть, а всё, что решит иначе, меняет правкой этого файла.
+Продолжение спецификации ядра (подпроект 4 «Сервер и память агентов»), библиотечных подпроектов 2–3c и спецификации веб-интерфейса `2026-11-06-amem-subproject-5-web-ui-design.md`. Веб-интерфейс уже описал HTTP-контракт `docs/api/http-v1.openapi.yaml`: служба реализует его, а где решает иначе — меняет файл контракта своим PR по согласию с вебом.
 
 Учтены практики:
 - **claude-mem:** хуки на события сессии, поиск в три шага, метка `<private>`, один установщик для разных агентов;
-- **Graphify:**
-  - установщик по матрице платформ с `--project` и чистым `uninstall`;
-  - хук «сначала спроси память»;
-  - честная неоднозначность с машиночитаемыми исходами;
-  - журнал запросов;
-  - «ничего не уходит наружу без явной настройки».
+- **Graphify:** установщик по матрице платформ с `--project` и чистым `uninstall`, хук «сначала спроси память», честная неоднозначность, журнал запросов, «ничего не уходит наружу без явной настройки».
 
 ## Цель
 
 amem становится программой, которой пользуются, а не только библиотекой. Агенты пишут и читают память через MCP и хуки, человек — через CLI и веб-интерфейс.
 
 Готово, когда:
-- служба и CLI ставятся одной командой;
-- работают с Claude Code и Codex CLI;
+- служба и CLI ставятся одной командой (`pipx install amem`);
+- они работают с Claude Code и Codex CLI;
 - веб-интерфейс подключается к настоящей службе вместо моков.
 
-Состав:
+Состав — четыре части, у каждой своя ветка от `main` и свой PR с автослиянием после зелёной проверки `test`:
+- **4.0 — библиотека для службы:**
+  - папки (миграция 0008);
+  - задача сессии для отметки пользы;
+  - список записей и подписи;
+  - ссылки по ключу;
+  - фильтры и `limit` у рецептов;
+  - коды ошибок очереди;
+  - семья вида;
+  - имя базы.
 - **4a — служба и HTTP:**
-  - настройки;
-  - пул соединений;
-  - сессия, вход и права;
-  - ошибки `problem+json`;
+  - настройки и пул соединений;
+  - сессия, вход и защита;
+  - `problem+json`;
   - все пути контракта v1;
-  - `/ui` из `amem_web`;
-  - папки;
-  - тест сверки ответов с контрактом.
-- **4b — CLI и MCP:**
-  - команды CLI с кодами выхода;
-  - инструменты MCP и поиск в три шага;
-  - отметка полезного;
-  - `<private>`;
-  - журнал запросов.
+  - `/ui`;
+  - тест сверки с контрактом.
+- **4b — CLI и MCP:** команды с кодами выхода, инструменты MCP с поиском в три шага, отметка пользы, `<private>`, журнал запросов.
 - **4c — память агентов:**
   - хуки Claude Code;
-  - установщик по матрице: Claude Code и Codex CLI, `--project`, `uninstall`;
-  - навыки ядра, в том числе смысловой проверяющий (уровень 5);
-  - профиль compose;
+  - установщик по матрице (Claude Code и Codex CLI, `--project`, `uninstall`);
+  - навыки ядра, в том числе смысловой проверяющий;
+  - образ и профиль compose;
   - документация.
 
-Каждая часть — своя ветка от `main` и свой PR с автослиянием после зелёной проверки `test`.
-
 Не входит:
-- установщик с PostgreSQL внутри для Windows и macOS — отдельная задача поставки;
+- установщик с PostgreSQL внутри для Windows и macOS (отдельная задача поставки);
 - облачный режим;
-- связь с ssearch — подпроект 6.
+- связь с ssearch (подпроект 6);
+- задачи из спецификации веба без данных в библиотеке: `visibility: hidden`, папки объектов-источников, конструктор видов (запись пакета «Мои виды»), загрузка файла-источника через веб, настройки UI через MCP. Их делает тот подпроект, который введёт нужные данные;
+- хук конца сессии (`Stop`). По протоколу Claude Code вывод хука `Stop` модель не видит, а ответ «продолжай» добавляет лишний ход каждой задаче. Напоминание записать выводы и отметить помогшее даётся в начале сессии и в навыках.
 
 ## Решения
 
 | Вопрос | Решение |
 |---|---|
-| HTTP | Starlette + uvicorn. Контракт OpenAPI пишется руками и считается источником истины, служба отдаёт сам файл по `/api/v1/openapi.json`. FastAPI построил бы свою схему, которая разошлась бы с файлом |
-| MCP | Официальный Python SDK `mcp`. Транспорты: stdio (агент запускает `amem mcp`) и streamable HTTP внутри службы (`/mcp`) |
-| Библиотека в службе | Функции библиотеки синхронные: обработчики работают в пуле потоков Starlette, у каждого запроса своё соединение из `psycopg_pool` (autocommit) |
-| Порт | `127.0.0.1:8767` по умолчанию (8765 занят сервером v0). Наружу служба слушает, только если адрес задан явно |
-| Вход | Локальная служба без входа: агент — `person:` из настроек, `can_write: true`. Общая служба: файл токенов `token → агент, права`, `Authorization: Bearer`. Агент записи всегда берётся из сессии, клиент его не передаёт |
-| Папки | Метаданные записи, как статус, а не ревизия: столбец `folder` у `atom` и `entity`, журнал `folder_log`, реестр `folder` для пустых папок. `content_hash` перенос не меняет |
-| CLI | `amem` на `argparse`, без лишних зависимостей. Вывод для человека или `--json`; коды выхода закреплены (разд. 5.1) |
-| Поиск в три шага | `amem_search` даёт короткий список с id; `amem_timeline` — что вокруг находки (история и связи); `amem_get` — полные записи по выбранным id |
-| `<private>` | Текст между `<private>` и `</private>` вырезается до поиска, журнала и записи, на любом входе: MCP, HTTP, CLI, хуки |
-| Журнал запросов | Локальный JSONL без ответов; отключается `AMEM_QUERY_LOG=off` |
-| Агенты | Claude Code (MCP, хуки, навыки) и Codex CLI (MCP, блок в `AGENTS.md`, навыки как инструкции). Обе платформы ставятся глобально или в проект (`--project`); `uninstall` убирает только своё |
-| Хук «сначала amem» | На каждый запрос пользователя — поиск по тексту запроса с бюджетом 1,5 с. При превышении бюджета или любой ошибке хук молча пропускает (fails open) и никогда не блокирует агента |
+| HTTP | Starlette + uvicorn. Контракт OpenAPI — источник истины, его копия лежит в пакете (`amem/service/http-v1.openapi.yaml`, тест сверяет её с `docs/api/`), служба отдаёт её по `/api/v1/openapi.json`. FastAPI построил бы свою схему, которая разошлась бы с файлом |
+| MCP | Официальный Python SDK `mcp`. Транспорты: stdio (агент запускает `amem mcp`) и streamable HTTP в службе (`/mcp`) |
+| Операции | `amem/api.py` — операции в форме ответов контракта, без Starlette. Их зовут HTTP, MCP и CLI, поэтому три входа не расходятся. `amem/service/` — тонкий слой: маршруты, сессия, ошибки |
+| Синхронная библиотека в асинхронной службе | Обработчики Starlette синхронные (пул потоков), соединение — из `psycopg_pool` (autocommit) на запрос. Инструменты MCP зовут операции через `anyio.to_thread` с соединением из того же пула; stdio-сервер держит маленький пул (1–2) с переподключением после `OperationalError` |
+| Порт | `127.0.0.1:8767` по умолчанию. Наружу — только явным `--host` |
+| Человек и модель | Человеком (`person:`) служба считает только браузер со своей cookie сессии, токен `person:` и CLI в обычном терминале. Остальные клиенты — модель (`model:…`): их записи идут через проверку |
+| Папки | Метаданные записи, как статус, а не ревизия: столбец `folder`, журнал `folder_log`, реестр `folder` для пустых папок |
+| Отметка пользы | Задача (`activity`) вида `session` на сессию MCP. Выдача и отметка пользы — в одной задаче |
+| `<private>` | Вырезается до поиска, журнала и записи на любом входе |
+| Журнал запросов | Локальный JSONL явных поисков (MCP, CLI, HTTP); отключается `AMEM_QUERY_LOG=off`. Запросы хука в журнал и в базу не пишутся |
+| Хук «сначала amem» | На запрос пользователя — лексический поиск напрямую в базе (без векторов и без записи выдачи) с бюджетом 1,5 с; при превышении бюджета или любой ошибке хук молча пропускает (fails open) |
+| Агенты | Claude Code (MCP, хуки, навыки) и Codex CLI (MCP, блок в `AGENTS.md`, навыки) — глобально или в проект; `uninstall` убирает только своё |
 
-## 1. Устройство
+## 1. Часть 4.0 — библиотека для службы
 
-| Модуль | Что делает |
+Всё, чего не хватает библиотеке, чтобы служба оставалась тонкой. Один PR, тесты на обеих версиях PostgreSQL.
+
+### 1.1. Папки
+
+**Путь.** Сегменты через `/`. Каждый сегмент:
+- непустой после обрезки пробелов;
+- без `/`, без управляющих символов, не `.` и не `..`;
+- в NFC, не длиннее 100 знаков.
+
+Глубина — до 8 сегментов. Регистр сохраняется, сравнение — как есть. Путь `-` запрещён: в контракте он означает «без папки». У записи одна папка или ни одной (`NULL`).
+
+**Миграция 0008:**
+- `atom.folder` и `entity.folder` — `text NULL` с CHECK длины и запрета пустого;
+- `folder (path PRIMARY KEY, created_at, created_by)` — реестр, в нём живут пустые папки;
+- `folder_log (id, target, record_id, folder_from, folder_to, agent, changed_at)` — журнал переносов, неизменяемый, как `status_log`;
+- индекс по `folder`.
+
+**Модуль `amem/folders.py`:**
+- `check(path) -> str` — нормализованный путь или `FolderError`;
+- `move(conn, ref, folder, *, agent)` — под блокировкой записи меняет столбец, пишет `folder_log`, добавляет путь и его родителей в реестр. Ревизии нет, `content_hash` прежний. Переносить вправе и модель: это порядок, а не утверждение о мире;
+- `create(conn, path, *, agent)` — папка в реестре. Если она уже есть — `FolderError` с кодом `exists`;
+- `delete(conn, path)` — удаляет только пустую папку без вложенных и без записей, иначе `FolderError` с кодом `not_empty`;
+- `rename(conn, path, new_path, *, agent)` — переносит папку с вложенными и записями, по строке `folder_log` на запись. Занятый новый путь — `exists`;
+- `tree(conn)` — реестр вместе с путями записей. `count` считается по вложенности: запись в `a/b` учтена и в `a`. Ответ: `folders` с `children`, `unfiled`, `total`.
+
+Префикс в SQL проверяется как `folder = %s OR starts_with(folder, %s || '/')`, без `LIKE`. Четыре папки — «Проекты», «Области», «Ресурсы», «Архив» — создаёт `db.prepare` в той же транзакции, где у базы впервые появляется `base_id`. В уже существующей базе миграция их не добавляет. `recipes.what_changed` получает события `folder` (`from`, `to`). Подборки папку не переносят: это порядок одной базы.
+
+### 1.2. Прочее
+
+| Что | Где |
 |---|---|
-| `amem/settings.py` | Настройки из окружения и `amem.toml`: DSN, папки данных и документов, адрес, агент, токены, журнал |
-| `amem/folders.py` | Папки: проверка пути, реестр, перенос, дерево со счётчиками |
-| `amem/private.py` | Вырезание `<private>…</private>` |
-| `amem/service/app.py` | Приложение Starlette: маршруты `/api/v1`, `/mcp`, `/ui`, `/health` |
-| `amem/service/session.py` | Сессия: вход, агент, права |
-| `amem/service/problems.py` | Перевод исключений библиотеки в `problem+json` |
-| `amem/service/http_v1.py` | Обработчики путей контракта |
-| `amem/service/views.py` | Сборка ответов контракта из выдачи библиотеки (подписи записей, `RecordView`, `GraphNode.family` и т. п.) |
-| `amem/service/mcp.py` | Инструменты MCP поверх тех же функций, что HTTP |
-| `amem/cli/` | Команды CLI |
-| `amem/agents/` | Хуки, установщик, матрица платформ, навыки |
-| `amem/journal.py` | Журнал запросов |
-| `amem/sql/0008_service.sql` | Папки: столбцы, `folder_log`, реестр `folder` |
-
-HTTP, MCP и CLI зовут одни и те же функции: в `views.py` и в функции нового модуля `amem/api.py`, где для каждой операции собраны вызов библиотеки и подписи записей. Так три входа не расходятся.
+| `records.resolve(conn, ref) -> (target, uuid)` — `atm:`/`ent:` с UUID или ключом; нет такой записи — `RecordNotFound(RecordError)` | `records.py`. `lookup.get`, `what_changed`, `around_entity`, `similar` и `profile.card` принимают ссылку по ключу через неё |
+| `lookup.list_records(conn, *, folder, kinds, statuses, tag, about, limit, cursor)` — сводки записей (подпись, вид или класс, статус, папка, `about`, теги, время и агент текущей ревизии), курсор по `(recorded_at, id)` и `total` | `lookup.py` |
+| `lookup.labels(conn, refs) -> {ref: {label, kind | entity_class, status}}` одним запросом | `lookup.py` |
+| `lookup.object_view(conn, object_id)` — объект, версии, отметка строкой (`status`), `cited_by` (источники текущих ревизий), `pages` (число страниц из кэша текста или `null`), `sheets` (листы xlsx/xlsm или `null`) | `lookup.py`, по договорённости с вебом |
+| `objects.sheet(conn, store, object_id, n, name, cell_range)` — ячейки листа xlsx в нотации A1, до 10 000 ячеек (иначе `ObjectError` с кодом `too_large`) | `objects.py` / `extract.py` |
+| Фильтры поиска `kind` и `entity_class` принимают несколько значений | `search.py`, `recipes.py` |
+| `log: bool = True` у `exact_fact` и `similar`. При `False` выдача не пишется в `retrieval`, `retrieval_id` равен `null` | `recipes.py` |
+| `what_changed(…, limit, who)` — `who`: `person`, `model` или `all`; у событий ревизий и связей — `agent` | `recipes.py` |
+| `usefulness.session_activity(conn, label) -> uuid` — задача вида `session` с меткой (например `mcp:<id процесса и время>`); та же метка — та же задача | `usefulness.py` |
+| `ReviewError.code`: `closed` (с `by` и `at`), `forbidden`, `bad_outcome`, `stale`, `claimed` | `review.py` |
+| `Concept.family` (`source` / `work`) у понятий вида; ядро 1.3.0 размечает свои виды: `source` — fact, parameter, term, requirement; `work` — decision, lesson, method, question, note. Вид без `family` считается `work`. Доменные пакеты размечают свои виды (`norm`, `formula` — `source`) | схема, `model_v1`, ядро |
+| Имя базы: ключ `base_name` в `meta`, `db.set_base_name(conn, name)` | `db.py` |
+| `backup.backups` отдаёт `created_at` и размер из манифеста | `backup.py` |
 
 ## 2. Настройки и запуск
 
-Порядок источников: явный аргумент → переменная окружения → `amem.toml`. Файл ищется в `$AMEM_CONFIG`, затем в `~/.config/amem/amem.toml`.
+Порядок источников: явный аргумент → окружение → `amem.toml` (`$AMEM_CONFIG`, затем `~/.config/amem/amem.toml`).
 
 | Настройка | Окружение | По умолчанию |
 |---|---|---|
 | База | `AMEM_DSN` | — (обязательна) |
 | Хранилище копий | `AMEM_DATA` | `~/.local/share/amem/objects` |
-| Папка документов | `AMEM_DOCS` | — (без неё пути источников не разбираются, запись источников с `path` отклоняется понятной ошибкой) |
+| Папка документов | `AMEM_DOCS` | — без неё источник с `path` получает замечание `source_unresolved` («папка документов не настроена») |
+| Состояние службы (загрузки, подборки, журнал) | `AMEM_STATE` | `~/.local/state/amem` |
+| Каталог бэкапов | `AMEM_BACKUPS` | `AMEM_STATE/backups` |
 | Адрес службы | `AMEM_HOST`, `AMEM_PORT` | `127.0.0.1`, `8767` |
-| Агент локальной службы | `AMEM_AGENT` | `person:` + имя пользователя ОС, приведённое к шаблону агента |
-| Токены общей службы | `AMEM_TOKENS` | — (файл; если задан, вход обязателен) |
-| Журнал запросов | `AMEM_QUERY_LOG` | `~/.local/state/amem/queries.jsonl`; `off` — выключен |
-| Провайдер векторов | `AMEM_BACKEND` | как в подпроекте 2 |
+| Человек локальной службы | `AMEM_AGENT` | `person:` + имя пользователя ОС, приведённое к шаблону агента |
+| Модель для клиентов без cookie и токена | `AMEM_MODEL_AGENT` | `model:local` |
+| Токены общей службы | `AMEM_TOKENS` | — файл; если задан, без токена — 401 |
+| Журнал запросов | `AMEM_QUERY_LOG` | `AMEM_STATE/queries.jsonl`; `off` — выключен |
 
-`amem init` подготавливает базу (`db.prepare`) и хранилище. `amem serve` запускает службу. Если `AMEM_DSN` не задан, а Docker есть, `amem init --docker` поднимает контейнер `pgvector/pgvector:pg18` с томом и пишет DSN в `amem.toml`; это объявляется в выводе.
+`amem init` подготавливает базу (`db.prepare`) и хранилище. `amem serve` запускает службу. Готовый PostgreSQL с pgvector пользователь поднимает сам или через `docker compose` из репозитория. Своя установка PostgreSQL в amem не входит.
 
 ## 3. Служба и HTTP v1
 
-### 3.1. Сессия, вход и права
+### 3.1. Кто пишет: сессия и защита
 
-- **Без `AMEM_TOKENS`.** Каждый запрос получает агента `AMEM_AGENT` и `can_write: true`. Служба слушает `127.0.0.1`. Чтобы открыть её наружу без токенов, нужен явный `--host` и флаг `--no-auth`; служба предупреждает об этом при запуске.
-- **С `AMEM_TOKENS`.** Файл `amem-tokens.toml` хранит строки `[[token]] hash = "sha256:…", agent = "person:anna", write = true`. В файле лежат только хэши токенов. Без токена — 401, с токеном только для чтения — запись даёт 403.
-- **`GET /session`** отвечает: агент, `base`, `base_name` (имя из `meta`, если задано), `amem_version`, `semantic` (есть ли активная модель и провайдер), `can_write`.
-- **CORS** выключен: интерфейс раздаёт сама служба. Разрешённые источники можно перечислить в `AMEM_CORS`.
+**Защита запросов** — для каждого запроса, в любом режиме:
+- `Host` — один из разрешённых: `127.0.0.1`, `localhost`, `[::1]` и адрес из `--host`. Чужой `Host` (DNS rebinding) — 421;
+- `Origin`, если пришёл, — тот же источник, что и служба. Чужой — 403;
+- запись (`POST`, `PATCH`, `DELETE`) принимает только `application/json`. Исключение — `/bundles/inspect` (multipart), для него `Origin` обязателен;
+- у `/mcp` — те же проверки через `TransportSecuritySettings` SDK.
 
-Права, которые проверяет служба, — кто может писать. Кто что решает в очереди, проверяет библиотека: человек решает всё, модель — только `semantic`.
+**Локальная служба** (без `AMEM_TOKENS`):
+- **Браузер.** Открывая `/ui`, интерфейс получает cookie `amem_session`: `HttpOnly`, `SameSite=Strict`, `Path=/`, случайная на каждый запуск службы. Запрос с ней — человек `AMEM_AGENT`, `can_write: true`.
+- **Прочие клиенты** — запрос без cookie (`curl`, скрипт, агент). Это модель `AMEM_MODEL_AGENT`, `can_write: true`: всё записанное идёт через проверку.
+- **`/mcp`** — всегда модель. Агента задаёт заголовок `X-Amem-Agent: model:<имя>`, который пишет установщик; иначе `AMEM_MODEL_AGENT`. Значение не `model:` отвергается.
+
+**Общая служба** (`AMEM_TOKENS`):
+- файл `amem-tokens.toml` с правами 0600 хранит строки `[[token]] hash = "sha256:…", agent = "person:anna" | "model:…", write = true`;
+- токен — 32 случайных байта, его выдаёт `amem token create --agent … [--read-only]` и показывает один раз;
+- без токена — 401; токен без права записи — 403 на запись; cookie браузера в этом режиме не выдаётся.
+
+**`GET /session`** отвечает: агент, `base`, `base_name`, `amem_version`, `semantic` (есть ли активная модель и провайдер), `can_write`.
+
+**Остаточный риск.** Процесс под учётной записью пользователя (в том числе агент с доступом к shell) видит DSN базы и может писать в неё напрямую. Служба этого не меняет. CLI помечает такие записи моделью, если узнаёт окружение агента (разд. 5).
+
+Права решения в очереди проверяет библиотека: человек решает всё, модель — только `semantic`.
 
 ### 3.2. Ошибки
 
-Исключение библиотеки переводится в `application/problem+json`. `code` — машинный код; у отказа проверки есть ещё `issues`.
+Исключение переводится в `application/problem+json`. Обработчики идут от частного к общему: все исключения библиотеки — наследники `ValueError`.
 
 | Исключение | Статус | `code` |
 |---|---|---|
-| `check.Submitted` со `state = rejected` | 422 | `check_rejected`, `issues` из отчёта |
-| `CheckError`, `RecordError`, `ObjectError`, `ValueError` разбора запроса | 400 | `bad_request` |
-| Запись не найдена (`lookup.get` → None, `LookupError`) | 404 | `not_found` |
-| `ReviewError` «пункт закрыт» | 409 | `review_closed`, в `detail` — кто и когда решил |
-| Прочие `ReviewError` (права, аренда, исход) | 403 или 400 | `review_forbidden` / `review_bad` |
+| `Submitted.state == "rejected"` | 422 | `check_rejected`; `issues` — замечания в форме `CheckIssue` |
+| `RecordNotFound`, объекта нет, пункта нет | 404 | `not_found` |
+| `ReviewError(code=closed)` | 409 | `review_closed`; в `detail` — кто и когда решил |
+| `ReviewError(code=forbidden \| claimed)` | 403 | `review_forbidden` |
+| `ReviewError(code=stale \| bad_outcome)` | 400 | `review_bad` |
+| `FolderError(exists \| not_empty)` | 409 | `folder_exists` / `folder_not_empty` |
+| `FolderError` прочее | 422 | `folder_invalid` |
 | `BundleError` | 422 | `code` ошибки (`bundle_pack_missing`, …) |
+| `ObjectError(code=too_large)` | 413 | `too_large` |
+| `CheckError`, `RecordError`, `ObjectError`, ошибка разбора запроса | 400 | `bad_request` |
 | Нет входа / только чтение | 401 / 403 | `auth_required` / `read_only` |
+| Чужой `Host` / `Origin` | 421 / 403 | `bad_host` / `bad_origin` |
+| Запись не в `application/json` | 415 | `unsupported_media_type` |
 | База недоступна (`psycopg.OperationalError`) | 503 | `db_unavailable` |
 | Прочее | 500 | `internal`; подробности — в журнал службы, не в ответ |
 
-### 3.3. Пути
+### 3.3. Соответствие контракту
 
-Пути и ответы — по `docs/api/http-v1.openapi.yaml`. Служба берёт выдачу библиотеки и добавляет поля, нужные экрану:
-- подписи записей `RefLabel` — одним запросом на ответ, по списку ссылок;
-- имена и виды объектов у источников;
-- `GraphNode.family`: `source` для видов «из источников» (fact, parameter, term, requirement), `work` для остальных видов атомов, `object` для сущностей. Соответствие видов семьям хранится в пакете (поле понятия вида `family`), ядро задаёт его своим видам;
-- `RecordView.open_items` и `usefulness`;
-- у `ReviewItemView`: для `edit` и `imported` — текущая и предложенная ревизии, для `source_changed` — версии объекта.
+Служба берёт выдачу библиотеки и подгоняет её под контракт. Где выдача библиотеки естественнее, правится контракт — это делает PR части 4a по согласию с вебом.
 
-Особые случаи:
-- **`/objects/{id}/versions/{n}/content`** — файл копии из хранилища с `Content-Type` по `media_type` и поддержкой `Range` (206).
-- **`/bundles/export`** пишет подборку во временную папку службы (`AMEM_DATA/../bundles`, срок хранения 24 ч) и отвечает id и ссылкой на скачивание. `anthology: true` зовёт `amem.anthology` (часть F веба). Пока модуля нет — 501 `not_implemented`.
-- **`/bundles/inspect`** принимает zip (multipart, предел 4 ГиБ, как в `bundle.MAX_UNPACKED`), сохраняет его как загрузку с id и отвечает отчётом `inspect`.
-- **`/bundles/import`** — `bundle.import_` по `upload_id`. По умолчанию `dry_run: true`, как в контракте.
-- **`/submit`** — `check.submit` от агента сессии со `store` и `docs` из настроек.
+| Схема контракта | Откуда | Правка контракта |
+|---|---|---|
+| `Session` | разд. 3.1 | — |
+| `SearchHit` | выдача `exact_fact` и `similar` + `kind`, `entity_class`, `about` из `lookup.labels` и текущей ревизии | `matches[].source_rank` может быть `null` (у каналов кода ранга нет) |
+| `RecordSummary`, `RecordList` | `lookup.list_records` | фильтр `about` у `GET /records` |
+| `FolderTree`, `Folder` | `folders.tree` | пути `POST /folders`, `DELETE /folders/{path}`, `PATCH /folders/{path}` (по договорённости с вебом) |
+| `RecordView`, `SourceView` | `lookup.get`, `revisions_sources`, объекты, `review.items`, `usefulness.score` | `SourceView.verdict` может быть `null` (источник не сверялся) |
+| `LinkView` | `lookup.links` + `lookup.labels` | — |
+| `ChangeEvent`, `ChangesResult` | `what_changed` + `lookup.labels` | `changes` — массив (как в библиотеке); тип `folder` с `from`/`to` |
+| `Card`, `CardField` | `profile.card`; `ancestors` — служба сворачивает карточки предков в `RefLabel` | — |
+| `GraphResult`, `GraphNode` | `around_entity` + `lookup.labels` + `family` вида; служба режет выдачу до 500 узлов и ставит `truncated` | — |
+| `ObjectView`, `ObjectVersionView` | `lookup.object_view` (поля `cited_by`, `pages`, `sheets`, `status` — по договорённости с вебом, его PR) | `original_name` может отсутствовать (страница сайта); `digest` и `size` — `null` у сайта и переписки |
+| `ReviewItem`, `ReviewItemView` | `review.items` + `lookup.labels`; у `edit` и `imported` — текущая и предложенная ревизии (`lookup.history`), у `source_changed` — версии из `details` | — |
+| `ReviewStats` | `review.stats` | — |
+| `Submitted` | `check.submit`. Тело запроса: `proposals: [{target, payload, record_id?}]`; поле агента в теле не принимается | — |
+| `CheckIssue` | служба превращает `where` («`@a: sources[0].quote`») в `ref` (`@a`) и `path` (`sources[0].quote`) | — |
+| `VocabEntry` | `concept` по схеме: код, подписи `ru`/`en`, определение, `family` | — |
+| `Base` | `meta` (`base_id`, `base_name`), `pack`, счётчики записей и открытых пунктов | — |
+| `Backup` | `backup.backups`: имя, время, размер; пути наружу не отдаются | — |
+| `Selection`, `Imported` | `bundle.Selection`, `bundle.import_` | `Imported.warnings` и `collisions` — массивы строк (как в библиотеке) |
 
-Тест сверки ответов: для каждого пути контракта есть тест, ответ которого проверяется по схеме ответа из файла контракта (jsonschema, OpenAPI 3.1 = JSON Schema 2020-12). Отдельный тест проверяет, что каждый путь контракта реализован, а служба не отвечает на пути, которых в контракте нет.
+Тест сверки:
+- ответ каждого пути контракта проверяется по схеме ответа из файла контракта (jsonschema, OpenAPI 3.1 = JSON Schema 2020-12);
+- отдельный тест проверяет, что все пути контракта реализованы и что служба не отвечает на пути вне контракта. Исключения — `/api/v1/openapi.json`, `/health`, `/mcp`, `/ui`.
 
-### 3.4. `/ui`
+### 3.4. Файлы, загрузки и `/ui`
 
-Если установлен пакет `amem_web`, служба монтирует `amem_web.static_dir()` по `/ui`:
-- файлы с хэшем в имени — `Cache-Control: immutable`;
-- `index.html` — `no-cache`;
-- неизвестные пути под `/ui/` отдают `index.html`.
-
-Без пакета `/ui` отвечает 404 с подсказкой `pip install amem[web]`. Корень `/` ведёт на `/ui`, если веб есть.
-
-### 3.5. Папки
-
-**Путь.** Сегменты через `/`. Каждый сегмент:
-- непустой после обрезки пробелов, без `/`, в NFC;
-- не длиннее 100 знаков;
-- регистр сохраняется, сравнение — как есть.
-
-Глубина — до 8 сегментов. У записи одна папка или ни одной (`NULL`).
-
-**Хранение** (миграция 0008):
-- `atom.folder` и `entity.folder` — `text NULL` с CHECK формата;
-- `folder (path PRIMARY KEY, created_at, created_by)` — реестр, в нём живут и пустые папки;
-- `folder_log (id, target, record_id, folder, agent, changed_at)` — журнал переносов, неизменяемый, как `status_log`.
-
-**Операции** (`amem/folders.py`):
-- **`move(conn, ref, folder, *, agent)`** переносит запись. Под блокировкой записи (`FOR NO KEY UPDATE`) меняется столбец, пишется `folder_log`, путь и его родители добавляются в реестр. Ревизии не появляется, `content_hash` прежний. Модель переносить вправе: это не утверждение о мире.
-- **`create(conn, path, *, agent)`** создаёт папку в реестре; **`delete(conn, path)`** удаляет только пустую папку без вложенных.
-- **`tree(conn)`** сливает реестр с путями записей. `count` считается по вложенности: запись в `a/b` учтена и в `a`. Ответ — `FolderTree`: `folders` с `children`, `unfiled`, `total`.
-
-`db.prepare` новой базы создаёт четыре папки: «Проекты», «Области», «Ресурсы», «Архив».
-
-**В контракте:**
-- `GET /folders`, `PATCH /records/{ref}/folder`, `GET /records?folder=` — как есть; `folder=-` означает «без папки»;
-- `POST /folders` и `DELETE /folders/{path}` добавляются правкой контракта, по согласию с вебом;
-- в `ChangeEvent.type` добавляется событие `folder`;
-- в `recipes.what_changed` добавляются события из `folder_log`.
-
-Подборки папку не переносят: это порядок одной базы.
+- **Файл версии** (`/objects/{id}/versions/{n}/content`) — копия из хранилища с поддержкой `Range` (206).
+  - Типы из белого списка (`application/pdf`, `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `text/plain`) отдаются как есть, остальные — `application/octet-stream` с `Content-Disposition: attachment`.
+  - Всегда `X-Content-Type-Options: nosniff` и `Content-Security-Policy: sandbox`.
+- **Отчёт антологии** (`/bundles/{id}/report`) — HTML с `Content-Security-Policy: sandbox` и `default-src 'none'`.
+- **Подборки и загрузки.**
+  - Id — UUIDv7, по ним ищутся только файлы в своих папках `AMEM_STATE/bundles/` и `AMEM_STATE/uploads/`.
+  - Срок хранения — 24 часа. Старше — удаляется при запуске службы и раз в час.
+  - Размер загрузки (`/bundles/inspect`) считается потоково при записи на диск. Предел — 4 ГиБ (`bundle.MAX_UNPACKED`), иначе 413.
+- **Экспорт и импорт подборок** идут синхронно в запросе. Долгая подборка держит запрос, а интерфейс показывает ожидание. Фоновые задачи — когда понадобятся.
+- **Антология.** `anthology: true` зовёт `amem.anthology` (часть F веба). Пока модуля нет — 501 `not_implemented`.
+- **`/ui`.** Если установлен пакет `amem_web`, служба монтирует `amem_web.static_dir()` через `StaticFiles` (без перехода по симлинкам, только внутри папки):
+  - файлы с хэшем в имени — `Cache-Control: immutable`;
+  - `index.html` — `no-cache` и выдача cookie сессии;
+  - неизвестные пути под `/ui/` — `index.html`;
+  - без пакета `/ui` отвечает 404 с подсказкой `pip install amem[web]`;
+  - `/` ведёт на `/ui`, если веб есть.
 
 ## 4. MCP
 
-Инструменты (префикс `amem_`, чтобы не путаться с другими серверами):
+Инструменты с префиксом `amem_`:
 
 | Инструмент | Что делает |
 |---|---|
 | `amem_search(query, kind?, limit?)` | Шаг 1 — `exact_fact`: короткий список `{ref, label, kind, status, snippet}` и `retrieval_id` |
 | `amem_similar(query \| ref, limit?)` | `similar` в той же форме |
-| `amem_timeline(ref)` | Шаг 2 — что вокруг находки: последние события записи (`what_changed`) и соседи (`around_entity` или связи атома) |
-| `amem_get(refs)` | Шаг 3 — полные записи по выбранным ссылкам: тело, источники с вердиктом, статус, открытые пункты |
+| `amem_timeline(ref)` | Шаг 2 — что вокруг находки: последние события записи и её соседи |
+| `amem_get(refs)` | Шаг 3 — полные записи по выбранным ссылкам: тело, источники с итогом сверки, статус, открытые пункты |
 | `amem_card(ref)` | Карточка сущности `amem.card/1` |
-| `amem_submit(proposals, links?, reason?)` | `check.submit` от агента сессии; ответ — `Submitted` (состояние, уровни, `queued`, `complete`) |
-| `amem_helpful(retrieval_id, refs)` | Отметить атомы, которые помогли (`usefulness.mark_helpful`) |
+| `amem_submit(proposals, links?, reason?)` | `check.submit` от агента сессии; ответ `Submitted` |
+| `amem_helpful(retrieval_id, refs)` | Отметить атомы, которые помогли |
+| `amem_move(ref, folder)` | Переложить запись в папку |
 | `amem_object_status(path)` и `amem_mark_object(path, status, note?)` | Что из документа уже атомизировано |
-| `amem_review_claim(reasons?)` и `amem_review_resolve(item, outcome, confidence?, note?)` | Для смыслового проверяющего (навык `amem-verify`) |
+| `amem_review_claim(reasons?)`, `amem_review_release(item)`, `amem_review_resolve(item, outcome, confidence, note?)` | Для смыслового проверяющего (навык `amem-verify`) |
 | `amem_vocab(scheme)` | Коды словаря с подписями |
 
-**Агент.** У stdio-сервера агент — `AMEM_AGENT` окружения, которое пишет установщик (`model:claude-code`, `model:codex`). У `/mcp` в службе агент берётся из токена или из настроек. Модель записи в amem — всегда `model:`: так её записи идут через проверку.
+**Задача сессии.** Сервер MCP при старте сессии (stdio — процесс, `/mcp` — сессия SDK) получает задачу `usefulness.session_activity(conn, "mcp:<id>")`. Её передают все поиски и отметки этой сессии. `amem_helpful` отмечает только атомы выдачи этой же сессии.
 
-**Неоднозначность.** Ссылка по ключу, который совпал у нескольких записей, или поиск без явного лидера отдаёт кандидатов с полем `ambiguous: true`, а не первый попавшийся (практика Graphify). Для CLI это код выхода 3.
+**Неоднозначность.** Поиск без явного лидера отдаёт кандидатов с `ambiguous: true`, а не первый попавшийся (практика Graphify). Неизвестная ссылка — ошибка с подсказкой найти запись через `amem_search`.
 
 ## 5. CLI
 
@@ -222,123 +269,162 @@ HTTP, MCP и CLI зовут одни и те же функции: в `views.py` 
 | 3 | Неоднозначность: выведены кандидаты |
 | 4 | Не найдено |
 | 5 | Отказ проверки: пакет отклонён, вывод — отчёт |
-| 6 | Конфликт: пункт уже решён, коллизия ключей подборки |
+| 6 | Конфликт: пункт уже решён, папка занята, коллизия подборки |
 
 ### 5.2. Команды
 
 ```
-amem init [--docker]                 база и хранилище
+amem init                            база и хранилище
 amem serve [--host --port --no-auth] служба HTTP + /mcp + /ui
-amem mcp                             MCP по stdio (для агентов)
+amem mcp [--agent model:имя]         MCP по stdio (для агентов)
 amem search QUERY [--kind --limit]   поиск (шаг 1)
-amem get REF...                      полные записи (шаг 3)
 amem timeline REF                    вокруг записи (шаг 2)
+amem get REF...                      полные записи (шаг 3)
 amem card REF                        карточка сущности
 amem submit FILE.json                запись пакета
 amem review list|claim|resolve|stats очередь
-amem folders [tree|create|delete|move]
+amem folders [tree|create|delete|rename|move]
 amem export|inspect|import           подборки
 amem backup create|restore|verify    бэкап (подпроект 2)
-amem install AGENT [--project DIR]   регистрация MCP, хуков и навыков
+amem token create|list|revoke        токены общей службы
+amem base name NAME                  имя базы
+amem install AGENT [--project DIR] [--dry-run]
 amem uninstall AGENT [--project DIR]
 amem hook EVENT                      вход для хуков агентов (stdin → stdout)
-amem doctor                          проверка установки: база, хранилище, модель, агенты
+amem doctor                          проверка установки
 ```
 
-Вывод — текст для человека или `--json` с тем же содержимым, что у HTTP. Подсказки при ошибке называют, что сделать: «задайте AMEM_DSN или выполните amem init».
+Вывод — текст для человека или `--json` с тем же содержимым, что у HTTP. Подсказка при ошибке называет, что сделать: «задайте AMEM_DSN или выполните amem init».
+
+**Агент CLI.**
+- В обычном терминале — `AMEM_AGENT` (человек).
+- Если окружение выдаёт агента — это модель `model:<платформа>`:
+  - `CLAUDECODE=1` — `model:claude-code`;
+  - переменные Codex (`CODEX_SANDBOX`, `CODEX_HOME` при запуске из Codex) — `model:codex`;
+  - явный `AMEM_AS_MODEL=имя` — `model:имя`.
+- `--agent` задаёт агента явно; `person:` при узнанном окружении агента не принимается.
 
 ## 6. Память агентов
 
-### 6.1. Хуки (Claude Code)
+### 6.1. Хуки Claude Code
 
-`amem hook <event>` читает JSON события со stdin и пишет ответ хука в stdout, по протоколу хуков Claude Code.
+`amem hook <event>` читает JSON события со stdin и пишет ответ по протоколу хуков Claude Code: `hookSpecificOutput.additionalContext`. Хук идёт в базу напрямую коротким соединением (`AMEM_DSN`), без службы. Векторный канал не используется, выдача не записывается (`log=False`), журнал запросов не пишется.
 
 | Событие | Что делает |
 |---|---|
-| `SessionStart` | Подставляет в контекст 3–5 атомов о проекте рабочей папки: сущность-проект по имени репозитория или папки, затем поиск по нему. Плюс одна строка о памяти: «есть amem — спроси её до поиска по файлам» |
-| `UserPromptSubmit` | «Сначала amem»: поиск по тексту запроса без `<private>`. Если есть уверенные находки — короткий список с id в контекст. Бюджет 1,5 с |
-| `Stop` | Напоминает, если в задаче были находки: отметить помогшие (`amem_helpful`) и записать выводы 1–3 атомами (навык `amem-remember`) |
+| `SessionStart` | Проект берётся по `cwd` из входа хука: имя корня git или папки. По нему ищется сущность класса `project` — ключ, совпавший с именем, или точная подпись. Нашлась — 3–5 атомов о ней. Плюс две строки: «есть amem — спроси её до поиска по файлам; в конце задачи запиши выводы (навык amem-remember) и отметь помогшее (amem_helpful)» |
+| `UserPromptSubmit` | «Сначала amem»: лексический поиск по тексту запроса без `<private>`. Если есть уверенные находки (код или явный лидер полнотекста) — короткий список с id в контекст. Иначе ничего |
 
-Любой сбой хука — нет базы, превышен бюджет, ошибка — даёт пустой ответ с кодом 0: агент работает как без amem. Хук пишет одну строку в журнал службы и ничего не показывает пользователю.
+Бюджет — 1,5 с на событие, `statement_timeout` соединения — 1 с. Любой сбой — нет базы, превышен бюджет, ошибка — даёт пустой ответ с кодом 0, и агент работает как без amem. Хук пишет одну строку в журнал ошибок хуков (`AMEM_STATE/hooks.log`) и ничего не показывает пользователю.
 
 ### 6.2. Установщик
 
-`amem install claude-code` и `amem install codex`, глобально или с `--project DIR`.
+`amem install claude-code` и `amem install codex` — глобально или с `--project DIR`. Матрица платформ — один модуль `amem/agents/platforms.py` с версией формата.
 
 | Платформа | MCP | Хуки | Навыки и инструкции |
 |---|---|---|---|
-| Claude Code | `mcpServers.amem` в `~/.claude.json` (или `.mcp.json` проекта): `amem mcp` с `AMEM_AGENT=model:claude-code` | `hooks` в `~/.claude/settings.json` (или `.claude/settings.json`): три события → `amem hook …` | `~/.claude/skills/amem-*/SKILL.md` (или `.claude/skills/`) |
-| Codex CLI | `[mcp_servers.amem]` в `~/.codex/config.toml`, `AMEM_AGENT=model:codex` | хуков нет | блок в `~/.codex/AGENTS.md` (или `AGENTS.md` проекта) |
+| Claude Code, глобально | `claude mcp add --scope user amem -- amem mcp --agent model:claude-code`, если команда `claude` есть; иначе — правка `~/.claude.json` с предупреждением, что Claude Code может переписать файл при работе | `hooks` в `~/.claude/settings.json`: два события → `amem hook …` | `~/.claude/skills/amem-*/SKILL.md` |
+| Claude Code, `--project` | `.mcp.json` проекта | `.claude/settings.json` проекта | `.claude/skills/` |
+| Codex CLI, глобально | таблица `[mcp_servers.amem]` в `~/.codex/config.toml` | хуков нет | блок в `~/.codex/AGENTS.md`; навыки — в папке навыков Codex, если версия их поддерживает |
+| Codex CLI, `--project` | `.codex/config.toml` проекта, если версия Codex его читает (проверяется по документации при реализации), иначе — глобально с предупреждением | — | блок в `AGENTS.md` проекта |
 
 Правила:
-- **Пометки.** Установщик правит только свои ключи и блоки: в JSON — ключи `amem`, в TOML — таблицу `mcp_servers.amem`, в Markdown — блок между `<!-- amem:begin -->` и `<!-- amem:end -->`.
-- **Резервная копия.** Перед правкой файл копируется рядом с суффиксом `.amem-backup`, если копии ещё нет.
-- **Чистое удаление.** `uninstall` убирает ровно установленное. Остальные ключи файла остаются как были, и тест сверяет файл до установки и после удаления.
-- **Без сюрпризов.** Сеть установщику не нужна, на любой автовыбор — объявление в выводе. `--dry-run` показывает изменения без записи.
+- **Пометки.** Установщик правит только своё:
+  - в JSON — ключи `amem`, а в списках хуков — элементы с командой `amem hook`;
+  - в TOML — таблицу `mcp_servers.amem` текстовым блоком между `# amem:begin` и `# amem:end`, без библиотеки записи TOML;
+  - в Markdown — блок между `<!-- amem:begin -->` и `<!-- amem:end -->`.
+- **Резервная копия.** Перед первой правкой файл копируется рядом с суффиксом `.amem-backup`.
+- **Чистое удаление.** `uninstall` убирает ровно установленное. Тест сравнивает разобранное содержимое (JSON и TOML) до установки и после удаления, а Markdown — текст.
+- **Без сюрпризов.** Сеть установщику не нужна, на любой автовыбор — объявление в выводе. `--dry-run` показывает изменения без записи. Повторная установка ничего не меняет.
+- **Проверка на машине.** После установки `amem doctor` показывает, что установлено, и предлагает `claude mcp list` и `codex mcp list`.
 
 ### 6.3. Навыки ядра
 
-Навыки лежат в `amem/packs/core/skills/`; так `packs.py` их уже описывает.
-- **`amem-remember`** — как записать 1–3 атома в конце задачи: что атомизировать, источники, `basis`, проверка дублей через `amem_search`.
+Навыки лежат в `amem/packs/core/skills/`; файлы входят в `package-data`.
+- **`amem-remember`** — как записать 1–3 атома в конце задачи: что атомизировать, источники, `basis`, проверка дублей.
 - **`amem-answer`** — как отвечать по памяти: три шага, ссылки на источники, честное «не знаю», отметка помогшего.
-- **`amem-verify`** — смысловой проверяющий (уровень 5). Он забирает пункты `semantic` (`amem_review_claim`), читает только атом и текст фрагмента и выносит вердикт с уверенностью (`amem_review_resolve`). Запуск по расписанию — на стороне пользователя (cron или `systemd timer` с `claude -p`), пример — в README.
+- **`amem-verify`** — смысловой проверяющий (уровень 5): забирает пункты `semantic`, читает только атом и текст фрагмента и выносит вердикт с уверенностью. Расписание (cron или `systemd timer` с `claude -p`) — на стороне пользователя; пример — в README.
 
 ### 6.4. `<private>`
 
-`private.strip(text)` вырезает всё между `<private>` и `</private>`, включая метки. Незакрытая метка вырезает до конца текста. Применяется:
+`private.strip(text)` вырезает всё между `<private>` и `</private>`, включая метки; незакрытая метка вырезает до конца текста. Применяется:
 - к тексту запроса — до поиска и журнала;
-- к строковым полям тел в `submit` — до проверки: в ревизию вырезанное не попадает, а в отчёте есть info-замечание `private_removed`;
-- в хуках — до отправки в службу.
+- к строковым полям тел в `submit` — до проверки. В ревизию вырезанное не попадает, в ответе — предупреждение в `warnings` ответа службы (`private_removed`);
+- в хуках — до поиска.
 
 ### 6.5. Журнал запросов
 
-Одна строка JSONL на запрос:
-- время, рецепт, текст запроса после `<private>`;
-- `base_id`, агент;
-- число находок, длительность в мс, `retrieval_id`.
-
-Ответы в журнал не пишутся. При 10 МиБ файл поворачивается, хранятся пять старых. `AMEM_QUERY_LOG=off` выключает журнал. Журнал — сигнал пользы для будущей настройки ранжирования; служба его не читает.
+Одна строка JSONL на явный поиск: время, рецепт, текст запроса после `<private>`, `base_id`, агент, число находок, длительность в мс, `retrieval_id`. Ответы не пишутся. `AMEM_QUERY_LOG=off` выключает журнал. Файл не поворачивается — его объём ограничен числом явных поисков. Журнал — сигнал пользы для будущей настройки ранжирования; служба его не читает.
 
 ## 7. Поставка
 
-- **Зависимости ядра:** `starlette`, `uvicorn`, `psycopg_pool`, `mcp`, `python-multipart` (загрузка подборок). CLI на стандартной библиотеке.
-- **`pyproject`:** скрипт `amem = amem.cli:main`; extra `web` тянет `amem-web`.
-- **compose:** служба `amem` (образ Python + пакет, `amem serve --host 0.0.0.0` внутри сети compose, наружу — `127.0.0.1:8767`) и `db` (pgvector pg18, том); профиль `web` — служба с `amem[web]`.
-- **Одной командой:** `pipx install amem` (или `uv tool install amem`), затем `amem init --docker && amem install claude-code`. `amem doctor` проверяет результат.
+- **Зависимости ядра:** `starlette`, `uvicorn`, `psycopg_pool`, `mcp`, `python-multipart`. CLI — на стандартной библиотеке.
+- **`pyproject`:** скрипт `amem = amem.cli:main`; extra `web` тянет `amem-web`; в `package-data` — копия контракта и навыки.
+- **compose:** образ службы, `db` (pgvector pg18, том) и служба `amem`.
+  - Служба запускается как `amem serve --host 0.0.0.0` внутри сети compose; наружу публикуется только `127.0.0.1:8767`.
+  - `AMEM_AGENT` задаётся явно в `.env`.
+  - Разрешённый `Host` — `localhost`; `AMEM_TOKENS` по желанию.
+  - Профиль `web` — служба с `amem[web]`.
+- **Одной командой:** `pipx install amem` (или `uv tool install amem`), затем `amem init` (DSN — из готового PostgreSQL или compose) и `amem install claude-code`; `amem doctor` проверяет результат.
 
 ## 8. Тестирование
 
-- Служба — через `starlette.testclient` на настоящей базе, на обеих версиях PostgreSQL. Каждый путь контракта сверяется со схемой ответа, отдельно — ошибки 401, 403, 404, 409, 422, 503.
-- MCP — клиентом SDK через память (in-memory transport), без сети. Поиск в три шага, `submit`, `helpful`, неоднозначность.
-- CLI — `main(argv)` с перехватом вывода: коды выхода по таблице 5.1, `--json`.
-- Установщик — на временном `HOME` и временном проекте: файлы до установки, после неё и после удаления; повторная установка ничего не меняет; чужие ключи на месте.
-- Хуки — события из образцов протокола: бюджет по времени (служба «зависает» — хук укладывается в бюджет и возвращает пустое), сбой базы, `<private>`.
-- Папки — правила пути, перенос без новой ревизии, реестр, дерево со счётчиками, журнал, события в `what_changed`.
+- **Часть 4.0.** Папки:
+  - правила пути;
+  - перенос без новой ревизии;
+  - реестр, переименование, удаление;
+  - дерево со счётчиками;
+  - журнал и события в `what_changed`.
+
+  Ещё ссылки по ключу, `list_records` (фильтры, курсор), подписи, `log=False`, `session_activity` с отметкой пользы, коды `ReviewError`, `family`, имя базы.
+- **Служба.** `starlette.testclient` на настоящей базе, на обеих версиях PostgreSQL:
+  - каждый путь контракта со сверкой ответа по схеме;
+  - ошибки 401, 403, 404, 409, 413, 421, 422, 503;
+  - cookie человека и запросы без неё;
+  - `Host` и `Origin`;
+  - `Range`, `nosniff`, `attachment`;
+  - выход за папку `/ui`;
+  - чужой id загрузки.
+- **MCP.** Клиент SDK через память, без сети:
+  - поиск в три шага, `helpful` в той же задаче;
+  - `submit` от `model:`;
+  - неоднозначность.
+- **CLI.** `main(argv)` с перехватом вывода: коды выхода по таблице 5.1, `--json`, агент по окружению.
+- **Установщик.** На временном `HOME` и временном проекте: файлы до установки, после неё и после удаления; повторная установка; чужие ключи на месте; `--dry-run`. Команда `claude` подменяется заглушкой в `PATH`.
+- **Хуки.** События из образцов протокола:
+  - бюджет — база «зависает», хук укладывается в бюджет и отдаёт пустое;
+  - сбой базы;
+  - `<private>`;
+  - проект по `cwd`;
+  - ничего не записано в `retrieval` и журнал.
 
 ## 9. Приёмка
 
 | Требование | Как проверяется |
 |---|---|
-| Контракт реализован полностью | Тест: каждый путь файла отвечает, ответы проходят схемы; лишних путей нет |
-| Агент записи — из сессии | `submit` через HTTP пишет от агента сессии; поле агента в теле игнорируется |
+| Контракт реализован полностью | Каждый путь файла отвечает, ответы проходят схемы; лишних путей нет |
+| Кто пишет | Браузер с cookie — человек; запрос без cookie и `/mcp` — модель; поле агента в теле игнорируется |
+| Защита локальной службы | Чужой `Host` — 421, чужой `Origin` — 403, запись не JSON — 415 |
 | Вход общей службы | Без токена — 401, токен только для чтения — 403 на запись, верный — 200 |
-| `/ui` | С `amem_web` — `index.html` и статика с правильными заголовками; без него — 404 с подсказкой |
-| Папки | Перенос не создаёт ревизию; дерево с пустой папкой и счётчиками; четыре папки новой базы |
-| CLI | Коды выхода 0–6 на своих случаях; `--json` совпадает с HTTP |
-| Поиск в три шага | `amem_search` → `amem_timeline` → `amem_get` на подготовленной базе; `retrieval_id` переходит в `amem_helpful` |
+| Файлы | `Range` даёт 206; HTML и SVG отдаются вложением с `nosniff` и `sandbox` |
+| `/ui` | С `amem_web` — статика с правильными заголовками; без него — 404 с подсказкой |
+| Папки | Перенос не создаёт ревизию; пустая папка видна в дереве; переименование переносит записи; четыре папки новой базы |
+| CLI | Коды выхода 0–6 на своих случаях; `--json` совпадает с HTTP; агент по окружению |
+| Поиск в три шага | `amem_search` → `amem_timeline` → `amem_get`; `retrieval_id` переходит в `amem_helpful` той же сессии |
 | `<private>` | Скрытое не попадает ни в журнал, ни в ревизию, ни в поиск |
-| Журнал | Строка на запрос без ответов; `off` — пусто; поворот по размеру |
-| Хуки | «Сначала amem» в бюджете; сбой — пустой ответ, код 0 |
-| Установщик | Claude Code и Codex, глобально и `--project`; `uninstall` возвращает файлы к исходным |
-| Одной командой | `amem init --docker && amem install claude-code && amem doctor` на чистом окружении CI (без Docker — `amem init` с готовым DSN) |
+| Журнал | Строка на явный поиск без ответов; хук не пишет; `off` — пусто |
+| Хуки | «Сначала amem» укладывается в бюджет; сбой — пустой ответ с кодом 0 |
+| Установщик | Claude Code и Codex, глобально и `--project`; `uninstall` возвращает разобранное содержимое файлов к исходному |
+| Одной командой | `amem init` с готовым DSN, `amem install claude-code`, `amem doctor` — в CI |
 | PostgreSQL 18 и 16 | Все тесты базы — на обеих версиях |
 
 ## 10. Риски
 
 | Риск | Что делаем |
 |---|---|
-| Контракт и служба разойдутся | Один файл; тест сверки в CI службы, `api:check` в CI веба; изменения — PR с правкой файла |
+| Контракт и служба разойдутся | Один файл; копия в пакете с тестом совпадения; сверка в CI службы и `api:check` в CI веба; изменения — PR с правкой файла |
 | Протоколы хуков и конфигов агентов меняются | Матрица платформ в одном модуле с версией формата; тесты на образцах; `amem doctor` показывает, что установлено |
-| Хук замедлит агента | Бюджет 1,5 с, fails open, кэш соединения в процессе хука не держим — короткое соединение |
-| Служба открыта в сеть без входа | По умолчанию только `127.0.0.1`; наружу без токенов — только явным флагом с предупреждением |
-| Модель записывает от имени человека | Агент — из сессии или из окружения, которое пишет установщик (`model:`); человеком служба считает только `AMEM_AGENT` локальной службы и токены `person:` |
+| Хук замедлит агента | Бюджет 1,5 с, `statement_timeout`, только лексический поиск, fails open |
+| Служба открыта в сеть без входа | По умолчанию только `127.0.0.1`; наружу без токенов — только явным `--no-auth` с предупреждением; `Host` и `Origin` проверяются всегда |
+| Модель запишет от имени человека | Человек — только браузер с cookie службы, токен `person:` и CLI без признаков агента; остальное — `model:`. Остаточный риск — прямой доступ к базе по DSN (разд. 3.1) |
+| Запросы пользователя осядут в базе навсегда | Хук не пишет выдачу и журнал; журнал — только явных поисков, отключается |
