@@ -167,7 +167,8 @@ def test_dry_run_writes_nothing(pg, pg2, monkeypatch, store, store2, docs, tmp_p
     before = {t: _count(pg2, t) for t in ("atom", "entity", "object", "link", "changeset", "agent")}
     plan = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER, dry_run=True)
     assert plan.counts == {"created": 3, "unchanged": 0, "pending": 0, "skipped": 0, "links": 1, "objects": 1}
-    assert plan.changeset_id is None
+    assert plan.changeset_id is None and plan.complete
+    assert plan.report["format"] == "amem.check/1" and plan.report["issues"] == []
     assert {t: _count(pg2, t) for t in before} == before
     assert not (tmp_path / "objects2").exists()
 
@@ -263,7 +264,9 @@ def test_object_status_is_carried(pg, pg2, monkeypatch, store, store2, docs, tmp
     _export(pg, store, tmp_path / "b")
     bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
     got = lookup.object_status(pg2, oid)
-    assert got["status"] == "parsed" and got["note"] == "всё" and got["agent"] == PERSON
+    # отметку ставит вливающий; кто и когда отметил в базе-источнике — в заметке
+    assert got["status"] == "parsed" and got["agent"] == OTHER
+    assert got["note"].startswith("всё (из подборки: person:alice, ")
 
 
 def test_web_object_with_same_url_is_matched(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
@@ -319,6 +322,9 @@ def test_level1_violation_refuses_whole_bundle(pg, pg2, monkeypatch, store, stor
         return row
 
     _rewrite(tmp_path / "b", "atoms.jsonl", no_unit)
+    plan = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER, dry_run=True)        # план — с отчётом
+    assert not plan.complete and any(i["code"] == "unit_required" for i in plan.report["issues"])
+    assert all(i["where"].startswith("atm:") for i in plan.report["issues"])
     with pytest.raises(bundle.BundleError, match="уровень 1") as e:
         bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
     assert any(i["code"] == "unit_required" for i in e.value.details["report"]["issues"])
@@ -348,3 +354,116 @@ def test_damaged_part_refuses(pg, pg2, monkeypatch, store, store2, docs, tmp_pat
     with pytest.raises(bundle.BundleError, match="atoms.jsonl"):
         bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
     assert _count(pg2, "changeset") == 0
+
+
+def test_model_import_does_not_keep_verified(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Проверенное в чужой базе остаётся проверенным, только если вливает человек; модель — needs_review и imported."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    refs = _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+    r = bundle.import_(pg2, store2, tmp_path / "b", agent="model:importer")
+    assert {lookup.get(pg2, "atom", refs[k])["status"] for k in ("@m", "@n")} == {"needs_review"}
+    assert lookup.get(pg2, "entity", refs["@s"])["status"] == "needs_review"
+    imported = [q for q in r.queued if q["reason"] == "imported"]
+    assert len(imported) == 3 and not r.complete
+    details = pg2.execute("SELECT details FROM review_item WHERE id = %s", (imported[0]["id"],)).fetchone()[0]
+    assert details["origin_status"] == "verified" and details["action"] == "created"
+
+
+def test_person_import_keeps_verified(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    refs = _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+    r = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert lookup.get(pg2, "atom", refs["@n"])["status"] == "verified" and r.queued == [] and r.complete
+
+
+def test_link_id_with_other_ends_is_collision(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    refs = _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+    bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    _export(pg, store, tmp_path / "c")
+
+    def other_end(link):
+        return {**link, "dst": f"ent:{refs['@s']}", "retired_at": "2026-01-01T00:00:00+00:00"}
+
+    _rewrite(tmp_path / "c", "links.jsonl", other_end)
+    with pytest.raises(bundle.BundleError, match="связь") as e:
+        bundle.import_(pg2, store2, tmp_path / "c", agent=OTHER)
+    assert e.value.code == "bundle_key_collision"
+    assert len(lookup.links(pg2, refs["@n"])) == 1                     # связь не выведена из оборота
+
+
+def test_only_property_concepts_are_added(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+    extra = [{"scheme": "property", "code": "x_reach", "label": {"ru": "Вылет"}},
+             {"scheme": "kind", "code": "x_evil", "label": {"ru": "Свой вид"}}]
+    (tmp_path / "b" / "concepts.jsonl").write_text("".join(json.dumps(c, ensure_ascii=False) + "\n" for c in extra),
+                                                   encoding="utf-8")
+    manifest = json.loads((tmp_path / "b" / "manifest.json").read_text(encoding="utf-8"))
+    manifest["parts"]["concepts.jsonl"] = hashlib.sha256((tmp_path / "b" / "concepts.jsonl").read_bytes()).hexdigest()
+    (tmp_path / "b" / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+    r = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    got = dict(pg2.execute("SELECT scheme || '.' || code, origin FROM concept WHERE code LIKE 'x\\_%'").fetchall())
+    assert got == {"property.x_reach": "agent"}
+    assert any("kind.x_evil" in w for w in r.warnings)
+
+
+def test_history_hash_mismatch_refuses(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    refs = _seed(pg, store, docs)
+    _edit(pg, store, docs, refs["@n"], "Вторая.", PERSON)
+    _export(pg, store, tmp_path / "b", with_history=True)
+
+    def forge(row):
+        for h in row.get("history") or []:
+            h["payload"]["body"] = {"ru": "Подменено"}
+        return row
+
+    _rewrite(tmp_path / "b", "atoms.jsonl", forge)
+    with pytest.raises(bundle.BundleError, match="история.*content_hash"):
+        bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+
+
+def test_same_file_in_both_bases_is_matched_by_digest(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Тот же документ, загруженный в обе базы, — один источник: ссылка — на локальный объект, повтор — unchanged."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    refs = _seed(pg, store, docs)
+    local = objects.ingest(pg2, store2, docs, "заметка.md", agent=OTHER)
+    _export(pg, store, tmp_path / "b")
+    r = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert r.counts["created"] == 3 and r.counts["objects"] == 0
+    assert any(f"obj:{local.object_id}" in w for w in r.warnings)
+    got = lookup.get(pg2, "atom", refs["@m"])
+    assert (got["sources"][0]["object"], got["sources"][0]["object_version"]) == (f"obj:{local.object_id}", local.n)
+    assert got["provenance"]["origin_revision_hash"] == lookup.get(pg, "atom", refs["@m"])["content_hash"]
+    assert _count(pg2, "object") == 1
+    assert _source_row(pg2, refs["@m"])[0] == "ok"                    # своя сверка по локальной копии
+    again = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert again.counts["unchanged"] == 3 and again.changeset_id is None
+
+
+def test_partial_file_match_refuses(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Получатель знает только первую версию файла, а источник подборки ссылается на вторую — отказ, базы не тронуты."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    first = docs.parent / "docs2"
+    first.mkdir()
+    (first / "заметка.md").write_bytes((docs / "заметка.md").read_bytes())
+    _seed(pg, store, docs)
+    with (docs / "заметка.md").open("a", encoding="utf-8") as f:
+        f.write("\nДобавлено позже.\n")
+    r = check.submit(pg, store, docs, [Proposal("atom", atom("@v2", kind="parameter", tags=["shared"],
+                                                              sources=[source_md("заметка.md", "Масса 3 кг")],
+                                                              content={"values": [value("mass", 3, "kg")]}))],
+                     agent=PERSON)
+    assert r.state == "approved", r.report
+    objects.ingest(pg2, store2, first, "заметка.md", agent=OTHER)
+    _export(pg, store, tmp_path / "b")
+    before = {t: _count(pg2, t) for t in ("atom", "entity", "object", "object_version", "changeset")}
+    with pytest.raises(bundle.BundleError) as e:
+        bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert e.value.code == "bundle_object_conflict" and e.value.details["lost"] == [2]
+    assert {t: _count(pg2, t) for t in before} == before

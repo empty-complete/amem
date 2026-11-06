@@ -140,6 +140,14 @@ def _new_changeset(conn, *, agent, activity, reason, state, check_report, at) ->
     return cs
 
 
+def new_changeset(conn, *, agent: str, reason: str | None, at: datetime | None = None) -> uuid.UUID:
+    """Пакет изменений без ревизий (approved) в уже открытой транзакции вызывающего — для строк, которые ссылаются
+    на пакет, когда записей в нём нет (история подборки в import_history)."""
+    _ensure_agent(conn, agent)
+    return _new_changeset(conn, agent=agent, activity=None, reason=reason, state="approved", check_report=None,
+                          at=at or _now())
+
+
 def _lock(conn, target: Target, record_id: uuid.UUID) -> datetime:
     """Заблокировать запись до конца транзакции; вернуть время её последнего изменения — новое не раньше его."""
     if conn.execute(f"SELECT 1 FROM {target} WHERE id = %s FOR NO KEY UPDATE", (record_id,)).fetchone() is None:
