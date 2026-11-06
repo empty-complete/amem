@@ -149,13 +149,16 @@ def new_changeset(conn, *, agent: str, reason: str | None, at: datetime | None =
 
 
 def _lock(conn, target: Target, record_id: uuid.UUID) -> datetime:
-    """Заблокировать запись до конца транзакции; вернуть время её последнего изменения — новое не раньше его."""
+    """Заблокировать запись до конца транзакции; вернуть время её последнего изменения — новое не раньше его.
+
+    Изменение — ревизия, решение проверки, статус и перенос в папку (folder_log, amem/folders.py)."""
     if conn.execute(f"SELECT 1 FROM {target} WHERE id = %s FOR NO KEY UPDATE", (record_id,)).fetchone() is None:
         raise RecordError(f"{PREFIX[target]}:{record_id}: такой записи нет")
     # отдельным запросом, после блокировки: он видит и то, что записал писатель, которого ждали
     return conn.execute(
         f"SELECT greatest(status_changed_at, (SELECT max(greatest(recorded_at, reviewed_at)) FROM {target}_revision "
-        f"WHERE {target}_id = %(id)s)) FROM {target} WHERE id = %(id)s", {"id": record_id}).fetchone()[0]
+        f"WHERE {target}_id = %(id)s), (SELECT max(changed_at) FROM folder_log WHERE record_id = %(id)s "
+        f"AND target = '{target}')) FROM {target} WHERE id = %(id)s", {"id": record_id}).fetchone()[0]
 
 
 def resolve_ref(conn: psycopg.Connection, ref: str, refs: dict[str, str]) -> str:

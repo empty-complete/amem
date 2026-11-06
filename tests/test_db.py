@@ -11,7 +11,7 @@ from amem import db, ids, packs
 from v1_support import same_database
 
 MIGRATIONS = ["0001_core.sql", "0002_objects.sql", "0003_packs.sql", "0004_hub.sql", "0005_search.sql",
-              "0006_check.sql", "0007_ontology.sql"]
+              "0006_check.sql", "0007_ontology.sql", "0008_folders.sql"]
 
 
 def test_migration_files_are_listed():
@@ -147,7 +147,7 @@ def test_missing_migration_file_is_refused(pg, tmp_path, monkeypatch):
 
 PROTECTED = ["entity_revision", "atom_revision", "link", "changeset", "status_log", "atom_about", "atom_derived",
              "template", "object", "object_path", "object_version", "object_status", "source",
-             "review_item", "verification", "import_history"]
+             "review_item", "verification", "import_history", "folder_log"]
 
 
 @pytest.mark.parametrize("table", PROTECTED)

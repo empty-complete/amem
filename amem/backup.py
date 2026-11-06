@@ -55,7 +55,8 @@ KEEP = 14
 PG_MAJOR = 18                    # клиент не старше сервера: 18 читает и пишет и 16, и 18
 NAME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$")
 COUNTED = ("atom", "atom_revision", "entity", "entity_revision", "link", "source", "object", "object_version",
-           "atom_use", "changeset", "review_item", "verification", "atom_property", "import_history")
+           "atom_use", "changeset", "review_item", "verification", "atom_property", "import_history", "folder",
+           "folder_log")
 VERIFY_AGENT = "model:amem-backup-verify"
 CHUNK = 1 << 20
 HEADER_LINES = 50               # SET в заголовке SQL от pg_restore — в первых строках, до данных

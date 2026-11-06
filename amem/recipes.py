@@ -199,6 +199,16 @@ def what_changed(conn: psycopg.Connection, *, ref: str | None = None,
                 ref=f"{records.PREFIX[row['target']]}:{row['record_id']}", status=row["status"],
                 changed_at=row["changed_at"].isoformat(), agent=row["agent"], reason=row["reason"])
 
+        # переносы по папкам (amem/folders.py): from / to — путь или None («без папки»)
+        rows = cur.execute(
+            f"SELECT id, target, record_id, folder_from, folder_to, agent, changed_at FROM folder_log "
+            f"WHERE {changed_at} {scope}", params).fetchall()
+        for row in rows:
+            add("folder", row["id"], row["changed_at"],
+                ref=f"{records.PREFIX[row['target']]}:{row['record_id']}",
+                changed_at=row["changed_at"].isoformat(), agent=row["agent"],
+                **{"from": row["folder_from"], "to": row["folder_to"]})
+
         created = _history_interval("created_at", since, until)
         retired = _history_interval("retired_at", since, until)
         if target == "atom":
