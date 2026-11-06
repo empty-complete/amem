@@ -252,3 +252,98 @@ def test_unit_of_first_value_when_vocab_has_none(interface):
     assert _field(profile.card(interface, doc), "load")["state"] == "known"
     _param(interface, doc, "load", 13, "kg")
     assert _field(profile.card(interface, doc), "load")["state"] == "conflict"
+
+
+def test_rules_for_entity(ready):
+    rules = profile.rules_for_entity(ready, "sensor")
+    assert rules.templates[-2:] == ("device@1.0.0", "sensor@1.0.0")
+    assert [p["property"] for p in rules.parameters] == ["mass", "temperature", "length"]
+    assert rules.parameter_origins["temperature"] == "sensor@1.0.0"
+    assert profile.rules_for_entity(ready, "document").parameters == ()
+
+
+def test_conflict_atoms_are_live_candidates(ready):
+    dev = _entity(ready, "Насос", "device")
+    a = _param(ready, dev, "mass", 12, "kg")
+    b = _param(ready, dev, "mass", 15, "kg")
+    _param(ready, dev, "mass", 99, "kg", rank="deprecated")
+    f = _field(profile.card(ready, dev), "mass")
+    assert f["state"] == "conflict" and f["atoms"] == sorted([a, b]) == [c["atom"] for c in f["candidates"]]
+    n = _param(ready, dev, "temperature", None, None, value_extra={"value_state": "none"})
+    k = _param(ready, dev, "temperature", 30, "Cel")
+    _param(ready, dev, "temperature", 40, "Cel", rank="deprecated")
+    _param(ready, dev, "temperature", None, None, value_extra={"value_state": "unknown"})
+    f = _field(profile.card(ready, dev), "temperature")
+    assert f["state"] == "conflict" and set(f["atoms"]) == {n, k} == {c["atom"] for c in f["candidates"]}
+
+
+def test_revisions_sources_keys_and_input(ready, store, docs):
+    from amem import check, lookup
+    from amem.check import Proposal
+    from check_support import source_md
+    body = atom("@m", kind="parameter", sources=[source_md("заметка.md", "Масса 3 кг.")],
+                content={"values": [value("mass", 3, "kg")]})
+    rid = check.submit(ready, store, docs, [Proposal("atom", body)], agent=PERSON).records[0]["revision_id"]
+    got = lookup.revisions_sources(ready, "atom", [str(rid)])
+    assert list(got) == [rid] and got[rid] == lookup.revision_sources(ready, "atom", rid) and got[rid]
+    assert lookup.revisions_sources(ready, "atom", []) == {}
+
+
+def test_card_through_submit_review_and_rebuild(ready, store, docs, monkeypatch):
+    """Сквозной путь: check.submit → очередь проверки → карточка; карточка переживает перестройку проекций."""
+    from amem import check, review
+    from amem.check import Proposal
+    from check_support import source_md
+    monkeypatch.setenv("AMEM_BACKEND", "none")
+
+    def submit(body, agent, record_id=None):
+        done = check.submit(ready, store, docs, [Proposal(body.get("entity_class") and "entity" or "atom", body,
+                                                          record_id)], agent=agent)
+        assert done.state == "approved", done.report
+        return done
+
+    def mass(amount, agent, record_id=None, label=None):
+        body = atom("@m", kind="parameter", label={"ru": label or f"Масса {amount} кг"}, about=[sensor],
+                    sources=[source_md("заметка.md", f"Масса {amount} кг.")],
+                    content={"values": [value("mass", amount, "kg")]})
+        return submit(body, agent, record_id)
+
+    done = submit({"ref": "@e", "entity_class": "sensor", "label": {"ru": "Датчик давления"}}, PERSON)
+    sensor = f"ent:{done.records[0]['record_id']}"
+    assert _field(profile.card(ready, sensor), "mass")["state"] == "missing"
+
+    first = mass(3, MODEL).records[0]["record_id"]                 # черновик модели, источник сверен
+    f = _field(profile.card(ready, sensor), "mass")
+    assert (f["state"], f["by"], f["status"]) == ("known", "model", "draft") and f["sources"][0]["verdict"] == "ok"
+
+    mass(3, PERSON, first, label="Масса корпуса 3,0 кг")            # правка человека — verified без очереди
+    f = _field(profile.card(ready, sensor), "mass")
+    assert (f["by"], f["status"]) == ("person", "verified")
+
+    edit = mass(4, MODEL, first)                                    # правка модели записи человека — pending
+    f = _field(profile.card(ready, sensor), "mass")
+    assert f["value"]["amount"] == 3 and f["by"] == "person"
+    [item] = [q for q in edit.queued if q["reason"] == "edit"]
+    review.resolve(ready, item["id"], "refuted", agent=PERSON)
+    assert _field(profile.card(ready, sensor), "mass")["value"]["amount"] == 3
+
+    other = mass(4, MODEL)                                          # другое значение модели спорит с человеком
+    f = _field(profile.card(ready, sensor), "mass")
+    assert f["state"] == "conflict" and {(c["by"], c["value"]["amount"]) for c in f["candidates"]} == \
+        {("person", 3), ("model", 4)}
+    for q in other.queued:
+        review.resolve(ready, q["id"], "refuted", agent=PERSON)
+    f = _field(profile.card(ready, sensor), "mass")
+    assert f["state"] == "known" and f["value"]["amount"] == 3
+
+    q = atom("@q", kind="question", label={"ru": "Какова рабочая температура?"}, about=[sensor], sources=None,
+             basis="author", content={"values": [{"property": "temperature", "value_state": "unknown"}]})
+    submit(q, PERSON)
+    card = profile.card(ready, sensor)
+    assert _field(card, "temperature")["state"] == "asked" and card["summary"]["blockers_open"] == 1
+
+    ready.execute("DELETE FROM atom_property")                      # проекция испорчена: стёрта и засорена
+    assert _field(profile.card(ready, sensor), "mass")["state"] == "missing"
+    ready.execute("INSERT INTO atom_property SELECT id, 'width' FROM atom_revision")
+    records.rebuild_projections(ready)
+    assert profile.card(ready, sensor) == card

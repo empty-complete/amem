@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import posixpath
 import uuid
+from collections.abc import Iterable
 from datetime import date, datetime
 
 import psycopg
@@ -130,8 +131,11 @@ def revision_sources(conn: psycopg.Connection, target: Target, revision_id: uuid
 
 
 def revisions_sources(conn: psycopg.Connection, target: Target,
-                      revision_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[dict]]:
-    """Источники нескольких ревизий одним запросом: revision_id → список, как у revision_sources."""
+                      revision_ids: Iterable[uuid.UUID | str]) -> dict[uuid.UUID, list[dict]]:
+    """Источники нескольких ревизий одним запросом, как у revision_sources.
+
+    На входе — UUID или строки; ключи ответа — uuid.UUID, по ключу на каждую запрошенную ревизию (без источников —
+    пустой список)."""
     check_target(target)
     out: dict[uuid.UUID, list[dict]] = {as_uuid(r, "revision_id"): [] for r in revision_ids}
     if not out:

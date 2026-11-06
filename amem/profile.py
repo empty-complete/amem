@@ -8,7 +8,8 @@
 Пограничные состояния: none + unknown → na; none + known → conflict; unknown + вопрос → asked; вопрос — атом
 question со значением этой величины в value_state unknown. Значения с rank deprecated учитываются, только если
 других нет, и в candidates не попадают. Из нескольких атомов с одним значением поле берёт признаки у лучшего:
-сначала status verified, затем автор person:, затем более новая ревизия.
+сначала status verified, затем автор person:, затем более новая ревизия. У conflict atoms — те же атомы,
+что в candidates (без deprecated и unknown).
 """
 from __future__ import annotations
 
@@ -46,16 +47,24 @@ def _entity_uuid(ref: str) -> uuid.UUID:
     return as_uuid(ref.split(":", 1)[1], "ref")
 
 
-def _atoms_about(conn, entity_id: uuid.UUID, kind: str) -> list[dict]:
-    """Действующие атомы вида kind о сущности, у текущей ревизии которых есть величины (проекция atom_property)."""
+def _atoms_about(conn, entity_id: uuid.UUID) -> dict[str, list[dict]]:
+    """Действующие атомы parameter и question о сущности, у текущей ревизии которых есть величины.
+
+    atom_current — DISTINCT ON по всем ревизиям: условие соединения с atom_about внутрь вида не проникает, и
+    без отбора atom_id заранее PostgreSQL читал бы все ревизии базы (как в recipes.graph)."""
     rows = conn.execute(
-        "SELECT r.atom_id, r.id, r.payload, a.status, c.agent "
-        "FROM atom_current r JOIN atom a ON a.id = r.atom_id "
-        "JOIN atom_about ab ON ab.revision_id = r.id JOIN changeset c ON c.id = r.changeset_id "
-        "WHERE ab.entity_id = %s AND a.kind = %s AND a.status <> ALL(%s) "
+        "SELECT r.atom_id, r.id, r.payload, a.status, c.agent, a.kind "
+        "FROM atom_current r JOIN atom a ON a.id = r.atom_id JOIN changeset c ON c.id = r.changeset_id "
+        "WHERE r.atom_id = ANY(ARRAY(SELECT ar.atom_id FROM atom_about g "
+        "JOIN atom_revision ar ON ar.id = g.revision_id WHERE g.entity_id = %(e)s)) "
+        "AND EXISTS (SELECT 1 FROM atom_about ab WHERE ab.revision_id = r.id AND ab.entity_id = %(e)s) "
+        "AND a.kind = ANY(%(kinds)s) AND a.status <> ALL(%(retired)s) "
         "AND EXISTS (SELECT 1 FROM atom_property p WHERE p.revision_id = r.id) ORDER BY r.atom_id",
-        (entity_id, kind, list(RETIRED))).fetchall()
-    return [{"atom_id": r[0], "revision_id": r[1], "payload": r[2], "status": r[3], "agent": r[4]} for r in rows]
+        {"e": entity_id, "kinds": ["parameter", "question"], "retired": list(RETIRED)}).fetchall()
+    out: dict[str, list[dict]] = {"parameter": [], "question": []}
+    for r in rows:
+        out[r[5]].append({"atom_id": r[0], "revision_id": r[1], "payload": r[2], "status": r[3], "agent": r[4]})
+    return out
 
 
 def _values(record: dict) -> list[dict]:
@@ -126,6 +135,7 @@ def _field(rule: dict, origin: str | None, params: list[dict], questions: list[d
     if none and known:                              # «не относится» спорит со значением
         out["state"] = "conflict"
         out["candidates"] = [_candidate(r, v, sources) for r, v in shown if _state(v) != "unknown"]
+        out["atoms"] = list(dict.fromkeys(c["atom"] for c in out["candidates"]))
         return out
     if none:                                        # none, возможно вместе с unknown
         out["state"] = "na"
@@ -143,7 +153,7 @@ def _field(rule: dict, origin: str | None, params: list[dict], questions: list[d
     if not _one_value([_canonical(v, unit) for _, v in deciding]):   # различные значения, нет единственного preferred
         out["state"] = "conflict"
         out["candidates"] = [_candidate(r, v, sources) for r, v in shown if _state(v) == "known"]
-        out["atoms"] = [c["atom"] for c in out["candidates"]]
+        out["atoms"] = list(dict.fromkeys(c["atom"] for c in out["candidates"]))
         return out
     chosen = max(deciding, key=lambda rv: _best_key(rv[0]))
     c = _candidate(*chosen, sources)
@@ -169,8 +179,8 @@ def _one(conn, ctx: _Context, entity_id: uuid.UUID) -> dict:
         raise LookupError(f"ent:{entity_id}: нет такой сущности")
     cls = record["entity_class"]
     rules = templates.rules_for(ctx.active, "entity", cls)
-    params = _atoms_about(conn, entity_id, "parameter")
-    questions = _atoms_about(conn, entity_id, "question")
+    about = _atoms_about(conn, entity_id)
+    params, questions = about["parameter"], about["question"]
     sources = lookup.revisions_sources(conn, "atom", [r["revision_id"] for r in params])
     fields = [_field(rule, rules.parameter_origins.get(rule["property"]), params, questions,
                      ctx.prop_units.get(rule["property"]), sources) for rule in rules.parameters]
@@ -205,7 +215,9 @@ def _parents(conn, entity_id: uuid.UUID) -> list[uuid.UUID]:
 def card(conn: psycopg.Connection, ref: str, *, ancestors: bool = True) -> dict:
     """Карточка сущности формата amem.card/1; ancestors — карточки предков по part_of, обход в ширину.
 
-    Цикл part_of обрывается по посещённым; глубина не ограничена."""
+    Цикл part_of обрывается по посещённым; глубина не ограничена. Статус и автор значений не решают спор:
+    черновик модели с другим значением даёт conflict и с проверенным значением человека — выбор делает только
+    rank preferred (или отклонение лишнего атома)."""
     root = _entity_uuid(ref)
     ctx = _Context(active=templates.active(conn), prop_units=dict(conn.execute(
         "SELECT code, data->>'unit' FROM concept WHERE scheme = 'property'").fetchall()))
