@@ -9,7 +9,7 @@
 }
 .recpage {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 38%, 540px);
   height: 100%;
   min-height: 0;
 }
@@ -164,6 +164,7 @@ a.pill:hover {
   letter-spacing: -0.01em;
 }
 .lede {
+  text-wrap: pretty;
   margin-block: 0 var(--s-md);
   font-size: var(--t-body);
   line-height: 1.6;
@@ -172,6 +173,7 @@ a.pill:hover {
 .prose {
   font-size: var(--t-body);
   line-height: 1.6;
+  text-wrap: pretty;
 }
 .prose h2 {
   font-size: var(--t-section);

@@ -1,4 +1,4 @@
-import { Tabs } from "@heroui/react";
+import { ToggleButton, ToggleButtonGroup } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
@@ -13,10 +13,43 @@ import { groupByDay } from "./group";
 import "./changes.css";
 
 export type Who = "all" | "person" | "model";
-export type Since = "7" | "30" | "all";
+export type Since = "7" | "30" | "ever";
 
 const sinceIso = (s: Since) =>
-  s === "all" ? undefined : new Date(Date.now() - Number(s) * 86_400_000).toISOString();
+  s === "ever" ? undefined : new Date(Date.now() - Number(s) * 86_400_000).toISOString();
+
+function Filter<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: (readonly [T, string])[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <ToggleButtonGroup
+      size="sm"
+      selectionMode="single"
+      disallowEmptySelection
+      selectedKeys={new Set([value])}
+      onSelectionChange={(keys) => {
+        const k = [...keys][0];
+        if (k != null) onChange(String(k) as T);
+      }}
+      aria-label={label}
+    >
+      {options.map(([k, l], i) => (
+        <ToggleButton key={k} id={k}>
+          {i > 0 && <ToggleButtonGroup.Separator />}
+          {l}
+        </ToggleButton>
+      ))}
+    </ToggleButtonGroup>
+  );
+}
 
 /** Лента изменений базы по дням (разд. 5.8): кто и срок — фильтры в адресе. */
 export function ChangesPage({ who = "all", since = "7" }: { who?: Who; since?: Since }) {
@@ -44,36 +77,22 @@ export function ChangesPage({ who = "all", since = "7" }: { who?: Who; since?: S
         <h1 id="ch-title">{t("changes.title")}</h1>
       </div>
       <div className="changes__filters">
-        <Tabs selectedKey={who} onSelectionChange={(k) => set({ who: k as Who })}>
-          <Tabs.ListContainer>
-            <Tabs.List aria-label={t("changes.who")}>
-              {(["all", "person", "model"] as const).map((w) => (
-                <Tabs.Tab key={w} id={w}>
-                  {t(`changes.${w}`)}
-                  <Tabs.Indicator />
-                </Tabs.Tab>
-              ))}
-            </Tabs.List>
-          </Tabs.ListContainer>
-        </Tabs>
-        <Tabs selectedKey={since} onSelectionChange={(k) => set({ since: k as Since })}>
-          <Tabs.ListContainer>
-            <Tabs.List aria-label={t("changes.when")}>
-              {(
-                [
-                  ["7", "d7"],
-                  ["30", "d30"],
-                  ["all", "ever"],
-                ] as const
-              ).map(([k, l]) => (
-                <Tabs.Tab key={k} id={k}>
-                  {t(`changes.${l}`)}
-                  <Tabs.Indicator />
-                </Tabs.Tab>
-              ))}
-            </Tabs.List>
-          </Tabs.ListContainer>
-        </Tabs>
+        <Filter
+          label={t("changes.who")}
+          value={who}
+          options={(["all", "person", "model"] as const).map((w) => [w, t(`changes.${w}`)])}
+          onChange={(v) => set({ who: v })}
+        />
+        <Filter
+          label={t("changes.when")}
+          value={since}
+          options={[
+            ["7", t("changes.d7")],
+            ["30", t("changes.d30")],
+            ["ever", t("changes.ever")],
+          ]}
+          onChange={(v) => set({ since: v })}
+        />
       </div>
       {list.isPending ? (
         <RegionState state="loading" />

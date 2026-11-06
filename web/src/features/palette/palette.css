@@ -1,5 +1,5 @@
 .palette {
-  width: min(560px, calc(100vw - 32px));
+  width: var(--trigger-width);
   max-height: min(420px, 60dvh);
   overflow: auto;
   padding: var(--s-2xs);
