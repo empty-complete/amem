@@ -175,12 +175,20 @@ overwrites, and runs in one transaction:
 The packs of the manifest must be loaded with the same name, version and digest; otherwise
 `BundleError` with `code="bundle_pack_missing"` says what is required and what is present (and the
 path to add to `AMEM_PACKS` if the bundle carries the packs). Other errors have their codes too:
-`bundle_key_collision`, `bundle_object_conflict`. A file already in both databases is matched by
+`bundle_key_collision` (also a link id taken by a link with another `rel` or other ends),
+`bundle_object_conflict`, `bundle_damaged`, `bundle_level1` (with the `amem.check/1` report). A file already in both databases is matched by
 digest (a web page or a message — by address or name), and its copy is not stored twice. With
-`trust="keep"` the status from the bundle is kept, except that `verified` and `auto_verified` survive only
-when the importer is a person (`person:…`); otherwise the record waits for review. With
+`trust="keep"` the status from the bundle is kept, except when the importer is a model (not `person:…`):
+then a record that was checked or decided there (`verified`, `auto_verified`, `rejected`, `deprecated`,
+`superseded`), a record with `basis: author`, or one written by a person waits for review
+(`needs_review`, item `imported`) instead. With
 `trust="review"` everything created is `needs_review`. The source check results are not taken on
-trust: they are computed again against the local copies of the files, `no_file` where there is none.
+trust: they are computed again against the local copies of the files, `no_file` where there is none; an
+atom whose place is not confirmed that way (`fuzzy`, `not_found`, `no_file`) waits for review. A link is
+retired by the import only if it is the same link (same id, `rel` and ends); agent concepts are taken only
+for quantities (`property`), valid by schema and with a UCUM unit. While an import brings new object
+versions, paths or files, it holds the exclusive object lock to the end of its transaction, so `submit`,
+`objects.ingest` and `backup.snapshot` wait for it; re-importing the same bundle does not take the lock.
 `dry_run=True` writes nothing and returns the plan: counts per action, warnings, collisions and the
 level 1 report. The returned `Imported` also carries `changeset_id`, `queued` and `complete`.
 

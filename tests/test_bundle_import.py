@@ -496,3 +496,131 @@ def test_quote_not_found_by_own_check_goes_to_review(pg, pg2, monkeypatch, store
     details = pg2.execute("SELECT details FROM review_item WHERE id = %s", (item["id"],)).fetchone()[0]
     assert details["origin_status"] == "verified"
     assert [v["verdict"] for v in details["verdicts"]] == ["not_found"]
+
+
+def test_model_import_of_author_basis_goes_to_review(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Модель не обходит политику основания: basis author и автор-человек в provenance — needs_review и imported,
+    а не черновик с проверкой смысла."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    r = check.submit(pg, store, docs, [Proposal("atom", atom("@a", tags=["shared"]))], agent="model:writer")
+    rid = r.records[0]["record_id"]
+    _export(pg, store, tmp_path / "b")
+
+    def as_author(row):
+        payload = row["revision"]["payload"]
+        payload["basis"] = "author"
+        payload["provenance"] = {"origin_agent": "person:boss"}
+        row["revision"]["content_hash"] = canon.content_hash(payload)
+        return row
+
+    _rewrite(tmp_path / "b", "atoms.jsonl", as_author)
+    got = bundle.import_(pg2, store2, tmp_path / "b", agent="model:importer")
+    assert lookup.get(pg2, "atom", rid)["status"] == "needs_review"
+    assert [q["reason"] for q in got.queued] == ["imported"]
+    details = pg2.execute("SELECT details FROM review_item WHERE id = %s", (got.queued[0]["id"],)).fetchone()[0]
+    assert details["origin_status"] == "draft"
+    assert "basis author" in details["why"] and "origin_agent person:boss" in details["why"]
+
+
+def test_link_matched_only_by_ends_is_not_retired(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Подборка с выведенной связью под чужим id не выводит локальную связь с теми же rel и концами."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    refs = _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+    bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    _export(pg, store, tmp_path / "c")
+    from amem.ids import uuid7
+
+    _rewrite(tmp_path / "c", "links.jsonl",
+             lambda l: {**l, "id": str(uuid7()), "retired_at": "2026-01-01T00:00:00+00:00"})
+    r = bundle.import_(pg2, store2, tmp_path / "c", agent=OTHER)
+    assert len(lookup.links(pg2, refs["@n"])) == 1
+    assert any("see_also" in w and "другим id" in w for w in r.warnings)
+
+
+def test_exchange_back_and_forth_is_unchanged(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """A → B → A → B без правок: записи обеих баз узнаются на каждом шаге, ничего не записывается."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    _seed(pg, store, docs)
+    r = check.submit(pg2, store2, docs, [Proposal("atom", atom("@y", kind="note", body={"ru": "Из B."}, basis="author",
+                                                               tags=["shared"], sources=None))], agent=OTHER)
+    assert r.state == "approved", r.report
+
+    def move(src, src_store, dst, dst_store, name, agent):
+        bundle.export(src, store=src_store, folder=tmp_path / name, selection=bundle.Selection(tags=("shared",)),
+                      agent=agent, with_files=True)
+        return bundle.import_(dst, dst_store, tmp_path / name, agent=agent)
+
+    first = move(pg, store, pg2, store2, "ab", OTHER)
+    assert first.counts["created"] == 3
+    back = move(pg2, store2, pg, store, "ba", PERSON)
+    assert back.counts["created"] == 1 and back.counts["unchanged"] == 3
+    for name, (src, ss, dst, ds, who) in {"ab2": (pg, store, pg2, store2, OTHER),
+                                          "ba2": (pg2, store2, pg, store, PERSON)}.items():
+        again = move(src, ss, dst, ds, name, who)
+        assert again.counts["unchanged"] == 4 and again.counts["created"] == again.counts["pending"] == 0
+        assert again.changeset_id is None and again.queued == []
+
+
+def test_repeated_import_does_not_adopt_known_objects(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Объект без новых версий и путей не принимается заново: исключительная блокировка объектов не берётся."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+    bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    calls = []
+    adopt = objects.adopt
+    monkeypatch.setattr(objects, "adopt", lambda *a, **kw: calls.append(a) or adopt(*a, **kw))
+    locks = []
+    execute = type(pg2).execute
+
+    def spy(self, query, *args, **kw):
+        if "pg_advisory_xact_lock(" in str(query):
+            locks.append(query)
+        return execute(self, query, *args, **kw)
+
+    monkeypatch.setattr(type(pg2), "execute", spy)
+    again = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert again.counts["unchanged"] == 3 and calls == [] and locks == []
+
+
+def test_invalid_property_concept_is_skipped(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+    extra = [{"scheme": "property", "code": "x_bad_unit", "label": {"ru": "Плохая"}, "unit": "кг"},
+             {"scheme": "property", "code": "x_no_label"},
+             {"scheme": "property", "code": "x_good", "label": {"ru": "Хорошая"}, "unit": "kg"}]
+    (tmp_path / "b" / "concepts.jsonl").write_text("".join(json.dumps(c, ensure_ascii=False) + "\n" for c in extra),
+                                                   encoding="utf-8")
+    manifest = json.loads((tmp_path / "b" / "manifest.json").read_text(encoding="utf-8"))
+    manifest["parts"]["concepts.jsonl"] = hashlib.sha256((tmp_path / "b" / "concepts.jsonl").read_bytes()).hexdigest()
+    (tmp_path / "b" / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+    r = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    got = {c for (c,) in pg2.execute("SELECT code FROM concept WHERE scheme = 'property' AND code LIKE 'x\\_%'")}
+    assert got == {"x_good"}
+    assert any("x_bad_unit" in w for w in r.warnings) and any("x_no_label" in w for w in r.warnings)
+
+
+def test_refusal_codes_for_damaged_and_level1(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+    _export(pg, store, tmp_path / "c")
+    with (tmp_path / "b" / "atoms.jsonl").open("a", encoding="utf-8") as f:
+        f.write("\n")
+    with pytest.raises(bundle.BundleError) as e:
+        bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert e.value.code == bundle.DAMAGED
+
+    def no_unit(row):
+        payload = row["revision"]["payload"]
+        if payload.get("content"):
+            del payload["content"]["values"][0]["unit"]
+            row["revision"]["content_hash"] = canon.content_hash(payload)
+        return row
+
+    _rewrite(tmp_path / "c", "atoms.jsonl", no_unit)
+    with pytest.raises(bundle.BundleError) as e:
+        bundle.import_(pg2, store2, tmp_path / "c", agent=OTHER)
+    assert e.value.code == bundle.LEVEL1
