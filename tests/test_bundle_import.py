@@ -1,5 +1,5 @@
 """Импорт подборки: id сохраняются, повтор идемпотентен, расхождение — pending, trust, пакеты, коллизии, dry_run,
-история, объекты и итоги сверки, связи (спецификация 3c, разд. 4.3)."""
+история, объекты и итоги сверки, связи, блокировки и сбои записи (спецификация 3c, разд. 4.3)."""
 import hashlib
 import json
 import os
@@ -8,8 +8,10 @@ from pathlib import Path
 import pytest
 
 from amem import bundle, canon, check, db, lookup, objects, records, review
-from amem.check import Proposal
+from amem.check import Proposal, level2
+from amem.ocfl_store import ObjectStore, StoreError
 from check_support import atom, entity, source_md, value
+from v1_support import same_database
 
 PACKS = Path(__file__).with_name("packs")
 PERSON, OTHER = "person:alice", "person:bob"
@@ -624,3 +626,174 @@ def test_refusal_codes_for_damaged_and_level1(pg, pg2, monkeypatch, store, store
     with pytest.raises(bundle.BundleError) as e:
         bundle.import_(pg2, store2, tmp_path / "c", agent=OTHER)
     assert e.value.code == bundle.LEVEL1
+
+
+def _object_locks(watch, pid: int) -> list[str]:
+    """Режимы рекомендательной блокировки объектов (OBJECTS_LOCK), которые держит соединение pid: ключ bigint
+    в pg_locks — старшая половина в classid, младшая в objid, objsubid = 1."""
+    key = objects.OBJECTS_LOCK
+    return sorted(mode for (mode,) in watch.execute(
+        "SELECT mode FROM pg_locks WHERE locktype = 'advisory' AND pid = %s AND classid::bigint = %s "
+        "AND objid::bigint = %s AND objsubid = 1", (pid, key >> 32, key & 0xFFFFFFFF)))
+
+
+def test_own_check_runs_without_object_lock(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Своя сверка (извлечение текста бывает долгим) идёт после приёма объектов и до транзакции записи: блокировки
+    объектов у импорта в это время нет, а принятый объект уже виден другим соединениям."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    refs = _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+    seen = []
+    judge = level2.judge_source
+    with same_database(pg2, autocommit=True) as watch:
+        def spy(*args, **kw):
+            seen.append((_object_locks(watch, pg2.info.backend_pid),
+                         watch.execute("SELECT count(*) FROM object").fetchone()[0]))
+            return judge(*args, **kw)
+
+        monkeypatch.setattr(level2, "judge_source", spy)
+        r = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert seen == [([], 1)]
+    assert r.counts["created"] == 3 and _source_row(pg2, refs["@m"])[0] == "ok"
+
+
+def test_write_transaction_holds_shared_object_lock(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Транзакция записи — под разделяемой блокировкой объектов, как у submit: пакет другого агента берёт её сразу,
+    а исключительная (новая версия объекта, снимок) ждёт фиксации импорта."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+    got = []
+    commit = records.commit
+    key = objects.OBJECTS_LOCK
+    with same_database(pg2, autocommit=True) as other:
+        def spy(*args, **kw):
+            got.append((_object_locks(other, pg2.info.backend_pid),
+                        other.execute("SELECT pg_try_advisory_xact_lock_shared(%s)", (key,)).fetchone()[0],
+                        other.execute("SELECT pg_try_advisory_xact_lock(%s)", (key,)).fetchone()[0]))
+            return commit(*args, **kw)
+
+        monkeypatch.setattr(records, "commit", spy)
+        r = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+        assert _object_locks(other, pg2.info.backend_pid) == []          # после фиксации — ничего
+    assert got == [(["ShareLock"], True, False)]
+    assert r.counts["created"] == 3
+
+
+def test_new_version_between_objects_and_write_gives_source_changed(pg, pg2, monkeypatch, store, store2, docs,
+                                                                    tmp_path):
+    """Новая версия объекта, принятая параллельным ingest после приёма объектов подборки и до транзакции записи,
+    не теряется: ревизия со ссылкой на прежнюю версию получает пункт source_changed."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    refs = _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+    with (docs / "заметка.md").open("a", encoding="utf-8") as f:
+        f.write("\nДобавлено позже.\n")
+    adopt, versions = objects.adopt, []
+    with same_database(pg2, autocommit=True) as other:
+        other.execute("SET lock_timeout = '5s'")      # импорт, держащий блокировку объектов, — отказ, а не зависание
+
+        def then_ingest(*args, **kw):
+            out = adopt(*args, **kw)
+            versions.append(objects.ingest(other, store2, docs, "заметка.md", agent=OTHER))
+            return out
+
+        monkeypatch.setattr(objects, "adopt", then_ingest)
+        r = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    [v2] = versions
+    assert v2.n == 2 and v2.created
+    assert lookup.get(pg2, "atom", refs["@m"])["sources"][0]["object_version"] == 1
+    [item] = [q for q in r.queued if q["reason"] == "source_changed"]
+    assert str(item["record_id"]) == refs["@m"] and not r.complete
+    details = pg2.execute("SELECT details FROM review_item WHERE id = %s", (item["id"],)).fetchone()[0]
+    assert [(o["object"], o["from"], o["to"]) for o in details["objects"]] == [(f"obj:{v2.object_id}", [1], 2)]
+
+
+@pytest.fixture
+def pg3(request, pg):
+    """Третья чистая схема на том же сервере — база, куда та же подборка вливается без сбоя (для сравнения)."""
+    from conftest import _schema
+
+    with _schema(request.node.callspec.params["pg"]) as conn:
+        yield conn
+
+
+def _state(conn, store) -> dict:
+    """Что импорт оставил в базе — без своих id ревизий, пакетов и пунктов и без времени: чтобы сравнить две базы."""
+    def rows(sql):
+        return [tuple(r) for r in conn.execute(sql).fetchall()]
+
+    out = {
+        "atoms": rows("SELECT a.id, a.key, a.status, c.content_hash, c.review_state FROM atom a "
+                      "JOIN atom_current c ON c.atom_id = a.id ORDER BY a.id"),
+        "entities": rows("SELECT e.id, e.key, e.status, c.content_hash FROM entity e "
+                         "JOIN entity_current c ON c.entity_id = e.id ORDER BY e.id"),
+        "sources": rows("SELECT r.atom_id, s.position, s.object_id, s.object_version, s.verdict, s.page, s.anchor "
+                        "FROM source s JOIN atom_revision r ON r.id = s.atom_revision_id ORDER BY 1, 2"),
+        "queue": rows("SELECT record_id, reason, state, details FROM review_item ORDER BY record_id, reason"),
+        "links": rows("SELECT id, rel, coalesce(src_atom, src_entity), coalesce(dst_atom, dst_entity), retired_at "
+                      "FROM link ORDER BY id"),
+        "objects": rows("SELECT o.id, o.kind, o.original_name, v.n, v.digest FROM object o "
+                        "JOIN object_version v ON v.object_id = o.id ORDER BY o.id, v.n"),
+        "paths": rows("SELECT path, object_id FROM object_path ORDER BY path"),
+    }
+    out["copies"] = [store.head(object_id) for object_id, *_ in out["objects"]]
+    return out
+
+
+def test_write_failure_keeps_objects_and_retry_matches_clean_import(pg, pg2, pg3, monkeypatch, store, store2, docs,
+                                                                    tmp_path):
+    """Сбой транзакции записи: объекты и копии, принятые до неё своими транзакциями, остаются, записей и пакета нет;
+    повтор импорта даёт то же, что импорт без сбоя."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch); _prepare(pg3, monkeypatch)
+    _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+    store3 = ObjectStore(tmp_path / "objects3")
+    clean = bundle.import_(pg3, store3, tmp_path / "b", agent="model:importer")
+    commit = records.commit
+
+    def broken(*args, **kw):
+        raise records.RecordError("сбой записи")
+
+    monkeypatch.setattr(records, "commit", broken)
+    with pytest.raises(bundle.BundleError, match="сбой записи"):
+        bundle.import_(pg2, store2, tmp_path / "b", agent="model:importer")
+    [(object_id,)] = pg2.execute("SELECT id FROM object").fetchall()
+    assert store2.head(object_id) == 1
+    assert {t: _count(pg2, t) for t in ("atom", "entity", "link", "changeset", "review_item")} == \
+        dict.fromkeys(("atom", "entity", "link", "changeset", "review_item"), 0)
+    monkeypatch.setattr(records, "commit", commit)
+    again = bundle.import_(pg2, store2, tmp_path / "b", agent="model:importer")
+    assert again.counts == {**clean.counts, "objects": 0}        # объект принят первой попыткой: он уже не новый
+    assert [q["reason"] for q in again.queued] == [q["reason"] for q in clean.queued] and not again.complete
+    assert again.warnings == clean.warnings
+    assert _state(pg2, store2) == _state(pg3, store3)
+
+
+def test_object_failure_refuses_and_keeps_adopted(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Сбой при приёме объекта (здесь — хранилища) — отказ BundleError до записи: объект, принятый раньше, остаётся
+    с копией, записей нет; повтор импорта принимает остальное как есть."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    _seed(pg, store, docs)
+    r = check.submit(pg, store, docs, [Proposal("atom", atom("@k", tags=["shared"]))], agent=PERSON)
+    assert r.state == "approved", r.report
+    _export(pg, store, tmp_path / "b")
+    add, calls = store2.add_version, []
+
+    def flaky(object_id, *args, **kw):
+        calls.append(object_id)
+        if len(calls) == 2:
+            raise StoreError("нет места на диске")
+        return add(object_id, *args, **kw)
+
+    monkeypatch.setattr(store2, "add_version", flaky)
+    with pytest.raises(bundle.BundleError, match="нет места на диске"):
+        bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    first, second = calls
+    assert [oid for (oid,) in pg2.execute("SELECT id FROM object")] == [first]
+    assert store2.head(first) == 1 and store2.head(second) == 0
+    assert _count(pg2, "atom") == 0 and _count(pg2, "changeset") == 0
+    monkeypatch.setattr(store2, "add_version", add)
+    again = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert again.counts["created"] == 4 and again.counts["objects"] == 1
+    assert _count(pg2, "object") == 2 and store2.head(second) == 1
