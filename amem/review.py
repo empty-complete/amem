@@ -161,11 +161,19 @@ def claim(conn: psycopg.Connection, *, agent: str, reasons: Sequence[str] | None
           lease: timedelta = LEASE, now: datetime | None = None) -> list[dict]:
     """Захватить самые старые пункты, которые агент вправе решать (разд. 8.4): queued или с истёкшей арендой.
 
-    Модель получает только semantic, автор пакета — не свой semantic. FOR UPDATE SKIP LOCKED: параллельные
-    проверяющие не берут один пункт и не ждут друг друга. Записи не блокируются. Устаревший пункт закрывается
-    obsolete и не выдаётся — вместо него берётся следующий."""
+    Модель получает только semantic и не свой: модель не подтверждает свой же текст; человек свои пункты получает
+    (разд. 8.2). reasons — список причин из ReviewReason; недоступные агенту просто не выдаются. FOR UPDATE SKIP
+    LOCKED: параллельные проверяющие не берут один пункт и не ждут друг друга. Записи не блокируются. Устаревший
+    пункт закрывается obsolete и не выдаётся — вместо него берётся следующий."""
     _require_autocommit(conn)
     allowed = _allowed(agent)
+    if reasons is not None:
+        if not isinstance(reasons, (list, tuple, set, frozenset)):
+            raise ReviewError(f"claim: reasons {reasons!r} — нужен список причин, а не строка")
+        unknown = sorted(set(reasons) - set(REASONS))
+        if unknown:
+            raise ReviewError(f"claim: неизвестные причины {', '.join(map(str, unknown))}; "
+                              f"допустимы {', '.join(REASONS)}")
     wanted = sorted(allowed if reasons is None else allowed & set(reasons))
     if limit < 1:
         raise ReviewError(f"claim: limit {limit} — нужно хотя бы 1")
@@ -179,11 +187,11 @@ def claim(conn: psycopg.Connection, *, agent: str, reasons: Sequence[str] | None
             rows = conn.execute(
                 f"{_ITEM} WHERE (ri.state = 'queued' OR (ri.state = 'claimed' AND ri.claimed_until < %(now)s)) "
                 "AND ri.reason = ANY(%(reasons)s) "
-                "AND NOT (ri.reason = 'semantic' AND cs.agent IS NOT DISTINCT FROM %(agent)s) "
+                "AND NOT (ri.reason = 'semantic' AND %(model)s AND cs.agent IS NOT DISTINCT FROM %(agent)s) "
                 "AND NOT ri.id = ANY(%(taken)s) "
                 "ORDER BY ri.created_at, ri.id LIMIT %(limit)s FOR UPDATE OF ri SKIP LOCKED",
-                {"now": now, "reasons": wanted, "agent": agent, "taken": [o["id"] for o in out],
-                 "limit": limit - len(out)}).fetchall()
+                {"now": now, "reasons": wanted, "agent": agent, "model": _kind(agent) == "llm_judge",
+                 "taken": [o["id"] for o in out], "limit": limit - len(out)}).fetchall()
             if not rows:
                 break
             for row in rows:
@@ -246,17 +254,23 @@ def resolve(conn: psycopg.Connection, item_id: uuid.UUID | str, outcome: str, *,
     if head is None:
         raise ReviewError(f"пункта очереди {item_id} нет")
     target, record_id = head
-    with conn.transaction():
-        records._ensure_agent(conn, agent)
-        last = records._lock(conn, target, record_id)
-        at = max(now, last)
-        item = _row(conn.execute(f"{_ITEM} WHERE ri.id = %s FOR UPDATE OF ri", (item_id,)).fetchone())
-        _check(item, agent, method, now)
-        stale = _stale(conn, item)
-        if stale:
-            _close(conn, item_id, "obsolete", at)     # закрытие фиксируется: ошибка — уже после транзакции
-        else:
-            result = _apply(conn, item, outcome, method, agent=agent, confidence=confidence, note=note, at=at)
+    try:
+        with conn.transaction():
+            records._ensure_agent(conn, agent)
+            last = records._lock(conn, target, record_id)
+            at = max(now, last)
+            item = _row(conn.execute(f"{_ITEM} WHERE ri.id = %s FOR UPDATE OF ri", (item_id,)).fetchone())
+            # порядок: закрыт ли → устарел ли (закрыть, даже если решающий не вправе) → аренда и права
+            if item["state"] in ("done", "obsolete"):
+                raise ReviewError(f"пункт {item_id} уже закрыт ({item['state']})")
+            stale = _stale(conn, item)
+            if stale:
+                _close(conn, item_id, "obsolete", at)     # закрытие фиксируется: ошибка — уже после транзакции
+            else:
+                _check(item, agent, method, now)
+                result = _apply(conn, item, outcome, method, agent=agent, confidence=confidence, note=note, at=at)
+    except records.RecordError as e:
+        raise ReviewError(f"пункт {item_id}: {e}") from e
     if stale:
         raise ReviewError(f"пункт {item_id} устарел: его ревизия больше не та, о которой спрашивали, — "
                           "пункт закрыт obsolete")
@@ -264,9 +278,7 @@ def resolve(conn: psycopg.Connection, item_id: uuid.UUID | str, outcome: str, *,
 
 
 def _check(item: dict, agent: str, method: str, now: datetime) -> None:
-    """Перепроверка под блокировкой: состояние, аренда, права на причину."""
-    if item["state"] in ("done", "obsolete"):
-        raise ReviewError(f"пункт {item['id']} уже закрыт ({item['state']})")
+    """Перепроверка под блокировкой: аренда и права на причину (закрытый и устаревший отсеяны раньше)."""
     if item["state"] == "claimed" and item["claimed_by"] != agent and item["claimed_until"] >= now:
         raise ReviewError(f"пункт {item['id']} захвачен {item['claimed_by']} до {item['claimed_until']}")
     if item["reason"] not in _allowed(agent):
@@ -315,9 +327,11 @@ def _apply(conn, item: dict, outcome: str, method: str, *, agent: str, confidenc
         set_status("verified" if outcome == "confirmed" else "rejected")
         final = True
     if final:
-        # итоговое решение человека: остальные вопросы об этой ревизии сняты; затем — устаревшее по записи
+        # итоговое решение человека: остальные вопросы об этой ревизии сняты, кроме source_changed — новую версию
+        # файла решавший не видел, это отдельный вопрос (разд. 7.3); затем — устаревшее по записи
         conn.execute("UPDATE review_item SET state = 'obsolete', closed_at = %s WHERE state = ANY(%s) "
-                     f"AND {t}_revision_id = %s AND id <> %s", (at, list(OPEN), revision_id, item["id"]))
+                     f"AND {t}_revision_id = %s AND id <> %s AND reason <> 'source_changed'",
+                     (at, list(OPEN), revision_id, item["id"]))
         close_stale(conn, t, record_id, at=at)
     status = conn.execute(f"SELECT status FROM {t} WHERE id = %s", (record_id,)).fetchone()[0]
     return {"verification_id": verification_id, "status": status, "queued": new}
