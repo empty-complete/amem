@@ -3,7 +3,7 @@ import { renderWithApp } from "../../test/render";
 import { ChangesPage } from "./ChangesPage";
 
 test("лента по дням: сегодня сверху, события словами, кто записал", async () => {
-  await renderWithApp(<ChangesPage who="all" since="all" />, "/changes");
+  await renderWithApp(<ChangesPage who="all" since="ever" />, "/changes");
   const today = await screen.findByRole("region", { name: "Сегодня" });
   expect(within(today).getByText("новая ревизия")).toBeInTheDocument();
   expect(within(today).getByText("связь добавлена · см. также")).toBeInTheDocument();
@@ -13,7 +13,7 @@ test("лента по дням: сегодня сверху, события сл
 });
 
 test("фильтр «Агенты» — только модели", async () => {
-  await renderWithApp(<ChangesPage who="model" since="all" />, "/changes");
+  await renderWithApp(<ChangesPage who="model" since="ever" />, "/changes");
   await screen.findByRole("region", { name: "Вчера" });
   expect(screen.queryByText("anna")).not.toBeInTheDocument();
   expect(screen.getAllByText(/\(модель\)/).length).toBeGreaterThan(0);

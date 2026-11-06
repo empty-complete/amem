@@ -74,13 +74,23 @@
 }
 .pdf__sheet {
   position: relative;
-  background: #fff;
+  background: var(--paper);
   box-shadow: var(--surface-shadow);
   border-radius: 4px;
   overflow: hidden;
 }
-.pdf__sheet canvas {
+.pdf__inner {
+  position: absolute;
+}
+.pdf__inner canvas {
   display: block;
+}
+.pdf__tools {
+  display: flex;
+  justify-content: flex-end;
+}
+.pdf__zoom {
+  overflow-x: auto;
 }
 
 .textLayer {
@@ -142,9 +152,8 @@ mark.q {
 blockquote.quote {
   margin: 0 0 var(--s-sm);
   padding: var(--s-sm) var(--s-md);
-  border-left: 3px solid var(--fam-source);
   background: var(--fam-source-wash);
-  border-radius: 0 var(--radius) var(--radius) 0;
+  border-radius: var(--radius);
 }
 
 @media (max-width: 64rem) {

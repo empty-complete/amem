@@ -19,3 +19,19 @@ export function markRange(els: HTMLElement[], start: Pos, end: Pos): HTMLElement
   }
   return first;
 }
+
+/** Прокрутить к элементу только внутри ближайшего прокручиваемого контейнера — страница не двигается. */
+export function scrollWithin(el: HTMLElement | null) {
+  if (!el) return;
+  let box = el.parentElement;
+  while (
+    box &&
+    !(box.scrollHeight > box.clientHeight && /(auto|scroll)/.test(getComputedStyle(box).overflowY))
+  ) {
+    box = box.parentElement;
+  }
+  if (!box || box === document.scrollingElement || box === document.body) return;
+  const a = el.getBoundingClientRect();
+  const b = box.getBoundingClientRect();
+  box.scrollTop += a.top - b.top - (b.height - a.height) / 2;
+}

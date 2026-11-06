@@ -202,7 +202,9 @@
     "sheet_label": "Лист {{name}}",
     "nothing_unparsed": "Всё, что есть в файле, уже разобрано.",
     "preview": "Превью",
-    "no_object": "Объекта {{id}} нет"
+    "no_object": "Объекта {{id}} нет",
+    "zoom_in": "Крупнее",
+    "zoom_fit": "По ширине"
   },
   "card": {
     "tab_card": "Карточка",

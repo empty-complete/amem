@@ -6,15 +6,44 @@
     "gzip": true
   },
   {
-    "name": "JS: всё приложение части A",
-    "path": "python/amem_web/dist/assets/*.js",
-    "limit": "300 kB",
+    "name": "JS: приложение без ленивых кусков (pdf.js, KaTeX, CodeMirror)",
+    "path": [
+      "python/amem_web/dist/assets/*.js",
+      "!python/amem_web/dist/assets/PdfPage-*.js",
+      "!python/amem_web/dist/assets/SourceView-*.js",
+      "!python/amem_web/dist/assets/katex-*.js"
+    ],
+    "limit": "360 kB",
     "gzip": true
   },
   {
-    "name": "CSS (все стили HeroUI; урезать в части G)",
-    "path": "python/amem_web/dist/assets/*.css",
-    "limit": "48 kB",
+    "name": "Лениво: pdf.js (страница источника)",
+    "path": "python/amem_web/dist/assets/PdfPage-*.js",
+    "limit": "140 kB",
+    "gzip": true
+  },
+  {
+    "name": "Лениво: воркер pdf.js (отдельный поток)",
+    "path": "python/amem_web/dist/assets/pdf.worker.min-*.mjs",
+    "limit": "450 kB",
+    "gzip": true
+  },
+  {
+    "name": "Лениво: KaTeX (формулы)",
+    "path": ["python/amem_web/dist/assets/katex-*.js", "python/amem_web/dist/assets/katex-*.css"],
+    "limit": "90 kB",
+    "gzip": true
+  },
+  {
+    "name": "Лениво: CodeMirror (исходник записи)",
+    "path": "python/amem_web/dist/assets/SourceView-*.js",
+    "limit": "170 kB",
+    "gzip": true
+  },
+  {
+    "name": "CSS приложения (все стили HeroUI; урезать в части G)",
+    "path": ["python/amem_web/dist/assets/*.css", "!python/amem_web/dist/assets/katex-*.css"],
+    "limit": "52 kB",
     "gzip": true
   }
 ]

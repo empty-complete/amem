@@ -46,7 +46,12 @@ function Sheet({
   const width = Math.max(...s.data.rows.map((r) => r.length), 1);
   return (
     <div className="sheet">
-      <div className="sheet__scroll">
+      <section
+        className="sheet__scroll"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: прокручиваемая таблица должна получать фокус с клавиатуры
+        tabIndex={0}
+        aria-label={t("source.sheet_label", { name })}
+      >
         <table aria-label={t("source.sheet_label", { name })}>
           <thead>
             <tr>
@@ -87,7 +92,7 @@ function Sheet({
             })}
           </tbody>
         </table>
-      </div>
+      </section>
       {ranges.map((c) => (
         <p key={`${c.range}-${c.label}`} className="sheet__cap">
           <i aria-hidden="true" /> {t("source.cited_cell", { range: c.range, label: c.label })}

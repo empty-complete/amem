@@ -202,7 +202,9 @@
     "sheet_label": "Sheet {{name}}",
     "nothing_unparsed": "Everything in the file is parsed.",
     "preview": "Preview",
-    "no_object": "No object {{id}}"
+    "no_object": "No object {{id}}",
+    "zoom_in": "Zoom in",
+    "zoom_fit": "Fit width"
   },
   "card": {
     "tab_card": "Card",

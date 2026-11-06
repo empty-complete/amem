@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { errorText } from "../../api/errors";
 import { q } from "../../api/queries";
 import { RegionState } from "../../ui/RegionState";
-import { markRange } from "./mark";
+import { markRange, scrollWithin } from "./mark";
 import { findQuote } from "./quote";
 
 /** Текст версии (страница или весь) абзацами, цитата подсвечена тем же поиском, что и на PDF. */
@@ -38,7 +38,7 @@ export function TextFragment({
       const r = findQuote(paras, quote);
       if (r) first ??= markRange(els, r.start, r.end);
     }
-    first?.scrollIntoView?.({ block: "center" });
+    scrollWithin(first);
   }, [paras, quotes]);
 
   if (text.isPending) return <RegionState state="loading" />;

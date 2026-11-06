@@ -1,6 +1,5 @@
 /* Hallmark · v2.0.0 · shape: app screen · genre: modern-minimal · theme: custom (vibe: "calm apple grouped lists, a night sky of knowledge") · posture: full-palette · modes: light+dark · signature: the claim beside its source, the constellation beside the claim */
 /* critique: part A of the amem web UI: shell, folders, record list, search; the sweep runs per part */
-/* Hallmark · answered 41 · --press-ink always sits on --press (light fill in dark mode) · the pair passes 4.5:1 */
 @import "tailwindcss";
 @import "@heroui/styles";
 @import "./theme.css";
