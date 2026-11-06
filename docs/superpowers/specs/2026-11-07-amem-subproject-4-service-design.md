@@ -177,12 +177,14 @@ amem становится программой, которой пользуют�
 | `ReviewError(code=closed)` | 409 | `review_closed`; в `detail` — кто и когда решил |
 | `ReviewError(code=forbidden \| claimed)` | 403 | `review_forbidden` |
 | `ReviewError(code=stale \| bad_outcome)` | 400 | `review_bad` |
+| `ReviewError(code=not_found)` | 404 | `not_found` |
+| `ReviewError(code=invalid)` | 400 | `review_bad` |
 | `FolderError(exists \| not_empty)` | 409 | `folder_exists` / `folder_not_empty` |
 | `FolderError(not_found)` | 404 | `folder_not_found` |
 | `FolderError` прочее | 422 | `folder_invalid` |
 | `BundleError` | 422 | `code` ошибки (`bundle_pack_missing`, …) |
 | `ObjectError(code=too_large)` | 413 | `too_large` |
-| `CheckError`, `RecordError`, `ObjectError`, ошибка разбора запроса | 400 | `bad_request` |
+| `CheckError`, `RecordError`, `ObjectError`, `db.BaseNameError`, `vocab.VocabError`, ошибка разбора запроса | 400 | `bad_request` |
 | Нет входа / только чтение | 401 / 403 | `auth_required` / `read_only` |
 | Чужой `Host` / `Origin` | 421 / 403 | `bad_host` / `bad_origin` |
 | Запись не в `application/json` | 415 | `unsupported_media_type` |
