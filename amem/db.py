@@ -103,8 +103,10 @@ def load_vocab(conn: psycopg.Connection) -> None:
                                (p.name, p.version)).fetchone()
             if row is not None and row[0] != p.digest:
                 raise MigrationError(f"пакет {p.name} {p.version}: уже загружен с другим содержимым — поднимите версию")
-            conn.execute("INSERT INTO pack (name, version, digest, loaded_at) VALUES (%s, %s, %s, %s) "
-                         "ON CONFLICT (name, version) DO NOTHING", (p.name, p.version, p.digest, now))
+            # requires обновляется и у уже загруженного пакета: базы до 0007 получили столбец пустым
+            conn.execute("INSERT INTO pack (name, version, digest, requires, loaded_at) VALUES (%s, %s, %s, %s, %s) "
+                         "ON CONFLICT (name, version) DO UPDATE SET requires = EXCLUDED.requires",
+                         (p.name, p.version, p.digest, Jsonb(p.requires), now))
             for c in p.concepts:
                 _upsert_concept(conn, c, p.name, now)
             for t in p.templates:

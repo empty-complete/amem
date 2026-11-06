@@ -212,7 +212,7 @@ def test_migration_drops_text_cache_of_docx_and_xlsx(pg, tmp_path, monkeypatch):
     # у docx есть и настоящая страница: сброс трогает только page = 0
     pg.execute("INSERT INTO object_text (digest, page, text) VALUES (%s, 1, 'Давление')", (digests["a.docx"],))
     monkeypatch.setattr(db, "SQL_DIR", real)
-    assert db.migrate(pg) == ["0006_check.sql"]
+    assert db.migrate(pg)[0] == "0006_check.sql"          # дальше — следующие миграции
     left = {r[0] for r in pg.execute("SELECT digest FROM object_text WHERE page = 0")}
     assert left == {digests["c.pdf"]}
     assert pg.execute("SELECT text FROM object_text WHERE page = 1").fetchall() == [("Давление",)]

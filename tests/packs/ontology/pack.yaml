@@ -1,0 +1,6 @@
+name: ontology
+version: 1.0.0
+title: Пакет для тестов профилей
+description: Классы device и sensor с профилями, словарь parameter_origin.
+license: MIT
+requires: {quantities: ">=1.0.0,<2"}

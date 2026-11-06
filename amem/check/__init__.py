@@ -6,6 +6,10 @@ submit — единая точка записи знаний: уровни 1–4
 Статус существующей записи ставится после records.commit и только у созданной ревизии: commit меняет статус раньше,
 чем узнаёт, что тело не изменилось. Пункты очереди — в review_item и в ответе, не в отчёте.
 
+Записи человека (агент person:, спецификация 3c, разд. 5): уровни 1–4 те же, но статус — verified без риска шаблонов
+и без пунктов очереди, кроме source_changed (ссылка на не последнюю версию файла); правка моделью записи, текущую
+ревизию которой записал человек, ждёт его решения (pending).
+
 Устройство и правила — docs/superpowers/specs/2026-11-05-amem-subproject-3-autocheck-design.md.
 """
 from __future__ import annotations
@@ -51,6 +55,7 @@ class Submitted:
 
 
 RETIRED = frozenset({"deprecated", "superseded"})
+LOW_CONFIDENCE = 0.8          # confidence ниже — риск low_confidence, если шаблон его включает
 CANDIDATE_CODES = ("conflict", "duplicate", "related")    # кандидаты уровней 3 и 4 — в details пункта
 
 
@@ -62,6 +67,8 @@ class _Plan:
     warned: bool
     status: str | None = None          # итоговый статус записи; у правки проверенной — прежний verified
     pending: bool = False              # правка проверенной: ревизия ждёт решения человека
+    person: bool = False               # пишет человек (person:): verified без риска и очереди
+    owner: str | None = None           # агент текущей ревизии существующей записи — читается под блокировкой
 
 
 class CheckError(ValueError):
@@ -88,14 +95,15 @@ def submit(conn: psycopg.Connection, store: ObjectStore, docs: Path, proposals: 
     _check_call(conn, proposals, links, activity)
     report = Report()
     levels = {"1": "done", "2": "done", "3": "skipped", "4": "skipped"}
-    batch = level1.check(conn, proposals, links, report)
+    batch = level1.check(conn, proposals, links, report, agent=agent)
     checks = level2.check(conn, store, docs, batch, report, agent=agent)
     if report.has_violations():
         return _reject(conn, report, batch, levels, degraded=[], agent=agent, activity=activity, reason=reason)
     conflicts = level3.check(conn, batch, report)
     degraded = level4.check(conn, batch, report, provider=provider)
     levels["3"] = levels["4"] = "done"
-    plans = [_risk(item, report, conflicts) for item in batch.items]
+    person = _is_person(agent)
+    plans = [_risk(item, report, conflicts, person=person) for item in batch.items]
     try:
         with conn.transaction():
             return _write(conn, batch, plans, checks, report, levels, degraded, agent=agent, activity=activity,
@@ -138,25 +146,42 @@ def _reject(conn, report: Report, batch: Batch, levels: dict, *, degraded: list,
     return Submitted("rejected", cs, body, [], [], {**levels, "5": "skipped"}, True)
 
 
-def _risk(item: Prepared, report: Report, conflicts: dict[str, list[str]]) -> _Plan:
-    """Риск записи (разд. 7.1): правила high_risk её шаблонов и противоречие уровня 3; предупреждения — warning."""
+def _is_person(agent: str) -> bool:
+    return agent.startswith("person:")
+
+
+def _risk(item: Prepared, report: Report, conflicts: dict[str, list[str]], *, person: bool = False) -> _Plan:
+    """Риск записи (разд. 7.1): правила high_risk её шаблонов и противоречие уровня 3; предупреждения — warning.
+    У записи человека риска нет: она и так проверена (замечания остаются в отчёте)."""
+    if person:
+        return _Plan(item, [], False, person=True)
     risk = []
     rules = item.rules.high_risk if item.rules is not None else frozenset()
     if "always" in rules:
         risk.append(f"template:{item.code}:always")
     if "numeric" in rules and item.target == "atom" and numbers.atom_numbers(item.payload):
         risk.append(f"template:{item.code}:numeric")
+    confidence = item.payload.get("confidence") if item.target == "atom" else None
+    if "low_confidence" in rules and confidence is not None and confidence < LOW_CONFIDENCE:
+        risk.append(f"template:{item.code}:low_confidence")
     risk.extend(conflicts.get(item.label, []))
     warned = any(i.severity == "warning" for i in report.for_label(item.label))
     return _Plan(item, risk, warned)
 
 
 def _decide(plan: _Plan, status: str | None) -> None:
-    """Политика по статусу записи, перечитанному под блокировкой (разд. 7.1)."""
+    """Политика по статусу записи, перечитанному под блокировкой (разд. 7.1), и по агенту (спецификация 3c, разд. 5):
+    запись человека — verified; правку моделью записи, текущую ревизию которой записал человек, решает человек.
+    Отвергнутая запись (rejected) открытых пунктов не держит (review.CLOSING_STATUSES): пункт edit к ней сразу
+    устарел бы и правка зависла бы в pending — поэтому её правка моделью идёт обычным путём, как до 3c."""
     if status in RETIRED:
         raise _Retired(plan.item, status)
-    if status == "verified":
-        plan.status, plan.pending = "verified", True
+    if plan.person:
+        plan.status = "verified"
+        return
+    by_person = plan.owner is not None and _is_person(plan.owner) and status not in review.CLOSING_STATUSES
+    if status == "verified" or by_person:
+        plan.status, plan.pending = status, True        # статус остаётся прежним до решения человека
         return
     if plan.warned or plan.risk:
         plan.status = "needs_review"
@@ -175,6 +200,7 @@ def _write(conn, batch: Batch, plans: list[_Plan], checks: dict[str, list[Source
         row = conn.execute(f"SELECT status FROM {t} WHERE id = %s FOR NO KEY UPDATE", (p.item.record_id,)).fetchone()
         if row is None:
             raise records.RecordError(f"{p.item.label}: такой записи нет")
+        p.owner = _owner(conn, t, p.item.record_id)
         _decide(p, row[0])
     for p in plans:
         if p.item.record_id is None:
@@ -217,6 +243,13 @@ def _write(conn, batch: Batch, plans: list[_Plan], checks: dict[str, list[Source
                      {**levels, "5": "queued" if semantic else "not_applicable"}, not queued)
 
 
+def _owner(conn, target: str, record_id: uuid.UUID) -> str | None:
+    """Агент текущей ревизии записи (под блокировкой записи: новой ревизии не появится)."""
+    row = conn.execute(f"SELECT c.agent FROM {target}_current r JOIN changeset c ON c.id = r.changeset_id "
+                       f"WHERE r.{target}_id = %s", (record_id,)).fetchone()
+    return None if row is None else row[0]
+
+
 def _verdicts(conn, target: str, revision_id: uuid.UUID, checks: list[SourceCheck], at) -> None:
     """Итоги сверки уровня 2 — в строки source ревизии (разд. 4.7); и у ревизии с тем же телом (created = false)."""
     for c in checks:
@@ -230,7 +263,9 @@ def _verdicts(conn, target: str, revision_id: uuid.UUID, checks: list[SourceChec
 def _reasons(conn, plan: _Plan, rev: records.Revision) -> list[tuple[str, dict]]:
     """Причины пунктов созданной ревизии (разд. 7.2): по итогу статуса, аудит и ссылки на старые версии объектов."""
     out: list[tuple[str, dict]] = []
-    if plan.pending:
+    if plan.person:
+        pass                       # запись человека проверена им самим; остаётся только вопрос о файле — source_changed
+    elif plan.pending:
         out.append(("edit", {}))
     elif plan.status == "needs_review":
         out.append(("high_risk" if plan.risk else "warning", {}))

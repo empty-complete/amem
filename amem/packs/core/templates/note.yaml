@@ -1,0 +1,8 @@
+code: note
+version: 1.0.0
+target: atom
+applies_to: note
+description: {ru: "Заметка: пояснение желательно; связи любые."}
+extends: [has_label]
+fields:
+  - {path: body, required: true, severity: warning, message: {ru: "У заметки нет текста."}}
