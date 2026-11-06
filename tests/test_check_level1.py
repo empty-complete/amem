@@ -19,7 +19,7 @@ from check_support import CHECK_PACK, MD, PDF, atom, entity, pack, source_md, so
 
 AGENT = "model:tester"
 HUMAN = "person:reviewer"
-INTERFACES = ("has_label@1.0.0", "has_source@1.0.0", "has_value@1.0.0")
+INTERFACES = ("has_label@1.0.0", "has_source@1.1.0", "has_value@1.0.0")
 DOC = entity("@doc")
 
 
@@ -261,7 +261,7 @@ def test_template_issue_names_template_path_and_rule(kb):
     assert (issue.level, issue.details) == (1, {"template": "rule@1.0.0", "path": "content.values", "rule": "required"})
     _, _, report = run(kb, atom("@a", sources=None))
     [issue] = report.issues
-    assert issue.message == "У атома нет источника."                        # текст правила has_source
+    assert issue.message == "У атома нет источника и не задано основание basis."                        # текст правила has_source
     _, _, report = run(kb, atom("@a", content={"values": [value("pressure", 0.38, "кПа")]}))
     [issue] = report.issues
     assert issue.details == {"template": "has_value@1.0.0", "path": "content.values[].unit", "rule": "ucum",
@@ -364,18 +364,18 @@ def test_link_to_itself_by_name_and_id(kb):
 
 @pytest.fixture
 def memo_kb(pg, monkeypatch, tmp_path):
-    """Вид memo — правила selector_types, entity_classes, min_count; вид note — обязательная связь see_also;
+    """Вид memo — правила selector_types, entity_classes, min_count; вид remark — обязательная связь see_also;
     у связи see_also — шаблон с обязательной заметкой."""
     memo = pack(tmp_path / "memo", "memo", {
         "memo": {"code": "memo", "version": "1.0.0", "target": "atom", "applies_to": "memo", "fields": [
             {"path": "sources[].selectors", "selector_types": ["page"]},
             {"path": "about", "entity_classes": ["document", "edition"]},
             {"path": "codes", "min_count": 2, "severity": "warning", "message": {"ru": "Нужны два обозначения."}}]},
-        "note": {"code": "note", "version": "1.0.0", "target": "atom", "applies_to": "note",
+        "remark": {"code": "remark", "version": "1.0.0", "target": "atom", "applies_to": "remark",
                  "links": {"allowed": ["see_also", "about"], "required": [{"rel": "see_also"}]}},
         "see_also_note": {"code": "see_also_note", "version": "1.0.0", "target": "link", "applies_to": "see_also",
                           "fields": [{"path": "note", "required": True, "severity": "warning"}]},
-    }, kinds=["memo", "note"])
+    }, kinds=["memo", "remark"])
     monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(CHECK_PACK), str(memo)]))
     db.prepare(pg)
     return pg
@@ -387,7 +387,7 @@ def memo(**fields) -> dict:
 
 
 def note(**fields) -> dict:
-    return atom("@n", kind="note", **fields)
+    return atom("@n", kind="remark", **fields)
 
 
 SEE = {"rel": "see_also", "src": "@n", "dst": "@a", "note": {"ru": "то же место"}}
@@ -452,7 +452,7 @@ def test_existing_entity_class_breaks_template_rule(memo_kb):
 @pytest.mark.parametrize("direction", ["from_record", "to_record"])
 def test_existing_links_count_for_required_link(memo_kb, direction):
     ends = ("@n", "@a") if direction == "from_record" else ("@a", "@n")       # see_also симметрична
-    ids = existing(memo_kb, atom("@n", kind="note", sources=None), atom("@a", sources=None),
+    ids = existing(memo_kb, atom("@n", kind="remark", sources=None), atom("@a", sources=None),
                    links=[{"rel": "see_also", "src": ends[0], "dst": ends[1], "note": {"ru": "то же"}}])
     assert run(memo_kb, Proposal("atom", note(), ids["@n"]))[1] == []
     link_id = memo_kb.execute("SELECT id FROM link").fetchone()[0]

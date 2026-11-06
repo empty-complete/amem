@@ -48,3 +48,9 @@ concepts:
     en: parameter
   definition:
     ru: Значение величины с единицей и условиями применения.
+- code: note
+  label:
+    ru: заметка
+    en: note
+  definition:
+    ru: Заметка человека — наблюдение, мысль, напоминание. Источник — сам автор (basis author).
