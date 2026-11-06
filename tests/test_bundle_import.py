@@ -252,8 +252,13 @@ def test_verdict_no_file_without_files(pg, pg2, monkeypatch, store, store2, docs
     _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
     refs = _seed(pg, store, docs)
     _export(pg, store, tmp_path / "bare", with_files=False)
-    bundle.import_(pg2, store2, tmp_path / "bare", agent=OTHER)
+    r = bundle.import_(pg2, store2, tmp_path / "bare", agent=OTHER)
     assert _source_row(pg2, refs["@m"]) == ("no_file", None)
+    # место без файла не подтверждено: атом — на проверку, а заметка без источника остаётся verified
+    assert lookup.get(pg2, "atom", refs["@m"])["status"] == "needs_review"
+    assert lookup.get(pg2, "atom", refs["@n"])["status"] == "verified"
+    [item] = [q for q in r.queued if q["reason"] == "imported"]
+    assert str(item["record_id"]) == refs["@m"]
 
 
 def test_object_status_is_carried(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
@@ -436,7 +441,7 @@ def test_same_file_in_both_bases_is_matched_by_digest(pg, pg2, monkeypatch, stor
     _export(pg, store, tmp_path / "b")
     r = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
     assert r.counts["created"] == 3 and r.counts["objects"] == 0
-    assert any(f"obj:{local.object_id}" in w for w in r.warnings)
+    assert any(f"obj:{local.object_id}" in w and "не переносятся" not in w for w in r.warnings)
     got = lookup.get(pg2, "atom", refs["@m"])
     assert (got["sources"][0]["object"], got["sources"][0]["object_version"]) == (f"obj:{local.object_id}", local.n)
     assert got["provenance"]["origin_revision_hash"] == lookup.get(pg, "atom", refs["@m"])["content_hash"]
@@ -467,3 +472,27 @@ def test_partial_file_match_refuses(pg, pg2, monkeypatch, store, store2, docs, t
         bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
     assert e.value.code == "bundle_object_conflict" and e.value.details["lost"] == [2]
     assert {t: _count(pg2, t) for t in before} == before
+
+
+def test_quote_not_found_by_own_check_goes_to_review(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Своя сверка не нашла цитату в копии файла — атом не остаётся verified: needs_review и пункт imported."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    refs = _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+
+    def other_quote(row):
+        payload = row["revision"]["payload"]
+        if payload.get("sources"):
+            payload["sources"][0]["quote"] = "Такого текста в заметке нет"
+            row["revision"]["content_hash"] = canon.content_hash(payload)
+        return row
+
+    _rewrite(tmp_path / "b", "atoms.jsonl", other_quote)
+    r = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert _source_row(pg2, refs["@m"])[0] == "not_found"
+    assert lookup.get(pg2, "atom", refs["@m"])["status"] == "needs_review"
+    assert any(refs["@m"] in w and "not_found" in w for w in r.warnings)
+    [item] = [q for q in r.queued if q["reason"] == "imported"]
+    details = pg2.execute("SELECT details FROM review_item WHERE id = %s", (item["id"],)).fetchone()[0]
+    assert details["origin_status"] == "verified"
+    assert [v["verdict"] for v in details["verdicts"]] == ["not_found"]

@@ -563,6 +563,7 @@ RETIRED = ("deprecated", "superseded")
 TRUSTED = ("verified", "auto_verified")      # проверенное в чужой базе: сохраняется, только если вливает человек
 CONCEPT_SCHEMES = ("property",)              # понятия агентов, которые импорт добавляет (величины, разд. 4.1)
 SHAKY = ("fuzzy", "not_found", "unresolved", "no_text", "error")     # итоги своей сверки — предупреждение
+UNCONFIRMED = ("fuzzy", "not_found", "no_file")   # своя сверка атома не подтвердила место — запись на проверку
 _NAME = re.compile(r"@b\d+")
 
 SourceKey = tuple[str, int]                  # (obj:<UUID>, номер версии)
@@ -780,8 +781,11 @@ def _plan_objects(conn, rows: list[dict], referenced: set[SourceKey],
         for n, (oid, m) in found.items():
             vmap[(ref, n)] = (f"obj:{oid}", m)
         what = o.get("url") or o.get("original_name") or ""
+        others = sorted(n for n in (v.get("n") for v in o.get("versions") or [] if isinstance(v, dict))
+                        if n not in found)
         warnings.append(f"{ref}: {o.get('kind')} {what!r} уже есть в базе как obj:{targets[0]} — источники подборки "
-                        "ссылаются на него")
+                        "ссылаются на него" + (f"; версии {others}, на которые источники не ссылаются и которых в "
+                                               "базе нет, не переносятся" if others else ""))
     return adopt, vmap, new
 
 
@@ -942,15 +946,16 @@ def _history_rows(conn, recs: list[_Rec], origin_base: str) -> list[tuple]:
     return out
 
 
-def _verdicts(conn, store, rec: _Rec, at: datetime, warnings: list[str]) -> None:
+def _verdicts(conn, store, rec: _Rec, at: datetime, warnings: list[str]) -> list[dict]:
     """Итоги сверки (шаг 9) в строки source созданной ревизии — своей сверкой, не верой подборке: файл с копией
     версии в хранилище сверяется уровнем 2 (level2.judge_source: место и цитата по тексту копии); файл без копии —
     no_file, пока файл не придёт; страница сайта и переписка — external. Итоги sources.jsonl не переносятся:
-    чужой вердикт — утверждение, которое здесь не проверено."""
+    чужой вердикт — утверждение, которое здесь не проверено. Ответ — источники атома с итогом из UNCONFIRMED."""
     from .check import level2
     from .check.report import Report
 
     t = rec.target
+    unconfirmed = []
     for position, src in enumerate(rec.body.get("sources") or []):
         object_id, n = _ref_uuid(src["object"]), src["object_version"]
         kind = conn.execute("SELECT kind FROM object WHERE id = %s", (object_id,)).fetchone()[0]
@@ -961,11 +966,32 @@ def _verdicts(conn, store, rec: _Rec, at: datetime, warnings: list[str]) -> None
             verdict, page, anchor = got.verdict, got.page, got.anchor
         if verdict is None:
             continue                                      # не сверялся (источник сущности-документа, правило PDF)
-        if verdict in SHAKY:
+        if verdict in SHAKY or verdict == "no_file":
             warnings.append(f"{rec.ref}: sources[{position}]: своя сверка с файлом — {verdict}")
+        if t == "atom" and verdict in UNCONFIRMED:
+            unconfirmed.append({"position": position, "object": src["object"], "object_version": n,
+                                "verdict": verdict})
         conn.execute(f"UPDATE source SET verdict = %s, page = %s, anchor = %s, checked_at = %s "
                      f"WHERE {t}_revision_id = %s AND position = %s",
                      (verdict, page, anchor, at, rec.revision.revision_id, position))
+    return unconfirmed
+
+
+def _unconfirmed(conn, rec: _Rec, verdicts: list[dict], *, agent: str, origin_base: str,
+                 at: datetime) -> list[tuple[str, dict]]:
+    """Атом, чьё место своя сверка не подтвердила (fuzzy, not_found, no_file), не остаётся проверенным или
+    черновиком на проверку смысла: проверять смысл без подтверждённого места нельзя, а чужой проверке здесь
+    подтверждения нет. Новая запись — needs_review с пунктом imported и итогами в details; у ждущей ревизии
+    (pending) статус не трогается — итоги идут в details её пункта imported. Запись, выведенная из оборота или
+    отвергнутая в базе-источнике, остаётся такой: вопроса к ней нет."""
+    if rec.action == "created" and rec.status not in ("verified", "auto_verified", "draft", "needs_review"):
+        return list(rec.reasons)
+    if rec.action == "created" and rec.status != "needs_review":
+        records.set_status_locked(conn, rec.target, rec.record_id, "needs_review", agent=agent,
+                                  reason="import: своя сверка не подтвердила источник", at=at)
+    details = {"origin_base": origin_base, "origin_status": rec.row["status"], "action": rec.action,
+               "verdicts": verdicts}
+    return [("imported", details), *((why, d) for why, d in rec.reasons if why not in ("imported", "semantic"))]
 
 
 def _stale_sources(conn, rec: _Rec) -> dict | None:
@@ -1103,8 +1129,9 @@ def _write(conn, store, recs: list[_Rec], new_links: list[dict], retire: list[uu
     for r in writing:
         if not r.revision.created:
             continue
-        _verdicts(conn, store, r, at, warnings)
-        reasons = list(r.reasons)
+        verdicts = _verdicts(conn, store, r, at, warnings)
+        reasons = (_unconfirmed(conn, r, verdicts, agent=agent, origin_base=origin_base, at=at) if verdicts
+                   else list(r.reasons))
         stale = _stale_sources(conn, r)
         if stale:
             reasons.append(("source_changed", stale))
