@@ -31,8 +31,10 @@ There is no server, CLI or web UI yet — they come in the next subprojects.
   (`amem/packs/core` is the kernel itself; more packs via the `AMEM_PACKS`
   environment variable). Codes used by records are enforced by foreign keys.
   A pack may depend on others (`requires`: pack name → version range); packs load
-  in dependency order, the core (version 1.2.0) first, cycles and unmet ranges are errors,
-  and a concept's `broader` must lead to a code of the same scheme in a loaded pack.
+  in dependency order, the core (version 1.3.0) first, cycles and unmet ranges are errors,
+  and a concept's `broader` must lead to a code of the same scheme in a loaded pack. An atom kind
+  has a `family`: `source` (knowledge from a document) or `work` (from the work itself); a kind
+  without one counts as `work`.
 - **Basis and confidence** — an atom whose value does not come from a document about
   the object carries a `basis`: `default` (the domain's rule, "on the safe side"), `assumed`
   (accepted to go on, needs confirmation) or `author` (the person's own word; only a

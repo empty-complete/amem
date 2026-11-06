@@ -381,7 +381,8 @@ def check(manifest: Path) -> dict:
 def backups(backup_dir: Path) -> list[dict]:
     """Готовые копии по возрастанию времени: манифест читается, дамп рядом и его размер сходится.
 
-    SHA-256 здесь не пересчитывается — его проверяют create (у новой копии), check и restore."""
+    Копия — name, manifest и dump (пути), created_at (ISO 8601 из манифеста; у манифеста без него — время из имени)
+    и size (байт дампа). SHA-256 здесь не пересчитывается — его проверяют create (у новой копии), check и restore."""
     out = []
     for manifest in sorted(Path(backup_dir).glob("*.json")):
         if not NAME.fullmatch(manifest.stem) or manifest.is_symlink():
@@ -393,7 +394,15 @@ def backups(backup_dir: Path) -> list[dict]:
         dump = manifest.with_suffix(".dump")
         if (data.get("kind") == "amem.pg_dump" and data.get("file") == dump.name and dump.is_file()
                 and not dump.is_symlink() and dump.stat().st_size == data.get("size")):
-            out.append({"name": manifest.stem, "manifest": str(manifest), "dump": str(dump)})
+            created_at = data.get("created_at")
+            if not isinstance(created_at, str):
+                try:
+                    created_at = datetime.strptime(manifest.stem, "%Y-%m-%dT%H-%M-%SZ").replace(
+                        tzinfo=timezone.utc).isoformat()
+                except ValueError:                   # имя по шаблону, но не дата (2026-13-40…)
+                    created_at = None
+            out.append({"name": manifest.stem, "manifest": str(manifest), "dump": str(dump),
+                        "created_at": created_at, "size": data["size"]})
     return out
 
 
