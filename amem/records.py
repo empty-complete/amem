@@ -4,6 +4,8 @@
 в объекты (amem/objects.resolve_sources). Здесь:
 - @имена и ключи (ent:sp20_13330) заменяются на UUID, проверяются вид ссылки и существование цели;
 - у источника проверяется версия объекта и её digest; источники ревизии раскладываются в таблицу source;
+- ревизия атома раскладывается в проекции atom_about, atom_derived и atom_property (величины content.values);
+  rebuild_projections строит их заново по всем ревизиям;
 - тело приводится к канонической форме и хэшируется (amem/canon.py);
 - тело, совпадающее с текущей ревизией, новой ревизии не даёт; совпадающее с последней ждущей проверки (новее
   текущей) — тоже, если и новое ждёт проверки: принятое без проверки должно стать текущим;
@@ -265,6 +267,37 @@ def _unchanged(conn, plan: _Planned) -> tuple[uuid.UUID, int] | None:
     return None
 
 
+def _project_atom(conn, revision_id: uuid.UUID, body: dict) -> None:
+    """Разложить ревизию атома в проекции: about, derived_from и величины content.values[].property.
+
+    ON CONFLICT — чтобы rebuild_projections мог дописать недостающее поверх уже записанного: строки atom_about
+    и atom_derived защищены триггерами от удаления, и стереть их перед перестройкой нельзя."""
+    for entity_id in _ids(body, "about[]"):
+        conn.execute("INSERT INTO atom_about (revision_id, entity_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                     (revision_id, entity_id))
+    for atom_id in _ids(body, "derived_from[]"):
+        conn.execute("INSERT INTO atom_derived (revision_id, atom_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                     (revision_id, atom_id))
+    for prop in sorted({v["property"] for v in (body.get("content") or {}).get("values") or []}):
+        conn.execute("INSERT INTO atom_property (revision_id, property) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                     (revision_id, prop))
+
+
+def rebuild_projections(conn: psycopg.Connection) -> int:
+    """Перестроить проекции по всем ревизиям атомов; идемпотентно, тела ревизий не меняются.
+
+    atom_property — производная (как поиск, search.rebuild_search): стирается и строится заново.
+    atom_about и atom_derived защищены от удаления — в них только дописываются недостающие строки.
+    Возвращает число просмотренных ревизий."""
+    _require_autocommit(conn)
+    with conn.transaction():
+        conn.execute("DELETE FROM atom_property")
+        rows = conn.execute("SELECT id, payload FROM atom_revision ORDER BY id").fetchall()
+        for revision_id, body in rows:
+            _project_atom(conn, revision_id, body)
+        return len(rows)
+
+
 def _write_revision(conn, plan: _Planned, cs: uuid.UUID, agent: str, reason: str | None, at: datetime) -> Revision:
     item, record_id, body, content_hash = plan.item, plan.record_id, plan.body, plan.content_hash
     target = item.target
@@ -282,10 +315,7 @@ def _write_revision(conn, plan: _Planned, cs: uuid.UUID, agent: str, reason: str
         (revision_id, record_id, n, SCHEMA_VERSION[target], Jsonb(body), content_hash, cs,
          body.get("valid_from"), body.get("valid_to"), at, item.review_state))
     if target == "atom":
-        for entity_id in _ids(body, "about[]"):
-            conn.execute("INSERT INTO atom_about (revision_id, entity_id) VALUES (%s, %s)", (revision_id, entity_id))
-        for atom_id in _ids(body, "derived_from[]"):
-            conn.execute("INSERT INTO atom_derived (revision_id, atom_id) VALUES (%s, %s)", (revision_id, atom_id))
+        _project_atom(conn, revision_id, body)
     for position, source in enumerate(body.get("sources", [])):
         conn.execute(
             "INSERT INTO source (id, atom_revision_id, entity_revision_id, position, object_id, object_version, "

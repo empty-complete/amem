@@ -30,6 +30,15 @@ There is no server, CLI or web UI yet — they come in the next subprojects.
 - **Domain packs** — vocabularies and templates are pluggable packages
   (`amem/packs/core` is the kernel itself; more packs via the `AMEM_PACKS`
   environment variable). Codes used by records are enforced by foreign keys.
+  A pack may depend on others (`requires`: pack name → version range); packs load
+  in dependency order, the core (version 1.2.0) first, cycles and unmet ranges are errors,
+  and a concept's `broader` must lead to a code of the same scheme in a loaded pack.
+- **Basis and confidence** — an atom whose value does not come from a document about
+  the object carries a `basis`: `default` (the domain's rule, "on the safe side"), `assumed`
+  (accepted to go on, needs confirmation) or `author` (the person's own word; only a
+  `person:` agent may set it). `default` and `assumed` without `derived_from` get a warning,
+  as the rule behind them is not visible. A model's own estimate goes in `confidence`
+  (0 to 1); a person's record has none.
 - **Hub groundwork** — every database has a stable `base_id`; atoms imported
   from another base carry `provenance.origin_base`.
 
@@ -85,6 +94,39 @@ queue by hand (`calibration`, `audit`), `stats` reports queue sizes, decision ti
 batches and audit results. When a file gets a new version (`objects.ingest`), the current and
 pending revisions citing an older version get a `source_changed` item; `rejected`, `deprecated` and
 `superseded` records are skipped.
+
+A record written by a person (`person:…`) is `verified` at once, with no risk and no queue
+(only `source_changed` can still queue it); levels 1 to 4 run as usual and their remarks stay in
+the report. An edit of such a record by a model waits for a human decision. A low `confidence`
+(below 0.8) means high risk when the template enables the `low_confidence` rule.
+
+## Profiles and cards
+
+A template for entities (`target: entity`) may have a `parameters` section — the profile of
+an entity class: which quantities (codes of the `property` vocabulary) describe such a thing.
+A rule sets the quantity, `required` (a blocker if missing), `group`, `origin` (where the value
+usually comes from, vocabulary `parameter_origin`), `default` (shown, but never counted as a
+value), and `ask` / `hint` / `when` (whom to ask, where to look, when it applies). Profiles
+inherit through `extends`: a descendant's rule replaces its ancestor's rule for the same quantity.
+
+`amem.profile.card(conn, ref, ancestors=True)` builds the card of an entity (format `amem.card/1`)
+from the live `parameter` atoms about it; nothing is stored. Each field in `fields` has a `state`:
+
+- `known` — one value (or several equal ones); the field also tells the `status` of the atom,
+  who wrote it (`by`), `basis`, `confidence`, `rank`, source role and `sources`; other values go to `candidates`;
+- `conflict` — different values with no single `preferred`, or "not applicable" against a value;
+- `na` — the document says the quantity does not apply;
+- `asked` — there is no value, but a question atom about it is open;
+- `missing` — nothing is known yet.
+
+`extra` lists atoms about quantities outside the profile (an entity without a profile has only `extra`),
+`summary` counts fields by state, open blockers (`blockers_open`) and fields with a basis, and
+`ancestors` holds the cards of the entities above along `part_of`. `amem.profile.rules_for_entity(conn,
+entity_class)` returns the rules a class gets from its templates.
+
+`amem.records.rebuild_projections(conn)` rebuilds the projections of atoms from all revisions
+(idempotent, revision bodies stay as they are): `atom_property` is erased and built again, while
+`atom_about` and `atom_derived` are protected from deletion and only get missing rows.
 
 ## Backup
 

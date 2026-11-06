@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import posixpath
 import uuid
+from collections.abc import Iterable
 from datetime import date, datetime
 
 import psycopg
@@ -125,13 +126,26 @@ def links(conn: psycopg.Connection, node: uuid.UUID | str, *, at: datetime | Non
 
 def revision_sources(conn: psycopg.Connection, target: Target, revision_id: uuid.UUID | str) -> list[dict]:
     """Источники ревизии в порядке тела: id строки source, объект и версия, место, роль; итог сверки — если был."""
+    rid = as_uuid(revision_id, "revision_id")
+    return revisions_sources(conn, target, [rid])[rid]
+
+
+def revisions_sources(conn: psycopg.Connection, target: Target,
+                      revision_ids: Iterable[uuid.UUID | str]) -> dict[uuid.UUID, list[dict]]:
+    """Источники нескольких ревизий одним запросом, как у revision_sources.
+
+    На входе — UUID или строки; ключи ответа — uuid.UUID, по ключу на каждую запрошенную ревизию (без источников —
+    пустой список)."""
     check_target(target)
+    out: dict[uuid.UUID, list[dict]] = {as_uuid(r, "revision_id"): [] for r in revision_ids}
+    if not out:
+        return out
     with conn.cursor(row_factory=dict_row) as cur:
         rows = cur.execute(
-            f"SELECT id, position, object_id, object_version, selectors, quote, edition_id, role, verdict, page, "
-            f"anchor, checked_at FROM source WHERE {target}_revision_id = %s ORDER BY position",
-            (_uuid(revision_id),)).fetchall()
-    out = []
+            f"SELECT {target}_revision_id AS revision_id, id, position, object_id, object_version, selectors, quote, "
+            f"edition_id, role, verdict, page, anchor, checked_at FROM source "
+            f"WHERE {target}_revision_id = ANY(%s) ORDER BY {target}_revision_id, position",
+            (list(out),)).fetchall()
     for r in rows:
         item = {"id": str(r["id"]), "position": r["position"], "object": f"obj:{r['object_id']}",
                 "object_version": r["object_version"]}
@@ -140,7 +154,7 @@ def revision_sources(conn: psycopg.Connection, target: Target, revision_id: uuid
             item["edition"] = f"ent:{r['edition_id']}"
         if r["checked_at"] is not None:
             item["checked_at"] = r["checked_at"].isoformat()
-        out.append(item)
+        out[r["revision_id"]].append(item)
     return out
 
 
