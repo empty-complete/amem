@@ -147,7 +147,7 @@ def test_missing_migration_file_is_refused(pg, tmp_path, monkeypatch):
 
 PROTECTED = ["entity_revision", "atom_revision", "link", "changeset", "status_log", "atom_about", "atom_derived",
              "template", "object", "object_path", "object_version", "object_status", "source",
-             "review_item", "verification"]
+             "review_item", "verification", "import_history"]
 
 
 @pytest.mark.parametrize("table", PROTECTED)

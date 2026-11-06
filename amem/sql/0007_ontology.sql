@@ -5,6 +5,9 @@ ALTER TABLE pack ADD COLUMN requires jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 -- Величины текущей ревизии атома: content.values[].property. Заполняется записью ревизии (amem/records.py)
 -- вместе с atom_about; перестраивается records.rebuild_projections.
+-- Производная проекция, как search_document: триггеров неизменяемости нет — её можно стереть и построить заново.
+-- Внешнего ключа на concept нет намеренно: коды величин свободны (неизвестный код — предупреждение
+-- unknown_property уровня 3, спецификация подпроекта 3, разд. 6), иначе запись такого атома упала бы.
 CREATE TABLE atom_property (
     revision_id  uuid NOT NULL REFERENCES atom_revision (id),
     property     text NOT NULL,
@@ -27,6 +30,11 @@ CREATE TABLE import_history (
     UNIQUE (origin_base, record_id, n)
 );
 CREATE INDEX import_history_record ON import_history (record_id, n);
+-- журнал: только добавление
+CREATE TRIGGER import_history_immutable BEFORE UPDATE OR DELETE ON import_history
+    FOR EACH ROW EXECUTE FUNCTION amem_forbid_change();
+CREATE TRIGGER import_history_no_truncate BEFORE TRUNCATE ON import_history
+    FOR EACH STATEMENT EXECUTE FUNCTION amem_forbid_change();
 
 -- Новая причина пункта очереди: пришло подборкой из другой базы. 0006 не меняется — её хэш записан в базах.
 ALTER TABLE review_item DROP CONSTRAINT review_item_reason_check;
