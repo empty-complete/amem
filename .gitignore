@@ -7,3 +7,6 @@ build/
 .pytest_cache/
 backups/
 .env
+
+# Hallmark build log (design sweeps)
+.hallmark/
