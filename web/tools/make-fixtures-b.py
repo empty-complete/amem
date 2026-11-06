@@ -28,7 +28,10 @@ manual_src = lambda quote, verdict="ok": {  # noqa: E731
 
 
 def view(ref, payload, *, status="verified", review="none", agent="model:extractor", at="2026-11-05T10:12:00Z",
-         folder="Области/Приборы", about=(), ancestors=(), sources=(), open_items=(), revision=1, target="atom"):
+         folder="Области/Приборы", about=(), ancestors=(), sources=(), open_items=(), revision=1, target="atom",
+         basis_source=False):
+    if basis_source:  # заметка о файле: ссылается на него как на источник, без цитаты
+        sources = [{k: v for k, v in manual_src("").items() if k != "quote"} | {"selectors": [], "verdict": "external", "role": "primary"}]
     return {"ref": ref, "target": target, "revision": revision, "payload": payload, "status": status,
             "review_state": review, "recorded_at": at, "agent": agent, "folder": folder, "about": list(about),
             "ancestors": list(ancestors), "sources": list(sources), "open_items": list(open_items), "usefulness": None}
@@ -93,8 +96,8 @@ records = {
         "kind": "note", "label": ru("Руководство МС-1 — о чём файл"),
         "summary_plain": ru("Руководство по эксплуатации метеостанции: комплект, датчики, монтаж и обслуживание."),
         "body": ru("Главное для нас — раздел **4.2** с диапазонами и погрешностями датчиков. Монтаж и обслуживание ещё не разобраны."),
-        "about": [MANUAL],
-    }, folder="Ресурсы/Источники", agent="person:anna"),
+        "sources": [{"object": MANUAL, "object_version": 2, "selectors": []}],
+    }, folder="Ресурсы/Источники", agent="person:anna", basis_source=True),
 }
 records[A(0x20)] = records.pop(f"note-{MANUAL}")
 
