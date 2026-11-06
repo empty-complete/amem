@@ -425,12 +425,25 @@ def _plan_link(conn, payload: dict, refs: dict, label: str) -> _LinkPlan:
     return _LinkPlan(payload, src_kind, src, dst_kind, dst, ends)
 
 
-def _write_link(conn, plan: _LinkPlan, cs: uuid.UUID, agent: str, at: datetime) -> uuid.UUID:
+def _link_id(conn, payload: dict, keep_id: bool, label: str) -> uuid.UUID:
+    """id новой связи: свой, или — с keep_ids — id связи из подборки (UUIDv7, не занятый другой связью)."""
+    if not keep_id or payload.get("id") is None:
+        return uuid7()
+    link_id = as_uuid(payload["id"], f"{label}.id")
+    if not UUID7.fullmatch(str(link_id)):
+        raise RecordError(f"{label}: id связи — не UUIDv7")
+    if conn.execute("SELECT 1 FROM link WHERE id = %s", (link_id,)).fetchone() is not None:
+        raise RecordError(f"{label}: id связи {link_id} уже занят")
+    return link_id
+
+
+def _write_link(conn, plan: _LinkPlan, cs: uuid.UUID, agent: str, at: datetime, keep_id: bool = False,
+                label: str = "") -> uuid.UUID:
     payload, rel = plan.payload, plan.payload["rel"]
     existing = _active_link(conn, rel, plan.ends)
     if existing is not None:
         return existing
-    link_id = uuid7()
+    link_id = _link_id(conn, payload, keep_id, label)
     try:
         with conn.transaction():             # точка сохранения: одновременный дубль не обрывает весь пакет
             conn.execute(
@@ -465,7 +478,8 @@ def commit(conn: psycopg.Connection, items: Sequence[Item], links: Sequence[dict
     """Записать принятый пакет изменений целиком или не записать ничего (порядок — в описании модуля).
 
     keep_ids — для подборок из другой базы: record_id, которого здесь нет, — новая запись с этим id (UUIDv7, не
-    занятый записью другого вида), а не ошибка. Без него record_id — только существующая запись."""
+    занятый записью другого вида), а не ошибка; новая связь с полем id — связь с этим id. Без него record_id —
+    только существующая запись, а id связи не читается."""
     _require_autocommit(conn)
     if not items and not links:
         raise RecordError("пустая пачка")
@@ -516,7 +530,8 @@ def commit(conn: psycopg.Connection, items: Sequence[Item], links: Sequence[dict
         for p in planned:
             result.revisions.append(_write_revision(conn, p, cs, agent, reason, at))
         order = sorted(range(len(link_plans)), key=lambda i: (link_plans[i].payload["rel"], min(link_plans[i].ends)))
-        written = {i: _write_link(conn, link_plans[i], cs, agent, at) for i in order}
+        written = {i: _write_link(conn, link_plans[i], cs, agent, at, keep_ids, f"links[{i}]")
+                   for i in order}
         result.links = [written[i] for i in range(len(link_plans))]          # id — в порядке пачки
     return result
 

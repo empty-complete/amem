@@ -30,7 +30,8 @@ STATES = ("queued", "claimed", "done", "obsolete")
 CLOSING_STATUSES = ("rejected", "deprecated", "superseded")    # у такой записи открытых пунктов не остаётся
 RETIRED = ("deprecated", "superseded")                          # выведенные из оборота: решение статус не меняет
 
-REASONS = ("semantic", "warning", "high_risk", "semantic_doubt", "edit", "source_changed", "audit", "calibration")
+REASONS = ("semantic", "warning", "high_risk", "semantic_doubt", "edit", "source_changed", "audit", "calibration",
+           "imported")
 MODEL_REASONS = frozenset({"semantic"})                         # модели решают только смысл (уровень 5)
 HUMAN_REASONS = frozenset(REASONS)                              # человек — всё, semantic тоже
 MANUAL_REASONS = ("calibration", "audit")                       # что человек ставит вручную (разд. 8.6)
@@ -361,9 +362,10 @@ def _apply(conn, item: dict, outcome: str, method: str, *, agent: str, confidenc
                 set_status("needs_review")
                 put("semantic_doubt", {**item["details"], "verification": str(verification_id),
                                        "outcome": outcome, "confidence": confidence, "note": note})
-    elif reason == "edit":
+    elif reason == "edit" or (reason == "imported" and _review_state(conn, t, revision_id) == "pending"):
         # о правке решает состояние ревизии, а не статус записи: pending бывает и у записи человека не в verified
-        # (спецификация 3c, разд. 5); статус записи решение не меняет
+        # (спецификация 3c, разд. 5); статус записи решение не меняет. Расхождение с подборкой (imported у ждущей
+        # ревизии) решается так же: подтверждение делает чужую ревизию текущей
         if _review_state(conn, t, revision_id) == "pending":
             # records.decide — в нашей транзакции: его transaction() становится точкой сохранения
             records.decide(conn, t, revision_id, outcome == "confirmed", agent=agent)
