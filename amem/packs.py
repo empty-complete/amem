@@ -149,8 +149,12 @@ def check_path(path: str, target: str) -> dict:
     return slot
 
 
-def _check_template(t: Template, file: Path, by_code: dict[str, Template], codes: dict[str, set[str]]) -> None:
-    """Шаблон по отдельности: applies_to, extends, пути и коды правил полей и связей."""
+def _check_template(t: Template, file: Path, by_code: dict[str, Template], codes: dict[str, set[str]],
+                    properties: dict[str, str | None]) -> None:
+    """Шаблон по отдельности: applies_to, extends, пути и коды правил полей, связей и параметров профиля.
+
+    properties — код величины → её единица: умолчание профиля должно переводиться в единицу величины,
+    иначе карточка покажет число, которое не с чем сравнить."""
     target = t.target
     if t.applies_to and t.applies_to not in codes.get(APPLIES_TO[target], set()):
         raise PackError(f"{file}: applies_to {t.applies_to} — нет в словаре {APPLIES_TO[target]} загружаемых пакетов")
@@ -179,6 +183,32 @@ def _check_template(t: Template, file: Path, by_code: dict[str, Template], codes
         for req in links.required or []:
             if bad := unknown("entity_class", req.to_classes):
                 raise PackError(f"{file}: links: {req.rel}: to_classes {bad} — нет в словаре entity_class")
+    _check_parameters(t, file, codes, properties)
+
+
+def _check_parameters(t: Template, file: Path, codes: dict[str, set[str]], properties: dict[str, str | None]) -> None:
+    """Раздел parameters: профиль бывает только у сущностей, величина и origin — из словарей, умолчание — в UCUM."""
+    params = t.parameters or []
+    if params and t.target != "entity":
+        raise PackError(f"{file}: parameters — только у шаблонов target entity")
+    seen: set[str] = set()
+    for rule in params:
+        where = f"{file}: parameters: {rule.property}"
+        if rule.property in seen:                # сведение идёт по property: повтор в одном шаблоне — двусмысленность
+            raise PackError(f"{file}: parameters: property {rule.property} повторяется")
+        seen.add(rule.property)
+        if rule.property not in codes.get("property", set()):
+            raise PackError(f"{file}: parameters: property {rule.property} — нет в словаре property загружаемых пакетов")
+        if rule.origin and rule.origin not in codes.get("parameter_origin", set()):
+            raise PackError(f"{where}: origin {rule.origin} — нет в словаре parameter_origin загружаемых пакетов")
+        default = rule.default
+        if default is not None and default.unit is not None:
+            from .check import units             # локальный импорт: units тянет pint, загрузке без умолчаний он не нужен
+            if not units.is_ucum(default.unit):
+                raise PackError(f"{where}: default.unit {default.unit} — не код UCUM")
+            prop_unit = properties.get(rule.property)
+            if prop_unit and units.convert(1.0, default.unit, prop_unit) is None:
+                raise PackError(f"{where}: default.unit {default.unit} не переводится в {prop_unit}")
 
 
 def _check_templates(packs: list[Pack]) -> None:
@@ -187,6 +217,7 @@ def _check_templates(packs: list[Pack]) -> None:
     for p in packs:
         for c in p.concepts:
             codes.setdefault(c.scheme, set()).add(c.code)
+    properties = {c.code: c.unit for p in packs for c in p.concepts if c.scheme == "property"}
     by_code: dict[str, Template] = {}
     files: dict[str, Path] = {}
     owner: dict[str, str] = {}
@@ -204,7 +235,7 @@ def _check_templates(packs: list[Pack]) -> None:
                 pairs[pair] = t.code
             by_code[t.code], files[t.code], owner[t.code] = t, file, p.name
     for code, t in by_code.items():
-        _check_template(t, files[code], by_code, codes)
+        _check_template(t, files[code], by_code, codes, properties)
 
     done: set[str] = set()
 

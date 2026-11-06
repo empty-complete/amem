@@ -1,0 +1,9 @@
+code: sensor
+version: 1.0.0
+target: entity
+applies_to: sensor
+description: {ru: "Датчик: как устройство, но температура обязательна и измеряется; плюс длина кабеля."}
+extends: [device]
+parameters:
+  - {property: temperature, required: true, group: environment, origin: measured}
+  - {property: length, required: false, group: body, hint: {ru: "длина кабеля"}}
