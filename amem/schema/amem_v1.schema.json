@@ -656,6 +656,143 @@
       "title": "ChangesetState",
       "type": "string"
     },
+    "CheckCode": {
+      "description": "Код замечания автопроверки; уровень и важность — в спецификации.",
+      "enum": [
+        "schema",
+        "unknown_code",
+        "ref_unknown",
+        "template",
+        "ucum",
+        "unit_required",
+        "bounds_order",
+        "link_not_allowed",
+        "link_required",
+        "link_pair",
+        "retired_record",
+        "record_error",
+        "source_unresolved",
+        "version_missing",
+        "digest_mismatch",
+        "pdf_page_required",
+        "pdf_quote_required",
+        "quote_not_found",
+        "quote_fuzzy",
+        "number_not_found",
+        "page_moved",
+        "place_unresolved",
+        "no_text",
+        "external_source",
+        "source_error",
+        "numbers_unchecked",
+        "edition_filled",
+        "unknown_property",
+        "out_of_range",
+        "unit_mismatch",
+        "conflict",
+        "duplicate",
+        "related"
+      ],
+      "title": "CheckCode",
+      "type": "string"
+    },
+    "CheckIssue": {
+      "additionalProperties": false,
+      "description": "Замечание автопроверки.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/CheckCode"
+        },
+        "details": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Any"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "level": {
+          "maximum": 4,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "where": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "level",
+        "severity",
+        "code",
+        "where",
+        "message"
+      ],
+      "title": "CheckIssue",
+      "type": "object"
+    },
+    "CheckReport": {
+      "additionalProperties": false,
+      "description": "Отчёт пакета; пишется в changeset.check_report до записи ревизий.",
+      "properties": {
+        "degraded": {
+          "items": {
+            "$ref": "#/$defs/Any"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "format": {
+          "pattern": "^amem\\.check/1$",
+          "type": "string"
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/CheckIssue"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "levels": {
+          "$ref": "#/$defs/Any"
+        },
+        "records": {
+          "items": {
+            "$ref": "#/$defs/Any"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "templates": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "format",
+        "levels"
+      ],
+      "title": "CheckReport",
+      "type": "object"
+    },
     "Column": {
       "additionalProperties": false,
       "description": "",
@@ -1243,6 +1380,15 @@
       "title": "Formula",
       "type": "object"
     },
+    "HighRiskRule": {
+      "description": "Правило шаблона, по которому запись считается рискованной.",
+      "enum": [
+        "always",
+        "numeric"
+      ],
+      "title": "HighRiskRule",
+      "type": "string"
+    },
     "LangString": {
       "additionalProperties": false,
       "description": "Текст на нескольких языках; русский обязателен.",
@@ -1677,6 +1823,118 @@
       "title": "RequiredLink",
       "type": "object"
     },
+    "ReviewItem": {
+      "additionalProperties": false,
+      "description": "Пункт очереди проверки. Ревизия — атома или сущности, по target.",
+      "properties": {
+        "changeset_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "claimed_by": {
+          "pattern": "^(person|model):[a-z0-9_.-]+$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "claimed_until": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "closed_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "created_by": {
+          "pattern": "^(person|model):[a-z0-9_.-]+$",
+          "type": "string"
+        },
+        "details": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Any"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/ReviewReason"
+        },
+        "record_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "revision_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/ReviewItemState"
+        },
+        "target": {
+          "pattern": "^(atom|entity)$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "target",
+        "record_id",
+        "revision_id",
+        "reason",
+        "state",
+        "created_at",
+        "created_by"
+      ],
+      "title": "ReviewItem",
+      "type": "object"
+    },
+    "ReviewItemState": {
+      "description": "",
+      "enum": [
+        "queued",
+        "claimed",
+        "done",
+        "obsolete"
+      ],
+      "title": "ReviewItemState",
+      "type": "string"
+    },
+    "ReviewReason": {
+      "description": "Почему запись попала в очередь проверки.",
+      "enum": [
+        "semantic",
+        "warning",
+        "high_risk",
+        "semantic_doubt",
+        "edit",
+        "source_changed",
+        "audit",
+        "calibration"
+      ],
+      "title": "ReviewReason",
+      "type": "string"
+    },
     "ReviewState": {
       "description": "",
       "enum": [
@@ -1988,6 +2246,15 @@
             "null"
           ]
         },
+        "high_risk": {
+          "items": {
+            "$ref": "#/$defs/HighRiskRule"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "links": {
           "anyOf": [
             {
@@ -2125,6 +2392,78 @@
         "none"
       ],
       "title": "ValueState",
+      "type": "string"
+    },
+    "Verification": {
+      "additionalProperties": false,
+      "description": "Вердикт по пункту очереди; неизменяемый.",
+      "properties": {
+        "agent": {
+          "pattern": "^(person|model):[a-z0-9_.-]+$",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "method": {
+          "$ref": "#/$defs/VerificationMethod"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outcome": {
+          "$ref": "#/$defs/VerificationOutcome"
+        },
+        "review_item_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "review_item_id",
+        "method",
+        "outcome",
+        "agent",
+        "created_at"
+      ],
+      "title": "Verification",
+      "type": "object"
+    },
+    "VerificationMethod": {
+      "description": "",
+      "enum": [
+        "llm_judge",
+        "human"
+      ],
+      "title": "VerificationMethod",
+      "type": "string"
+    },
+    "VerificationOutcome": {
+      "description": "",
+      "enum": [
+        "confirmed",
+        "partial",
+        "refuted",
+        "uncertain"
+      ],
+      "title": "VerificationOutcome",
       "type": "string"
     },
     "Visibility": {

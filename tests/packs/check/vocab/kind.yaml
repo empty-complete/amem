@@ -1,0 +1,8 @@
+scheme: kind
+concepts:
+  - code: rule
+    label: {ru: правило, en: rule}
+    definition: {ru: "Правило с числовыми значениями и ссылкой на документ."}
+  - code: idea
+    label: {ru: идея, en: idea}
+    definition: {ru: "Мысль или предложение, ещё не ставшее решением."}

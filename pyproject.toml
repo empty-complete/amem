@@ -3,7 +3,7 @@ name = "amem"
 version = "0.1.0.dev0"
 license = {text = "MIT"}
 description = "База знаний из атомов: схема, хранилище с ревизиями, объекты и автопроверка"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
   "pymupdf>=1.24",
   "rapidfuzz>=3.0",
@@ -12,6 +12,9 @@ dependencies = [
   "psycopg[binary]>=3.2,<4",
   "pgvector>=0.5.1,<1",
   "rfc8785==0.1.4",
+  "ucumvert==0.3.2",
+  "pint>=0.25,<0.26",
+  "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]

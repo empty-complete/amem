@@ -1,0 +1,6 @@
+code: decision
+version: 1.0.0
+target: atom
+applies_to: decision
+description: {ru: "Решение: всегда к человеку — его последствия дороже ошибки проверки."}
+high_risk: [always]

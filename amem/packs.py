@@ -11,12 +11,19 @@ skills/*.md (тексты для агентов — раздаёт устано�
   чьё понятие удалять при исчезновении кода из пакета);
 - один пакет не встречается дважды.
 
+Шаблоны любого пакета проверяются там же (спецификация подпроекта 3, разд. 3.6), ошибка называет файл шаблона:
+- один code шаблона — не больше чем в одном пакете, одна пара (target, applies_to) — не больше чем у одного шаблона;
+- код applies_to есть в словаре загружаемых пакетов (kind, entity_class или rel — по target);
+- extends ведёт на шаблон того же target, наследование без циклов;
+- пути правил ведут на настоящие поля схемы (check_path), коды selector_types, entity_classes, links — из словарей.
+
 Служебные перечни (Status, Rank, ValueState, SourceRole, Visibility) остаются закрытыми
 перечислениями amem/schema/amem_v1.yaml и грузятся в concept с origin='schema' — как раньше.
 Опечатка в аннотации или в файле словаря — ошибка с указанием места.
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import os
@@ -40,6 +47,9 @@ SERVICE = {
 }
 # допустимые аннотации значений служебных перечислений; любая другая — опечатка
 ANNOTATIONS = {"label_ru", "label_en", "definition_ru", "definition_en", "inverse_label_ru", "inverse_label_en"}
+# тело записи, от которого идут пути правил шаблона, и схема понятий, из которой берётся applies_to
+ROOTS = {"atom": "AtomPayload", "entity": "EntityPayload", "link": "LinkPayload"}
+APPLIES_TO = {"atom": "kind", "entity": "entity_class", "link": "rel"}
 
 
 class PackError(ValueError):
@@ -54,6 +64,7 @@ class Pack:
     concepts: list[Concept]
     templates: list[Template]
     digest: str                       # sha256 содержимого pack.yaml, vocab/ и templates/
+    template_files: dict[str, Path]   # code шаблона → его файл: ошибки согласованности называют файл
 
 
 def _read(path: Path):
@@ -89,6 +100,122 @@ def service_concepts() -> list[Concept]:
     return out
 
 
+@functools.lru_cache(maxsize=None)
+def _classes(schema_file: Path) -> dict:
+    return _read(schema_file)["classes"]
+
+
+def field_attrs(class_name: str) -> dict:
+    """Поля класса схемы вместе с полями предков (is_a); поле потомка важнее."""
+    classes = _classes(SCHEMA_FILE)
+    cls, attrs = classes[class_name], {}
+    while True:
+        attrs = {**(cls.get("attributes") or {}), **attrs}
+        if "is_a" not in cls:
+            return attrs
+        cls = classes[cls["is_a"]]
+
+
+def check_path(path: str, target: str) -> dict:
+    """Пройти путь правила шаблона по полям LinkML от тела записи target; вернуть описание последнего поля.
+
+    [] — «каждый элемент списка, дальше вглубь»: стоит у промежуточных списков (sources[].edition)
+    и не ставится у последнего поля — правило тогда относится ко всему списку (sources[].selectors).
+    Ошибка — PackError без файла: файл добавляет вызывающий."""
+    classes, class_name, field = _classes(SCHEMA_FILE), ROOTS[target], None
+    segments = path.split(".")
+    slot: dict = {}
+    for i, segment in enumerate(segments):
+        name, each = segment.removesuffix("[]"), segment.endswith("[]")
+        if class_name not in classes:
+            raise PackError(f"{path}: поле {field} — {class_name}, а не класс; дальше по пути идти некуда")
+        attrs = field_attrs(class_name)
+        if name not in attrs:
+            raise PackError(f"{path}: у {class_name} нет поля {name}")
+        slot = attrs[name] or {}
+        if i == len(segments) - 1:
+            if each:
+                raise PackError(f"{path}: [] у последнего поля не нужен — правило относится ко всему списку")
+        elif each != bool(slot.get("multivalued")):
+            raise PackError(f"{path}: [] ставится ровно у промежуточных списков, а {name} "
+                            f"{'— список' if slot.get('multivalued') else 'не список'}")
+        class_name, field = slot.get("range", "string"), name
+    return slot
+
+
+def _check_template(t: Template, file: Path, by_code: dict[str, Template], codes: dict[str, set[str]]) -> None:
+    """Шаблон по отдельности: applies_to, extends, пути и коды правил полей и связей."""
+    target = t.target
+    if t.applies_to and t.applies_to not in codes.get(APPLIES_TO[target], set()):
+        raise PackError(f"{file}: applies_to {t.applies_to} — нет в словаре {APPLIES_TO[target]} загружаемых пакетов")
+    for parent in t.extends or []:
+        if parent not in by_code:
+            raise PackError(f"{file}: extends: нет шаблона {parent}")
+        if by_code[parent].target != t.target:
+            raise PackError(f"{file}: extends: {parent} — шаблон для {by_code[parent].target}, а не для {target}")
+
+    def unknown(scheme: str, values) -> list[str]:
+        return [v for v in values or [] if v not in codes.get(scheme, set())]
+
+    for rule in t.fields or []:
+        try:
+            check_path(rule.path, target)
+        except PackError as e:
+            raise PackError(f"{file}: {e}") from e
+        for attr, scheme in (("selector_types", "selector_type"), ("entity_classes", "entity_class")):
+            if bad := unknown(scheme, getattr(rule, attr)):
+                raise PackError(f"{file}: {rule.path}: {attr} {bad} — нет в словаре {scheme} загружаемых пакетов")
+    links = t.links
+    if links is not None:
+        rels = list(links.allowed or []) + [req.rel for req in links.required or []]
+        if bad := unknown("rel", rels):
+            raise PackError(f"{file}: links: виды связей {bad} — нет в словаре rel загружаемых пакетов")
+        for req in links.required or []:
+            if bad := unknown("entity_class", req.to_classes):
+                raise PackError(f"{file}: links: {req.rel}: to_classes {bad} — нет в словаре entity_class")
+
+
+def _check_templates(packs: list[Pack]) -> None:
+    """Шаблоны всех загружаемых пакетов вместе: коды и пары не повторяются, ссылки ведут на настоящее."""
+    codes: dict[str, set[str]] = {}
+    for p in packs:
+        for c in p.concepts:
+            codes.setdefault(c.scheme, set()).add(c.code)
+    by_code: dict[str, Template] = {}
+    files: dict[str, Path] = {}
+    owner: dict[str, str] = {}
+    pairs: dict[tuple[str, str], str] = {}
+    for p in packs:
+        for t in p.templates:
+            file = p.template_files[t.code]
+            if t.code in by_code:
+                raise PackError(f"{file}: шаблон {t.code} уже задаёт пакет {owner[t.code]} ({files[t.code]})")
+            if t.applies_to:
+                pair = (t.target, t.applies_to)
+                if pair in pairs:
+                    raise PackError(f"{file}: шаблон для {pair[0]} {pair[1]} уже задаёт {pairs[pair]} "
+                                    f"({files[pairs[pair]]})")
+                pairs[pair] = t.code
+            by_code[t.code], files[t.code], owner[t.code] = t, file, p.name
+    for code, t in by_code.items():
+        _check_template(t, files[code], by_code, codes)
+
+    done: set[str] = set()
+
+    def walk(code: str, chain: tuple[str, ...]) -> None:
+        if code in done:
+            return
+        for parent in by_code[code].extends or []:
+            if parent in chain + (code,):
+                loop = chain[chain.index(parent):] if parent in chain else ()
+                raise PackError(f"{files[code]}: цикл в extends: {' → '.join(loop + (code, parent))}")
+            walk(parent, chain + (code,))
+        done.add(code)
+
+    for code in by_code:
+        walk(code, ())
+
+
 def load_pack(path: Path) -> Pack:
     """Пакет из каталога: манифест, понятия и шаблоны в строгой проверке, digest содержимого."""
     path = Path(path)
@@ -108,14 +235,17 @@ def load_pack(path: Path) -> Pack:
             except ValueError as e:
                 raise PackError(f"{file}: {c.get('code', '?')}: {e}") from e
 
-    templates = []
+    templates, template_files = [], {}
     for file in sorted((path / "templates").glob("*.yaml")) if (path / "templates").is_dir() else []:
         try:
             # строгая проверка JSON — как у входа сервера: строки-перечисления принимаются, "no" вместо true — нет
-            templates.append(Template.model_validate_json(
-                json.dumps(_read(file), ensure_ascii=False), strict=True))
+            t = Template.model_validate_json(json.dumps(_read(file), ensure_ascii=False), strict=True)
         except ValueError as e:
             raise PackError(f"{file}: {e}") from e
+        if t.code in template_files:
+            raise PackError(f"{file}: шаблон {t.code} уже задан в {template_files[t.code].name}")
+        templates.append(t)
+        template_files[t.code] = file
 
     digest = hashlib.sha256()
     for file in sorted(p for p in path.rglob("*") if p.is_file() and p.suffix in (".yaml", ".md")):
@@ -124,7 +254,7 @@ def load_pack(path: Path) -> Pack:
         digest.update(file.read_bytes())
         digest.update(b"\0")
     return Pack(name=name, version=version, path=path, concepts=concepts, templates=templates,
-                digest=digest.hexdigest())
+                digest=digest.hexdigest(), template_files=template_files)
 
 
 def discover() -> list[Path]:
@@ -157,4 +287,5 @@ def load_packs(paths: list[Path] | None = None) -> list[Pack]:
             if key in owners:
                 raise PackError(f"пакет {p.name}: {c.scheme}.{c.code} — код уже задаёт пакет {owners[key]}")
             owners[key] = p.name
+    _check_templates(packs)
     return packs
