@@ -14,6 +14,7 @@ CHECK_CODES = {
     "external_source", "source_error", "numbers_unchecked", "edition_filled",
     "unknown_property", "out_of_range", "unit_mismatch", "conflict",
     "duplicate", "related",
+    "basis_author_model", "basis_without_rule", "confidence_person", "bundle_pack_missing", "bundle_key_collision",
 }
 
 REPORT = {
@@ -37,11 +38,11 @@ def test_check_code_matches_spec_table():
 
 @pytest.mark.parametrize("enum, expected", [
     ("ReviewReason", {"semantic", "warning", "high_risk", "semantic_doubt", "edit", "source_changed",
-                      "audit", "calibration"}),
+                      "audit", "calibration", "imported"}),
     ("ReviewItemState", {"queued", "claimed", "done", "obsolete"}),
     ("VerificationMethod", {"llm_judge", "human"}),
     ("VerificationOutcome", {"confirmed", "partial", "refuted", "uncertain"}),
-    ("HighRiskRule", {"always", "numeric"}),
+    ("HighRiskRule", {"always", "numeric", "low_confidence"}),
 ])
 def test_queue_enums(enum, expected):
     assert _values(getattr(model_v1, enum)) == expected
