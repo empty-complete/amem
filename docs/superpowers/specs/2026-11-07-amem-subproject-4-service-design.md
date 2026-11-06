@@ -107,7 +107,7 @@ amem становится программой, которой пользуют�
 | Что | Где |
 |---|---|
 | `records.resolve(conn, ref) -> (target, uuid)` — `atm:`/`ent:` с UUID или ключом; нет такой записи — `RecordNotFound(RecordError)` | `records.py`. `lookup.get`, `what_changed`, `around_entity`, `similar` и `profile.card` принимают ссылку по ключу через неё |
-| `lookup.list_records(conn, *, folder, kinds, statuses, tag, about, limit, cursor)` — сводки записей (подпись, вид или класс, статус, папка, `about`, теги, время и агент текущей ревизии), курсор по `(recorded_at, id)` и `total` | `lookup.py` |
+| `lookup.list_records(conn, *, folder, kinds, statuses, tag, about, limit, cursor)` — `about`: `ent:…` (записи о сущности) или `obj:`/UUID объекта (записи, цитирующие объект); неизвестная ссылка — пустой список; — сводки записей (подпись, вид или класс, статус, папка, `about`, теги, время и агент текущей ревизии), курсор по `(recorded_at, id)` и `total` | `lookup.py` |
 | `lookup.labels(conn, refs) -> {ref: {label, kind | entity_class, status}}` одним запросом | `lookup.py` |
 | `lookup.object_view(conn, object_id)` — объект, версии, отметка строкой (`status`), `cited_by` (источники текущих ревизий), `pages` (число страниц из кэша текста или `null`), `sheets` (листы xlsx/xlsm или `null`) | `lookup.py`, по договорённости с вебом |
 | `objects.sheet(conn, store, object_id, n, name, cell_range)` — ячейки листа xlsx в нотации A1, до 10 000 ячеек (иначе `ObjectError` с кодом `too_large`) | `objects.py` / `extract.py` |
@@ -184,6 +184,9 @@ amem становится программой, которой пользуют�
 | `FolderError` прочее | 422 | `folder_invalid` |
 | `BundleError` | 422 | `code` ошибки (`bundle_pack_missing`, …) |
 | `ObjectError(code=too_large)` | 413 | `too_large` |
+| `ObjectError(code=not_found)` | 404 | `not_found` |
+| `ObjectError(code=invalid)` | 400 | `bad_request` |
+| `RecordNotFound`, `BaseNameError`, `VocabError` — по классу (у них нет `code`) | 404 / 400 / 400 | `not_found` / `bad_request` |
 | `CheckError`, `RecordError`, `ObjectError`, `db.BaseNameError`, `vocab.VocabError`, ошибка разбора запроса | 400 | `bad_request` |
 | Нет входа / только чтение | 401 / 403 | `auth_required` / `read_only` |
 | Чужой `Host` / `Origin` | 421 / 403 | `bad_host` / `bad_origin` |
