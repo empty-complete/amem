@@ -94,3 +94,18 @@ def test_pack_table_keeps_requires(pg, monkeypatch, tmp_path):
     row = pg.execute("SELECT requires FROM pack WHERE name = 'a'").fetchone()
     assert row[0] == {"quantities": ">=1.0.0,<2"}
     assert pg.execute("SELECT requires FROM pack WHERE name = 'core'").fetchone()[0] == {}
+
+
+def test_requires_accepts_prerelease(tmp_path):
+    """2.0.0rc1 подходит под >=1.0: по умолчанию packaging предварительные версии отбрасывает."""
+    dep = _pack(tmp_path / "dep", "dep", version="2.0.0rc1")
+    a = _pack(tmp_path / "a", "a", requires={"dep": ">=1.0"})
+    assert [p.name for p in packs.load_packs([packs.CORE_PACK, a, dep])] == ["core", "dep", "a"]
+
+
+def test_missing_core_is_pack_error(tmp_path):
+    a = _pack(tmp_path / "a", "a")
+    with pytest.raises(packs.PackError, match="ядро"):
+        packs.load_packs([a])
+    with pytest.raises(packs.PackError, match="ядро"):
+        packs._ordered([packs.load_pack(a)])

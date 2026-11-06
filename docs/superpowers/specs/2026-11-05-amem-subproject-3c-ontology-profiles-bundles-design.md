@@ -167,7 +167,7 @@ concepts:
 
 Параметр объекта — атом `kind: parameter`, `about: [ent:…]`, `content.values[0].property` — код величины. Один атом — одна величина об одной сущности; несколько сущностей в `about` допустимы (значение общее для них).
 
-Новая таблица-проекция `atom_property (atom_id, property)` заполняется при записи ревизии в `records._refresh` вместе с `atom_about`, из всех `content.values[].property` текущей ревизии. Индекс по `(property, atom_id)`. Это даёт отбор «атомы с величиной X о сущности Y» одним соединением `atom_about ⋈ atom_property` без разбора JSONB. Новая функция `records.rebuild_projections(conn)` идемпотентно перестраивает `atom_about`, `atom_derived` и `atom_property` из текущих ревизий; тест сверяет результат с построчным разбором.
+Новая таблица-проекция `atom_property (revision_id, property)` — ключ по ревизии, как у `atom_about`, — заполняется при записи ревизии в `records._refresh` вместе с `atom_about`, из всех `content.values[].property` текущей ревизии. Индекс по `(property, revision_id)`. Проекция производная, как `search_document`: триггеров неизменяемости у неё нет, `rebuild_projections` может её стереть и построить заново. Внешнего ключа на `concept` нет: коды величин свободны (неизвестный — предупреждение `unknown_property`). Это даёт отбор «атомы с величиной X о сущности Y» одним соединением `atom_about ⋈ atom_property` без разбора JSONB. Новая функция `records.rebuild_projections(conn)` идемпотентно перестраивает `atom_about`, `atom_derived` и `atom_property` из текущих ревизий; тест сверяет результат с построчным разбором.
 
 ### 3.4. Карточка
 

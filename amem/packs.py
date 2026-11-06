@@ -274,6 +274,8 @@ def load_pack(path: Path) -> Pack:
 def _ordered(packs: list[Pack]) -> list[Pack]:
     """Ядро первым, дальше — топологический порядок по requires; версии проверены; цикл — ошибка с цепочкой."""
     by_name = {p.name: p for p in packs}
+    if "core" not in by_name:
+        raise PackError("ядро (пакет core) обязательно")
     for p in packs:
         for dep, spec in p.requires.items():
             if dep not in by_name:
@@ -282,7 +284,8 @@ def _ordered(packs: list[Pack]) -> list[Pack]:
                 have = Version(by_name[dep].version)
             except InvalidVersion as e:
                 raise PackError(f"пакет {dep}: версия {by_name[dep].version!r} — не semver") from e
-            if have not in SpecifierSet(spec):
+            # предварительные версии (2.0.0rc1) тоже подходят под диапазон: иначе >=1.0 их бы не принял
+            if not SpecifierSet(spec).contains(have, prereleases=True):
                 raise PackError(f"пакет {p.name} требует {dep} {spec}, загружен {by_name[dep].version}")
     order: list[Pack] = []
     done: set[str] = set()
