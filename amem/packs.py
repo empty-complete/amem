@@ -9,7 +9,10 @@ skills/*.md (тексты для агентов — раздаёт устано�
 - пакет не переопределяет код ядра;
 - один код в одной схеме не задаётся двумя пакетами по-разному (и одинаково тоже — иначе непонятно,
   чьё понятие удалять при исчезновении кода из пакета);
-- один пакет не встречается дважды.
+- один пакет не встречается дважды;
+- requires пакета (имя → диапазон версий, packaging.SpecifierSet) выполнены, циклов нет; пакеты идут
+  в топологическом порядке — ядро первым, зависимость раньше зависимого;
+- broader понятия ведёт на код той же схемы в загружаемых пакетах.
 
 Шаблоны любого пакета проверяются там же (спецификация подпроекта 3, разд. 3.6), ошибка называет файл шаблона:
 - один code шаблона — не больше чем в одном пакете, одна пара (target, applies_to) — не больше чем у одного шаблона;
@@ -31,6 +34,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
 
 from .model_v1 import Concept, Template
 
@@ -65,6 +70,7 @@ class Pack:
     templates: list[Template]
     digest: str                       # sha256 содержимого pack.yaml, vocab/ и templates/
     template_files: dict[str, Path]   # code шаблона → его файл: ошибки согласованности называют файл
+    requires: dict[str, str]          # имя пакета → диапазон версий (packaging.SpecifierSet)
 
 
 def _read(path: Path):
@@ -223,6 +229,14 @@ def load_pack(path: Path) -> Pack:
     if not isinstance(manifest, dict) or not manifest.get("name") or not manifest.get("version"):
         raise PackError(f"{path / 'pack.yaml'}: нужны name и version")
     name, version = str(manifest["name"]), str(manifest["version"])
+    requires = manifest.get("requires") or {}
+    if not isinstance(requires, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in requires.items()):
+        raise PackError(f"{path / 'pack.yaml'}: requires: ожидается отображение имя → диапазон версий")
+    for dep, spec in requires.items():
+        try:
+            SpecifierSet(spec)
+        except InvalidSpecifier as e:
+            raise PackError(f"{path / 'pack.yaml'}: requires: {dep}: {e}") from e
 
     concepts = []
     for file in sorted((path / "vocab").glob("*.yaml")) if (path / "vocab").is_dir() else []:
@@ -254,7 +268,53 @@ def load_pack(path: Path) -> Pack:
         digest.update(file.read_bytes())
         digest.update(b"\0")
     return Pack(name=name, version=version, path=path, concepts=concepts, templates=templates,
-                digest=digest.hexdigest(), template_files=template_files)
+                digest=digest.hexdigest(), template_files=template_files, requires=requires)
+
+
+def _ordered(packs: list[Pack]) -> list[Pack]:
+    """Ядро первым, дальше — топологический порядок по requires; версии проверены; цикл — ошибка с цепочкой."""
+    by_name = {p.name: p for p in packs}
+    for p in packs:
+        for dep, spec in p.requires.items():
+            if dep not in by_name:
+                raise PackError(f"пакет {p.name} требует {dep} {spec}, он не загружается")
+            try:
+                have = Version(by_name[dep].version)
+            except InvalidVersion as e:
+                raise PackError(f"пакет {dep}: версия {by_name[dep].version!r} — не semver") from e
+            if have not in SpecifierSet(spec):
+                raise PackError(f"пакет {p.name} требует {dep} {spec}, загружен {by_name[dep].version}")
+    order: list[Pack] = []
+    done: set[str] = set()
+
+    def visit(name: str, chain: tuple[str, ...]) -> None:
+        if name in done:
+            return
+        if name in chain:
+            loop = chain[chain.index(name):] + (name,)
+            raise PackError(f"цикл в requires: {' → '.join(loop)}")
+        for dep in sorted(by_name[name].requires):
+            visit(dep, chain + (name,))
+        done.add(name)
+        order.append(by_name[name])
+
+    visit("core", ())
+    for name in sorted(by_name):
+        visit(name, ())
+    return order
+
+
+def _check_broader(packs: list[Pack]) -> None:
+    """broader ведёт на код той же схемы — в своём пакете, ядре или другом загружаемом пакете."""
+    codes: dict[str, set[str]] = {}
+    for p in packs:
+        for c in p.concepts:
+            codes.setdefault(c.scheme, set()).add(c.code)
+    for p in packs:
+        for c in p.concepts:
+            if c.broader and c.broader not in codes.get(c.scheme, set()):
+                raise PackError(f"пакет {p.name}: {c.scheme}.{c.code}: broader {c.broader} — "
+                                f"нет в словаре {c.scheme} загружаемых пакетов")
 
 
 def discover() -> list[Path]:
@@ -273,6 +333,7 @@ def load_packs(paths: list[Path] | None = None) -> list[Pack]:
         if p.name in seen_packs:
             raise PackError(f"пакет {p.name}: встречается дважды ({p.path})")
         seen_packs.add(p.name)
+    packs = _ordered(packs)
 
     core = next(p for p in packs if p.name == "core")
     core_codes = {(c.scheme, c.code) for c in core.concepts}
@@ -287,5 +348,6 @@ def load_packs(paths: list[Path] | None = None) -> list[Pack]:
             if key in owners:
                 raise PackError(f"пакет {p.name}: {c.scheme}.{c.code} — код уже задаёт пакет {owners[key]}")
             owners[key] = p.name
+    _check_broader(packs)
     _check_templates(packs)
     return packs

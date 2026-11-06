@@ -11,7 +11,7 @@ from amem import db, ids, packs
 from v1_support import same_database
 
 MIGRATIONS = ["0001_core.sql", "0002_objects.sql", "0003_packs.sql", "0004_hub.sql", "0005_search.sql",
-              "0006_check.sql"]
+              "0006_check.sql", "0007_ontology.sql"]
 
 
 def test_migration_files_are_listed():
