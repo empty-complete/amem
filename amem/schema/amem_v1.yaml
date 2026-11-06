@@ -1005,6 +1005,35 @@ classes:
       summary: {range: Any, required: true}
       ancestors: {range: Any, multivalued: true}
 
+  BundleManifest:
+    description: >-
+      Манифест подборки amem.bundle/1 (bundle.export, файл manifest.json): откуда и что отобрано, пакеты, состав
+      и sha256 каждого файла подборки (parts). Пишется последним; bundle.inspect сверяет части без базы.
+    attributes:
+      format: {required: true, pattern: '^amem\.bundle/1$'}
+      created_at: {range: datetime, required: true}
+      base_id:
+        required: true
+        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      agent:
+        required: true
+        pattern: '^(person|model):[a-z0-9_.-]+$'
+      amem_version: {required: true}
+      selection: {range: Any, required: true}
+      packs:
+        description: Пакеты, которым принадлежат коды записей, с зависимостями — name, version, digest, requires.
+        range: Any
+        multivalued: true
+        required: true
+      counts: {range: Any, required: true}
+      parts:
+        description: Путь файла в подборке → sha256 (hex); все файлы, кроме самого манифеста.
+        range: Any
+        required: true
+      with_files: {range: boolean, required: true}
+      with_history: {range: boolean, required: true}
+      with_packs: {range: boolean, required: true}
+
   Template:
     description: >-
       Шаблон вида атома, класса сущности или вида связи (applies_to) — или интерфейс (applies_to пуст):
