@@ -4,6 +4,7 @@
 Каждый шаблон раскрывается: сначала его extends слева направо (рекурсивно), затем собственные правила; шаблон,
 уже применённый в этом наборе, второй раз не применяется. Правило, применённое позже, заменяет прежнее с тем же
 path — так потомок заменяет предка, а из двух несвязанных интерфейсов действует тот, чей код больше.
+Правила профиля (parameters) сводятся так же, по property; порядок — предки, затем свои (спецификация 3c).
 
 Циклов, чужих target и ссылок на несуществующие шаблоны здесь нет: их отвергает packs.load_packs до записи в базу,
 а template_active переписывается только из проверенных пакетов.
@@ -23,6 +24,9 @@ class Rules:
     # чьё правило действует — замечание называет шаблон: path → code@version, rel обязательной связи → code@version
     field_origins: dict[str, str] = field(default_factory=dict)
     link_origins: dict[str, str] = field(default_factory=dict)
+    # профиль сущности: ParameterRule (json), сведённые по property; property → code@version
+    parameters: tuple[dict, ...] = ()
+    parameter_origins: dict[str, str] = field(default_factory=dict)
 
 
 def active(conn) -> dict[str, dict]:
@@ -56,6 +60,8 @@ def rules_for(active: dict[str, dict], target: str, code: str) -> Rules:
     required: dict[str, dict] = {}
     field_origins: dict[str, str] = {}
     link_origins: dict[str, str] = {}
+    params: dict[str, dict] = {}               # dict хранит место первого появления: правило потомка встаёт на место предка
+    parameter_origins: dict[str, str] = {}
     allowed: frozenset[str] | None = None
     high_risk: set[str] = set()
     for name in order:
@@ -71,6 +77,10 @@ def rules_for(active: dict[str, dict], target: str, code: str) -> Rules:
             required[req["rel"]] = dict(req)
             link_origins[req["rel"]] = applied
         high_risk.update(t.get("high_risk") or [])
+        for rule in t.get("parameters") or []:
+            params[rule["property"]] = dict(rule)
+            parameter_origins[rule["property"]] = applied
     return Rules(templates=tuple(f"{name}@{active[name]['version']}" for name in order), fields=fields,
                  allowed=allowed, required_links=tuple(required.values()), high_risk=frozenset(high_risk),
-                 field_origins=field_origins, link_origins=link_origins)
+                 field_origins=field_origins, link_origins=link_origins,
+                 parameters=tuple(params.values()), parameter_origins=parameter_origins)
