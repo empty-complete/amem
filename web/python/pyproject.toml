@@ -1,0 +1,17 @@
+[project]
+name = "amem-web"
+version = "0.1.0.dev0"
+description = "Статика веб-интерфейса amem; служба amem отдаёт её по /ui"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["amem_web"]
+artifacts = ["amem_web/dist/**"]

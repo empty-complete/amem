@@ -1,0 +1,71 @@
+{
+  "app": { "home": "amem, home", "sample": "Sample data" },
+  "nav": {
+    "search": "Search the base",
+    "review": "Review",
+    "changes": "Changes",
+    "write": "Write",
+    "menu": "Menu",
+    "theme": "Switch theme",
+    "settings": "Settings",
+    "base": "Base",
+    "bundles": "Bundles",
+    "sections": "Sections"
+  },
+  "folders": {
+    "title": "Folders",
+    "all": "All records",
+    "tags": "Tags",
+    "unfiled": "No folder",
+    "new": "Folder"
+  },
+  "records": {
+    "empty": "Nothing here yet. Agents write to the base over MCP, and you can write the first note.",
+    "write": "Write a note",
+    "count_one": "{{count}} record",
+    "count_few": "{{count}} records",
+    "count_many": "{{count}} records",
+    "count_other": "{{count}} records"
+  },
+  "search": {
+    "title": "Results for “{{q}}”",
+    "prompt": "Type a query in the search field above.",
+    "found_one": "{{count}} record",
+    "found_few": "{{count}} records",
+    "found_many": "{{count}} records",
+    "found_other": "{{count}} records",
+    "semanticOff": "Semantic search is unavailable: matching words and codes only.",
+    "exactCode": "Exact code match",
+    "more": "Show more",
+    "nothing": "Nothing found for “{{q}}”. Try other words or a code.",
+    "kind": "Kind",
+    "status": "Status",
+    "any": "Any"
+  },
+  "status": {
+    "draft": "Draft",
+    "needs_review": "Needs review",
+    "auto_verified": "Checked automatically",
+    "verified": "Verified",
+    "rejected": "Rejected",
+    "deprecated": "Deprecated",
+    "superseded": "Superseded"
+  },
+  "family": { "source": "From sources", "work": "From work", "object": "Objects" },
+  "region": {
+    "loading": "Loading",
+    "retry": "Retry",
+    "offline": "No connection to the amem service. Check that it is running and retry."
+  },
+  "settings": {
+    "title": "Settings",
+    "theme": "Theme",
+    "language": "Language",
+    "who": "Signed in as",
+    "service": "Service",
+    "version": "amem version"
+  },
+  "theme": { "system": "Match system", "light": "Light", "dark": "Dark" },
+  "lang": { "ru": "Русский", "en": "English" },
+  "stub": { "later": "This screen comes in the next part of the work.", "home": "Home" }
+}

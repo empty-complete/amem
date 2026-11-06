@@ -1,0 +1,7 @@
+node_modules/
+python/amem_web/dist/*
+!python/amem_web/dist/.gitkeep
+dist-mock/
+test-results/
+playwright-report/
+*.tsbuildinfo
