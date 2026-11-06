@@ -118,7 +118,7 @@ function Lazy({ title, children }: { title: string; children: (open: boolean) =>
   );
 }
 
-function HistoryList({ recordRef }: { recordRef: string }) {
+export function HistoryList({ recordRef }: { recordRef: string }) {
   const { t, i18n } = useTranslation();
   const h = useQuery(q.history(recordRef));
   if (h.isPending) return <RegionState state="loading" />;
