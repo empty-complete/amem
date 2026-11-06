@@ -396,3 +396,74 @@ def items(conn: psycopg.Connection, *, state: str | None = None, reason: str | N
         params["record"] = _record(conn, record)[1] if isinstance(record, str) and ":" in record else _id(record)
     sql = f"{_ITEM}{' WHERE ' + ' AND '.join(where) if where else ''} ORDER BY ri.created_at, ri.id LIMIT %(limit)s"
     return [_row(r) for r in conn.execute(sql, params).fetchall()]
+
+
+# --- метрики (разд. 8.7) ---
+
+STATUSES = ("draft", "needs_review", "auto_verified", "verified", "rejected", "deprecated", "superseded")
+VERDICTS = ("ok", "moved", "fuzzy", "by_locator", "unresolved", "not_found", "no_file", "no_text", "external", "error")
+
+
+def stats(conn: psycopg.Connection, *, days: int = 7, now: datetime | None = None) -> dict:
+    """Метрики очереди и проверки (разд. 8.7) одним словарём, который сериализуется в JSON.
+
+    Окно days считается назад от now и относится к разделам done и changesets; остальные разделы — на now.
+    queue: claimed — аренда действует, expired — истекла (claimed_until < now), эти два числа не пересекаются.
+    Пустые разделы — нули и None (нет данных для времени или возраста), а не пропуски: так проще читать."""
+    now = _now(now)
+    since = now - timedelta(days=days)
+    q = conn.execute(
+        "SELECT reason, count(*) FILTER (WHERE state = 'queued'), "
+        "count(*) FILTER (WHERE state = 'claimed' AND claimed_until >= %(now)s), "
+        "count(*) FILTER (WHERE state = 'claimed' AND claimed_until < %(now)s), "
+        "extract(epoch FROM %(now)s - min(created_at) FILTER (WHERE state = 'queued'))::float8 "
+        "FROM review_item WHERE state = ANY(%(open)s) GROUP BY reason", {"now": now, "open": list(OPEN)}).fetchall()
+    queue = {r: {"queued": 0, "claimed": 0, "expired": 0, "oldest_queued_age_s": None} for r in REASONS}
+    for reason, queued, claimed, expired, age in q:
+        queue[reason] = {"queued": queued, "claimed": claimed, "expired": expired, "oldest_queued_age_s": age}
+
+    done = {r: {"count": 0, "median_s": None} for r in REASONS}
+    for reason, n, median in conn.execute(
+            "SELECT reason, count(*), percentile_cont(0.5) WITHIN GROUP "
+            "(ORDER BY extract(epoch FROM closed_at - created_at))::float8 FROM review_item "
+            "WHERE state = 'done' AND closed_at > %s AND closed_at <= %s GROUP BY reason", (since, now)):
+        done[reason] = {"count": n, "median_s": median}
+    obsolete = conn.execute("SELECT count(*) FROM review_item WHERE state = 'obsolete' "
+                            "AND closed_at > %s AND closed_at <= %s", (since, now)).fetchone()[0]
+
+    states = dict(conn.execute("SELECT state, count(*) FROM changeset WHERE created_at > %s AND created_at <= %s "
+                               "GROUP BY state", (since, now)).fetchall())
+    codes = conn.execute(
+        "SELECT i->>'code', count(*) FROM changeset c, jsonb_array_elements(c.check_report->'issues') i "
+        "WHERE c.state = 'rejected' AND c.created_at > %s AND c.created_at <= %s AND i->>'severity' = 'violation' "
+        "GROUP BY 1 ORDER BY 2 DESC, 1", (since, now)).fetchall()
+
+    records_by = {}
+    for target in ("atom", "entity"):
+        counts = dict(conn.execute(f"SELECT status, count(*) FROM {target} GROUP BY status").fetchall())
+        records_by[f"{target}s"] = {s: counts.get(s, 0) for s in STATUSES}
+
+    verdicts = dict(conn.execute(
+        "SELECT coalesce(verdict, 'unchecked'), count(*) FROM source "
+        "WHERE atom_revision_id IN (SELECT id FROM atom_current) "
+        "OR entity_revision_id IN (SELECT id FROM entity_current) GROUP BY 1").fetchall())
+
+    # автор пакета: у пунктов, поставленных вручную, нет пакета — берём пакет самой ревизии
+    audit = {a: {"decided": n, "refuted": r} for a, n, r in conn.execute(
+        "SELECT cs.agent, count(*), count(*) FILTER (WHERE v.outcome = 'refuted') "
+        "FROM verification v JOIN review_item ri ON ri.id = v.review_item_id "
+        "LEFT JOIN atom_revision ar ON ar.id = ri.atom_revision_id "
+        "LEFT JOIN entity_revision er ON er.id = ri.entity_revision_id "
+        "JOIN changeset cs ON cs.id = coalesce(ri.changeset_id, ar.changeset_id, er.changeset_id) "
+        "WHERE ri.reason = 'audit' GROUP BY cs.agent ORDER BY cs.agent")}
+
+    return {
+        "now": now.isoformat(), "days": days,
+        "queue": queue,
+        "done": {"by_reason": done, "obsolete": obsolete},
+        "changesets": {"approved": states.get("approved", 0), "rejected": states.get("rejected", 0),
+                       "error_codes": {code: n for code, n in codes}},
+        "records": records_by,
+        "sources": {v: verdicts.get(v, 0) for v in (*VERDICTS, "unchecked")},
+        "audit": audit,
+    }
