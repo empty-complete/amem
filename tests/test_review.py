@@ -1,6 +1,7 @@
 """Очередь проверки: захват с арендой, права, решение с вердиктом и последствиями, аудит, ручная постановка
 (разд. 7.3–7.5, 8.2–8.6 спецификации подпроекта 3). Пункты ставит check.submit — как в работе."""
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 import psycopg
@@ -105,6 +106,22 @@ def test_model_gets_only_semantic_and_not_its_own(kb, store, docs):
     [got] = review.claim(kb, agent="model:other")
     assert got["id"] == queued(own, "semantic")
     assert state(kb, queued(w, "warning")) == "queued"
+
+
+def test_person_author_gets_own_semantic(kb, store, docs):
+    own = send(kb, store, docs, wind(), agent=PERSON)
+    [got] = review.claim(kb, agent=PERSON)              # исключение автора — только для модели (разд. 8.2)
+    assert got["id"] == queued(own, "semantic") and got["author"] == PERSON
+
+
+def test_claim_rejects_unknown_reasons(kb, store, docs):
+    send(kb, store, docs, wind())
+    with pytest.raises(review.ReviewError, match="неизвестные причины"):
+        review.claim(kb, agent=PERSON, reasons=["semantic", "nonsense"])
+    with pytest.raises(review.ReviewError, match="не строка"):
+        review.claim(kb, agent=MODEL, reasons="semantic")
+    assert review.claim(kb, agent=MODEL, reasons=["warning"]) == []        # известная, но недоступная — фильтр
+    assert kb.execute("SELECT count(*) FROM review_item WHERE state = 'claimed'").fetchone()[0] == 0
 
 
 def test_person_gets_everything(kb, store, docs):
@@ -311,7 +328,8 @@ def test_edit_by_model_is_error(kb, store, docs):
 
 # --- несколько пунктов у ревизии ---
 
-def test_person_decision_closes_other_items_of_revision(kb, store, docs):
+def old_version_atom(kb, store, docs) -> check.Submitted:
+    """Атом со ссылкой на первую версию заметки, у которой уже есть вторая: пункты semantic и source_changed."""
     note = docs / "Заметки" / "версии.md"
     note.write_text("# Узел\n\n## Кронштейн\n\nКронштейн КБ-14 крепится анкером.\n", encoding="utf-8")
     v1 = objects.ingest(kb, store, docs, "Заметки/версии.md", agent=AUTHOR)
@@ -319,12 +337,26 @@ def test_person_decision_closes_other_items_of_revision(kb, store, docs):
     objects.ingest(kb, store, docs, "Заметки/версии.md", agent=AUTHOR)
     src = {"object": v1.ref, "object_version": 1, "digest": v1.digest,
            "selectors": [{"type": "heading", "value": "Кронштейн"}]}
-    result = send(kb, store, docs, atom("@a", sources=[src]))
+    return send(kb, store, docs, atom("@a", sources=[src]))
+
+
+def test_person_decision_closes_other_items_of_revision(kb, store, docs):
+    result = old_version_atom(kb, store, docs)
     rec = result.records[0]
     out = review.resolve(kb, queued(result, "source_changed"), "confirmed", agent=PERSON)
     assert out["status"] == "verified"
     assert state(kb, queued(result, "semantic")) == "obsolete"
     assert open_items(kb, rec["record_id"]) == []
+
+
+def test_person_decision_keeps_source_changed_open(kb, store, docs):
+    """Решавший semantic не видел новой версии файла: source_changed остаётся отдельным вопросом (разд. 7.3)."""
+    result = old_version_atom(kb, store, docs)
+    rec = result.records[0]
+    out = review.resolve(kb, queued(result, "semantic"), "confirmed", agent=PERSON)
+    assert out["status"] == "verified"
+    assert state(kb, queued(result, "source_changed")) == "queued"
+    assert open_items(kb, rec["record_id"]) == [("source_changed", rec["revision_id"])]
 
 
 def test_model_verdict_without_status_change_when_status_moved(kb, store, docs):
@@ -379,6 +411,37 @@ def test_stale_item_is_closed_on_resolve(kb, store, docs):
     with pytest.raises(review.ReviewError, match="устарел"):
         review.resolve(kb, queued(s, "semantic"), "confirmed", confidence=0.9, agent=MODEL)
     assert state(kb, queued(s, "semantic")) == "obsolete"
+    assert kb.execute("SELECT count(*) FROM verification").fetchone()[0] == 0
+
+
+def test_stale_check_comes_before_lease_and_rights(kb, store, docs):
+    """Устаревший пункт закрывается, даже если он захвачен другим или решающий не вправе его решать."""
+    s = send(kb, store, docs, wind())
+    review.claim(kb, agent="model:other")
+    bypass(kb, s.records[0])
+    with pytest.raises(review.ReviewError, match="устарел"):
+        review.resolve(kb, queued(s, "semantic"), "confirmed", confidence=0.9, agent=MODEL)
+    assert state(kb, queued(s, "semantic")) == "obsolete"
+    w = warned(kb, store, docs)
+    records.commit(kb, [records.Item("atom", atom(None, label=lab("Кронштейн, новая редакция"), sources=None),
+                                     w.records[0]["record_id"])], agent=PERSON)
+    with pytest.raises(review.ReviewError, match="устарел"):
+        review.resolve(kb, queued(w, "warning"), "confirmed", confidence=0.9, agent=MODEL)
+    assert state(kb, queued(w, "warning")) == "obsolete"
+    with pytest.raises(review.ReviewError, match="закрыт"):
+        review.resolve(kb, queued(w, "warning"), "confirmed", agent=PERSON)
+
+
+def test_record_error_in_resolve_is_review_error(kb, store, docs, monkeypatch):
+    _, result = edited(kb, store, docs)
+
+    def broken(*args, **kwargs):
+        raise records.RecordError("сбой проекции записи")
+
+    monkeypatch.setattr(records, "decide", broken)
+    with pytest.raises(review.ReviewError, match="сбой проекции записи"):
+        review.resolve(kb, queued(result, "edit"), "confirmed", agent=PERSON)
+    assert state(kb, queued(result, "edit")) == "queued"                   # всё откатилось
     assert kb.execute("SELECT count(*) FROM verification").fetchone()[0] == 0
 
 
@@ -439,40 +502,98 @@ def test_items_filters(kb, store, docs):
 
 # --- тупики ---
 
-def test_resolve_and_submit_on_one_record_do_not_deadlock(kb, store, docs):
-    """Решение по пункту и новая ревизия той же записи одновременно, 20 раз; у каждого — новый агент. Оба идут
-    агент → запись → пункты: решение либо проходит, либо видит, что пункт устарел (ReviewError), но не тупик."""
-    first = send(kb, store, docs, wind())
-    rec = first.records[0]
-    dsn = dsn_of(kb)
-    for round_ in range(20):
-        [item_id] = [i["id"] for i in review.items(kb, state="queued", record=f"atm:{rec['record_id']}")]
-        barrier = threading.Barrier(2)
-        errors: list[BaseException] = []
+def wait_locked(conn, app: str, n: int) -> None:
+    """Дождаться, пока n соединений с этим application_name встанут в ожидание блокировки."""
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        waiting = conn.execute("SELECT count(*) FROM pg_stat_activity WHERE application_name = %s "
+                               "AND wait_event_type = 'Lock'", (app,)).fetchone()[0]
+        if waiting >= n:
+            return
+        time.sleep(0.02)
+    raise AssertionError(f"{app}: за 30 с в ожидание блокировки встали не все {n} соединения")
 
-        def run(k: int) -> None:
-            try:
-                with db.connect(dsn) as conn:
-                    barrier.wait(timeout=30)
-                    if k == 0:
-                        body = wind(summary_plain=lab(f"Пояснение {round_}: давление ветра района II."))
-                        result = check.submit(conn, store, docs, [Proposal("atom", body, rec["record_id"])],
-                                              agent=f"model:writer-{round_}")
-                        assert result.state == "approved", result.report["issues"]
-                    else:
-                        try:
-                            review.resolve(conn, item_id, "confirmed", confidence=0.9,
-                                           agent=f"model:verifier-{round_}")
-                        except review.ReviewError:
-                            pass                               # пункт успел устареть — так и должно быть
-            except BaseException as e:                         # noqa: BLE001 — ошибку потока проверяет тест
-                errors.append(e)
 
-        threads = [threading.Thread(target=run, args=(k,)) for k in range(2)]
-        for t in threads:
-            t.start()
+def crossing(kb, hold, workers) -> list[BaseException]:
+    """Третье соединение держит блокировку (hold — запросы в открытой транзакции); оба потока стартуют и встают
+    в ожидание; затем блокировка отпускается. Ошибки потоков — в ответе."""
+    app = f"amem-cross-{time.monotonic_ns()}"
+    params = conninfo_to_dict(dsn_of(kb))
+    dsn = make_conninfo(**{**params, "application_name": app})
+    errors: list[BaseException] = []
+
+    def run(fn) -> None:
+        try:
+            with db.connect(dsn) as conn:
+                fn(conn)
+        except BaseException as e:                         # noqa: BLE001 — ошибку потока проверяет тест
+            errors.append(e)
+
+    with db.connect(dsn_of(kb)) as holder, db.connect(dsn_of(kb)) as watch:
+        with holder.transaction():
+            for sql, args in hold:
+                holder.execute(sql, args)
+            threads = [threading.Thread(target=run, args=(fn,)) for fn in workers]
+            for t in threads:
+                t.start()
+            wait_locked(watch, app, len(workers))
         for t in threads:
             t.join(timeout=120)
+        assert not any(t.is_alive() for t in threads)
+    return errors
+
+
+def test_resolve_and_submit_on_one_record_do_not_deadlock(kb, store, docs):
+    """Решение по пункту и новая ревизия той же записи сходятся на заблокированной записи, 10 раз. Оба идут
+    агент → запись → пункты: решение либо проходит, либо видит, что пункт устарел (ReviewError), но не тупик."""
+    rec = send(kb, store, docs, wind()).records[0]
+    for round_ in range(10):
+        [item_id] = [i["id"] for i in review.items(kb, state="queued", record=f"atm:{rec['record_id']}")]
+        outcomes: list[str] = []
+
+        def submit(conn, round_=round_) -> None:
+            body = wind(summary_plain=lab(f"Пояснение {round_}: давление ветра района II."))
+            result = check.submit(conn, store, docs, [Proposal("atom", body, rec["record_id"])],
+                                  agent=f"model:writer-{round_}")
+            assert result.state == "approved", result.report["issues"]
+            outcomes.append("submit")
+
+        def resolve(conn, round_=round_, item_id=item_id) -> None:
+            try:
+                review.resolve(conn, item_id, "confirmed", confidence=0.9, agent=f"model:verifier-{round_}")
+                outcomes.append("resolved")
+            except review.ReviewError:
+                outcomes.append("stale")                    # пункт успел устареть — так и должно быть
+
+        errors = crossing(kb, [("SELECT 1 FROM atom WHERE id = %s FOR NO KEY UPDATE", (rec["record_id"],))],
+                          [submit, resolve])
+        assert not any(isinstance(e, psycopg.errors.DeadlockDetected) for e in errors), errors
+        assert errors == [] and sorted(outcomes) in (["resolved", "submit"], ["stale", "submit"]), (round_, errors)
+        assert len(open_items(kb, rec["record_id"])) == 1
+
+
+def test_claim_and_resolve_do_not_deadlock(kb, store, docs):
+    """Захват и решение одного пункта одним новым агентом сходятся на вставке агента (третье соединение вставило
+    его и держит запись), 10 раз: claim записи не ждёт, resolve ждёт запись, затем пункт — без тупика."""
+    rec = send(kb, store, docs, wind()).records[0]
+    for round_ in range(10):
+        if round_:
+            send(kb, store, docs, wind(summary_plain=lab(f"Пояснение {round_}: давление ветра района II.")),
+                 rec["record_id"])
+        [item_id] = [i["id"] for i in review.items(kb, state="queued", record=f"atm:{rec['record_id']}")]
+        agent = f"model:judge-{round_}"
+        got: list = []
+
+        def claim(conn) -> None:
+            got.extend(review.claim(conn, agent=agent, reasons=["semantic"], limit=50))
+
+        def resolve(conn) -> None:
+            review.resolve(conn, item_id, "confirmed", confidence=0.9, agent=agent)
+
+        errors = crossing(kb, [("INSERT INTO agent (id) VALUES (%s)", (agent,)),
+                               ("SELECT 1 FROM atom WHERE id = %s FOR NO KEY UPDATE", (rec["record_id"],))],
+                          [claim, resolve])
         assert not any(isinstance(e, psycopg.errors.DeadlockDetected) for e in errors), errors
         assert errors == [], (round_, errors)
-    assert len(open_items(kb, rec["record_id"])) == 1
+        assert state(kb, item_id) == "done"
+        assert status(kb, rec["record_id"]) == "auto_verified"
