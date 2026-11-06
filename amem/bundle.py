@@ -10,8 +10,12 @@ tags и kinds — условия атомов, entity_classes — сущност
 project — обоих. Условия другого вида запись не отбирают и не отсекают: Selection(kinds=("note",)) берёт заметки,
 а сущности приходят только замыканием. Selection() без условий — вся база. Статус (по умолчанию — все, кроме
 rejected), since и приватность ограничивают всегда; visibility: private исключается, пока не задано
-include_private. Замыкание — всегда: сущности из about, scope.project, sources[].edition, edition_of; связи с
-обоими концами в подборке (и выведенные из оборота); объекты источников; пакеты кодов и понятия агентов.
+include_private. Замыкание — всегда, до неподвижной точки: все поля-ссылки тел (canon.REF_FIELDS: about,
+scope.project, sources[].edition, edition_of, derived_from, content.formula.symbols[].term) у записей подборки и
+у записей, пришедших замыканием; связи с обоими концами в подборке (и выведенные из оборота); объекты источников;
+пакеты кодов и понятия агентов. Записи замыкания идут с любым статусом и вне since — ради целостности ссылок:
+иначе получатель не примет подборку (ref_unknown). Исключение — атом rejected или приватный (без include_private):
+выгрузить его молча нельзя, и подборка отклоняется с их перечнем.
 """
 from __future__ import annotations
 
@@ -31,8 +35,9 @@ import psycopg
 from psycopg.rows import dict_row
 from pydantic import ValidationError
 
-from . import __version__, lookup, model_v1, packs
+from . import __version__, canon, lookup, model_v1, packs
 from .ids import uuid7
+from .ocfl_store import StoreError
 from .records import PREFIX, Target
 
 FORMAT = "amem.bundle/1"
@@ -41,6 +46,11 @@ DEFAULT_STATUSES = tuple(s for s in STATUSES if s != "rejected")
 PARTS = ("entities.jsonl", "atoms.jsonl", "links.jsonl", "objects.jsonl", "sources.jsonl", "concepts.jsonl")
 _CODE = {"atom": "kind", "entity": "entity_class"}      # столбец вида записи — из закрытого набора
 _TARGET = {prefix: target for target, prefix in PREFIX.items()}
+# пределы распаковки zip: подборка из чужих рук не должна заполнить диск или зависнуть на миллионе записей
+MAX_UNPACKED = 4 << 30              # байт в сумме
+MAX_MEMBERS = 200_000               # файлов в архиве
+MAX_RATIO = 200                     # сжатие больше 200:1 у файла больше RATIO_FROM — признак zip-бомбы
+RATIO_FROM = 1 << 20
 
 
 class BundleError(ValueError):
@@ -58,6 +68,16 @@ class Selection:
     statuses: tuple[str, ...] = DEFAULT_STATUSES
     since: datetime | None = None
     include_private: bool = False
+
+    def __post_init__(self):
+        # строка вместо кортежа дала бы отбор по буквам: tags="shared" — теги «s», «h», …
+        for name in ("tags", "kinds", "entity_classes", "refs", "statuses"):
+            value = getattr(self, name)
+            if isinstance(value, (str, bytes)) or not isinstance(value, (tuple, list)) or \
+                    not all(isinstance(v, str) for v in value):
+                raise BundleError(f"Selection.{name}: нужен кортеж строк, получено {value!r}")
+        if self.project is not None and not isinstance(self.project, str):
+            raise BundleError(f"Selection.project: нужна строка ent:…, получено {self.project!r}")
 
     def as_json(self) -> dict:
         out = {}
@@ -173,28 +193,58 @@ def _current(conn, target: Target, ids: set[uuid.UUID]) -> dict[uuid.UUID, dict]
     return {r["record_id"]: r for r in rows}
 
 
-def _entity_refs(payload: dict) -> set[uuid.UUID]:
-    out = {s["edition"] for s in payload.get("sources") or [] if s.get("edition")}
-    if payload.get("edition_of"):
-        out.add(payload["edition_of"])
-    return {_ref_uuid(r) for r in out}
-
-
-def _closure(conn, atoms: dict[uuid.UUID, dict], entities: set[uuid.UUID]) -> dict[uuid.UUID, dict]:
-    """Сущности отбора и те, на которые ссылаются записи подборки: about, scope.project, sources[].edition,
-    edition_of — до неподвижной точки; ответ — текущие ревизии сущностей."""
-    wanted = set(entities)
-    for row in atoms.values():
-        p = row["payload"]
-        wanted |= {_ref_uuid(r) for r in p.get("about") or []} | _entity_refs(p)
-        if (p.get("scope") or {}).get("project"):
-            wanted.add(_ref_uuid(p["scope"]["project"]))
-    out: dict[uuid.UUID, dict] = {}
-    while wanted:
-        got = _current(conn, "entity", wanted)
-        out |= got
-        wanted = {r for row in got.values() for r in _entity_refs(row["payload"])} - set(out)
+def _body_refs(target: Target, payload: dict) -> dict[str, set[uuid.UUID]]:
+    """Ссылки тела на атомы и сущности — по полям canon.REF_FIELDS (ссылки на объекты идут через sources.jsonl)."""
+    out: dict[str, set[uuid.UUID]] = {"atm": set(), "ent": set()}
+    for path, prefix in canon.REF_FIELDS[target].items():
+        if prefix in out:
+            out[prefix] |= {_ref_uuid(ref) for _, ref in canon.values_at(payload, path)}
     return out
+
+
+def _private(row: dict) -> bool:
+    return (row["payload"].get("scope") or {}).get("visibility") == "private"
+
+
+def _closure(conn, s: Selection, atoms: dict[uuid.UUID, dict],
+             entity_ids: set[uuid.UUID]) -> tuple[dict[uuid.UUID, dict], dict[uuid.UUID, dict]]:
+    """Отбор и всё, на что ссылаются тела его записей и записей, пришедших так же, — до неподвижной точки.
+
+    Ответ — текущие ревизии атомов и сущностей. Атом-цель rejected, приватный (без include_private) или без
+    действующей ревизии — BundleError с перечнем: подборка без него сломала бы ссылку у получателя."""
+    atoms = dict(atoms)
+    entities: dict[uuid.UUID, dict] = {}
+    want = {"atm": set(), "ent": set(entity_ids)}
+    fresh = [("atom", row) for row in atoms.values()]
+    visited = {"atm": set(atoms), "ent": set()}
+    refused: list[str] = []
+    while True:
+        for target, row in fresh:
+            for prefix, ids in _body_refs(target, row["payload"]).items():
+                want[prefix] |= ids
+        fresh = []
+        new_atoms, new_entities = want["atm"] - visited["atm"], want["ent"] - visited["ent"]
+        if not new_atoms and not new_entities:
+            break
+        visited["atm"] |= new_atoms
+        visited["ent"] |= new_entities
+        got = _current(conn, "atom", new_atoms)
+        for atom_id in sorted(new_atoms):
+            row = got.get(atom_id)
+            why = ("нет действующей ревизии" if row is None else "rejected" if row["status"] == "rejected"
+                   else "private" if not s.include_private and _private(row) else None)
+            if why:
+                refused.append(f"atm:{atom_id} ({why})")
+            else:
+                atoms[atom_id] = row
+                fresh.append(("atom", row))
+        got = _current(conn, "entity", new_entities)
+        entities |= got
+        fresh += [("entity", row) for row in got.values()]
+    if refused:
+        raise BundleError("записи подборки ссылаются на атомы, которые нельзя выгрузить: " + ", ".join(refused)
+                          + " — уберите ссылку из отбора или задайте include_private")
+    return atoms, entities
 
 
 def _revision(row: dict) -> dict:
@@ -296,7 +346,10 @@ def _copy_files(store, objects: list[dict], dst: Path) -> None:
             target = dst / hexdigest
             if target.exists():
                 continue
-            shutil.copyfile(store.content(o["id"], v["n"]), target)
+            try:
+                shutil.copyfile(store.content(o["id"], v["n"]), target)
+            except (StoreError, OSError) as e:
+                raise BundleError(f"obj:{o['id']} версия {v['n']}: файл не скопирован из хранилища: {e}") from e
             if _sha256(target) != hexdigest:
                 raise BundleError(f"obj:{o['id']} версия {v['n']}: копия в хранилище не совпадает с digest базы")
 
@@ -312,8 +365,11 @@ def _copy_packs(pack_rows: list[dict], dst: Path) -> None:
                               f"(или пакета нет в AMEM_PACKS) — обновите базу (prepare)")
         for file in sorted(p for p in loaded.path.rglob("*") if p.is_file() and p.suffix in (".yaml", ".md")):
             target = dst / row["name"] / file.relative_to(loaded.path)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(file, target)
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(file, target)
+            except OSError as e:
+                raise BundleError(f"пакет {row['name']}: {file.name} не скопирован: {e}") from e
 
 
 def _files(root: Path) -> list[str]:
@@ -347,12 +403,12 @@ def export(conn: psycopg.Connection, *, store, folder: Path, selection: Selectio
     work.mkdir()
     try:
         atom_ids, entity_ids = _select(conn, selection)
-        atoms = _current(conn, "atom", atom_ids)
-        entities = _closure(conn, atoms, entity_ids)
+        atoms, entities = _closure(conn, selection, _current(conn, "atom", atom_ids), entity_ids)
         if selection.project:
             # сущности проекта видны вместе с тем, во что они входят (датчик → стойка)
             more = _containers(conn, set(entities), list(selection.statuses)) - set(entities)
-            entities = _closure(conn, {}, set(entities) | more)
+            if more:
+                atoms, entities = _closure(conn, selection, atoms, set(entities) | more)
         atom_rows = _record_rows(conn, "atom", atoms, with_history)
         entity_rows = _record_rows(conn, "entity", entities, with_history)
         link_rows = _links(conn, set(atoms) | set(entities))
@@ -414,10 +470,31 @@ def opened(path: Path):
     with tempfile.TemporaryDirectory(prefix="amem-bundle-") as tmp:
         try:
             with zipfile.ZipFile(path) as z:
-                z.extractall(tmp)                     # extractall отбрасывает абсолютные пути и «..»
+                _check_zip(path, z.infolist())        # до распаковки: ни байта на диск из вредного архива
+                z.extractall(tmp)
         except (OSError, zipfile.BadZipFile) as e:
             raise BundleError(f"{path}: не читается как zip: {e}") from e
         yield Path(tmp)
+
+
+def _check_zip(path: Path, members: list[zipfile.ZipInfo]) -> None:
+    """Имена, ссылки и размеры записей архива: вредное — BundleError, не полагаясь на чистку extractall."""
+    if len(members) > MAX_MEMBERS:
+        raise BundleError(f"{path}: {len(members)} записей в архиве — больше предела {MAX_MEMBERS}")
+    total = 0
+    for m in members:
+        name = m.filename
+        parts = PurePosixPath(name).parts
+        if (not name or "\\" in name or "\0" in name or name.startswith("/") or ".." in parts
+                or (len(name) > 1 and name[1] == ":")):
+            raise BundleError(f"{path}: недопустимое имя в архиве {name!r}")
+        if (m.external_attr >> 16) & 0o170000 == 0o120000:
+            raise BundleError(f"{path}: {name} — символическая ссылка, в подборке их не бывает")
+        total += m.file_size
+        if total > MAX_UNPACKED:
+            raise BundleError(f"{path}: распакованный размер больше предела {MAX_UNPACKED} байт")
+        if m.file_size > RATIO_FROM and m.file_size > MAX_RATIO * max(m.compress_size, 1):
+            raise BundleError(f"{path}: {name} сжат больше {MAX_RATIO}:1 — похоже на zip-бомбу")
 
 
 def _manifest(root: Path, label: Path) -> dict:
@@ -445,7 +522,7 @@ def _manifest(root: Path, label: Path) -> dict:
 
 def _damaged(root: Path, manifest: dict) -> list[str]:
     """Части, которых нет или чей sha256 не совпал с манифестом; файлы объектов сверяются и по имени (digest)."""
-    out = set()
+    out = {name for name in PARTS if name not in manifest["parts"]}     # обязательные части — всегда
     for name, digest in manifest["parts"].items():
         file = root / name
         if not file.is_file() or _sha256(file) != digest:
