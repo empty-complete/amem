@@ -4,6 +4,8 @@
 sources, concepts; по выбору — файлы объектов objects/sha256/<hex> и копии пакетов packs/<name>/. Записи идут
 как есть: id, key, статус и текущая ревизия с каноническим телом и content_hash — получатель узнаёт то же
 содержание по хэшу. Манифест пишется последним и даёт sha256 каждого файла: inspect сверяет их без базы.
+Импорт (import_) вливает подборку с теми же id и ничего не затирает: расхождение с локальной записью — ревизия,
+ждущая решения человека (пункт imported); устройство — в докстринге import_.
 
 Отбор: запись попадает, если подходит под все заданные условия своего вида (пустое условие не ограничивает):
 tags и kinds — условия атомов, entity_classes — сущностей, refs — явные ссылки своего вида (atm: / ent:),
@@ -23,22 +25,24 @@ import contextlib
 import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
 import uuid
 import zipfile
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from datetime import date, datetime, timezone
 from pathlib import Path, PurePosixPath
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
-from . import __version__, canon, lookup, model_v1, packs
+from . import __version__, canon, lookup, model_v1, objects, packs, records, review
 from .ids import uuid7
 from .ocfl_store import StoreError
-from .records import PREFIX, Target
+from .records import PREFIX, RecordError, Target
 
 FORMAT = "amem.bundle/1"
 STATUSES = ("draft", "needs_review", "auto_verified", "verified", "rejected", "deprecated", "superseded")
@@ -54,7 +58,14 @@ RATIO_FROM = 1 << 20
 
 
 class BundleError(ValueError):
-    """Неверный отбор, подборка, которую нельзя записать, или повреждённая подборка."""
+    """Неверный отбор, подборка, которую нельзя записать или принять, или повреждённая подборка.
+
+    code — код отказа импорта из CheckCode (bundle_pack_missing, bundle_key_collision) или None; details — для
+    машины: missing, collisions, report (отчёт amem.check/1 уровня 1)."""
+
+    def __init__(self, message: str, *, code: str | None = None, **details):
+        super().__init__(message)
+        self.code, self.details = code, details
 
 
 @dataclass(frozen=True)
@@ -542,3 +553,470 @@ def inspect(path: Path) -> dict:
         damaged = _damaged(root, manifest)
         unexpected = [n for n in _files(root) if n != "manifest.json" and n not in manifest["parts"]]
     return {**manifest, "ok": not damaged, "damaged": damaged, "unexpected": unexpected}
+
+
+# --- импорт (разд. 4.3) ---
+
+TRUST = ("keep", "review")
+ORIGIN = ("origin_base", "origin_revision_hash", "origin_agent")       # поля provenance, которые пишет импорт
+RETIRED = ("deprecated", "superseded")
+_NAME = re.compile(r"@b\d+")
+
+
+@dataclass
+class Imported:
+    """Ответ импорта: пакет изменений (None — ничего не записано: dry_run или всё совпало), счётчики по действиям
+    (created, unchanged, pending, skipped; links — новые связи; objects — новые объекты), пункты очереди,
+    предупреждения, коллизии ключей (только у dry_run: без него коллизия — отказ) и complete — очередь пуста."""
+    changeset_id: uuid.UUID | None
+    counts: dict[str, int]
+    queued: list[dict] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    collisions: list[str] = field(default_factory=list)
+    complete: bool = True
+
+
+@dataclass
+class _Rec:
+    """Запись подборки и решение о ней: действие, тело для записи (None — писать нечего), ревизия после commit."""
+    target: Target
+    row: dict
+    record_id: uuid.UUID
+    action: str = ""
+    body: dict | None = None
+    revision: records.Revision | None = None
+
+    @property
+    def ref(self) -> str:
+        return f"{PREFIX[self.target]}:{self.record_id}"
+
+
+def _read_jsonl(root: Path, name: str) -> list[dict]:
+    rows = []
+    for i, line in enumerate((root / name).read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError as e:
+            raise BundleError(f"{name}: строка {i} — не JSON: {e}") from e
+        if not isinstance(row, dict):
+            raise BundleError(f"{name}: строка {i} — не объект JSON")
+        rows.append(row)
+    return rows
+
+
+def _check_packs(conn, manifest: dict, root: Path, folder: Path) -> None:
+    """Пакеты подборки загружены с теми же name, version, digest; иначе — отказ со списком и подсказкой."""
+    have = {(n, v): d for n, v, d in conn.execute("SELECT name, version, digest FROM pack")}
+    latest = dict(conn.execute("SELECT DISTINCT ON (name) name, version FROM pack "
+                               "ORDER BY name, loaded_at DESC, version DESC").fetchall())
+    missing, names = [], []
+    for p in manifest["packs"]:
+        if not isinstance(p, dict):
+            raise BundleError(f"{folder}/manifest.json: пакет {p!r} — не объект")
+        name, version, digest = p.get("name"), p.get("version"), p.get("digest")
+        got = have.get((name, version))
+        if got is not None and got == digest:
+            continue
+        why = ("загружен с другим digest" if got is not None else
+               f"загружена версия {latest[name]}" if name in latest else "не загружен")
+        missing.append(f"{name} {version} ({why})")
+        names.append(name)
+    if not missing:
+        return
+    bundled = [n for n in names if isinstance(n, str) and (root / "packs" / n / "pack.yaml").is_file()]
+    if bundled and folder.suffix == ".zip":
+        hint = "; пакеты лежат в подборке (packs/): распакуйте её, добавьте их папки в AMEM_PACKS и выполните prepare"
+    elif bundled:
+        hint = (f"; пакеты лежат в подборке: добавьте в AMEM_PACKS "
+                f"{os.pathsep.join(str(root / 'packs' / n) for n in bundled)} и выполните prepare")
+    else:
+        hint = "; добавьте папки пакетов в AMEM_PACKS и выполните prepare"
+    raise BundleError("не загружены пакеты подборки: " + "; ".join(missing) + hint, code="bundle_pack_missing",
+                      missing=missing)
+
+
+def _check_row(target: Target, row: dict, part: str) -> uuid.UUID:
+    """Строка записи подборки: id, статус, ревизия с телом; хэш тела совпадает с content_hash ревизии."""
+    try:
+        record_id = uuid.UUID(row["id"])
+        rev = row["revision"]
+        payload, content_hash = rev["payload"], rev["content_hash"]
+        if not isinstance(payload, dict) or not isinstance(content_hash, str) or not isinstance(rev["id"], str):
+            raise TypeError("ревизия без тела, хэша или id")
+    except (KeyError, TypeError, ValueError, AttributeError) as e:
+        raise BundleError(f"{part}: запись {row.get('id')!r} — неполная строка ({e})") from e
+    ref = f"{PREFIX[target]}:{record_id}"
+    if row.get("status") not in STATUSES:
+        raise BundleError(f"{part}: {ref}: статус {row.get('status')!r} — не из перечня")
+    try:
+        same = canon.content_hash(payload) == content_hash
+    except canon.CanonError as e:
+        raise BundleError(f"{part}: {ref}: тело ревизии не приводится к канонической форме: {e}") from e
+    if not same:
+        raise BundleError(f"{part}: {ref}: content_hash не совпадает с телом ревизии — подборка повреждена или "
+                          "изменена после экспорта")
+    return record_id
+
+
+def _swap(value, mapping: dict[str, str]):
+    """Тело с заменой ссылок-строк по mapping (obj:/atm:/ent:<UUID> → другая ссылка или @имя)."""
+    if isinstance(value, str):
+        return mapping.get(value, value)
+    if isinstance(value, list):
+        return [_swap(v, mapping) for v in value]
+    if isinstance(value, dict):
+        return {k: _swap(v, mapping) for k, v in value.items()}
+    return value
+
+
+def _without_origin(payload: dict) -> dict:
+    """Тело без полей происхождения, которые дописывает импорт: то же содержание, что в базе-источнике."""
+    provenance = {k: v for k, v in (payload.get("provenance") or {}).items() if k not in ORIGIN}
+    body = {k: v for k, v in payload.items() if k != "provenance"}
+    return {**body, "provenance": provenance} if provenance else body
+
+
+def _hash(payload: dict) -> str:
+    return canon.content_hash(payload)
+
+
+def _plan_objects(conn, rows: list[dict], warnings: list[str]) -> tuple[list[dict], dict[str, str], int]:
+    """Объекты подборки: что принимать (adopt), какие ссылки obj: заменить на локальные и сколько объектов новых.
+
+    Страница сайта или переписка, известная базе под другим id (тот же адрес или название), — тот же источник:
+    ссылки на неё переводятся на локальный объект (предупреждение), иначе уникальный индекс отверг бы её."""
+    adopt, mapping, new = [], {}, 0
+    for o in rows:
+        try:
+            object_id = objects.object_uuid(o.get("id", ""))
+        except ValueError as e:
+            raise BundleError(f"objects.jsonl: объект {o.get('id')!r}: {e}") from e
+        record = {k: v for k, v in o.items() if k != "status"}
+        if conn.execute("SELECT 1 FROM object WHERE id = %s", (object_id,)).fetchone() is not None:
+            adopt.append(record)
+            continue
+        kind = o.get("kind")
+        column = {"web": "url", "message": "original_name"}.get(kind)
+        value = o.get(column) if column else None
+        if isinstance(value, str) and value.strip():
+            row = conn.execute(f"SELECT id FROM object WHERE kind = %s AND {column} = normalize(%s, NFC)",
+                               (kind, value.strip())).fetchone()
+            if row is not None:
+                mapping[f"obj:{object_id}"] = f"obj:{row[0]}"
+                warnings.append(f"obj:{object_id}: {kind} {value!r} уже есть в базе как obj:{row[0]} — источники "
+                                "подборки ссылаются на него")
+                continue
+        adopt.append(record)
+        new += 1
+    return adopt, mapping, new
+
+
+def _plan_record(conn, rec: _Rec, mapping: dict[str, str], *, origin_base: str, own_base: str,
+                 warnings: list[str], collisions: list[str]) -> None:
+    """Действие для записи (разд. 4.3, шаг 6): created / unchanged / pending / skipped — и тело для записи.
+
+    Совпадением считается любая локальная ревизия записи (текущая, ждущая, отклонённая, старая), чей content_hash
+    или provenance.origin_revision_hash равен хэшу тела подборки или того же тела без полей происхождения: это
+    содержание база уже видела, и повтор подборки ничего не меняет — даже если о нём уже решили."""
+    t, rev = rec.target, rec.row["revision"]
+    raw, incoming_hash = rev["payload"], rev["content_hash"]
+    incoming = _swap(raw, mapping)
+    try:
+        keys = {incoming_hash, _hash(_without_origin(raw)), _hash(_without_origin(incoming))}
+    except canon.CanonError as e:
+        raise BundleError(f"{rec.ref}: тело ревизии не приводится к канонической форме: {e}") from e
+    key = rec.row.get("key")
+    local = conn.execute(f"SELECT status, key FROM {t} WHERE id = %s", (rec.record_id,)).fetchone()
+    if local is not None and local[1] and key and local[1] != key:
+        collisions.append(f"{rec.ref}: локальный ключ {local[1]}, в подборке {key}")
+    if key:
+        owner = lookup.by_key(conn, t, key)
+        if owner is not None and owner != rec.ref:
+            collisions.append(f"{t} {key}: локально {owner}, в подборке {rec.ref}")
+    body = dict(incoming)
+    if t == "atom" and origin_base != own_base:          # provenance — только у атома (схема сущности его не знает)
+        body["provenance"] = {**(incoming.get("provenance") or {}), "origin_base": origin_base,
+                              "origin_revision_hash": incoming_hash, "origin_agent": rev.get("agent")}
+        body["provenance"] = {k: v for k, v in body["provenance"].items() if v is not None}
+    if local is None:
+        rec.action, rec.body = "created", body
+        return
+    if local[0] in RETIRED:
+        rec.action = "skipped"
+        warnings.append(f"{rec.ref}: локально {local[0]} — подборка её не меняет: вывод из оборота решается здесь")
+        return
+    seen = conn.execute(f"SELECT 1 FROM {t}_revision WHERE {t}_id = %s AND (content_hash = ANY(%s) "
+                        "OR payload->'provenance'->>'origin_revision_hash' = ANY(%s)) LIMIT 1",
+                        (rec.record_id, list(keys), list(keys))).fetchone()
+    if seen is not None:
+        rec.action = "unchanged"
+        return
+    rec.action, rec.body = "pending", body
+
+
+def _link_ends(conn, link: dict) -> tuple[str, uuid.UUID, uuid.UUID, bool]:
+    try:
+        rel, src, dst = link["rel"], _ref_uuid(link["src"]), _ref_uuid(link["dst"])
+        uuid.UUID(link["id"])
+    except (KeyError, TypeError, ValueError, AttributeError, IndexError) as e:
+        raise BundleError(f"links.jsonl: связь {link.get('id')!r} — неполная строка ({e})") from e
+    data = conn.execute("SELECT data FROM concept WHERE scheme = 'rel' AND code = %s", (rel,)).fetchone()
+    return rel, src, dst, bool(data and data[0].get("symmetric"))
+
+
+def _plan_links(conn, rows: list[dict], warnings: list[str]) -> tuple[list[dict], list[uuid.UUID]]:
+    """Связи (шаг 8): какие создать (тело с id подборки) и какие действующие локальные вывести из оборота.
+
+    Своя связь ищется по id, затем — действующая с теми же rel и концами (у симметричной — в любую сторону).
+    Выведенная в подборке и действующая локально — выводится; выведенная локально остаётся выведенной."""
+    create, retire = [], []
+    for link in rows:
+        rel, src, dst, symmetric = _link_ends(conn, link)
+        retired = link.get("retired_at") is not None
+        ends = [(src, dst)] + ([(dst, src)] if symmetric else [])
+        mine = conn.execute("SELECT id, retired_at FROM link WHERE id = %s", (link["id"],)).fetchone()
+        if mine is None:
+            same = [r for a, b in ends for r in conn.execute(
+                "SELECT id, retired_at FROM link WHERE rel = %s AND coalesce(src_atom, src_entity) = %s "
+                "AND coalesce(dst_atom, dst_entity) = %s ORDER BY retired_at NULLS FIRST", (rel, a, b)).fetchall()]
+            active = [r for r in same if r[1] is None]
+            mine = active[0] if active else same[0] if same else None
+        where = f"связь {rel} {link['src']} → {link['dst']}"
+        if mine is None:
+            if not retired:
+                create.append({"id": link["id"], **{k: link[k] for k in ("rel", "src", "dst", "note", "qualifiers",
+                                                                         "confidence") if link.get(k) is not None}})
+        elif retired and mine[1] is None:
+            retire.append(mine[0])
+        elif not retired and mine[1] is not None:
+            warnings.append(f"{where}: локально выведена из оборота — остаётся выведенной")
+    return create, retire
+
+
+def _level1(conn, recs: list[_Rec], links: list[dict]):
+    """Уровень 1 над телами, которые будут записаны: новые записи — под @именами (их ещё нет в базе), правки —
+    по record_id. Правила о том, кто пишет (basis author, confidence), не применяются: их проверила база-источник,
+    автор — в provenance.origin_agent. Ответ — отчёт и @имя → ссылка, чтобы назвать запись в отказе."""
+    from .check import Proposal, level1
+    from .check.report import Report
+
+    names = {r.ref: f"@b{i}" for i, r in enumerate(recs) if r.action == "created"}
+    proposals = []
+    for r in recs:
+        if r.body is None:
+            continue
+        payload = _swap(r.body, names)
+        if r.action == "created":
+            proposals.append(Proposal(r.target, {**payload, "ref": names[r.ref]}))
+        else:
+            proposals.append(Proposal(r.target, payload, record_id=r.record_id))
+    report = Report()
+    level1.check(conn, proposals, [_swap({k: v for k, v in l.items() if k != "id"}, names) for l in links], report)
+    return report, {v: k for k, v in names.items()}
+
+
+def _history_rows(conn, recs: list[_Rec], origin_base: str) -> list[tuple]:
+    """Ревизии подборки с историей — для import_history: история и текущая, каких там ещё нет."""
+    out = []
+    for r in recs:
+        have = {n for (n,) in conn.execute("SELECT n FROM import_history WHERE origin_base = %s AND record_id = %s",
+                                           (origin_base, r.record_id))}
+        for h in [*(r.row.get("history") or []), r.row["revision"]]:
+            if not isinstance(h, dict) or h.get("n") in have:
+                continue
+            try:
+                out.append((r.target, r.record_id, int(h["n"]), h["content_hash"], h["payload"], h["recorded_at"],
+                            h.get("agent")))
+            except (KeyError, TypeError, ValueError) as e:
+                raise BundleError(f"{r.ref}: ревизия истории — неполная строка ({e})") from e
+            have.add(h["n"])
+    return out
+
+
+def _queue_reasons(rec: _Rec, trust: str) -> list[str]:
+    """Пункты созданной ревизии (шаг 7): расхождение и trust=review — imported; при keep — как у submit по статусу."""
+    if rec.action == "pending" or trust == "review":
+        return ["imported"]
+    status = rec.row["status"]
+    return ["semantic"] if status == "draft" else ["imported"] if status == "needs_review" else []
+
+
+def _verdicts(conn, store, rec: _Rec, rows: list[dict], mapping: dict[str, str], at: datetime) -> None:
+    """Итоги сверки (шаг 9) в строки source созданной ревизии: есть копия файла той же версии (по digest) — итог
+    подборки (тот же файл, то же место); у файла без копии — no_file, пока файл не придёт; страница сайта
+    и переписка — итог подборки."""
+    t = rec.target
+    for s in rows:
+        position, version = s.get("position"), s.get("object_version")
+        try:
+            object_id = _ref_uuid(mapping.get(s.get("object"), s.get("object")))
+        except (AttributeError, ValueError, IndexError):
+            continue
+        kind = conn.execute("SELECT kind FROM object WHERE id = %s", (object_id,)).fetchone()
+        if kind is None or not isinstance(version, int):
+            continue
+        verdict, page, anchor = s.get("verdict"), s.get("page"), s.get("anchor")
+        if kind[0] == "file" and store.head(object_id) < version:
+            verdict, page, anchor = "no_file", None, None
+        if verdict not in review.VERDICTS:
+            continue
+        page = page if isinstance(page, int) and not isinstance(page, bool) and page >= 1 else None
+        conn.execute(f"UPDATE source SET verdict = %s, page = %s, anchor = %s, checked_at = %s "
+                     f"WHERE {t}_revision_id = %s AND position = %s",
+                     (verdict, page, anchor if isinstance(anchor, str) else None, at, rec.revision.revision_id,
+                      position))
+
+
+def _stale_sources(conn, rec: _Rec) -> dict | None:
+    """Источники созданной ревизии на не последнюю локальную версию объекта — details пункта source_changed."""
+    rows = conn.execute(
+        "SELECT s.object_id, array_agg(DISTINCT s.object_version ORDER BY s.object_version), latest.n FROM source s "
+        "CROSS JOIN LATERAL (SELECT max(n) AS n FROM object_version v WHERE v.object_id = s.object_id) latest "
+        f"WHERE s.{rec.target}_revision_id = %s AND s.object_version < latest.n "
+        "GROUP BY s.object_id, latest.n ORDER BY s.object_id", (rec.revision.revision_id,)).fetchall()
+    return review.source_changed_details(rows) if rows else None
+
+
+def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust: str = "keep",
+            dry_run: bool = False) -> Imported:
+    """Влить подборку (папку или zip): id сохраняются, ничего не затирается (спецификация 3c, разд. 4.3).
+
+    Порядок: манифест и sha256 частей → пакеты (bundle_pack_missing) → строки и хэши тел → объекты и план записей,
+    коллизии ключей (bundle_key_collision) → уровень 1 → одна транзакция: объекты и их отметки, понятия агентов,
+    записи и связи одним records.commit (keep_ids), статусы и пункты очереди, итоги сверки, вывод связей из
+    оборота, import_history. Отказ — BundleError (code и details), и в базе ничего не появилось; файлы, уже
+    скопированные в хранилище до отказа, повторный импорт примет как есть (objects.adopt).
+
+    trust=keep — статус записи из подборки; review — новые записи needs_review с пунктом imported. Расхождение
+    с локальной записью — ревизия pending с пунктом imported, текущая не меняется. dry_run — план без записи:
+    счётчики, предупреждения и коллизии (вместо отказа)."""
+    if trust not in TRUST:
+        raise BundleError(f"trust: {trust!r} — ожидается keep или review")
+    folder = Path(folder)
+    with opened(folder) as root:
+        manifest = _manifest(root, folder)
+        damaged = _damaged(root, manifest)
+        if damaged:
+            raise BundleError(f"{folder}: повреждены части подборки: {', '.join(damaged)}")
+        _check_packs(conn, manifest, root, folder)
+        own = conn.execute("SELECT value FROM meta WHERE key = 'base_id'").fetchone()
+        if own is None:
+            raise BundleError("у базы нет base_id — выполните prepare")
+        own_base, origin_base = own[0], manifest["base_id"]
+        recs = [_Rec(target, row, _check_row(target, row, part))
+                for target, part in (("entity", "entities.jsonl"), ("atom", "atoms.jsonl"))
+                for row in _read_jsonl(root, part)]
+        link_rows, object_rows = _read_jsonl(root, "links.jsonl"), _read_jsonl(root, "objects.jsonl")
+        source_rows, concepts = _read_jsonl(root, "sources.jsonl"), _read_jsonl(root, "concepts.jsonl")
+        files = {f"sha256:{PurePosixPath(n).name}": root / n for n in manifest["parts"]
+                 if n.startswith("objects/sha256/")}
+        warnings: list[str] = []
+        collisions: list[str] = []
+        adopt, mapping, new_objects = _plan_objects(conn, object_rows, warnings)
+        for rec in recs:
+            _plan_record(conn, rec, mapping, origin_base=origin_base, own_base=own_base, warnings=warnings,
+                         collisions=collisions)
+        new_links, retire = _plan_links(conn, link_rows, warnings)
+        counts = {a: sum(r.action == a for r in recs) for a in ("created", "unchanged", "pending", "skipped")}
+        counts |= {"links": len(new_links), "objects": new_objects}
+        if dry_run:
+            return Imported(None, counts, warnings=warnings, collisions=collisions, complete=not collisions)
+        if collisions:
+            raise BundleError("ключи заняты другими записями: " + "; ".join(collisions), code="bundle_key_collision",
+                              collisions=collisions)
+        report, names = _level1(conn, recs, new_links)
+        if report.has_violations():
+            text = _NAME.sub(lambda m: names.get(m[0], m[0]), report.summary())
+            raise BundleError("подборка не прошла уровень 1:\n" + text,
+                              report=report.as_json(levels={"1": "done"}, records=[], templates=[], degraded=[]))
+        # история — только у подборки with_history и только чужая: своя история и так в базе
+        history = (_history_rows(conn, recs, origin_base) if manifest["with_history"] and origin_base != own_base
+                   else [])
+        by_revision: dict[str, list[dict]] = {}
+        for s in source_rows:
+            by_revision.setdefault(s.get("revision_id"), []).append(s)
+        try:
+            with conn.transaction():
+                cs = _write(conn, store, recs, new_links, retire, adopt, object_rows, concepts, history, files,
+                            mapping, by_revision, warnings, agent=agent, trust=trust, origin_base=origin_base,
+                            reason=f"import {origin_base} {manifest['created_at']}")
+        except objects.ObjectError as e:
+            raise BundleError(f"подборка не принята: {e}") from e
+        except RecordError as e:
+            raise BundleError(f"подборка не записана: {e}") from e
+    changeset_id, queued = cs
+    return Imported(changeset_id, counts, queued=queued, warnings=warnings, complete=not queued)
+
+
+def _write(conn, store, recs: list[_Rec], new_links: list[dict], retire: list[uuid.UUID], adopt: list[dict],
+           object_rows: list[dict], concepts: list[dict], history: list[tuple], files: dict[str, Path],
+           mapping: dict[str, str], by_revision: dict[str, list[dict]], warnings: list[str], *, agent: str,
+           trust: str, origin_base: str, reason: str) -> tuple[uuid.UUID | None, list[dict]]:
+    """Запись импорта в уже открытой транзакции (функции записи ниже становятся точками сохранения)."""
+    for record in adopt:
+        warnings.extend(objects.adopt(conn, store, record, files=files, agent=agent))
+    for o in object_rows:
+        mark = o.get("status")
+        if not isinstance(mark, dict) or f"obj:{o.get('id')}" in mapping:
+            continue
+        local = lookup.object_status(conn, o["id"])
+        if local is None:
+            by = mark.get("agent")
+            objects.mark(conn, o["id"], mark.get("status"), note=mark.get("note"),
+                         agent=by if isinstance(by, str) and objects.AGENT.fullmatch(by) else agent)
+        elif (local["status"], local.get("note")) != (mark.get("status"), mark.get("note")):
+            warnings.append(f"obj:{o['id']}: отметка {local['status']} локальная, в подборке {mark.get('status')} — "
+                            "остаётся локальная")
+    for c in concepts:
+        scheme, code = c.get("scheme"), c.get("code")
+        if not isinstance(scheme, str) or not isinstance(code, str):
+            continue
+        row = conn.execute("SELECT data FROM concept WHERE scheme = %s AND code = %s", (scheme, code)).fetchone()
+        if row is None:
+            conn.execute("INSERT INTO concept (scheme, code, data, origin, updated_at) VALUES (%s, %s, %s, 'agent', "
+                         "now())", (scheme, code, Jsonb(c)))
+        elif row[0] != c:
+            warnings.append(f"понятие {scheme}.{code} отличается от локального — остаётся локальное")
+    writing = [r for r in recs if r.body is not None]
+    items = [records.Item(r.target, r.body, record_id=r.record_id,
+                          status=("needs_review" if trust == "review" else r.row["status"]) if r.action == "created"
+                          else None,
+                          review_state="none" if r.action == "created" else "pending") for r in writing]
+    cs: uuid.UUID | None = None
+    queued: list[dict] = []
+    if items or new_links:
+        done = records.commit(conn, items, new_links, agent=agent, reason=reason, keep_ids=True)
+        cs = done.changeset_id
+        for r, rev in zip(writing, done.revisions):
+            r.revision = rev
+    elif history:
+        # записи и связи совпали, а истории ещё нет: строки import_history тоже ссылаются на пакет изменений
+        records._ensure_agent(conn, agent)
+        cs = records._new_changeset(conn, agent=agent, activity=None, reason=reason, state="approved",
+                                    check_report=None, at=datetime.now(timezone.utc))
+    at = conn.execute("SELECT created_at FROM changeset WHERE id = %s", (cs,)).fetchone()[0] if cs else None
+    for r in writing:
+        if not r.revision.created:
+            continue
+        _verdicts(conn, store, r, by_revision.get(r.row["revision"]["id"], []), mapping, at)
+        details = {"origin_base": origin_base, "action": r.action}
+        reasons = [(why, details) for why in _queue_reasons(r, trust)]
+        stale = _stale_sources(conn, r)
+        if stale:
+            reasons.append(("source_changed", stale))
+        for why, extra in reasons:
+            item = review.insert_item(conn, r.target, r.record_id, r.revision.revision_id, why, changeset_id=cs,
+                                      details=extra, agent=agent, at=at)
+            if item is not None:
+                queued.append({**item, "ref": r.ref})
+    for link_id in retire:
+        records.retire_link(conn, link_id, agent=agent, reason="импорт: связь выведена из оборота в базе-источнике")
+    for target, record_id, n, content_hash, payload, recorded_at, by in history:
+        conn.execute("INSERT INTO import_history (id, changeset_id, target, record_id, origin_base, n, content_hash, "
+                     "payload, recorded_at, agent) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                     "ON CONFLICT (origin_base, record_id, n) DO NOTHING",
+                     (uuid7(), cs, target, record_id, origin_base, n, content_hash, Jsonb(payload),
+                      recorded_at, by))
+    return cs, queued
