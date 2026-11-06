@@ -199,3 +199,50 @@ def test_person_entity_is_verified_without_audit(ready, store, docs, monkeypatch
                                                                "label": {"ru": "Насос циркуляционный"}})],
                      agent=PERSON)
     assert r.records[0]["status"] == "verified" and r.queued == []
+
+
+def _person_note(conn, store, docs, status):
+    body = a("@n", "Проверить крепёж кронштейна", "note", sources=None, body={"ru": "Проверить крепёж."},
+             basis="author")
+    rid = _submit(conn, store, docs, body, PERSON).records[0]["record_id"]
+    records.set_status(conn, "atom", rid, status, agent=PERSON)
+    edit = a("@n", "Проверить крепёж кронштейна", "note", sources=[source_md(NOTE)],
+             body={"ru": "Проверить крепёж и анкер."})
+    return rid, _submit(conn, store, docs, edit, MODEL, record_id=rid)
+
+
+@pytest.mark.parametrize("outcome, state", [("confirmed", "accepted"), ("refuted", "declined")])
+def test_model_edit_of_person_record_not_verified_can_be_decided(ready, store, docs, outcome, state):
+    """Запись человека в needs_review: правка модели ждёт (pending, пункт edit), и решение по ней принимается —
+    по состоянию ревизии, а не по статусу записи; статус записи решение не меняет."""
+    rid, r = _person_note(ready, store, docs, "needs_review")
+    rev = r.records[0]["revision_id"]
+    assert (r.records[0]["status"], r.records[0]["review_state"]) == ("needs_review", "pending")
+    [item] = [q for q in r.queued if q["reason"] == "edit"]
+    out = review.resolve(ready, item["id"], outcome, agent=PERSON)
+    assert out["status"] == "needs_review"
+    assert ready.execute("SELECT review_state FROM atom_revision WHERE id = %s", (rev,)).fetchone()[0] == state
+    current = ready.execute("SELECT id FROM atom_current WHERE atom_id = %s", (rid,)).fetchone()[0]
+    assert (current == rev) is (outcome == "confirmed")
+
+
+def test_model_edit_of_rejected_person_record_goes_usual_way(ready, store, docs):
+    """Отвергнутая запись человека открытых пунктов не держит: правка модели не ждёт, а проверяется как обычно."""
+    rid, r = _person_note(ready, store, docs, "rejected")
+    assert (r.records[0]["status"], r.records[0]["review_state"]) == ("draft", "none")
+    assert [q["reason"] for q in r.queued] == ["semantic"]
+
+
+def test_person_record_on_old_object_version_gets_source_changed(ready, store, docs):
+    """У записи человека из пунктов остаётся только source_changed: это вопрос о файле, а не проверка записи."""
+    from amem import objects
+    note = docs / "версии.md"
+    note.write_text("# Узел\n\n## Кронштейн\n\nКронштейн КБ-14 крепится анкером.\n", encoding="utf-8")
+    v1 = objects.ingest(ready, store, docs, "версии.md", agent=PERSON)
+    note.write_text("# Узел\n\n## Кронштейн\n\nКронштейн КБ-16 крепится двумя анкерами.\n", encoding="utf-8")
+    objects.ingest(ready, store, docs, "версии.md", agent=PERSON)
+    src = {"object": v1.ref, "object_version": 1, "digest": v1.digest,
+           "selectors": [{"type": "heading", "value": "Кронштейн"}]}
+    r = _submit(ready, store, docs, a("@k", "Кронштейн крепится анкером", "fact", sources=[src]), PERSON)
+    assert r.state == "approved" and r.records[0]["status"] == "verified"
+    assert [q["reason"] for q in r.queued] == ["source_changed"] and r.complete is False

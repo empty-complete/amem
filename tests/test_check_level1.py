@@ -261,7 +261,7 @@ def test_template_issue_names_template_path_and_rule(kb):
     assert (issue.level, issue.details) == (1, {"template": "rule@1.0.0", "path": "content.values", "rule": "required"})
     _, _, report = run(kb, atom("@a", sources=None))
     [issue] = report.issues
-    assert issue.message == "У атома нет источника и не задано основание basis."  # текст правила has_source
+    assert issue.message == "У атома нет источника и не задано основание basis."                        # текст правила has_source
     _, _, report = run(kb, atom("@a", content={"values": [value("pressure", 0.38, "кПа")]}))
     [issue] = report.issues
     assert issue.details == {"template": "has_value@1.0.0", "path": "content.values[].unit", "rule": "ucum",
