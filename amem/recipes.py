@@ -78,18 +78,12 @@ def _history_moment(value, name: str):
 
 
 def _history_ref(conn: psycopg.Connection, ref: str | None):
-    """Проверить ref даже для пустого интервала: отсутствующая запись — не пустая история."""
+    """Проверить ref (UUID или ключ) даже для пустого интервала: отсутствующая запись — не пустая история,
+    а RecordNotFound."""
     if ref is None:
         return None, None, None
-    try:
-        prefix, value = ref.split(":", 1)
-        target = records.TARGET[prefix]
-    except (AttributeError, ValueError, KeyError) as e:
-        raise records.RecordError(f"ref {ref!r}: нужна ссылка atm:<UUID> или ent:<UUID>") from e
-    record_id = records.as_uuid(value, what="ref")
-    if conn.execute(f"SELECT 1 FROM {target} WHERE id = %s", (record_id,)).fetchone() is None:
-        raise records.RecordError(f"{ref}: такой записи нет")
-    return target, record_id, f"{prefix}:{record_id}"
+    target, record_id = records.resolve(conn, ref)
+    return target, record_id, f"{records.PREFIX[target]}:{record_id}"
 
 
 def _history_interval(column: str, since, until) -> str:
@@ -147,7 +141,8 @@ def _diff(before, after) -> list[dict]:
 
 def what_changed(conn: psycopg.Connection, *, ref: str | None = None,
                  since: datetime | None = None, until: datetime | None = None) -> dict:
-    """События записи или всей базы за [since, until), без поиска и журнала retrieval."""
+    """События записи (ref — atm:/ent: с UUID или ключом) или всей базы за [since, until), без поиска и журнала
+    retrieval."""
     since = _history_moment(since, "since")
     until = _history_moment(until, "until")
     if since is not None and until is not None and since >= until:
@@ -267,9 +262,8 @@ def exact_fact(conn: psycopg.Connection, query: str, *, agent: str, activity=Non
 
 
 def _source_document(conn: psycopg.Connection, ref: str):
-    prefix, value = ref.split(":", 1)
-    target = records.TARGET[prefix]
-    record_id = records.as_uuid(value, what="ref")
+    """Запись-образец similar (atm:/ent: с UUID или ключом) и поисковый документ её текущей ревизии."""
+    target, record_id = records.resolve(conn, ref)
     table = target
     row = conn.execute(
         f"SELECT rec.id, r.id, d.document FROM {table} rec "
@@ -279,7 +273,7 @@ def _source_document(conn: psycopg.Connection, ref: str):
         f"WHERE rec.id = %(record_id)s",
         {"target": target, "record_id": record_id}).fetchone()
     if row is None:
-        raise records.RecordError(f"{ref}: такой записи нет")
+        raise records.RecordNotFound(f"{ref}: такой записи нет")
     if row[1] is None:
         raise records.RecordError(f"{ref}: у записи нет текущей ревизии")
     if row[2] is None:
@@ -291,7 +285,7 @@ def similar(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
             limit: int = 10, target=None, kind=None, entity_class=None, statuses=None,
             include_record: bool = False, provider: embed.EmbeddingProvider | None = None,
             usefulness: bool = True, now=None) -> dict:
-    """Найти похожие записи по тексту либо по atm:/ent: ссылке на существующую запись."""
+    """Найти похожие записи по тексту либо по atm:/ent: ссылке (UUID или ключ) на существующую запись."""
     if not isinstance(query, str):
         raise ValueError("запрос должен быть строкой")
     source = None
@@ -468,7 +462,8 @@ def _path_evidence_role(path: dict, nodes: dict, roles: dict):
 
 
 def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=None, statuses=None) -> dict:
-    """Кратчайшие пути от записи по link/about/derived_from; узел посещается один раз.
+    """Кратчайшие пути от записи (ref — atm:/ent: с UUID или ключом) по link/about/derived_from; узел посещается
+    один раз.
 
     rels — набор видов связей (about и derived_from — тоже), statuses — статусы соседей, как у других рецептов.
     При равной длине путь выбирается по последовательности id рёбер, затем по ref; рёбра вне дерева кратчайших

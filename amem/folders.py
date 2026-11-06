@@ -149,14 +149,6 @@ def _known(conn: psycopg.Connection, path: str) -> bool:
     return _registered(conn, path) or _has_content(conn, path)
 
 
-def _record(conn: psycopg.Connection, ref) -> tuple[str, uuid.UUID]:
-    """atm:/ent: с UUID или ключом → (вид, id); нет записи или не та ссылка — RecordError."""
-    if not isinstance(ref, str) or ":" not in ref or ref.split(":", 1)[0] not in records.TARGET:
-        raise records.RecordError(f"ref {ref!r}: нужна ссылка atm:<UUID или ключ> или ent:<UUID или ключ>")
-    prefix, value = records.resolve_ref(conn, ref, {}).split(":", 1)
-    return records.TARGET[prefix], uuid.UUID(value)
-
-
 def _log(conn, target: str, record_id: uuid.UUID, before: str | None, after: str | None, agent: str,
          at: datetime) -> None:
     """Перенос одной записи: столбец folder и строка журнала (у переименования — те же два шага пакетно)."""
@@ -169,7 +161,7 @@ def move(conn: psycopg.Connection, ref: str, folder: str | None, *, agent: str) 
     """Переложить запись в папку (None — «без папки») без новой ревизии; та же папка — ничего не меняется."""
     records._require_autocommit(conn)
     path = check(folder) if folder is not None else None
-    target, record_id = _record(conn, ref)
+    target, record_id = records.resolve(conn, ref)     # нет записи — RecordNotFound
     with conn.transaction():
         records._ensure_agent(conn, agent)
         _lock_folders(conn, exclusive=False)

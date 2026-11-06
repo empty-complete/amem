@@ -30,6 +30,8 @@
 Ошибка называет место: @имя записи, её id или items[i]; у связи — links[i]; дальше — путь поля.
 
 Решения проверки (статус, review_state) принимает вызывающий код — автопроверка этапа 3.
+Чтение по ссылке (lookup, recipes, profile, folders) разбирает её через resolve: atm:/ent: с UUID или ключом;
+нет записи — RecordNotFound.
 Соединение — только в режиме autocommit (db.connect): без него транзакции становятся точками сохранения и запись
 не фиксируется.
 """
@@ -54,10 +56,19 @@ PREFIX = {"atom": "atm", "entity": "ent"}
 TARGET = {"atm": "atom", "ent": "entity"}
 SCHEMA_VERSION = {"atom": "amem.atom/1", "entity": "amem.entity/1"}
 UUID7 = re.compile(canon.UUID7)
+# ссылка на чтение: UUID в обычной записи (любой версии и регистра) или ключ по шаблону поля key схемы v1;
+# в ключе нет «-», поэтому одна строка не может быть и тем и другим
+_ANY_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
+_KEY = re.compile(r"[a-z0-9][a-z0-9_.]*")
 
 
 class RecordError(ValueError):
     pass
+
+
+class RecordNotFound(RecordError, LookupError):
+    """Ссылка верная, но такой записи нет. LookupError — как у «не нашлось» в Python; profile.card прежде
+    бросал его на неизвестную сущность, и такие обработчики продолжают работать."""
 
 
 @dataclass
@@ -186,6 +197,34 @@ def _lock_many(conn, pairs: Sequence[tuple[Target, uuid.UUID]]) -> datetime | No
     return max(marks)
 
 
+def parse_ref(ref) -> tuple[Target, uuid.UUID | None, str | None]:
+    """atm:/ent: с UUID или ключом → (вид, UUID, None) или (вид, None, ключ), без обращения к базе.
+
+    Не такая ссылка (@имя, obj:, пустое или чужое после «:», не строка) — RecordError."""
+    prefix, _, rest = ref.partition(":") if isinstance(ref, str) else ("", "", "")
+    if prefix in TARGET:
+        if _ANY_UUID.fullmatch(rest):
+            return TARGET[prefix], uuid.UUID(rest), None
+        if _KEY.fullmatch(rest):
+            return TARGET[prefix], None, rest
+    raise RecordError(f"ref {ref!r}: нужна ссылка atm:<UUID или ключ> или ent:<UUID или ключ>")
+
+
+def resolve(conn: psycopg.Connection, ref: str) -> tuple[Target, uuid.UUID]:
+    """atm:/ent: с UUID или ключом → (вид, UUID записи). Записи нет — RecordNotFound, не та ссылка — RecordError.
+
+    Ключ ищется в проекции текущей ревизии (atom.key, entity.key): старый ключ записи не находится."""
+    target, record_id, key = parse_ref(ref)
+    if record_id is not None:
+        if conn.execute(f"SELECT 1 FROM {target} WHERE id = %s", (record_id,)).fetchone() is None:
+            raise RecordNotFound(f"{ref}: такой записи нет")
+        return target, record_id
+    row = conn.execute(f"SELECT id FROM {target} WHERE key = %s", (key,)).fetchone()
+    if row is None:
+        raise RecordNotFound(f"{ref}: нет записи с ключом {key}")
+    return target, row[0]
+
+
 def resolve_ref(conn: psycopg.Connection, ref: str, refs: dict[str, str]) -> str:
     """@имя, ключ или UUID → каноническая ссылка atm:/ent:<UUID>; цель должна существовать.
 
@@ -199,15 +238,8 @@ def resolve_ref(conn: psycopg.Connection, ref: str, refs: dict[str, str]) -> str
         if not UUID7.fullmatch(rest) or conn.execute("SELECT 1 FROM object WHERE id = %s", (rest,)).fetchone() is None:
             raise RecordError(f"{ref}: такого объекта нет")
         return ref
-    table = TARGET[prefix]
-    if UUID7.fullmatch(rest):
-        if conn.execute(f"SELECT 1 FROM {table} WHERE id = %s", (rest,)).fetchone() is None:
-            raise RecordError(f"{ref}: такой записи нет")
-        return ref
-    row = conn.execute(f"SELECT id FROM {table} WHERE key = %s", (rest,)).fetchone()
-    if row is None:
-        raise RecordError(f"{ref}: нет записи с ключом {rest}")
-    return f"{prefix}:{row[0]}"
+    target, record_id = resolve(conn, ref)
+    return f"{PREFIX[target]}:{record_id}"
 
 
 def _resolve_payload(conn, target: Target, payload: dict, refs: dict[str, str]) -> dict:
