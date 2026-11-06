@@ -591,7 +591,8 @@ class Imported:
 @dataclass
 class _Rec:
     """Запись подборки и решение о ней: действие, тело для записи (None — писать нечего), статус новой записи,
-    причины пунктов очереди, ревизия после commit."""
+    причины пунктов очереди, итоги своей сверки (до транзакции записи: (position, verdict, page, anchor) и
+    источники атома с итогом из UNCONFIRMED), ревизия после commit."""
     target: Target
     row: dict
     record_id: uuid.UUID
@@ -599,6 +600,8 @@ class _Rec:
     body: dict | None = None
     status: str | None = None
     reasons: list[tuple[str, dict]] = field(default_factory=list)
+    checks: list[tuple[int, str, int | None, str | None]] = field(default_factory=list)
+    unconfirmed: list[dict] = field(default_factory=list)
     revision: records.Revision | None = None
 
     @property
@@ -753,8 +756,8 @@ def _local_versions(conn, o: dict) -> dict[int, tuple[uuid.UUID, int]]:
 
 def _known(conn, store, object_id: uuid.UUID, o: dict, files: dict[str, Path]) -> bool:
     """Объект базы, которому подборка ничего не добавляет: все версии есть с тем же digest, все пути записаны,
-    копии файлов подборки уже в хранилище. Его adopt не нужен — и не нужна исключительная блокировка объектов,
-    которая держала бы submit и ingest до конца импорта."""
+    копии файлов подборки уже в хранилище. Его adopt не нужен: повтор той же подборки не берёт исключительную
+    блокировку объектов вовсе."""
     have = dict(conn.execute("SELECT n, digest FROM object_version WHERE object_id = %s", (object_id,)).fetchall())
     versions = o.get("versions") or []
     if not all(isinstance(v, dict) and v.get("n") in have and have[v["n"]] == v.get("digest") for v in versions):
@@ -1001,19 +1004,25 @@ def _history_rows(conn, recs: list[_Rec], origin_base: str) -> list[tuple]:
     return out
 
 
-def _verdicts(conn, store, rec: _Rec, at: datetime, warnings: list[str]) -> list[dict]:
-    """Итоги сверки (шаг 9) в строки source созданной ревизии — своей сверкой, не верой подборке: файл с копией
-    версии в хранилище сверяется уровнем 2 (level2.judge_source: место и цитата по тексту копии); файл без копии —
-    no_file, пока файл не придёт; страница сайта и переписка — external. Итоги sources.jsonl не переносятся:
-    чужой вердикт — утверждение, которое здесь не проверено. Ответ — источники атома с итогом из UNCONFIRMED."""
+def _own_check(conn, store, rec: _Rec) -> None:
+    """Своя сверка источников тела, которое будет записано (шаг 9), — не верой подборке: файл с копией версии в
+    хранилище сверяется уровнем 2 (level2.judge_source: место и цитата по тексту копии); файл без копии — no_file,
+    пока файл не придёт; страница сайта и переписка — external. Итоги sources.jsonl не переносятся: чужой вердикт —
+    утверждение, которое здесь не проверено. Считается до транзакции записи и без блокировки объектов (извлечение
+    текста бывает долгим) — по копиям, уже принятым adopt; итоги — в rec.checks и rec.unconfirmed."""
     from .check import level2
     from .check.report import Report
 
     t = rec.target
-    unconfirmed = []
+    rec.checks, rec.unconfirmed = [], []
     for position, src in enumerate(rec.body.get("sources") or []):
-        object_id, n = _ref_uuid(src["object"]), src["object_version"]
-        kind = conn.execute("SELECT kind FROM object WHERE id = %s", (object_id,)).fetchone()[0]
+        try:
+            object_id, n = _ref_uuid(src["object"]), src["object_version"]
+            kind = conn.execute("SELECT kind FROM object WHERE id = %s", (object_id,)).fetchone()[0]
+        except (KeyError, TypeError, ValueError, AttributeError, IndexError):
+            continue                # источник без объекта или с чужим объектом: тело отвергнет records.commit
+        if not isinstance(n, int):
+            continue
         if kind == "file" and store.head(object_id) < n:
             verdict, page, anchor = "no_file", None, None
         else:
@@ -1021,15 +1030,21 @@ def _verdicts(conn, store, rec: _Rec, at: datetime, warnings: list[str]) -> list
             verdict, page, anchor = got.verdict, got.page, got.anchor
         if verdict is None:
             continue                                      # не сверялся (источник сущности-документа, правило PDF)
+        rec.checks.append((position, verdict, page, anchor))
+        if t == "atom" and verdict in UNCONFIRMED:
+            rec.unconfirmed.append({"position": position, "object": src["object"], "object_version": n,
+                                    "verdict": verdict})
+
+
+def _apply_checks(conn, rec: _Rec, at: datetime, warnings: list[str]) -> None:
+    """Итоги своей сверки (_own_check) — в строки source созданной ревизии, в транзакции записи."""
+    t = rec.target
+    for position, verdict, page, anchor in rec.checks:
         if verdict in SHAKY or verdict == "no_file":
             warnings.append(f"{rec.ref}: sources[{position}]: своя сверка с файлом — {verdict}")
-        if t == "atom" and verdict in UNCONFIRMED:
-            unconfirmed.append({"position": position, "object": src["object"], "object_version": n,
-                                "verdict": verdict})
         conn.execute(f"UPDATE source SET verdict = %s, page = %s, anchor = %s, checked_at = %s "
                      f"WHERE {t}_revision_id = %s AND position = %s",
                      (verdict, page, anchor, at, rec.revision.revision_id, position))
-    return unconfirmed
 
 
 def _unconfirmed(conn, rec: _Rec, verdicts: list[dict], *, agent: str, origin_base: str,
@@ -1079,23 +1094,36 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
 
     Порядок: манифест и sha256 частей → пакеты (bundle_pack_missing) → строки и хэши тел (и истории) → объекты
     (сопоставление с локальными, bundle_object_conflict) и план записей и связей, коллизии ключей и id связей
-    (bundle_key_collision) → уровень 1 → одна транзакция: объекты и их отметки, понятия агентов (величины),
-    записи и связи одним records.commit (keep_ids), статусы и пункты очереди, своя сверка источников, вывод связей
-    из оборота, import_history. Отказ — BundleError (code и details), и в базе ничего не появилось; файлы, уже
-    скопированные в хранилище до отказа, повторный импорт примет как есть (objects.adopt). Коды отказа:
-    bundle_damaged (DAMAGED), bundle_pack_missing, bundle_object_conflict, bundle_key_collision, bundle_level1
-    (LEVEL1); ошибка самих данных строки (не JSON, неверный хэш тела) — без кода.
+    (bundle_key_collision) → уровень 1 → объекты с новыми версиями, путями или файлами — каждый своей транзакцией
+    objects.adopt (строки и копии файлов) → своя сверка источников по принятым копиям → одна транзакция записи:
+    агент, разделяемая блокировка объектов, отметки объектов, понятия агентов (величины), записи и связи одним
+    records.commit (keep_ids), итоги сверки, статусы и пункты очереди, вывод связей из оборота, import_history.
+    Соединение — с autocommit=True (db.connect), иначе BundleError до любого чтения: приём объектов и запись идут
+    своими транзакциями. Отказ до приёма объектов — BundleError (code и details), и в базе ничего не появилось.
+    Отказ при приёме объекта (ObjectError, StoreError), в своей сверке (ObjectError, StoreError — например, копии
+    версии нет в хранилище) или в транзакции записи — тоже BundleError: записей, связей и пакета изменений нет,
+    а принятое до отказа своими транзакциями остаётся, как после ingest: объекты с копиями (копия файла —
+    содержимое, а не утверждение), пункты source_changed, которые adopt поставил для новой версии известного
+    объекта, кэш текста (object_text) и строка агента. Повторный импорт примет объекты как есть (adopt идемпотентен)
+    и запишет остальное. Коды отказа: bundle_damaged (DAMAGED), bundle_pack_missing, bundle_object_conflict,
+    bundle_key_collision, bundle_level1 (LEVEL1); ошибка самих данных строки (не JSON, неверный хэш тела) — без кода.
 
-    Блокировка: объект с новыми версиями, путями или файлами принимается objects.adopt, а он берёт исключительную
-    блокировку объектов (OBJECTS_LOCK) до конца транзакции импорта, вместе с копированием файлов в хранилище.
-    Пока такой импорт идёт, submit, objects.ingest и снимок backup.snapshot ждут его; импорт без нового в объектах
-    (повтор той же подборки) блокировку не берёт. Вынести копирование до транзакции нельзя без переделки adopt:
-    версия и её копия в нём связаны одной проверкой «подряд» (store.head).
+    Блокировка — как у submit и ingest (разд. 7.5 спецификации 3): исключительная блокировка объектов
+    (OBJECTS_LOCK) берётся только на время приёма одного объекта — его строк и копий, как у objects.ingest; своя
+    сверка (извлечение текста бывает долгим) идёт без неё. Транзакция записи держит разделяемую: submit её не ждёт,
+    а ingest, adopt и backup.snapshot ждут только фиксации записи. Новая версия объекта, принятая параллельным
+    ingest между приёмом объектов и записью, даёт ревизии со ссылкой на прежнюю версию пункт source_changed: под
+    разделяемой блокировкой видна последняя версия. Импорт без нового в объектах (повтор той же подборки)
+    исключительную блокировку не берёт — кроме объекта, у которого adopt пропустил копию (в хранилище нет копии
+    предыдущей версии): он не известен целиком (_known) и принимается при каждом повторе, пока копии не придут.
 
     trust=keep — статус записи из подборки; модель (не person:) не сохраняет проверенное и решённое в чужой базе,
     basis author и записи человека — они needs_review с пунктом imported. review — все новые записи needs_review
     с пунктом imported. Расхождение с локальной записью — ревизия pending с пунктом imported, текущая не
     меняется. dry_run — план без записи: счётчики, предупреждения, коллизии (вместо отказа) и отчёт уровня 1."""
+    if not conn.autocommit:
+        raise BundleError("import_: нужно соединение с autocommit=True (db.connect): иначе приём объектов и запись "
+                          "не фиксируются")
     if trust not in TRUST:
         raise BundleError(f"trust: {trust!r} — ожидается keep или review")
     folder = Path(folder)
@@ -1141,12 +1169,27 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
         # история — только у подборки with_history и только чужая: своя история и так в базе
         history = (_history_rows(conn, recs, origin_base) if manifest["with_history"] and origin_base != own_base
                    else [])
+        # объекты — каждый своей транзакцией, до записи (как resolve_sources у submit): копия файла — содержимое,
+        # а не утверждение, и исключительная блокировка объектов держится только на время одного объекта
+        for record in adopt:
+            try:
+                warnings.extend(objects.adopt(conn, store, record, files=files, agent=agent))
+            except (objects.ObjectError, StoreError) as e:
+                raise BundleError(f"подборка не принята: {e}") from e
+        for rec in recs:
+            if rec.body is None:
+                continue
+            try:
+                _own_check(conn, store, rec)
+            except (objects.ObjectError, StoreError) as e:
+                raise BundleError(f"подборка не записана: {rec.ref}: своя сверка источников не выполнена ({e}); "
+                                  "принятые объекты остаются") from e
         try:
             with conn.transaction():
-                cs, queued = _write(conn, store, recs, new_links, retire, adopt, object_rows, concepts, history, files,
-                                    vmap, warnings, agent=agent, origin_base=origin_base,
+                cs, queued = _write(conn, recs, new_links, retire, object_rows, concepts, history, vmap, warnings,
+                                    agent=agent, origin_base=origin_base,
                                     reason=f"import {origin_base} {manifest['created_at']}")
-        except objects.ObjectError as e:
+        except objects.ObjectError as e:                     # отметка объекта (objects.mark)
             raise BundleError(f"подборка не принята: {e}") from e
         except RecordError as e:
             # ключ, занятый между планом и записью (records ловит UniqueViolation ключа и называет его)
@@ -1160,13 +1203,15 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
                     complete=not queued)
 
 
-def _write(conn, store, recs: list[_Rec], new_links: list[dict], retire: list[uuid.UUID], adopt: list[dict],
-           object_rows: list[dict], concepts: list[dict], history: list[tuple], files: dict[str, Path],
-           vmap: dict[SourceKey, SourceKey], warnings: list[str], *, agent: str, origin_base: str,
-           reason: str) -> tuple[uuid.UUID | None, list[dict]]:
-    """Запись импорта в уже открытой транзакции (функции записи ниже становятся точками сохранения)."""
-    for record in adopt:
-        warnings.extend(objects.adopt(conn, store, record, files=files, agent=agent))
+def _write(conn, recs: list[_Rec], new_links: list[dict], retire: list[uuid.UUID], object_rows: list[dict],
+           concepts: list[dict], history: list[tuple], vmap: dict[SourceKey, SourceKey], warnings: list[str], *,
+           agent: str, origin_base: str, reason: str) -> tuple[uuid.UUID | None, list[dict]]:
+    """Запись импорта в уже открытой транзакции (функции записи ниже становятся точками сохранения). Порядок
+    блокировок — как у submit (разд. 7.5 спецификации 3, шаги 1–2): агент, разделяемая блокировка объектов, записи."""
+    conn.execute("INSERT INTO agent (id) VALUES (%s) ON CONFLICT (id) DO NOTHING", (agent,))
+    # новая версия объекта, принятая параллельным ingest после приёма объектов подборки, не теряет source_changed:
+    # под этой блокировкой _stale_sources видит последнюю версию, и новой до фиксации не появится
+    conn.execute("SELECT pg_advisory_xact_lock_shared(%s)", (objects.OBJECTS_LOCK,))
     mapped = {ref for ref, _ in vmap}
     for o in object_rows:
         mark = o.get("status")
@@ -1216,9 +1261,9 @@ def _write(conn, store, recs: list[_Rec], new_links: list[dict], retire: list[uu
     for r in writing:
         if not r.revision.created:
             continue
-        verdicts = _verdicts(conn, store, r, at, warnings)
-        reasons = (_unconfirmed(conn, r, verdicts, agent=agent, origin_base=origin_base, at=at) if verdicts
-                   else list(r.reasons))
+        _apply_checks(conn, r, at, warnings)
+        reasons = (_unconfirmed(conn, r, r.unconfirmed, agent=agent, origin_base=origin_base, at=at)
+                   if r.unconfirmed else list(r.reasons))
         stale = _stale_sources(conn, r)
         if stale:
             reasons.append(("source_changed", stale))
