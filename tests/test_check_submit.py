@@ -8,10 +8,11 @@ import psycopg
 import pytest
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
-from amem import check, db, model_v1, objects, records, review
+from amem import check, db, embed, model_v1, objects, records, review
 from amem.check import Proposal, level4
 from amem.ocfl_store import StoreError
 from check_support import CHECK_PACK, PDF, atom, entity, pack, source_md, source_pdf, value
+from conftest import FakeProvider
 
 AGENT = "model:tester"
 PERSON = "person:reviewer"
@@ -422,3 +423,84 @@ def test_new_agent_is_inserted_before_record_lock(kb, store, docs, monkeypatch):
     assert not any(isinstance(e, psycopg.errors.DeadlockDetected) for e in errors), errors
     assert errors == []
     assert status(kb, "atom", rec["record_id"]) == "needs_review"
+
+
+# --- неверный вызов ---
+
+def test_empty_batch_is_check_error(kb, store, docs):
+    with pytest.raises(check.CheckError, match="пустая пачка"):
+        check.submit(kb, store, docs, [], [], agent=AGENT)
+    assert kb.execute("SELECT count(*) FROM changeset").fetchone()[0] == 0
+    assert kb.execute("SELECT count(*) FROM agent WHERE id = %s", (AGENT,)).fetchone()[0] == 0
+
+
+def test_connection_without_autocommit_is_check_error(kb, store, docs):
+    params = conninfo_to_dict(kb.info.dsn)
+    params["password"] = kb.info.password
+    with psycopg.connect(make_conninfo(**params)) as conn:          # autocommit=False
+        with pytest.raises(check.CheckError, match="autocommit"):
+            check.submit(conn, store, docs, [prop(wind())], agent=AGENT)
+    assert kb.execute("SELECT count(*) FROM changeset").fetchone()[0] == 0
+
+
+def test_unknown_activity_is_check_error(kb, store, docs):
+    with pytest.raises(check.CheckError, match="activity"):
+        send(kb, store, docs, wind(), activity=uuid.UUID("01900000-0000-7000-8000-000000000001"))
+    assert kb.execute("SELECT count(*) FROM changeset").fetchone()[0] == 0
+
+
+def test_unknown_target_is_schema_issue(kb, store, docs):
+    result = check.submit(kb, store, docs, [Proposal("link", {"ref": "@x"})], agent=AGENT)
+    assert result.state == "rejected"
+    assert [c[0] for c in codes(result)] == ["schema"]
+
+
+# --- сквозные: уровни 2–4 в записи ---
+
+def test_conflict_is_risk_and_goes_to_person(kb, store, docs):
+    stored = records.commit(kb, [records.Item("entity", entity("@e")), records.Item("atom", atom(
+        "@a0", label=lab("Давление ветра района II по старым данным"), sources=None,
+        content={"values": [value("pressure", 0.38, "kPa")]}, about=["@e"]))], agent=AGENT)
+    ent, rival = stored.refs["@e"], stored.refs["@a0"]
+    result = send(kb, store, docs, wind(content={"values": [value("pressure", 0.3, "kPa")]}, about=[ent]))
+    assert result.state == "approved", result.report["issues"]
+    assert result.report["records"][0]["risk"] == ["conflict"]
+    assert result.records[0]["status"] == "needs_review"
+    [queued] = result.queued
+    assert queued["reason"] == "high_risk"
+    details = kb.execute("SELECT details FROM review_item WHERE id = %s", (queued["id"],)).fetchone()[0]
+    assert details["risk"] == ["conflict"]
+    assert {"code": "conflict", "ref": rival, "suggest": "contradicts"} in details["candidates"]
+
+
+def test_moved_quote_fixes_page_in_source(kb, store, docs):
+    result = send(kb, store, docs, wind(sources=[source_pdf(PDF, 3, PAGE2)]))
+    assert ("page_moved", "info", "@a: sources[0]") in codes(result)
+    assert result.records[0]["status"] == "draft"                  # info на статус не влияет
+    row = kb.execute("SELECT verdict, page, selectors FROM source WHERE atom_revision_id = %s",
+                     (result.records[0]["revision_id"],)).fetchone()
+    assert row[:2] == ("moved", 2) and row[2] == [{"type": "page", "value": "3"}]
+
+
+def test_similar_entity_goes_to_person_with_same_as(kb, store, docs):
+    old = first(kb, store, docs, entity("@e0", cls="organization", label=lab("Пример"),
+                                        aliases=["Пример и партнёры"]))
+    result = send(kb, store, docs, entity("@e1", cls="organization", label=lab("Пример и партнеры")))
+    assert result.records[0]["status"] == "needs_review"
+    [queued] = result.queued
+    assert queued["reason"] == "warning"
+    details = kb.execute("SELECT details FROM review_item WHERE id = %s", (queued["id"],)).fetchone()[0]
+    [cand] = [c for c in details["candidates"] if c["code"] == "duplicate"]
+    assert cand["ref"] == f"ent:{old['record_id']}" and cand["suggest"] == "same_as"
+
+
+def test_active_model_and_provider_give_no_degraded(kb, store, docs, monkeypatch):
+    monkeypatch.delenv("AMEM_BACKEND")
+    fake = FakeProvider()
+    model = embed.register_model(kb, fake)
+    embed.sync_embeddings(kb, model["id"], fake)
+    embed.activate_model(kb, model["id"])
+    result = send(kb, store, docs, wind(), provider=fake)
+    assert result.state == "approved"
+    assert result.report["degraded"] == []
+    assert fake.calls                                              # вектор действительно считался

@@ -177,13 +177,13 @@ def _strength(cand: dict) -> float:
 
 def _report(report: Report, item: Prepared, found: dict[str, dict]) -> None:
     ordered = sorted(found.values(), key=lambda c: (-_strength(c), c["ref"]))
-    dup = [_public(c) for c in ordered if c["verdict"] == "duplicate"]
+    dup = [{**_public(c), "suggest": SUGGEST[item.target]} for c in ordered if c["verdict"] == "duplicate"]
     rel = [_public(c) for c in ordered if c["verdict"] == "related"][:RELATED]
     if dup:
         report.add(LEVEL, "warning", "duplicate", item.label,
                    "Похоже на " + ", ".join(c["ref"] for c in dup)
                    + (": кандидат в same_as." if item.target == "entity" else ": кандидат в слияние."),
-                   candidates=dup, suggest=SUGGEST[item.target])
+                   candidates=dup)
     if rel:
         report.add(LEVEL, "info", "related", item.label,
                    "Похожие записи ниже порога дубля: " + ", ".join(c["ref"] for c in rel) + ".", candidates=rel)

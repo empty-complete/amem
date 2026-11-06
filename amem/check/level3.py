@@ -143,7 +143,7 @@ class _Level3:
                 risks[item.label] = ["conflict"]
                 self.add("conflict", item.label,
                          "Другое значение той же величины у той же сущности при тех же условиях: "
-                         + ", ".join(found) + ".", atoms=list(found))
+                         + ", ".join(found) + ".", candidates=[{"ref": ref, "suggest": "contradicts"} for ref in found])
         return risks
 
     def stored(self, entities: set) -> list[tuple[uuid.UUID, dict, set]]:

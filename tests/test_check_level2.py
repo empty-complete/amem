@@ -434,3 +434,38 @@ def test_external_edition_not_looked_up(kb, store, docs):
     _, issues, body, _ = one(kb, store, docs, atom("@a", sources=[{"object": v.ref, "object_version": 1}]))
     assert "edition" not in body["sources"][0]
     assert issues == [("external_source", "warning", "@a: sources[0]")]
+
+
+# --- кэш путей на пакет ---
+
+def test_path_is_resolved_once_per_batch(kb, store, docs, monkeypatch):
+    calls = []
+    ingest = objects.ingest
+
+    def counted(*args, **kwargs):
+        calls.append(args[3] if len(args) > 3 else kwargs.get("path"))
+        return ingest(*args, **kwargs)
+
+    monkeypatch.setattr(objects, "ingest", counted)
+    bodies = [atom(f"@a{i}", sources=[source_pdf(PDF, 2, PAGE2)]) for i in range(20)]
+    batch, results, issues, _ = run(kb, store, docs, *bodies)
+    assert calls == [PDF]
+    assert {results[f"@a{i}"][0].verdict for i in range(20)} == {"ok"}
+    assert len({it.payload["sources"][0]["object"] for it in batch.items}) == 1
+    assert batch.items[5].payload["sources"][0]["quote"] == PAGE2
+
+
+def test_unresolved_path_is_reported_for_each_source(kb, store, docs, monkeypatch):
+    calls = []
+    resolve = objects.resolve_sources
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return resolve(*args, **kwargs)
+
+    monkeypatch.setattr(objects, "resolve_sources", counted)
+    bodies = [atom(f"@a{i}", sources=[source_md("Заметки/нет такого.md")]) for i in range(3)]
+    _, _, issues, report = run(kb, store, docs, *bodies)
+    assert len(calls) == 1
+    assert issues == [("source_unresolved", "violation", f"@a{i}: sources[0]") for i in range(3)]
+    assert len({i.message for i in l2(report, "source_unresolved")}) == 1
