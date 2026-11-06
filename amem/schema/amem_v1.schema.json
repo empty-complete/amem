@@ -121,6 +121,17 @@
             "null"
           ]
         },
+        "basis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Basis"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Основание значения без документа; при заданном basis источник не обязателен (has_source 1.1.0)."
+        },
         "body": {
           "anyOf": [
             {
@@ -145,6 +156,15 @@
           },
           "type": [
             "array",
+            "null"
+          ]
+        },
+        "confidence": {
+          "description": "Уверенность агента-модели в утверждении (распознавание, извлечение). Человек поле не заполняет.",
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "number",
             "null"
           ]
         },
@@ -378,6 +398,17 @@
             "null"
           ]
         },
+        "basis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Basis"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Основание значения без документа; при заданном basis источник не обязателен (has_source 1.1.0)."
+        },
         "body": {
           "anyOf": [
             {
@@ -395,6 +426,15 @@
           },
           "type": [
             "array",
+            "null"
+          ]
+        },
+        "confidence": {
+          "description": "Уверенность агента-модели в утверждении (распознавание, извлечение). Человек поле не заполняет.",
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "number",
             "null"
           ]
         },
@@ -544,6 +584,16 @@
       "title": "AtomPayload",
       "type": "object"
     },
+    "Basis": {
+      "description": "Основание значения, когда оно не взято из документа об объекте.",
+      "enum": [
+        "default",
+        "assumed",
+        "author"
+      ],
+      "title": "Basis",
+      "type": "string"
+    },
     "Bundle": {
       "additionalProperties": false,
       "description": "Пачка предложений агента — один пакет изменений (kb_add, kb_import).",
@@ -691,7 +741,12 @@
         "unit_mismatch",
         "conflict",
         "duplicate",
-        "related"
+        "related",
+        "basis_author_model",
+        "basis_without_rule",
+        "confidence_person",
+        "bundle_pack_missing",
+        "bundle_key_collision"
       ],
       "title": "CheckCode",
       "type": "string"
@@ -1338,6 +1393,14 @@
             }
           ]
         },
+        "skip_if_set": {
+          "description": "Путь до поля того же тела; если оно непусто, правило не применяется.",
+          "pattern": "^[a-z_][a-z0-9_]*(\\.[a-z_][a-z0-9_]*)*$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "ucum": {
           "type": [
             "boolean",
@@ -1384,7 +1447,8 @@
       "description": "Правило шаблона, по которому запись считается рискованной.",
       "enum": [
         "always",
-        "numeric"
+        "numeric",
+        "low_confidence"
       ],
       "title": "HighRiskRule",
       "type": "string"
@@ -1697,13 +1761,129 @@
       "title": "ObjectVersion",
       "type": "object"
     },
+    "ParameterDefault": {
+      "additionalProperties": false,
+      "description": "",
+      "properties": {
+        "amount": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "title": "ParameterDefault",
+      "type": "object"
+    },
+    "ParameterRule": {
+      "additionalProperties": false,
+      "description": "Правило профиля сущности: какая величина нужна объекту этого класса. required — блокер; default — умолчание области (в карточке показывается, значением не считается); origin — код словаря parameter_origin.",
+      "properties": {
+        "ask": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParameterDefault"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "group": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "origin": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "property": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "required": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "property"
+      ],
+      "title": "ParameterRule",
+      "type": "object"
+    },
     "Provenance": {
       "additionalProperties": false,
       "description": "Происхождение записи при переносе между базами (задел под хаб, разд. 5 спеки amem).",
       "properties": {
+        "origin_agent": {
+          "pattern": "^(person|model):[a-z0-9_.-]+$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "origin_base": {
           "description": "base_id базы, из которой атом пришёл при разворачивании проекта в собственную базу. Заполняется только при импорте из другой базы; не ссылка — UUID-строка.",
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "origin_revision_hash": {
+          "description": "content_hash ревизии в базе-источнике — по нему повторный импорт узнаёт то же содержание.",
+          "pattern": "^sha256-c[1-9][0-9]*:[0-9a-f]{64}$",
           "type": [
             "string",
             "null"
@@ -1930,7 +2110,8 @@
         "edit",
         "source_changed",
         "audit",
-        "calibration"
+        "calibration",
+        "imported"
       ],
       "title": "ReviewReason",
       "type": "string"
@@ -2263,6 +2444,16 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "parameters": {
+          "description": "Профиль параметров — только у target entity.",
+          "items": {
+            "$ref": "#/$defs/ParameterRule"
+          },
+          "type": [
+            "array",
+            "null"
           ]
         },
         "target": {

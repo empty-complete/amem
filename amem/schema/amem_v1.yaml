@@ -265,6 +265,16 @@ enums:
         annotations: {label_ru: "дубль", label_en: "duplicate", definition_ru: "Похоже на существующую запись или запись той же пачки."}
       related:
         annotations: {label_ru: "похожие записи", label_en: "related", definition_ru: "Похожие записи ниже порога дубля."}
+      basis_author_model:
+        annotations: {label_ru: "автор — модель", label_en: "basis author model", definition_ru: "basis author у записи модели."}
+      basis_without_rule:
+        annotations: {label_ru: "основание без правила", label_en: "basis without rule", definition_ru: "basis default или assumed без derived_from."}
+      confidence_person:
+        annotations: {label_ru: "уверенность у человека", label_en: "confidence person", definition_ru: "confidence заполнил человек."}
+      bundle_pack_missing:
+        annotations: {label_ru: "нет пакета подборки", label_en: "bundle pack missing", definition_ru: "Пакет подборки не загружен или digest иной."}
+      bundle_key_collision:
+        annotations: {label_ru: "ключ занят", label_en: "bundle key collision", definition_ru: "key записи подборки принадлежит другой записи."}
 
   ReviewReason:
     description: Почему запись попала в очередь проверки.
@@ -285,6 +295,8 @@ enums:
         annotations: {label_ru: "аудит", label_en: "audit", definition_ru: "Выборка аудита."}
       calibration:
         annotations: {label_ru: "калибровка", label_en: "calibration", definition_ru: "Поставлен вручную."}
+      imported:
+        annotations: {label_ru: "из другой базы", label_en: "imported", definition_ru: "Пришло подборкой из другой базы."}
 
   ReviewItemState:
     permissible_values:
@@ -322,6 +334,18 @@ enums:
         annotations: {label_ru: "всегда", label_en: "always", definition_ru: "Записи этого вида всегда уходят к человеку."}
       numeric:
         annotations: {label_ru: "числовой", label_en: "numeric", definition_ru: "Записи с числовыми значениями уходят к человеку."}
+      low_confidence:
+        annotations: {label_ru: "низкая уверенность", label_en: "low confidence", definition_ru: "Записи с confidence ниже порога уходят к человеку."}
+
+  Basis:
+    description: Основание значения, когда оно не взято из документа об объекте.
+    permissible_values:
+      default:
+        annotations: {label_ru: "умолчание", label_en: "default", definition_ru: "Умолчание методики — принято по правилу области «в запас», не из документа об объекте."}
+      assumed:
+        annotations: {label_ru: "допущение", label_en: "assumed", definition_ru: "Принято без решения по объекту, чтобы продолжить работу; требует подтверждения."}
+      author:
+        annotations: {label_ru: "утверждение автора", label_en: "author", definition_ru: "Человек утверждает это сам; документа нет. Доступно только агенту person:."}
 
   TemplateTarget:
     permissible_values:
@@ -516,6 +540,11 @@ classes:
           base_id базы, из которой атом пришёл при разворачивании проекта в собственную базу.
           Заполняется только при импорте из другой базы; не ссылка — UUID-строка.
         pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      origin_revision_hash:
+        description: content_hash ревизии в базе-источнике — по нему повторный импорт узнаёт то же содержание.
+        pattern: '^sha256-c[1-9][0-9]*:[0-9a-f]{64}$'
+      origin_agent:
+        pattern: '^(person|model):[a-z0-9_.-]+$'
 
   AtomPayload:
     description: >-
@@ -585,6 +614,14 @@ classes:
         description: Происхождение атома при переносе из другой базы; у своих атомов поля нет.
         range: Provenance
         inlined: true
+      basis:
+        description: Основание значения без документа; при заданном basis источник не обязателен (has_source 1.1.0).
+        range: Basis
+      confidence:
+        description: Уверенность агента-модели в утверждении (распознавание, извлечение). Человек поле не заполняет.
+        range: float
+        minimum_value: 0
+        maximum_value: 1
 
   Atom:
     is_a: AtomPayload
@@ -848,6 +885,9 @@ classes:
         range: string
         pattern: '^[a-z][a-z0-9_]*$'
         multivalued: true
+      skip_if_set:
+        description: Путь до поля того же тела; если оно непусто, правило не применяется.
+        pattern: '^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)*$'
       message:
         range: LangString
         inlined: true
@@ -880,6 +920,26 @@ classes:
         range: RequiredLink
         multivalued: true
         inlined_as_list: true
+
+  ParameterRule:
+    description: >-
+      Правило профиля сущности: какая величина нужна объекту этого класса. required — блокер; default — умолчание
+      области (в карточке показывается, значением не считается); origin — код словаря parameter_origin.
+    attributes:
+      property: {required: true, pattern: '^[a-z][a-z0-9_]*$'}
+      required: {range: boolean}
+      group: {pattern: '^[a-z][a-z0-9_]*$'}
+      origin: {pattern: '^[a-z][a-z0-9_]*$'}
+      default: {range: ParameterDefault, inlined: true}
+      ask: {range: LangString, inlined: true}
+      hint: {range: LangString, inlined: true}
+      when: {range: LangString, inlined: true}
+
+  ParameterDefault:
+    attributes:
+      amount: {range: float}
+      unit: {}
+      value_text: {}
 
   Template:
     description: >-
@@ -915,6 +975,11 @@ classes:
       high_risk:
         range: HighRiskRule
         multivalued: true
+      parameters:
+        description: Профиль параметров — только у target entity.
+        range: ParameterRule
+        multivalued: true
+        inlined_as_list: true
 
   Agent:
     attributes:
