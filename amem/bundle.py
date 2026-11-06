@@ -1098,12 +1098,15 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
     objects.adopt (строки и копии файлов) → своя сверка источников по принятым копиям → одна транзакция записи:
     агент, разделяемая блокировка объектов, отметки объектов, понятия агентов (величины), записи и связи одним
     records.commit (keep_ids), итоги сверки, статусы и пункты очереди, вывод связей из оборота, import_history.
-    Отказ до приёма объектов — BundleError (code и details), и в базе ничего не появилось. Отказ при приёме объекта
-    (ObjectError, StoreError) или в транзакции записи — тоже BundleError: записей, связей и пакета изменений нет,
-    а объекты, принятые до отказа, остаются с копиями — копия файла содержимое, а не утверждение; повторный импорт
-    примет их как есть (adopt идемпотентен) и запишет остальное. Коды отказа: bundle_damaged (DAMAGED),
-    bundle_pack_missing, bundle_object_conflict, bundle_key_collision, bundle_level1 (LEVEL1); ошибка самих данных
-    строки (не JSON, неверный хэш тела) — без кода.
+    Соединение — с autocommit=True (db.connect), иначе BundleError до любого чтения: приём объектов и запись идут
+    своими транзакциями. Отказ до приёма объектов — BundleError (code и details), и в базе ничего не появилось.
+    Отказ при приёме объекта (ObjectError, StoreError), в своей сверке (ObjectError, StoreError — например, копии
+    версии нет в хранилище) или в транзакции записи — тоже BundleError: записей, связей и пакета изменений нет,
+    а принятое до отказа своими транзакциями остаётся, как после ingest: объекты с копиями (копия файла —
+    содержимое, а не утверждение), пункты source_changed, которые adopt поставил для новой версии известного
+    объекта, кэш текста (object_text) и строка агента. Повторный импорт примет объекты как есть (adopt идемпотентен)
+    и запишет остальное. Коды отказа: bundle_damaged (DAMAGED), bundle_pack_missing, bundle_object_conflict,
+    bundle_key_collision, bundle_level1 (LEVEL1); ошибка самих данных строки (не JSON, неверный хэш тела) — без кода.
 
     Блокировка — как у submit и ingest (разд. 7.5 спецификации 3): исключительная блокировка объектов
     (OBJECTS_LOCK) берётся только на время приёма одного объекта — его строк и копий, как у objects.ingest; своя
@@ -1111,12 +1114,16 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
     а ingest, adopt и backup.snapshot ждут только фиксации записи. Новая версия объекта, принятая параллельным
     ingest между приёмом объектов и записью, даёт ревизии со ссылкой на прежнюю версию пункт source_changed: под
     разделяемой блокировкой видна последняя версия. Импорт без нового в объектах (повтор той же подборки)
-    исключительную блокировку не берёт вовсе.
+    исключительную блокировку не берёт — кроме объекта, у которого adopt пропустил копию (в хранилище нет копии
+    предыдущей версии): он не известен целиком (_known) и принимается при каждом повторе, пока копии не придут.
 
     trust=keep — статус записи из подборки; модель (не person:) не сохраняет проверенное и решённое в чужой базе,
     basis author и записи человека — они needs_review с пунктом imported. review — все новые записи needs_review
     с пунктом imported. Расхождение с локальной записью — ревизия pending с пунктом imported, текущая не
     меняется. dry_run — план без записи: счётчики, предупреждения, коллизии (вместо отказа) и отчёт уровня 1."""
+    if not conn.autocommit:
+        raise BundleError("import_: нужно соединение с autocommit=True (db.connect): иначе приём объектов и запись "
+                          "не фиксируются")
     if trust not in TRUST:
         raise BundleError(f"trust: {trust!r} — ожидается keep или review")
     folder = Path(folder)
@@ -1170,8 +1177,13 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
             except (objects.ObjectError, StoreError) as e:
                 raise BundleError(f"подборка не принята: {e}") from e
         for rec in recs:
-            if rec.body is not None:
+            if rec.body is None:
+                continue
+            try:
                 _own_check(conn, store, rec)
+            except (objects.ObjectError, StoreError) as e:
+                raise BundleError(f"подборка не записана: {rec.ref}: своя сверка источников не выполнена ({e}); "
+                                  "принятые объекты остаются") from e
         try:
             with conn.transaction():
                 cs, queued = _write(conn, recs, new_links, retire, object_rows, concepts, history, vmap, warnings,

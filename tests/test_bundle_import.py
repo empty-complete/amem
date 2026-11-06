@@ -3,9 +3,12 @@
 import hashlib
 import json
 import os
+import threading
+import time
 from pathlib import Path
 
 import pytest
+from psycopg.pq import TransactionStatus
 
 from amem import bundle, canon, check, db, lookup, objects, records, review
 from amem.check import Proposal, level2
@@ -797,3 +800,77 @@ def test_object_failure_refuses_and_keeps_adopted(pg, pg2, monkeypatch, store, s
     again = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
     assert again.counts["created"] == 4 and again.counts["objects"] == 1
     assert _count(pg2, "object") == 2 and store2.head(second) == 1
+
+
+def test_import_requires_autocommit(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Соединение без autocommit — отказ до любого чтения: приём объектов и запись идут своими транзакциями."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+    with same_database(pg2) as manual:
+        with pytest.raises(bundle.BundleError, match="autocommit"):
+            bundle.import_(manual, store2, tmp_path / "b", agent=OTHER)
+        assert manual.info.transaction_status == TransactionStatus.IDLE      # транзакцию не открыл
+    assert _count(pg2, "object") == 0 and not (tmp_path / "objects2").exists()
+
+
+def test_own_check_failure_is_bundle_error(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Сбой своей сверки (копии версии нет в хранилище) — отказ BundleError с местом: записей нет, принятый объект
+    остаётся."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    refs = _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+
+    def broken(*args, **kw):
+        raise StoreError("sources[0]: копии файла нет в хранилище")
+
+    monkeypatch.setattr(level2, "judge_source", broken)
+    with pytest.raises(bundle.BundleError, match="своя сверка") as e:
+        bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert f"atm:{refs['@m']}" in str(e.value) and "копии файла нет" in str(e.value)
+    assert _count(pg2, "atom") == 0 and _count(pg2, "changeset") == 0 and _count(pg2, "object") == 1
+
+
+def test_ingest_during_write_waits_and_marks_written_revision(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Новая версия объекта во время транзакции записи: ingest ждёт фиксации импорта (разделяемая блокировка
+    объектов), а потом его on_new_version ставит source_changed на только что записанную ревизию."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    refs = _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+    with (docs / "заметка.md").open("a", encoding="utf-8") as f:
+        f.write("\nДобавлено позже.\n")
+    app = f"amem-ingest-{time.monotonic_ns()}"
+    versions, errors, started = [], [], []
+    commit = records.commit
+
+    def ingest_v2() -> None:
+        try:
+            with same_database(pg2, autocommit=True, application_name=app) as other:
+                versions.append(objects.ingest(other, store2, docs, "заметка.md", agent=OTHER))
+        except BaseException as e:                         # noqa: BLE001 — ошибку потока проверяет тест
+            errors.append(e)
+
+    def waiting_commit(*args, **kw):
+        t = threading.Thread(target=ingest_v2)
+        t.start()
+        started.append(t)
+        deadline = time.monotonic() + 30
+        with same_database(pg2, autocommit=True) as watch:
+            while watch.execute("SELECT count(*) FROM pg_stat_activity WHERE application_name = %s "
+                                "AND wait_event_type = 'Lock' AND wait_event = 'advisory'", (app,)).fetchone()[0] < 1:
+                assert not versions and not errors, "ingest не ждал транзакцию записи"
+                assert time.monotonic() < deadline, "ingest не встал в ожидание блокировки объектов"
+                time.sleep(0.02)
+        return commit(*args, **kw)
+
+    monkeypatch.setattr(records, "commit", waiting_commit)
+    r = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    started[0].join(timeout=60)
+    assert errors == [] and [v.n for v in versions] == [2]
+    assert [q for q in r.queued if q["reason"] == "source_changed"] == []        # при записи версии 2 ещё не было
+    [revision_id] = pg2.execute("SELECT id FROM atom_current WHERE atom_id = %s", (refs["@m"],)).fetchone()
+    [(details, changeset_id)] = pg2.execute(
+        "SELECT details, changeset_id FROM review_item WHERE atom_revision_id = %s AND reason = 'source_changed'",
+        (revision_id,)).fetchall()
+    assert changeset_id is None                                                  # пункт поставила новая версия
+    assert [(o["from"], o["to"]) for o in details["objects"]] == [([1], 2)]
