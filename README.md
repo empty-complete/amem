@@ -186,9 +186,15 @@ then a record that was checked or decided there (`verified`, `auto_verified`, `r
 trust: they are computed again against the local copies of the files, `no_file` where there is none; an
 atom whose place is not confirmed that way (`fuzzy`, `not_found`, `no_file`) waits for review. A link is
 retired by the import only if it is the same link (same id, `rel` and ends); agent concepts are taken only
-for quantities (`property`), valid by schema and with a UCUM unit. While an import brings new object
-versions, paths or files, it holds the exclusive object lock to the end of its transaction, so `submit`,
-`objects.ingest` and `backup.snapshot` wait for it; re-importing the same bundle does not take the lock.
+for quantities (`property`), valid by schema and with a UCUM unit. Objects with new versions, paths or
+files are taken in before the write, each in its own transaction (`objects.adopt`): the exclusive object
+lock is held only while one object and its copies are stored, as with `objects.ingest`; the source check
+runs without it, and the write transaction holds the shared lock, like `submit`, so `submit` does not wait
+for an import. If the import is refused after that, what was taken in stays, as after `objects.ingest`:
+the objects and their copies, the `source_changed` items set for a new version of a known object, the
+text cache and the agent; importing again accepts the objects as they are. Re-importing the same bundle
+does not take the exclusive lock, except for an object whose copy was skipped (no copy of the previous
+version in the store): it is taken in again on every import until the copies arrive.
 `dry_run=True` writes nothing and returns the plan: counts per action, warnings, collisions and the
 level 1 report. The returned `Imported` also carries `changeset_id`, `queued` and `complete`.
 
