@@ -353,6 +353,20 @@ enums:
       entity: {}
       link: {}
 
+  CardState:
+    description: Состояние поля карточки amem.card/1 (спецификация 3c, разд. 3.4).
+    permissible_values:
+      known:
+        annotations: {label_ru: "известно", label_en: "known", definition_ru: "Одно действующее значение или одно preferred среди нескольких."}
+      missing:
+        annotations: {label_ru: "нет", label_en: "missing", definition_ru: "Значения нет или документ величину не называет (value_state unknown)."}
+      asked:
+        annotations: {label_ru: "спрошено", label_en: "asked", definition_ru: "Значения нет, но есть действующий вопрос о величине."}
+      na:
+        annotations: {label_ru: "не относится", label_en: "not applicable", definition_ru: "Величина к объекту не относится (value_state none)."}
+      conflict:
+        annotations: {label_ru: "расхождение", label_en: "conflict", definition_ru: "Несколько различных значений, ни одно не preferred."}
+
 classes:
   Any:
     class_uri: linkml:Any
@@ -940,6 +954,55 @@ classes:
       amount: {range: float}
       unit: {}
       value_text: {}
+
+  CardField:
+    description: >-
+      Поле карточки: правило профиля и выведенное по действующим атомам parameter состояние. У known — значение
+      и признаки (status, by, basis, rank, confidence, source_role, sources); candidates — остальные значения.
+      Карточка не хранится — класс только описывает формат (JSON Schema).
+    attributes:
+      property: {required: true, pattern: '^[a-z][a-z0-9_]*$'}
+      required: {range: boolean, required: true}
+      group: {}
+      origin: {}
+      rule:
+        description: Шаблон, чьё правило действует (code@version).
+      default: {range: Any}
+      ask: {range: LangString, inlined: true}
+      hint: {range: LangString, inlined: true}
+      when: {range: LangString, inlined: true}
+      state: {range: CardState, required: true}
+      value: {range: Any}
+      atoms:
+        multivalued: true
+        pattern: '^atm:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      candidates: {range: Any, multivalued: true}
+      status: {range: Status}
+      by:
+        pattern: '^(person|model)$'
+      basis: {range: Basis}
+      rank: {range: Rank}
+      confidence: {range: float}
+      source_role: {range: SourceRole}
+      sources: {range: Any, multivalued: true}
+
+  Card:
+    description: >-
+      Карточка сущности amem.card/1 (profile.card): поля профиля её класса, величины вне профиля (extra),
+      сводка и карточки предков по part_of. Вычисляется, не хранится.
+    attributes:
+      format: {required: true, pattern: '^amem\.card/1$'}
+      entity: {range: Any, required: true}
+      profile:
+        description: Шаблон класса с профилем (code@version) или пусто, если профиля нет.
+      templates: {multivalued: true}
+      fields:
+        range: CardField
+        multivalued: true
+        inlined_as_list: true
+      extra: {range: Any, multivalued: true}
+      summary: {range: Any, required: true}
+      ancestors: {range: Any, multivalued: true}
 
   Template:
     description: >-
