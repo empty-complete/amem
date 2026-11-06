@@ -7,7 +7,8 @@
 Порядок блокировок — общий с записью (разд. 7.5): агент → запись (FOR NO KEY UPDATE) → пункты очереди.
 claim записи не блокирует: берёт пункты FOR UPDATE SKIP LOCKED и меняет только их. resolve узнаёт запись
 по пункту без блокировки, блокирует запись и только затем пункт — поэтому с submit по той же записи не встаёт
-в тупик. Метрики и пересмотр при новой версии объекта — следующие задачи части 3b.
+в тупик. Новая версия объекта (on_new_version) ставит пункты под исключительной блокировкой объектов, которую
+пакеты берут разделяемой раньше записей (разд. 7.5).
 """
 from __future__ import annotations
 
@@ -82,6 +83,36 @@ def close_stale(conn, target: str, record_id: uuid.UUID, *, at: datetime) -> int
         "     AND (v.review_state <> 'pending' OR v.n < coalesce(%(n)s, 0))))",
         {"at": at, "id": record_id, "open": list(OPEN), "retired": retired, "cur": current_id,
          "n": current_n}).rowcount
+
+
+def on_new_version(conn, object_id: uuid.UUID, n: int, *, agent: str, at: datetime) -> list[dict]:
+    """Новая версия n объекта (разд. 8.8): пункт source_changed каждой текущей и ждущей решения ревизии атома
+    и сущности со ссылкой на версию меньше n. Ждущая правка, принятая позже, иначе осталась бы со ссылкой на старую
+    версию без пересмотра; ждущая правка старше текущей — уже не вопрос (разд. 7.3), её нет.
+
+    Записи rejected, deprecated, superseded пропускаются. details: объект, старые версии ревизии, новая. Открытый
+    пункт ревизии не дублируется (ON CONFLICT): его вопрос — «файл изменился», и он ещё не решён. Вызывается
+    из objects.ingest в его транзакции, под исключительной блокировкой объектов, агент уже записан: пакеты
+    (разделяемая блокировка) не идут параллельно, ревизию со ссылкой на старую версию, не видимую здесь, пакет
+    ставит сам (разд. 7.5, шаг 6). Записи не блокируются: что изменится мимо, закроется лениво при захвате."""
+    out: list[dict] = []
+    for target in ("atom", "entity"):
+        rows = conn.execute(
+            f"SELECT v.{target}_id, v.id, array_agg(DISTINCT s.object_version ORDER BY s.object_version) "
+            f"FROM source s JOIN {target}_revision v ON v.id = s.{target}_revision_id "
+            f"JOIN {target} r ON r.id = v.{target}_id "
+            f"LEFT JOIN {target}_current c ON c.{target}_id = r.id "
+            "WHERE s.object_id = %(obj)s AND s.object_version < %(n)s AND NOT r.status = ANY(%(closing)s) "
+            "AND (v.id = c.id OR (v.review_state = 'pending' AND v.n > coalesce(c.n, 0))) "
+            f"GROUP BY v.{target}_id, v.id ORDER BY v.id",
+            {"obj": object_id, "n": n, "closing": list(CLOSING_STATUSES)}).fetchall()
+        for record_id, revision_id, old in rows:
+            item = insert_item(conn, target, record_id, revision_id, "source_changed", changeset_id=None,
+                               details={"object": f"obj:{object_id}", "from": list(old), "to": n},
+                               agent=agent, at=at)
+            if item is not None:
+                out.append(item)
+    return out
 
 
 # --- общее ---
