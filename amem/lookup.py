@@ -80,10 +80,14 @@ def get(conn: psycopg.Connection, target: Target, record_id: uuid.UUID | str, *,
 
 
 def history(conn: psycopg.Connection, target: Target, record_id: uuid.UUID | str) -> list[dict]:
+    """Все ревизии записи по порядку: id, n, schema_version, content_hash, payload (каноническое тело),
+    review_state, recorded_at, changeset_id, agent — подборка с историей берёт их отсюда как есть."""
     check_target(target)
     with conn.cursor(row_factory=dict_row) as cur:
-        return cur.execute(f"SELECT id, n, content_hash, review_state, recorded_at, changeset_id "
-                           f"FROM {target}_revision WHERE {target}_id = %s ORDER BY n", (_uuid(record_id),)).fetchall()
+        return cur.execute(f"SELECT r.id, r.n, r.schema_version, r.content_hash, r.payload, r.review_state, "
+                           f"r.recorded_at, r.changeset_id, cs.agent FROM {target}_revision r "
+                           f"JOIN changeset cs ON cs.id = r.changeset_id WHERE r.{target}_id = %s ORDER BY r.n",
+                           (_uuid(record_id),)).fetchall()
 
 
 def by_key(conn: psycopg.Connection, target: Target, key: str) -> str | None:

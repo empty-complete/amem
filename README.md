@@ -128,6 +128,70 @@ entity_class)` returns the rules a class gets from its templates.
 (idempotent, revision bodies stay as they are): `atom_property` is erased and built again, while
 `atom_about` and `atom_derived` are protected from deletion and only get missing rows.
 
+## Bundles
+
+A bundle (`amem.bundle/1`) is a selection of records carried from one database to another: a folder
+or a zip with the same layout. `manifest.json` is written last and holds the sha256 of every part;
+the parts are `atoms.jsonl`, `entities.jsonl`, `links.jsonl`, `sources.jsonl`, `objects.jsonl` and
+`concepts.jsonl`, and optionally the files of the source documents (`objects/sha256/…`), the
+revision history and copies of the packs.
+
+```python
+from amem import bundle
+
+bundle.export(conn, store=store, folder=Path("out/shared"), agent="person:anna",
+              selection=bundle.Selection(tags=("shared",), kinds=("parameter",)),
+              with_files=True, with_history=False, with_packs=False)
+bundle.inspect(Path("out/shared"))        # integrity check, no database needed
+bundle.import_(conn, store, Path("out/shared"), agent="person:boris", trust="keep", dry_run=True)
+```
+
+**Export.** `Selection` narrows by `tags`, `kinds`, `entity_classes`, explicit `refs`, `project`,
+`statuses` and `since`; a record must match every condition that is set. By default all statuses
+except `rejected` are taken, and private records (`visibility: private`) stay out unless
+`include_private=True`. The selection is then closed over references: entities the atoms are about,
+editions of sources, links with both ends in the bundle, object records of every source, and the
+packs that own the codes used. `with_files` adds the files from the object store, `with_history`
+all revisions instead of the current one, `with_packs` copies of the pack folders. The result is
+built aside and appears under its name only whole.
+
+**Inspect.** `bundle.inspect(path)` returns the manifest plus `ok`, `damaged` (parts that are
+missing or whose sha256 differs) and `unexpected` (files outside the manifest). A zip is checked
+before it is unpacked: names, symbolic links, total size, number of entries and compression ratio.
+
+**Import.** `bundle.import_(conn, store, folder, agent=…, trust="keep" | "review", dry_run=…)` never
+overwrites, and runs in one transaction:
+
+- a record the database does not have is created with the same id; its `provenance` tells the
+  origin base, the hash of the original revision and the original agent;
+- a record the database has already seen (any local revision with the same body) is left alone,
+  so importing the same bundle twice does nothing;
+- a record that differs gets a new `pending` revision and a review item with reason `imported`;
+  the current revision does not change;
+- a record with another `key`, or a `key` taken by another record, is a collision: the import is
+  refused before anything is written (`dry_run` lists collisions instead); deprecated and superseded
+  local records are skipped with a warning.
+
+The packs of the manifest must be loaded with the same name, version and digest; otherwise
+`BundleError` with `code="bundle_pack_missing"` says what is required and what is present (and the
+path to add to `AMEM_PACKS` if the bundle carries the packs). Other errors have their codes too:
+`bundle_key_collision` (also a link id taken by a link with another `rel` or other ends),
+`bundle_object_conflict`, `bundle_damaged`, `bundle_level1` (with the `amem.check/1` report). A file already in both databases is matched by
+digest (a web page or a message — by address or name), and its copy is not stored twice. With
+`trust="keep"` the status from the bundle is kept, except when the importer is a model (not `person:…`):
+then a record that was checked or decided there (`verified`, `auto_verified`, `rejected`, `deprecated`,
+`superseded`), a record with `basis: author`, or one written by a person waits for review
+(`needs_review`, item `imported`) instead. With
+`trust="review"` everything created is `needs_review`. The source check results are not taken on
+trust: they are computed again against the local copies of the files, `no_file` where there is none; an
+atom whose place is not confirmed that way (`fuzzy`, `not_found`, `no_file`) waits for review. A link is
+retired by the import only if it is the same link (same id, `rel` and ends); agent concepts are taken only
+for quantities (`property`), valid by schema and with a UCUM unit. While an import brings new object
+versions, paths or files, it holds the exclusive object lock to the end of its transaction, so `submit`,
+`objects.ingest` and `backup.snapshot` wait for it; re-importing the same bundle does not take the lock.
+`dry_run=True` writes nothing and returns the plan: counts per action, warnings, collisions and the
+level 1 report. The returned `Imported` also carries `changeset_id`, `queued` and `complete`.
+
 ## Backup
 
 `amem.backup` needs the PostgreSQL 18 client (`pg_dump`, `pg_restore`, `psql`) — in `PATH`
