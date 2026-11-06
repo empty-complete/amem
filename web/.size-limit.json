@@ -1,0 +1,20 @@
+[
+  {
+    "name": "JS: входной кусок",
+    "path": "python/amem_web/dist/assets/index-*.js",
+    "limit": "220 kB",
+    "gzip": true
+  },
+  {
+    "name": "JS: всё приложение части A",
+    "path": "python/amem_web/dist/assets/*.js",
+    "limit": "300 kB",
+    "gzip": true
+  },
+  {
+    "name": "CSS (все стили HeroUI; урезать в части G)",
+    "path": "python/amem_web/dist/assets/*.css",
+    "limit": "48 kB",
+    "gzip": true
+  }
+]

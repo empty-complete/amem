@@ -38,6 +38,10 @@
 
 ## Часть A — основа (ветка `subproject-5a-web-foundation`)
 
+### Итог части A (06.11.2026)
+
+Сделано по плану, отличия: MSW 3 — опция `onUnhandledFrame` (не `onUnhandledRequest`), плагин `msw/vite` в режиме `worker-only` + `setupWorker`; `openapi-fetch` получает `fetch` при каждом запросе (иначе моки в тестах не видны); параметры поиска в URL сериализуются своими `parseSearch`/`stringifySearch` (повтор ключа вместо JSON); TypeScript 5.9; CSS 45 КБ — бюджет 48, урезание в G0. Контракт дополнен `/folders`, `/records`, `PATCH /records/{ref}/folder`, схемой входа `bearer` (необязательной).
+
 ### Task 0: Исходная точка
 
 **Files:** нет изменений кода.
@@ -1186,6 +1190,7 @@ gh pr merge --repo empty-complete/amem --merge --auto
 
 ### Часть G — отделка (ветка `subproject-5g-finish`)
 
+- **Task G0.** Урезать CSS до бюджета 40 КБ: вместо `@import "@heroui/styles"` подключать стили только используемых компонентов HeroUI (в части A — 45 КБ gzip, временный бюджет 48 КБ в `web/.size-limit.json`); заодно уйдёт находка Impeccable `repeating-stripes-gradient` (шахматка палитры цветов, компонент не используется).
 - **Task G1.** `/impeccable critique`, `audit`, `polish`, `harden` по каждому экрану; `sloplint --scope app --render` по всем маршрутам; снимки-эталоны в CI.
 - **Task G2.** Финальный обзор свежим взглядом (агент `impeccable-finish-reviewer`), вердикт «ship»; `/impeccable document` → `web/DESIGN.md`.
 - **Task G3.** README (en/ru): разделы о веб-UI, `amem[web]`, `npm run dev:mock`; проверка `web` в набор правил `main`.
