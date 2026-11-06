@@ -1,3 +1,7 @@
+.muted {
+  color: var(--muted);
+  font-size: var(--t-label);
+}
 .kind {
   display: inline-flex;
   align-items: center;

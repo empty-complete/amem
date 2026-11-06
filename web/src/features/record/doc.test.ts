@@ -10,7 +10,7 @@ test("запись → документ: шапка YAML и тело Markdown п
   const d = doc();
   expect(d.startsWith("---\nkind: parameter\n")).toBe(true);
   expect(d).toContain("about: [[Датчик влажности В-2]]\n");
-  expect(d).toContain("page: \"12\"");
+  expect(d).toContain('page: "12"');
   expect(d).toContain("maturity: 🌱 росток");
   expect(d).toContain("\n---\n# Погрешность влажности В-2: ±2 %\n");
   expect(d).toContain("\n## Цитата\n> Погрешность ±2 % в диапазоне от 10 до 90 %\n");
