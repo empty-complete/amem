@@ -2,6 +2,8 @@
 
   prepare(conn) — то, что делает сервер при старте: миграции → словари и шаблоны → base_id и четыре папки новой
   базы → счётчик id.
+  set_base_name(conn, name), base_name(conn) — имя базы для людей (ключ base_name в meta); base_id от него
+  не зависит.
 
 Соединение — в режиме autocommit: тогда каждый `with conn.transaction()` — настоящая транзакция и фиксируется
 при выходе из блока. Без autocommit первое же чтение открывает неявную транзакцию, все дальнейшие блоки становятся
@@ -16,6 +18,7 @@ UTF8: миграции и данные в UTF-8, имена и пути объе
 from __future__ import annotations
 
 import hashlib
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,8 +31,15 @@ SQL_DIR = Path(__file__).with_name("sql")
 MIGRATION_LOCK = 0x616D656D00000001          # ключ pg_advisory_lock для миграций: «amem» + 1
 
 
+BASE_NAME_MAX = 200
+
+
 class MigrationError(RuntimeError):
     pass
+
+
+class BaseNameError(ValueError):
+    """Неверное имя базы: не строка, пустое, длиннее BASE_NAME_MAX или с невидимыми и управляющими знаками."""
 
 
 def connect(dsn: str, **kwargs) -> psycopg.Connection:
@@ -174,3 +184,30 @@ def prepare(conn: psycopg.Connection) -> list[str]:
             folders.seed_defaults(conn)
     seed_ids(conn)
     return applied
+
+
+def set_base_name(conn: psycopg.Connection, name: str) -> str:
+    """Задать имя базы — ключ base_name в meta; вернуть сохранённое имя. Имя — в NFC, без пробелов по краям,
+    1–BASE_NAME_MAX знаков, без управляющих и невидимых знаков (правило то же, что у сегмента папки)."""
+    require_autocommit(conn)
+    if not isinstance(name, str):
+        raise BaseNameError(f"имя базы {name!r}: нужна строка")
+    value = unicodedata.normalize("NFC", name).strip()
+    if not value:
+        raise BaseNameError("имя базы: пустое")
+    if len(value) > BASE_NAME_MAX:
+        raise BaseNameError(f"имя базы: {len(value)} знаков, можно до {BASE_NAME_MAX}")
+    bad = next((ch for ch in value if ch not in folders._ALLOWED and unicodedata.category(ch) in folders._FORBIDDEN),
+               None)
+    if bad is not None:
+        raise BaseNameError(f"имя базы: невидимый или управляющий знак U+{ord(bad):04X}")
+    with conn.transaction():
+        conn.execute("INSERT INTO meta (key, value) VALUES ('base_name', %s) "
+                     "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", (Jsonb(value),))
+    return value
+
+
+def base_name(conn: psycopg.Connection) -> str | None:
+    """Имя базы или None, если его не задавали."""
+    row = conn.execute("SELECT value FROM meta WHERE key = 'base_name'").fetchone()
+    return row[0] if row is not None else None

@@ -291,6 +291,14 @@ class CardState(str, Enum):
     conflict = "conflict"
 
 
+class KindFamily(str, Enum):
+    """
+    Семья вида атома (Concept.family, спецификация подпроекта 4, разд. 1.2): откуда знание — из документа или из работы. По ней интерфейс группирует виды и раскрашивает граф. Вид без family считается work.
+    """
+    source = "source"
+    work = "work"
+
+
 
 class LangString(ConfiguredBaseModel):
     """
@@ -1554,6 +1562,7 @@ class Concept(ConfiguredBaseModel):
     pairs: Optional[list[str]] = Field(default=None, description="""Допустимые пары концов связи «от>к» — atom>entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Concept']} })
     symmetric: Optional[bool] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Concept']} })
     via_field: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Concept']} })
+    family: Optional[KindFamily] = Field(default=None, description="""Семья вида атома — только у понятий scheme kind; без неё вид считается work.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Concept']} })
 
     @field_validator('scheme')
     def pattern_scheme(cls, v):

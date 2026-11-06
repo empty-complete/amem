@@ -1,54 +1,64 @@
 scheme: kind
+# family: source — знание из документа, work — из работы (Concept.family); вид без family — work
 concepts:
 - code: fact
+  family: source
   label:
     ru: факт
     en: fact
   definition:
     ru: Утверждение о мире или наблюдение из документа, не являющееся нормой или решением.
 - code: term
+  family: source
   label:
     ru: термин
     en: term
   definition:
     ru: Определение термина или обозначения.
 - code: method
+  family: work
   label:
     ru: методика
     en: method
   definition:
     ru: Как делать — порядок работы, приём, правило оформления, инструмент.
 - code: decision
+  family: work
   label:
     ru: решение
     en: decision
   definition:
     ru: Принятое проектное или техническое решение и его обоснование.
 - code: question
+  family: work
   label:
     ru: вопрос
     en: question
   definition:
     ru: Открытый вопрос или противоречие, требующее решения.
 - code: lesson
+  family: work
   label:
     ru: урок
     en: lesson
   definition:
     ru: Что пошло не так и как этого избежать.
 - code: requirement
+  family: source
   label:
     ru: требование
     en: requirement
   definition:
     ru: Требование заказчика, технического задания или проекта, не норматив.
 - code: parameter
+  family: source
   label:
     ru: параметр
     en: parameter
   definition:
     ru: Значение величины с единицей и условиями применения.
 - code: note
+  family: work
   label:
     ru: заметка
     en: note

@@ -1217,6 +1217,17 @@
             }
           ]
         },
+        "family": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KindFamily"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Семья вида атома — только у понятий scheme kind; без неё вид считается work."
+        },
         "inverse_label": {
           "anyOf": [
             {
@@ -1770,6 +1781,15 @@
         "low_confidence"
       ],
       "title": "HighRiskRule",
+      "type": "string"
+    },
+    "KindFamily": {
+      "description": "Семья вида атома (Concept.family, спецификация подпроекта 4, разд. 1.2): откуда знание — из документа или из работы. По ней интерфейс группирует виды и раскрашивает граф. Вид без family считается work.",
+      "enum": [
+        "source",
+        "work"
+      ],
+      "title": "KindFamily",
       "type": "string"
     },
     "LangString": {
