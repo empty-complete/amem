@@ -7,7 +7,8 @@ submit — единая точка записи знаний: уровни 1–4
 чем узнаёт, что тело не изменилось. Пункты очереди — в review_item и в ответе, не в отчёте.
 
 Записи человека (агент person:, спецификация 3c, разд. 5): уровни 1–4 те же, но статус — verified без риска шаблонов
-и без пунктов очереди; правка моделью записи, текущую ревизию которой записал человек, ждёт его решения (pending).
+и без пунктов очереди, кроме source_changed (ссылка на не последнюю версию файла); правка моделью записи, текущую
+ревизию которой записал человек, ждёт его решения (pending).
 
 Устройство и правила — docs/superpowers/specs/2026-11-05-amem-subproject-3-autocheck-design.md.
 """
@@ -170,13 +171,16 @@ def _risk(item: Prepared, report: Report, conflicts: dict[str, list[str]], *, pe
 
 def _decide(plan: _Plan, status: str | None) -> None:
     """Политика по статусу записи, перечитанному под блокировкой (разд. 7.1), и по агенту (спецификация 3c, разд. 5):
-    запись человека — verified; правку моделью записи, текущую ревизию которой записал человек, решает человек."""
+    запись человека — verified; правку моделью записи, текущую ревизию которой записал человек, решает человек.
+    Отвергнутая запись (rejected) открытых пунктов не держит (review.CLOSING_STATUSES): пункт edit к ней сразу
+    устарел бы и правка зависла бы в pending — поэтому её правка моделью идёт обычным путём, как до 3c."""
     if status in RETIRED:
         raise _Retired(plan.item, status)
     if plan.person:
         plan.status = "verified"
         return
-    if status == "verified" or (plan.owner is not None and _is_person(plan.owner)):
+    by_person = plan.owner is not None and _is_person(plan.owner) and status not in review.CLOSING_STATUSES
+    if status == "verified" or by_person:
         plan.status, plan.pending = status, True        # статус остаётся прежним до решения человека
         return
     if plan.warned or plan.risk:
@@ -219,7 +223,7 @@ def _write(conn, batch: Batch, plans: list[_Plan], checks: dict[str, list[Source
             records.set_status_locked(conn, t, rev.record_id, p.status, agent=agent, reason="autocheck", at=at)
         _verdicts(conn, t, rev.revision_id, checks.get(label, []), at)
         if rev.created:
-            reasons = [] if p.person else _reasons(conn, p, rev)      # запись человека в очередь не ставится
+            reasons = _reasons(conn, p, rev)
             if p.item.record_id is not None:
                 review.close_stale(conn, t, rev.record_id, at=at)
             details = _details(p, report)
@@ -259,7 +263,9 @@ def _verdicts(conn, target: str, revision_id: uuid.UUID, checks: list[SourceChec
 def _reasons(conn, plan: _Plan, rev: records.Revision) -> list[tuple[str, dict]]:
     """Причины пунктов созданной ревизии (разд. 7.2): по итогу статуса, аудит и ссылки на старые версии объектов."""
     out: list[tuple[str, dict]] = []
-    if plan.pending:
+    if plan.person:
+        pass                       # запись человека проверена им самим; остаётся только вопрос о файле — source_changed
+    elif plan.pending:
         out.append(("edit", {}))
     elif plan.status == "needs_review":
         out.append(("high_risk" if plan.risk else "warning", {}))
