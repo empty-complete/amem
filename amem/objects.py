@@ -6,6 +6,7 @@
       версии получают пункт source_changed (review.on_new_version) в той же транзакции;
     - иначе — новый объект. Файл копируется в хранилище один раз.
   web(conn, url) / message(conn, title) — объект без файла: одна версия без digest.
+  adopt(conn, store, record, files=…, agent=…) — объект из подборки с тем же id, его версии и файлы, какие пришли.
   resolve_sources(conn, store, docs, payload, agent=…) — path источников тела → object, object_version, digest.
   text(conn, store, object_id, n) — текст версии по страницам, в NFC; кэш object_text по digest.
   mark(conn, object_id, status, agent=…) — отметка, что из объекта атомизировано (читает lookup.object_status).
@@ -194,6 +195,87 @@ def ingest(conn: psycopg.Connection, store: ObjectStore, docs: Path, path: str, 
             review.on_new_version(conn, object_id, n, agent=agent, at=at)
         store.add_version(object_id, n, file, name, digest, user=agent, message=f"amem: {key}")
     return Version(object_id, n, digest, "file", created=True)
+
+
+def adopt(conn: psycopg.Connection, store: ObjectStore, record: dict, *, files: dict[str, Path],
+          agent: str) -> list[str]:
+    """Принять объект из подборки (запись objects.jsonl, как её отдаёт lookup.get_object): строка object с тем же id,
+    пути, версии по номеру; файлы версий (files: digest → путь к файлу) — в хранилище. Вернуть предупреждения.
+
+    Существующие версии сверяются по digest: расхождение, другой вид объекта или digest у другого объекта —
+    ObjectError, и ничего не записано. Версия без файла остаётся без копии: её источники получат вердикт no_file,
+    пока файл не придёт (повторный adopt с файлом). Копии в хранилище идут подряд: файл версии, перед которой
+    копии нет, не копируется — предупреждение. Путь, занятый другим объектом, остаётся за ним — предупреждение.
+    Новая версия известного объекта ставит пункты source_changed, как у ingest. Блокировка и порядок — как у
+    ingest: строки, копия, фиксация."""
+    _require_autocommit(conn)
+    _check_agent(agent)
+    object_id = object_uuid(record.get("id", ""))
+    kind = record.get("kind")
+    label = f"obj:{object_id}"
+    versions = sorted(record.get("versions") or [], key=lambda v: v.get("n", 0))
+    warnings: list[str] = []
+    try:
+        with conn.transaction():
+            conn.execute("INSERT INTO agent (id) VALUES (%s) ON CONFLICT (id) DO NOTHING", (agent,))
+            at = _lock(conn)
+            if kind == "file":
+                # под блокировкой, как у ingest, и даже без файлов в подборке: версии с digest в базе означают
+                # корень хранилища — иначе следующая копия (ingest, adopt с файлом) сочла бы его неподключённым
+                has_files = conn.execute(
+                    "SELECT EXISTS (SELECT 1 FROM object_version WHERE digest IS NOT NULL)").fetchone()[0]
+                store.init(create=not has_files)
+            row = conn.execute("SELECT kind FROM object WHERE id = %s", (object_id,)).fetchone()
+            if row is None:
+                name = record.get("original_name")
+                conn.execute("INSERT INTO object (id, kind, original_name, media_type, format_puid, url, "
+                             "retrieved_at, created_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                             (object_id, kind, _nfc(name) if name else None, record.get("media_type"),
+                              record.get("format_puid"), record.get("url"), record.get("retrieved_at"), at))
+            elif row[0] != kind:
+                raise ObjectError(f"{label}: вид {row[0]}, в подборке {kind}")
+            for path in record.get("logical_paths") or []:
+                key = _nfc(path)
+                owner = conn.execute("SELECT object_id FROM object_path WHERE path = %s", (key,)).fetchone()
+                if owner is None:
+                    _add_path(conn, key, object_id, at)
+                elif owner[0] != object_id:
+                    warnings.append(f"{label}: путь {key} уже у объекта obj:{owner[0]} — остаётся за ним")
+            have = dict(conn.execute("SELECT n, digest FROM object_version WHERE object_id = %s", (object_id,)))
+            copies: list[tuple[int, Path, str]] = []
+            for v in versions:
+                n, digest = v.get("n"), v.get("digest")
+                if n in have:
+                    if have[n] != digest:
+                        raise ObjectError(f"{label}: digest версии {n} не совпадает с локальным")
+                else:
+                    if digest is not None:
+                        owner = conn.execute("SELECT object_id, n FROM object_version WHERE digest = %s",
+                                             (digest,)).fetchone()
+                        if owner is not None:
+                            raise ObjectError(f"{label}: digest версии {n} уже у объекта obj:{owner[0]} "
+                                              f"(версия {owner[1]})")
+                    conn.execute("INSERT INTO object_version (object_id, kind, n, digest, size, recorded_at) "
+                                 "VALUES (%s, %s, %s, %s, %s, %s)",
+                                 (object_id, kind, n, digest, v.get("size"), v.get("recorded_at") or at))
+                    if isinstance(n, int) and n > 1:
+                        review.on_new_version(conn, object_id, n, agent=agent, at=at)
+                file = files.get(digest) if digest is not None else None
+                if file is not None and kind == "file":
+                    copies.append((n, Path(file), digest))
+            for n, file, digest in copies:
+                head = store.head(object_id)
+                if head >= n:
+                    continue                             # копия уже есть: содержимое по digest второй раз не пишется
+                if head != n - 1:
+                    warnings.append(f"{label}: файл версии {n} не скопирован — в хранилище нет копии версии "
+                                    f"{head + 1}; источники этой версии останутся без файла")
+                    continue
+                store.add_version(object_id, n, file, record.get("original_name") or file.name, digest,
+                                  user=agent, message=f"amem: adopt {label}")
+    except (psycopg.errors.IntegrityError, psycopg.errors.DataError) as e:      # ограничения таблиц, неверные даты
+        raise ObjectError(f"{label}: запись объекта не принята: {e.diag.message_primary}") from e
+    return warnings
 
 
 def _without_file(conn, kind: str, value: str, retrieved_at: date | None) -> Version:
