@@ -64,6 +64,11 @@ class _Plan:
     pending: bool = False              # правка проверенной: ревизия ждёт решения человека
 
 
+class CheckError(ValueError):
+    """Неверный вызов submit — до любой записи: пустая пачка, соединение без autocommit, задачи (activity) нет.
+    Ошибки данных агента — не исключения, а замечания отчёта."""
+
+
 class _Retired(Exception):
     """Запись вывели из оборота между уровнями проверки и блокировкой: правка невозможна, транзакция откатывается."""
 
@@ -78,7 +83,9 @@ def submit(conn: psycopg.Connection, store: ObjectStore, docs: Path, proposals: 
     """Проверить пакет уровнями 1–4 и записать его со статусами, итогами сверки и пунктами очереди (разд. 1.1).
 
     Ошибка (violation) любого уровня — пакет отклонён целиком (records.reject), записей нет. Ошибки окружения
-    (StoreError, сбой базы, EmbeddingError явного провайдера) уходят вызывающему: пакета в базе нет."""
+    (StoreError, сбой базы, EmbeddingError явного провайдера) уходят вызывающему: пакета в базе нет.
+    Неверный вызов — CheckError до любой записи."""
+    _check_call(conn, proposals, links, activity)
     report = Report()
     levels = {"1": "done", "2": "done", "3": "skipped", "4": "skipped"}
     batch = level1.check(conn, proposals, links, report)
@@ -102,13 +109,24 @@ def submit(conn: psycopg.Connection, store: ObjectStore, docs: Path, proposals: 
     return _reject(conn, report, batch, levels, degraded=degraded, agent=agent, activity=activity, reason=reason)
 
 
+def _check_call(conn, proposals: Sequence, links: Sequence, activity) -> None:
+    """Проверки вызова — те, что records.commit иначе дал бы поздним отказом без метки записи."""
+    if not conn.autocommit:
+        raise CheckError("submit: нужно соединение с autocommit=True (db.connect): иначе запись не фиксируется")
+    if not proposals and not links:
+        raise CheckError("submit: пустая пачка — нет ни записей, ни связей")
+    if activity is not None and conn.execute("SELECT 1 FROM activity WHERE id = %s", (activity,)).fetchone() is None:
+        raise CheckError(f"submit: задачи (activity) {activity} нет")
+
+
 def _where(message: str, batch: Batch) -> str:
-    """Место позднего отказа: метка записи или связи, с которой начинается сообщение records, иначе — пакет."""
+    """Место позднего отказа: метка записи или связи, с которой начинается сообщение records. Сообщения без метки
+    (пустая пачка, autocommit, activity) отсекает _check_call; на всякий случай — первая метка пачки."""
     labels = [it.label for it in batch.items] + [f"links[{i}]" for i in range(len(batch.links))]
     for label in sorted(labels, key=len, reverse=True):
         if message == label or message.startswith(f"{label}:"):
             return label
-    return "пакет"
+    return labels[0]
 
 
 def _reject(conn, report: Report, batch: Batch, levels: dict, *, degraded: list, agent: str, activity,
@@ -235,4 +253,5 @@ def _details(plan: _Plan, report: Report) -> dict:
     """details пункта: коды замечаний записи, риск, кандидаты уровней 3 и 4."""
     issues = report.for_label(plan.item.label)
     return {"issues": list(dict.fromkeys(i.code for i in issues)), "risk": list(plan.risk),
-            "candidates": [{"code": i.code, **i.details} for i in issues if i.code in CANDIDATE_CODES]}
+            "candidates": [{"code": i.code, **c} for i in issues if i.code in CANDIDATE_CODES
+                           for c in i.details.get("candidates", [])]}

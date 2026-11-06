@@ -1,7 +1,8 @@
 """Уровень 2 автопроверки — привязка к источнику (спецификация подпроекта 3, разд. 4).
 
 Источники каждой записи пачки, разобранной уровнем 1:
-1. разбор — путь → объект и версия (objects.resolve_sources по одному источнику: одна ошибка не прячет другие);
+1. разбор — путь → объект и версия (objects.resolve_sources по одному пути: одна ошибка не прячет другие; путь
+   разбирается один раз на пакет, и ошибка по нему повторяется у каждого источника с этим путём);
    у источника с object проверяются версия и digest;
 2. место — селекторы с цепочкой refined_by дают ожидаемую страницу, диапазон, локатор, лист и цитату (place);
    сверка — sources.judge по тексту версии (objects.text, кэш по digest);
@@ -136,6 +137,9 @@ class _Level2:
     def __init__(self, conn, store, docs, report: Report, agent: str):
         self.conn, self.store, self.docs, self.report, self.agent = conn, store, docs, report, agent
         self.texts: dict[tuple, sources.DocText | None] = {}
+        # путь → поля разобранного источника (object, object_version, digest) или текст ошибки разбора — на пакет:
+        # иначе sha256 файла считался бы заново для каждого источника с этим путём
+        self.paths: dict[str, dict | str] = {}
 
     def add(self, severity: str, code: str, where: str, message: str, **details) -> None:
         self.report.add(LEVEL, severity, code, where, message, **details)
@@ -166,18 +170,25 @@ class _Level2:
     def resolve(self, source: dict, where: str) -> dict | None:
         """Источник с object, object_version и digest или None (замечание уже записано)."""
         if not source.get("object"):
-            if not source.get("path"):
+            path = source.get("path")
+            if not path:
                 return None
-            try:
-                body = objects.resolve_sources(self.conn, self.store, self.docs, {"sources": [source]},
-                                               agent=self.agent)
-            except objects.ObjectError as e:
-                self.add("violation", "source_unresolved", where,
-                         f"Источник не разобрался: {str(e).removeprefix('sources[0]: ')}", path=source["path"])
+            if path not in self.paths:
+                try:
+                    body = objects.resolve_sources(self.conn, self.store, self.docs, {"sources": [{"path": path}]},
+                                                   agent=self.agent)
+                except objects.ObjectError as e:
+                    self.paths[path] = str(e).removeprefix("sources[0]: ")
+                except StoreError as e:
+                    raise StoreError(f"{where}: {str(e).removeprefix('sources[0]: ')}") from e
+                else:
+                    got = body["sources"][0]
+                    self.paths[path] = {k: got[k] for k in ("object", "object_version", "digest") if k in got}
+            found = self.paths[path]
+            if isinstance(found, str):
+                self.add("violation", "source_unresolved", where, f"Источник не разобрался: {found}", path=path)
                 return None
-            except StoreError as e:
-                raise StoreError(f"{where}: {str(e).removeprefix('sources[0]: ')}") from e
-            return dict(body["sources"][0])
+            return {**{k: v for k, v in source.items() if k != "digest"}, **found}
         object_id, n = objects.object_uuid(source["object"]), source.get("object_version")
         row = self.conn.execute("SELECT digest FROM object_version WHERE object_id = %s AND n = %s",
                                 (object_id, n)).fetchone()

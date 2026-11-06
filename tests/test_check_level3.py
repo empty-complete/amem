@@ -111,7 +111,7 @@ def test_conflict_with_stored_atom(kb):
     assert found == [("conflict", "@a1")]
     assert risks == {"@a1": ["conflict"]}
     [issue] = [i for i in report.issues if i.code == "conflict" and i.where == "@a1"]
-    assert issue.details["atoms"] == [f"atm:{ids['@a0']}"]
+    assert issue.details["candidates"] == [{"ref": f"atm:{ids['@a0']}", "suggest": "contradicts"}]
 
 
 def test_same_value_after_conversion_is_no_conflict(kb):
@@ -150,7 +150,7 @@ def test_conflict_inside_batch_by_name(kb):
         atom("@a2", **vals(value("pressure", 0.4, "kPa")), about=["@e"]))
     assert sorted(found) == [("conflict", "@a1"), ("conflict", "@a2")]
     assert risks == {"@a1": ["conflict"], "@a2": ["conflict"]}
-    assert [i.details["atoms"] for i in report.issues if i.where == "@a1"] == [["@a2"]]
+    assert [[c["ref"] for c in i.details["candidates"]] for i in report.issues if i.where == "@a1"] == [["@a2"]]
 
 
 def test_atom_without_about_not_compared(kb):
@@ -215,6 +215,6 @@ def test_two_edits_of_different_atoms_in_one_batch(kb):
     risks = level3.check(kb, batch, report)
     [issue] = [i for i in report.issues if i.code == "conflict" and i.where == "@x"]
     # старые ревизии обеих правок не соперники; конфликт только между новыми телами
-    assert issue.where == "@x" and issue.details["atoms"] == ["@y"]
+    assert issue.where == "@x" and issue.details["candidates"] == [{"ref": "@y", "suggest": "contradicts"}]
     assert risks == {"@x": ["conflict"], "@y": ["conflict"]}
 

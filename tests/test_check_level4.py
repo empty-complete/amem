@@ -183,7 +183,7 @@ def test_entity_alias_duplicate_suggests_same_as(kb):
     ids = stored(kb, entity("@e0", cls="organization", label=lab("Пример"), aliases=["Пример и партнёры"]))
     issues, _ = run(kb, entity("@e1", cls="organization", label=lab("Пример и партнеры")))
     assert codes(issues) == [("duplicate", "warning", "@e1")]
-    assert issues[0].details["suggest"] == "same_as"
+    assert [c["suggest"] for c in issues[0].details["candidates"]] == ["same_as"]
     assert issues[0].details["candidates"][0]["ref"] == f"ent:{ids['@e0']}"
 
 
