@@ -205,15 +205,28 @@ def adopt(conn: psycopg.Connection, store: ObjectStore, record: dict, *, files: 
     Существующие версии сверяются по digest: расхождение, другой вид объекта или digest у другого объекта —
     ObjectError, и ничего не записано. Версия без файла остаётся без копии: её источники получат вердикт no_file,
     пока файл не придёт (повторный adopt с файлом). Копии в хранилище идут подряд: файл версии, перед которой
-    копии нет, не копируется — предупреждение. Путь, занятый другим объектом, остаётся за ним — предупреждение.
+    копии нет, не копируется — предупреждение; копия версии, которой база до вызова не знала (сбой прошлой
+    попытки), сверяется заново. Путь — от корня папки документов вниз, как у ingest; занятый другим объектом
+    остаётся за ним, а original_name, media_type, url существующего объекта — локальные (оба — предупреждение).
+    Неверный id объекта или номер версии — ObjectError.
     Новая версия известного объекта ставит пункты source_changed, как у ingest. Блокировка и порядок — как у
     ingest: строки, копия, фиксация."""
     _require_autocommit(conn)
     _check_agent(agent)
-    object_id = object_uuid(record.get("id", ""))
+    try:
+        object_id = object_uuid(record.get("id", ""))
+    except ValueError as e:                      # RecordError — для записей; здесь ошибка объекта
+        raise ObjectError(f"объект подборки: {e}") from e
     kind = record.get("kind")
     label = f"obj:{object_id}"
-    versions = sorted(record.get("versions") or [], key=lambda v: v.get("n", 0))
+    for v in record.get("versions") or []:
+        n = v.get("n") if isinstance(v, dict) else None
+        if not isinstance(n, int) or isinstance(n, bool) or n < 1:
+            raise ObjectError(f"{label}: номер версии {n!r} — нужно целое от 1")
+    versions = sorted(record.get("versions") or [], key=lambda v: v["n"])
+    paths = [_nfc(path) for path in record.get("logical_paths") or []]
+    for path in paths:
+        _check_relative(path)                    # путь из чужой базы — тоже от корня папки документов вниз
     warnings: list[str] = []
     try:
         with conn.transaction():
@@ -225,7 +238,8 @@ def adopt(conn: psycopg.Connection, store: ObjectStore, record: dict, *, files: 
                 has_files = conn.execute(
                     "SELECT EXISTS (SELECT 1 FROM object_version WHERE digest IS NOT NULL)").fetchone()[0]
                 store.init(create=not has_files)
-            row = conn.execute("SELECT kind FROM object WHERE id = %s", (object_id,)).fetchone()
+            row = conn.execute("SELECT kind, original_name, media_type, url FROM object WHERE id = %s",
+                               (object_id,)).fetchone()
             if row is None:
                 name = record.get("original_name")
                 conn.execute("INSERT INTO object (id, kind, original_name, media_type, format_puid, url, "
@@ -234,8 +248,14 @@ def adopt(conn: psycopg.Connection, store: ObjectStore, record: dict, *, files: 
                               record.get("format_puid"), record.get("url"), record.get("retrieved_at"), at))
             elif row[0] != kind:
                 raise ObjectError(f"{label}: вид {row[0]}, в подборке {kind}")
-            for path in record.get("logical_paths") or []:
-                key = _nfc(path)
+            else:
+                for column, local in zip(("original_name", "media_type", "url"), row[1:]):
+                    theirs = record.get(column)
+                    if column == "original_name" and theirs:
+                        theirs = _nfc(theirs)
+                    if theirs is not None and theirs != local:
+                        warnings.append(f"{label}: {column} {local!r}, в подборке {theirs!r} — остаётся локальное")
+            for key in paths:
                 owner = conn.execute("SELECT object_id FROM object_path WHERE path = %s", (key,)).fetchone()
                 if owner is None:
                     _add_path(conn, key, object_id, at)
@@ -265,9 +285,11 @@ def adopt(conn: psycopg.Connection, store: ObjectStore, record: dict, *, files: 
                     copies.append((n, Path(file), digest))
             for n, file, digest in copies:
                 head = store.head(object_id)
-                if head >= n:
-                    continue                             # копия уже есть: содержимое по digest второй раз не пишется
-                if head != n - 1:
+                if n in have and head >= n:
+                    continue                             # версию и её копию база знала до вызова
+                # версия новая для базы, а копия уже есть (сбой прошлой попытки после копии): add_version сам
+                # примет то же содержимое или откатит иное — как у ingest
+                if head < n - 1:
                     warnings.append(f"{label}: файл версии {n} не скопирован — в хранилище нет копии версии "
                                     f"{head + 1}; источники этой версии останутся без файла")
                     continue
