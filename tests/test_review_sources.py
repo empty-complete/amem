@@ -64,7 +64,7 @@ def test_new_version_queues_current_atom_and_entity(kb, store, docs):
     e = send(kb, store, docs, note_entity()).records[0]
     v2 = new_version(kb, store, docs, V2)
     assert v2.n == 2
-    expected = {"object": v2.ref, "from": [1], "to": 2}
+    expected = {"objects": [{"object": v2.ref, "from": [1], "to": 2}]}
     for rec in (a, e):
         assert changed(kb, rec["revision_id"]) == [("queued", expected, None, PERSON)]
     items = review.items(kb, reason="source_changed")
@@ -79,7 +79,7 @@ def test_pending_edit_on_old_version_is_queued_too(kb, store, docs):
                 first["record_id"]).records[0]
     assert edit["review_state"] == "pending"
     v2 = new_version(kb, store, docs, V2)
-    expected = {"object": v2.ref, "from": [1], "to": 2}
+    expected = {"objects": [{"object": v2.ref, "from": [1], "to": 2}]}
     assert [d for _, d, _, _ in changed(kb, edit["revision_id"])] == [expected]
     assert [d for _, d, _, _ in changed(kb, first["revision_id"])] == [expected]
 
@@ -114,7 +114,7 @@ def test_repeated_ingest_and_third_version_do_not_duplicate(kb, store, docs):
     v3 = new_version(kb, store, docs, V3)
     assert v3.n == 3
     [(st, details, _, _)] = changed(kb, rec["revision_id"])
-    assert st == "queued" and details == {"object": v2.ref, "from": [1], "to": 2}
+    assert st == "queued" and details == {"objects": [{"object": v2.ref, "from": [1], "to": 2}]}
 
 
 def test_third_version_after_decision_queues_again(kb, store, docs):
@@ -128,7 +128,7 @@ def test_third_version_after_decision_queues_again(kb, store, docs):
     v3 = new_version(kb, store, docs, V3)
     states = [(st, d) for st, d, _, _ in changed(kb, rec["revision_id"])]
     assert states[0][0] == "done"
-    assert states[1] == ("queued", {"object": v3.ref, "from": [1], "to": 3})
+    assert states[1] == ("queued", {"objects": [{"object": v3.ref, "from": [1], "to": 3}]})
 
 
 def test_revision_on_new_version_makes_item_obsolete(kb, store, docs):
@@ -156,13 +156,13 @@ def test_several_sources_on_old_versions(kb, store, docs):
     rec = send(kb, store, docs, atom("@a", sources=srcs)).records[0]
     v3 = new_version(kb, store, docs, V3)
     details = [d for _, d, _, _ in changed(kb, rec["revision_id"])]
-    # submit поставил пункт сам (ссылка на v1 при последней v2); v3 его не дублирует
-    assert len(details) == 1
+    # submit поставил пункт сам (ссылка на v1 при последней v2) в той же форме; v3 его не дублирует и не меняет
+    assert details == [{"objects": [{"object": v1.ref, "from": [1], "to": 2}]}]
     review.resolve(kb, review.items(kb, reason="source_changed")[0]["id"], "confirmed", agent=PERSON)
     write(docs, V1 + "\nДобавлено.\n")
     v4 = objects.ingest(kb, store, docs, NOTE, agent=PERSON)
     [last] = [d for st, d, _, _ in changed(kb, rec["revision_id"]) if st == "queued"]
-    assert last == {"object": v3.ref, "from": [1, 2], "to": v4.n}
+    assert last == {"objects": [{"object": v3.ref, "from": [1, 2], "to": v4.n}]}
 
 
 def test_ingest_between_resolve_and_write_gives_one_item(kb, store, docs, monkeypatch):
@@ -236,4 +236,48 @@ def test_ingest_during_write_waits_and_does_not_duplicate(kb, store, docs, monke
     # пакет записал ссылку на v1, когда v2 ещё не было: пункт — от новой версии, один
     items = changed(kb, rec["revision_id"])
     assert len(items) == 1 and items[0][2] is None
-    assert items[0][1]["to"] == 2
+    assert [o["to"] for o in items[0][1]["objects"]] == [2]
+
+
+def pending_with_source_changed(kb, store, docs):
+    """Проверенный атом, ждущая правка на v1, новая версия v2: у правки пункты edit и source_changed."""
+    write(docs, V1)
+    first = send(kb, store, docs, note_atom()).records[0]
+    records.set_status(kb, "atom", first["record_id"], "verified", agent=PERSON)
+    result = send(kb, store, docs, note_atom(summary_plain={"ru": "Кронштейн держится на анкере."}),
+                  first["record_id"])
+    edit = result.records[0]
+    new_version(kb, store, docs, V2)
+    [sc] = [i for i in review.items(kb, reason="source_changed") if i["revision_id"] == edit["revision_id"]]
+    [edit_item] = [q["id"] for q in result.queued if q["reason"] == "edit"]
+    return first, edit, sc["id"], edit_item
+
+
+def item_state(kb, item_id) -> str:
+    return kb.execute("SELECT state FROM review_item WHERE id = %s", (item_id,)).fetchone()[0]
+
+
+def test_confirmed_source_changed_on_pending_edit_is_only_a_verdict(kb, store, docs):
+    """О правке решает её пункт edit: подтверждение по другой причине не меняет статус и не закрывает edit."""
+    first, edit, sc, edit_item = pending_with_source_changed(kb, store, docs)
+    out = review.resolve(kb, sc, "confirmed", agent=PERSON)
+    assert out["status"] == "verified" and out["queued"] == []
+    assert item_state(kb, sc) == "done" and item_state(kb, edit_item) == "queued"
+    assert kb.execute("SELECT review_state FROM atom_revision WHERE id = %s",
+                      (edit["revision_id"],)).fetchone()[0] == "pending"
+    assert kb.execute("SELECT count(*) FROM status_log WHERE record_id = %s AND reason LIKE 'review:%%'",
+                      (first["record_id"],)).fetchone()[0] == 0
+
+
+def test_refuted_source_changed_on_pending_edit_declines_the_edit(kb, store, docs):
+    """Опровержение отклоняет саму правку: статус записи прежний, текущая — прежняя, пункт edit устарел."""
+    first, edit, sc, edit_item = pending_with_source_changed(kb, store, docs)
+    out = review.resolve(kb, sc, "refuted", agent=PERSON)
+    assert out["status"] == "verified"
+    assert kb.execute("SELECT review_state FROM atom_revision WHERE id = %s",
+                      (edit["revision_id"],)).fetchone()[0] == "declined"
+    assert kb.execute("SELECT id FROM atom_current WHERE atom_id = %s",
+                      (first["record_id"],)).fetchone()[0] == first["revision_id"]
+    assert item_state(kb, sc) == "done" and item_state(kb, edit_item) == "obsolete"
+    # пункт source_changed текущей ревизии — отдельный вопрос, он остаётся
+    assert [st for st, *_ in changed(kb, first["revision_id"])] == ["queued"]

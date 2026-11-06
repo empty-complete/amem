@@ -297,7 +297,7 @@ def test_source_on_old_object_version_is_queued(kb, store, docs):
     assert set(reasons) == {"semantic", "source_changed"}
     details = kb.execute("SELECT details FROM review_item WHERE id = %s",
                          (reasons["source_changed"]["id"],)).fetchone()[0]
-    assert details["objects"] == [{"position": 0, "object": v1.ref, "version": 1, "latest": 2}]
+    assert details == {"objects": [{"object": v1.ref, "from": [1], "to": 2}]}         # без замечаний пакета
 
 
 def test_store_error_is_raised_and_nothing_is_written(kb, store, docs, monkeypatch):
