@@ -67,9 +67,21 @@ An error at level 1 or 2 rejects the whole batch with a report; nothing is writt
 record gets a status: `draft`, `needs_review` or `auto_verified` (an edit of a verified record waits
 for a human decision). The answer (`Submitted`) separates what is done from what is only queued:
 `complete` is false when review items were created, `queued` lists them, and level 5 (semantic
-review by a human) is reported as `queued`. Numbers recomputed by an agent must carry
+review by another model or a human) is reported as `queued`. Numbers recomputed by an agent must carry
 `role: "derived"` in the source. High risk (`high_risk` in pack templates, `decision` in the core)
 always goes to a human.
+
+The review queue lives in `amem.review`. `claim(conn, agent=…)` hands out the oldest items the agent
+may decide, with a lease (15 minutes by default) so that parallel reviewers never take the same
+item; `release` gives an item back. `resolve(conn, item_id, outcome, agent=…)` records a verdict and
+applies it: a model (`model:…`) decides only `semantic`, never for its own batch, and gives a
+`confidence` (`confirmed` at 0.8 or more makes an atom `auto_verified`, anything else sends it to a
+human as `semantic_doubt`); a human (`person:…`) decides everything with `confirmed` or `refuted`,
+which makes the record `verified` or `rejected` and closes its other open items (except
+`source_changed`). `enqueue` lets a human put a record into the queue by hand (`calibration`,
+`audit`), `stats` reports queue sizes, decision times, rejected batches and audit results. When a
+file gets a new version (`objects.ingest`), every record citing an older version gets a
+`source_changed` item.
 
 ## Backup
 
