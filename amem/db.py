@@ -1,6 +1,7 @@
 """Подключение к PostgreSQL схемы v1, миграции SQL, загрузка словарей и шаблонов.
 
-  prepare(conn) — то, что делает сервер при старте: миграции → словари и шаблоны → счётчик id.
+  prepare(conn) — то, что делает сервер при старте: миграции → словари и шаблоны → base_id и четыре папки новой
+  базы → счётчик id.
 
 Соединение — в режиме autocommit: тогда каждый `with conn.transaction()` — настоящая транзакция и фиксируется
 при выходе из блока. Без autocommit первое же чтение открывает неявную транзакцию, все дальнейшие блоки становятся
@@ -21,7 +22,7 @@ from pathlib import Path
 import psycopg
 from psycopg.types.json import Jsonb
 
-from . import canon, ids, packs
+from . import canon, folders, ids, packs
 
 SQL_DIR = Path(__file__).with_name("sql")
 MIGRATION_LOCK = 0x616D656D00000001          # ключ pg_advisory_lock для миграций: «amem» + 1
@@ -163,8 +164,13 @@ def seed_ids(conn: psycopg.Connection) -> None:
 def prepare(conn: psycopg.Connection) -> list[str]:
     applied = migrate(conn)
     load_vocab(conn)
-    # идентичность базы — один раз и навсегда: дамп и экспорт несут её с собой (задел под хаб)
-    conn.execute("INSERT INTO meta (key, value) VALUES ('base_id', %s) ON CONFLICT (key) DO NOTHING",
-                 (Jsonb(str(ids.uuid7())),))
+    # идентичность базы — один раз и навсегда: дамп и экспорт несут её с собой (задел под хаб).
+    # Четыре папки новой базы — в той же транзакции: база с base_id их больше не получает — ни после миграции 0008,
+    # ни после того, как пользователь удалил папку
+    with conn.transaction():
+        born = conn.execute("INSERT INTO meta (key, value) VALUES ('base_id', %s) ON CONFLICT (key) DO NOTHING "
+                            "RETURNING key", (Jsonb(str(ids.uuid7())),)).fetchone()
+        if born is not None:
+            folders.seed_defaults(conn)
     seed_ids(conn)
     return applied

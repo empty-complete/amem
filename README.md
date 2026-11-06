@@ -49,7 +49,7 @@ Four named recipes in `amem.recipes`, each returning plain JSON-compatible data:
 - `exact_fact(conn, query, agent=…)` — codes and marks (exact and prefix), Russian full text
   and vectors merged with RRF; an exact code always comes first, ambiguity returns all candidates;
 - `similar(conn, query, agent=…)` — semantic neighbours of a text or of a record (`atm:` / `ent:` ref), with a text fallback;
-- `what_changed(conn, ref=…, since=…, until=…)` — revisions, review decisions, statuses and links over time;
+- `what_changed(conn, ref=…, since=…, until=…)` — revisions, review decisions, statuses, folder moves and links over time;
 - `around_entity(conn, ref, depth=1, rels=…, statuses=…)` — shortest paths over links and the
   `about` / `derived_from` fields; a path's confidence is its weakest scored link, and its
   `evidence_role` is the weakest source role.
