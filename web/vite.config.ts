@@ -17,6 +17,7 @@ export default defineConfig({
     msw({ mode: "worker-only" }),
   ],
   server: {
+    host: "127.0.0.1",
     port: 5173,
     strictPort: true,
     proxy: { "/api": { target: process.env.AMEM_URL ?? "http://127.0.0.1:8765", changeOrigin: true } },
