@@ -521,6 +521,26 @@ def test_items_filters(kb, store, docs):
     assert len(review.items(kb, limit=1)) == 1
 
 
+def test_items_record_by_key_uuid_and_bad_arguments(kb, store, docs):
+    s = send(kb, store, docs, wind(key="wind.ii"))
+    rec = s.records[0]["record_id"]
+    expected = [queued(s, "semantic")]
+    assert [i["id"] for i in review.items(kb, record="atm:wind.ii")] == expected
+    assert [i["id"] for i in review.items(kb, record=rec)] == expected
+    assert [i["id"] for i in review.items(kb, record=str(rec))] == expected
+    with pytest.raises(review.ReviewError, match="atm:wind.ii"):
+        review.items(kb, record="wind.ii")                       # ключ без приставки — подсказка
+    with pytest.raises(review.ReviewError, match="нет записи с ключом"):
+        review.items(kb, record="atm:nope")
+    with pytest.raises(review.ReviewError, match="состояние"):
+        review.items(kb, state="open")
+    with pytest.raises(review.ReviewError, match="причина"):
+        review.items(kb, reason="nonsense")
+    for limit in (0, -1, "5", True):
+        with pytest.raises(review.ReviewError, match="limit"):
+            review.items(kb, limit=limit)
+
+
 # --- тупики ---
 
 def wait_locked(conn, app: str, n: int) -> None:

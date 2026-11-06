@@ -48,6 +48,7 @@ OBJECTS_LOCK = 0x616D656D00000002          # ключ pg_advisory_xact_lock за
 # адрес сайта: схема, www. или первый сегмент — домен латиницей («example.org/docs/TS.pdf»)
 URL = re.compile(r"^(?:[a-z][a-z0-9+.-]*://|www\.)|^[a-z0-9-]+(?:\.[a-z0-9-]+)+/", re.I)
 DOMAIN = re.compile(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}", re.I)     # «example.org» без схемы и пути
+AGENT = re.compile(r"^(person|model):[a-z0-9_.-]+$")         # как CHECK таблицы agent
 GUESS_SUFFIXES = (".pdf", ".md", ".txt")       # расширения, которые проверяются у пути без расширения
 STATUSES = {s.value for s in model_v1.ObjectStatus}
 
@@ -124,6 +125,14 @@ def _check_relative(path: str) -> None:
         raise ObjectError(f"{path}: «..» в пути не допускается — нужен путь от корня папки документов вниз")
 
 
+def _check_agent(agent: str) -> None:
+    """Агент пишется в базу (ingest записывает его до блокировки объектов): неверный — ObjectError, а не сбой
+    ограничения таблицы agent."""
+    if not isinstance(agent, str) or not AGENT.fullmatch(agent):
+        raise ObjectError(f"агент {agent!r}: нужен person:<имя> или model:<имя> (строчные латинские буквы, цифры, "
+                          "«_», «.», «-»)")
+
+
 def _require_autocommit(conn: psycopg.Connection) -> None:
     if not conn.autocommit:
         raise ObjectError("нужно соединение с autocommit=True (db.connect): иначе запись не фиксируется")
@@ -142,6 +151,7 @@ def _add_path(conn, path: str, object_id: uuid.UUID, at: datetime) -> None:
 def ingest(conn: psycopg.Connection, store: ObjectStore, docs: Path, path: str, *, agent: str) -> Version:
     """Файл из папки документов → объект и версия (правила — в описании модуля)."""
     _require_autocommit(conn)
+    _check_agent(agent)
     docs = Path(docs).resolve()
     path = _clean(path)
     _check_relative(path)
@@ -245,6 +255,7 @@ def resolve_sources(conn: psycopg.Connection, store: ObjectStore, docs: Path, pa
 
     Источник, у которого уже есть object, не трогается — его версию и digest проверяет запись (records.commit).
     Входное тело не меняется; ошибка — ObjectError с местом (sources[i])."""
+    _check_agent(agent)
     if not payload.get("sources"):
         return payload
     out = []

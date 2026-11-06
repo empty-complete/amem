@@ -202,8 +202,10 @@ def _write(conn, batch: Batch, plans: list[_Plan], checks: dict[str, list[Source
                 review.close_stale(conn, t, rev.record_id, at=at)
             details = _details(p, report)
             for why, extra in reasons:
+                # у source_changed свой вопрос — изменившийся файл: замечаний и кандидатов пакета в нём нет
+                item_details = extra if why == "source_changed" else {**details, **extra}
                 item = review.insert_item(conn, t, rev.record_id, rev.revision_id, why, changeset_id=cs,
-                                          details={**details, **extra}, agent=agent, at=at)
+                                          details=item_details, agent=agent, at=at)
                 if item is not None:
                     queued.append({**item, "label": label})
         status = conn.execute(f"SELECT status FROM {t} WHERE id = %s", (rev.record_id,)).fetchone()[0]
@@ -237,15 +239,15 @@ def _reasons(conn, plan: _Plan, rev: records.Revision) -> list[tuple[str, dict]]
     elif plan.status == "auto_verified" and review.in_audit(rev.revision_id, review.AUDIT_RATE):
         out.append(("audit", {}))
     # под разделяемой блокировкой объектов новых версий не появится: что старое сейчас — старое и при фиксации
+    # details — в форме review.source_changed_details, общей с пересмотром при новой версии (разд. 8.8)
     stale = conn.execute(
-        f"SELECT s.position, s.object_id, s.object_version, latest.n FROM source s "
+        "SELECT s.object_id, array_agg(DISTINCT s.object_version ORDER BY s.object_version), latest.n FROM source s "
         "CROSS JOIN LATERAL (SELECT max(n) AS n FROM object_version v WHERE v.object_id = s.object_id) latest "
-        f"WHERE s.{rev.target}_revision_id = %s AND s.object_version < latest.n ORDER BY s.position",
+        f"WHERE s.{rev.target}_revision_id = %s AND s.object_version < latest.n "
+        "GROUP BY s.object_id, latest.n ORDER BY s.object_id",
         (rev.revision_id,)).fetchall()
     if stale:
-        old = [{"position": pos, "object": f"obj:{oid}", "version": n, "latest": latest}
-               for pos, oid, n, latest in stale]
-        out.append(("source_changed", {"objects": old}))
+        out.append(("source_changed", review.source_changed_details(stale)))
     return out
 
 

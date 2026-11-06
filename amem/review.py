@@ -26,6 +26,7 @@ from .records import PREFIX, check_target
 
 AUDIT_RATE = 0.02                      # постоянная доля аудита записей, перешедших в auto_verified (разд. 7.4)
 OPEN = ("queued", "claimed")
+STATES = ("queued", "claimed", "done", "obsolete")
 CLOSING_STATUSES = ("rejected", "deprecated", "superseded")    # у такой записи открытых пунктов не остаётся
 RETIRED = ("deprecated", "superseded")                          # выведенные из оборота: решение статус не меняет
 
@@ -85,12 +86,20 @@ def close_stale(conn, target: str, record_id: uuid.UUID, *, at: datetime) -> int
          "n": current_n}).rowcount
 
 
+def source_changed_details(rows) -> dict:
+    """details пункта source_changed — одна форма у submit и у новой версии объекта (разд. 8.8):
+    {"objects": [{"object": "obj:…", "from": [старые версии по возрастанию], "to": n}]}. rows — (object_id,
+    старые версии, n). to — последняя версия на момент постановки: тело пункта неизменяемо, более новая версия
+    при открытом пункте его не меняет."""
+    return {"objects": [{"object": f"obj:{oid}", "from": list(old), "to": n} for oid, old, n in rows]}
+
+
 def on_new_version(conn, object_id: uuid.UUID, n: int, *, agent: str, at: datetime) -> list[dict]:
     """Новая версия n объекта (разд. 8.8): пункт source_changed каждой текущей и ждущей решения ревизии атома
     и сущности со ссылкой на версию меньше n. Ждущая правка, принятая позже, иначе осталась бы со ссылкой на старую
     версию без пересмотра; ждущая правка старше текущей — уже не вопрос (разд. 7.3), её нет.
 
-    Записи rejected, deprecated, superseded пропускаются. details: объект, старые версии ревизии, новая. Открытый
+    Записи rejected, deprecated, superseded пропускаются. details — source_changed_details. Открытый
     пункт ревизии не дублируется (ON CONFLICT): его вопрос — «файл изменился», и он ещё не решён. Вызывается
     из objects.ingest в его транзакции, под исключительной блокировкой объектов, агент уже записан: пакеты
     (разделяемая блокировка) не идут параллельно, ревизию со ссылкой на старую версию, не видимую здесь, пакет
@@ -108,7 +117,7 @@ def on_new_version(conn, object_id: uuid.UUID, n: int, *, agent: str, at: dateti
             {"obj": object_id, "n": n, "closing": list(CLOSING_STATUSES)}).fetchall()
         for record_id, revision_id, old in rows:
             item = insert_item(conn, target, record_id, revision_id, "source_changed", changeset_id=None,
-                               details={"object": f"obj:{object_id}", "from": list(old), "to": n},
+                               details=source_changed_details([(object_id, old, n)]),
                                agent=agent, at=at)
             if item is not None:
                 out.append(item)
@@ -318,6 +327,10 @@ def _check(item: dict, agent: str, method: str, now: datetime) -> None:
         raise ReviewError(f"пункт {item['id']}: модель — автор пакета и не подтверждает свой же текст")
 
 
+def _review_state(conn, target: str, revision_id: uuid.UUID) -> str:
+    return conn.execute(f"SELECT review_state FROM {target}_revision WHERE id = %s", (revision_id,)).fetchone()[0]
+
+
 def _apply(conn, item: dict, outcome: str, method: str, *, agent: str, confidence, note, at: datetime) -> dict:
     t, record_id, revision_id, reason = item["target"], item["record_id"], item["revision_id"], item["reason"]
     verification_id = uuid7()
@@ -349,11 +362,16 @@ def _apply(conn, item: dict, outcome: str, method: str, *, agent: str, confidenc
                 put("semantic_doubt", {**item["details"], "verification": str(verification_id),
                                        "outcome": outcome, "confidence": confidence, "note": note})
     elif reason == "edit":
-        pending = conn.execute(f"SELECT review_state FROM {t}_revision WHERE id = %s", (revision_id,)).fetchone()[0]
-        if status == "verified" and pending == "pending":
+        if status == "verified" and _review_state(conn, t, revision_id) == "pending":
             # records.decide — в нашей транзакции: его transaction() становится точкой сохранения
             records.decide(conn, t, revision_id, outcome == "confirmed", agent=agent)
             final = True
+    elif _review_state(conn, t, revision_id) == "pending":
+        # ждущая правка проверенной записи: о самой правке решает пункт edit. Подтверждение по другой причине —
+        # только вердикт; опровержение отклоняет эту правку, статус записи не меняется, её пункт edit устаревает
+        if outcome == "refuted":
+            records.decide(conn, t, revision_id, False, agent=agent)
+            close_stale(conn, t, record_id, at=at)
     elif status not in RETIRED:
         set_status("verified" if outcome == "confirmed" else "rejected")
         final = True
@@ -412,9 +430,27 @@ def enqueue(conn: psycopg.Connection, ref: str, reason: str, *, agent: str, note
                             "AND state = ANY(%s)", (current[0], reason, list(OPEN))).fetchone()[0]
 
 
+def _record_id(conn, record) -> uuid.UUID:
+    """id записи для фильтра items: ссылка atm:/ent: (UUID или ключ) или UUID; ключ без приставки — подсказка."""
+    if isinstance(record, str) and ":" in record:
+        return _record(conn, record)[1]
+    try:
+        return records.as_uuid(record, "record")
+    except records.RecordError as e:
+        raise ReviewError(f"items: record {record!r} — нужна ссылка atm:… или ent:… (UUID или ключ, например "
+                          f"atm:{record}) либо UUID записи") from e
+
+
 def items(conn: psycopg.Connection, *, state: str | None = None, reason: str | None = None,
           record: str | uuid.UUID | None = None, limit: int = 100) -> list[dict]:
-    """Пункты очереди для интерфейсов — по времени постановки; record — ref (atm:/ent:…) или id записи."""
+    """Пункты очереди для интерфейсов — по времени постановки; record — ref (atm:/ent:<UUID или ключ>) или UUID
+    записи. Неизвестные state и reason, limit меньше 1, неверная ссылка — ReviewError."""
+    if state is not None and state not in STATES:
+        raise ReviewError(f"items: состояние {state!r} — допустимы {', '.join(STATES)}")
+    if reason is not None and reason not in REASONS:
+        raise ReviewError(f"items: причина {reason!r} — допустимы {', '.join(REASONS)}")
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ReviewError(f"items: limit {limit!r} — нужно целое число от 1")
     where, params = [], {"limit": limit}
     if state is not None:
         where.append("ri.state = %(state)s")
@@ -424,7 +460,7 @@ def items(conn: psycopg.Connection, *, state: str | None = None, reason: str | N
         params["reason"] = reason
     if record is not None:
         where.append("ri.record_id = %(record)s")
-        params["record"] = _record(conn, record)[1] if isinstance(record, str) and ":" in record else _id(record)
+        params["record"] = _record_id(conn, record)
     sql = f"{_ITEM}{' WHERE ' + ' AND '.join(where) if where else ''} ORDER BY ri.created_at, ri.id LIMIT %(limit)s"
     return [_row(r) for r in conn.execute(sql, params).fetchall()]
 
