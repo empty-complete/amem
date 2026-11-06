@@ -1,0 +1,4 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { Stub } from "../app/shell/Stub";
+
+export const Route = createFileRoute("/review")({ component: () => <Stub /> });

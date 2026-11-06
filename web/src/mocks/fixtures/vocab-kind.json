@@ -1,0 +1,83 @@
+[
+  {
+    "code": "fact",
+    "label": {
+      "ru": "Факт",
+      "en": "Fact"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "term",
+    "label": {
+      "ru": "Термин",
+      "en": "Term"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "method",
+    "label": {
+      "ru": "Методика",
+      "en": "Method"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "decision",
+    "label": {
+      "ru": "Решение",
+      "en": "Decision"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "question",
+    "label": {
+      "ru": "Вопрос",
+      "en": "Question"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "lesson",
+    "label": {
+      "ru": "Урок",
+      "en": "Lesson"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "requirement",
+    "label": {
+      "ru": "Требование",
+      "en": "Requirement"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "parameter",
+    "label": {
+      "ru": "Параметр",
+      "en": "Parameter"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "note",
+    "label": {
+      "ru": "Заметка",
+      "en": "Note"
+    },
+    "pack": "core",
+    "broader": null
+  }
+]

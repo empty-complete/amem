@@ -1,0 +1,552 @@
+{
+  "items": [
+    {
+      "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+      "target": "entity",
+      "label": "Метеостанция МС-1",
+      "kind_or_class": "artifact",
+      "status": "verified",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [],
+      "tags": [],
+      "recorded_at": "2026-11-03T10:00:00+00:00",
+      "agent": "person:alex"
+    },
+    {
+      "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000002",
+      "target": "entity",
+      "label": "Датчик температуры Т-1",
+      "kind_or_class": "artifact",
+      "status": "verified",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": [],
+      "recorded_at": "2026-11-03T09:00:00+00:00",
+      "agent": "person:alex"
+    },
+    {
+      "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+      "target": "entity",
+      "label": "Датчик влажности В-2",
+      "kind_or_class": "artifact",
+      "status": "verified",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": [],
+      "recorded_at": "2026-11-03T08:00:00+00:00",
+      "agent": "person:alex"
+    },
+    {
+      "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000004",
+      "target": "entity",
+      "label": "Датчик давления Д-3",
+      "kind_or_class": "artifact",
+      "status": "verified",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": [],
+      "recorded_at": "2026-11-03T07:00:00+00:00",
+      "agent": "person:alex"
+    },
+    {
+      "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000005",
+      "target": "entity",
+      "label": "Мачта М-2",
+      "kind_or_class": "artifact",
+      "status": "verified",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": [],
+      "recorded_at": "2026-11-03T06:00:00+00:00",
+      "agent": "person:alex"
+    },
+    {
+      "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000006",
+      "target": "entity",
+      "label": "Руководство МС-1",
+      "kind_or_class": "document",
+      "status": "verified",
+      "folder": "Ресурсы/Источники",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": [],
+      "recorded_at": "2026-11-03T05:00:00+00:00",
+      "agent": "person:alex"
+    },
+    {
+      "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000007",
+      "target": "entity",
+      "label": "Паспорт Т-1, 2019",
+      "kind_or_class": "document",
+      "status": "verified",
+      "folder": "Ресурсы/Источники",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000002",
+          "label": "Датчик температуры Т-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": [],
+      "recorded_at": "2026-11-03T04:00:00+00:00",
+      "agent": "person:alex"
+    },
+    {
+      "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000008",
+      "target": "entity",
+      "label": "Метеоплощадка",
+      "kind_or_class": "project",
+      "status": "verified",
+      "folder": "Проекты",
+      "about": [],
+      "tags": [],
+      "recorded_at": "2026-11-03T03:00:00+00:00",
+      "agent": "person:alex"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000009",
+      "target": "atom",
+      "label": "Диапазон температуры Т-1: −40…+60 °C",
+      "kind_or_class": "parameter",
+      "status": "verified",
+      "folder": "Области/Приборы",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000002",
+          "label": "Датчик температуры Т-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-06T10:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000a",
+      "target": "atom",
+      "label": "Погрешность температуры Т-1: ±0,3 °C",
+      "kind_or_class": "parameter",
+      "status": "verified",
+      "folder": "Области/Приборы",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000002",
+          "label": "Датчик температуры Т-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-06T08:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+      "target": "atom",
+      "label": "Погрешность влажности В-2: ±2 %",
+      "kind_or_class": "parameter",
+      "status": "needs_review",
+      "folder": "Области/Приборы",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+          "label": "Датчик влажности В-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-06T06:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000c",
+      "target": "atom",
+      "label": "Диапазон давления Д-3: 300…1100 гПа",
+      "kind_or_class": "parameter",
+      "status": "auto_verified",
+      "folder": "Области/Приборы",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000004",
+          "label": "Датчик давления Д-3",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-06T04:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000d",
+      "target": "atom",
+      "label": "Высота датчиков: не ниже 2 м",
+      "kind_or_class": "parameter",
+      "status": "verified",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000005",
+          "label": "Мачта М-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-06T02:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000e",
+      "target": "atom",
+      "label": "Интервал опроса: 60 с",
+      "kind_or_class": "parameter",
+      "status": "verified",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-06T00:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000f",
+      "target": "atom",
+      "label": "Напряжение питания МС-1: 12 В",
+      "kind_or_class": "parameter",
+      "status": "auto_verified",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-05T22:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000010",
+      "target": "atom",
+      "label": "Степень защиты МС-1: IP65",
+      "kind_or_class": "parameter",
+      "status": "verified",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-05T20:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000011",
+      "target": "atom",
+      "label": "Ниже −40 °C показания Т-1 не нормируются",
+      "kind_or_class": "fact",
+      "status": "verified",
+      "folder": "Области/Приборы",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000002",
+          "label": "Датчик температуры Т-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-05T18:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000012",
+      "target": "atom",
+      "label": "Диапазон Т-1 по паспорту 2019 года: −30…+50 °C",
+      "kind_or_class": "fact",
+      "status": "superseded",
+      "folder": "Архив/Станция 2024",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000002",
+          "label": "Датчик температуры Т-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-05T16:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000013",
+      "target": "atom",
+      "label": "Погрешность температуры не хуже ±0,5 °C",
+      "kind_or_class": "requirement",
+      "status": "verified",
+      "folder": "Ресурсы/Требования",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000008",
+          "label": "Метеоплощадка",
+          "entity_class": "project"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-05T14:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000014",
+      "target": "atom",
+      "label": "Точка росы",
+      "kind_or_class": "term",
+      "status": "verified",
+      "folder": "Ресурсы/Методики и термины",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+          "label": "Датчик влажности В-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-05T12:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000015",
+      "target": "atom",
+      "label": "Ставим мачту на 2 м",
+      "kind_or_class": "decision",
+      "status": "verified",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000005",
+          "label": "Мачта М-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-05T10:00:00+00:00",
+      "agent": "person:alex"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000016",
+      "target": "atom",
+      "label": "В-2 завышает влажность при обмерзании",
+      "kind_or_class": "lesson",
+      "status": "verified",
+      "folder": "Области/Приборы",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+          "label": "Датчик влажности В-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-05T08:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000017",
+      "target": "atom",
+      "label": "Поверка Т-1 по эталонному термометру",
+      "kind_or_class": "method",
+      "status": "verified",
+      "folder": "Ресурсы/Методики и термины",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000002",
+          "label": "Датчик температуры Т-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-05T06:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000018",
+      "target": "atom",
+      "label": "Нужен ли обогрев В-2 зимой?",
+      "kind_or_class": "question",
+      "status": "draft",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+          "label": "Датчик влажности В-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-05T04:00:00+00:00",
+      "agent": "person:alex"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000019",
+      "target": "atom",
+      "label": "Данные МС-1 передаются по RS-485",
+      "kind_or_class": "fact",
+      "status": "auto_verified",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-05T02:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001a",
+      "target": "atom",
+      "label": "Ток потребления МС-1: 0,4 А",
+      "kind_or_class": "parameter",
+      "status": "needs_review",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-05T00:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001b",
+      "target": "atom",
+      "label": "Опрос раз в минуту достаточен",
+      "kind_or_class": "decision",
+      "status": "verified",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000008",
+          "label": "Метеоплощадка",
+          "entity_class": "project"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-04T22:00:00+00:00",
+      "agent": "person:alex"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001c",
+      "target": "atom",
+      "label": "Корпус МС-1 из алюминия",
+      "kind_or_class": "fact",
+      "status": "verified",
+      "folder": "Архив/Станция 2024",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-04T20:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001d",
+      "target": "atom",
+      "label": "Диапазон влажности В-2: 0…100 %",
+      "kind_or_class": "parameter",
+      "status": "verified",
+      "folder": "Области/Приборы",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+          "label": "Датчик влажности В-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-04T18:00:00+00:00",
+      "agent": "model:claude"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001e",
+      "target": "atom",
+      "label": "Проверить крепление мачты после ветра",
+      "kind_or_class": "note",
+      "status": "draft",
+      "folder": null,
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000005",
+          "label": "Мачта М-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-04T16:00:00+00:00",
+      "agent": "person:alex"
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001f",
+      "target": "atom",
+      "label": "Иней на корпусе искажает показания",
+      "kind_or_class": "lesson",
+      "status": "needs_review",
+      "folder": null,
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+          "label": "Датчик влажности В-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "tags": ["метео"],
+      "recorded_at": "2026-11-04T14:00:00+00:00",
+      "agent": "model:claude"
+    }
+  ],
+  "total": 31,
+  "next_cursor": null
+}
