@@ -1,0 +1,376 @@
+{
+  "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b": {
+    "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+    "target": "atom",
+    "revision": 1,
+    "payload": {
+      "kind": "parameter",
+      "label": {
+        "ru": "Погрешность влажности В-2: ±2 %"
+      },
+      "summary_plain": {
+        "ru": "Датчик влажности В-2 измеряет с погрешностью ±2 %, но только в диапазоне от 10 до 90 %."
+      },
+      "body": {
+        "ru": "## Суть источника\nПогрешность нормируется только в середине шкалы. У краёв — у сухого воздуха и у тумана — производитель не обещает ничего.\n\n## Моя мысль\nЗимой влажность у нас часто выше 90 %, а значит, погрешность в эти дни неизвестна. Точку росы по формуле Магнуса\n\n$$T_d = \\frac{b\\,\\gamma(T,RH)}{a - \\gamma(T,RH)}, \\qquad \\gamma = \\ln\\frac{RH}{100} + \\frac{aT}{b+T}$$\n\nпри $RH > 90\\,\\%$ лучше считать с запасом. См. [[Нужен ли обогрев В-2 зимой?]] и [[Точка росы]]."
+      },
+      "about": ["ent:0193b7c2-5e1a-7d40-9f2e-000000000003"],
+      "content": {
+        "values": [
+          {
+            "property": "humidity_error",
+            "label": {
+              "ru": "Погрешность"
+            },
+            "value_text": "±2",
+            "unit": "%",
+            "qualifiers": [
+              {
+                "property": "range",
+                "label": {
+                  "ru": "в диапазоне"
+                },
+                "lower_bound": 10,
+                "upper_bound": 90,
+                "unit": "%"
+              }
+            ]
+          }
+        ]
+      },
+      "tags": ["метрология", "зима"],
+      "qualifiers": [
+        {
+          "property": "maturity",
+          "label": {
+            "ru": "Зрелость"
+          },
+          "value_text": "🌱 росток"
+        }
+      ],
+      "confidence": 0.82,
+      "sources": [
+        {
+          "object": "0193b7c2-5e1a-7d40-9f2e-0000000000a1",
+          "object_version": 2,
+          "selectors": [
+            {
+              "type": "page",
+              "value": "2",
+              "label": "12"
+            }
+          ],
+          "quote": "Погрешность ±2 % в диапазоне от 10 до 90 %"
+        }
+      ]
+    },
+    "status": "needs_review",
+    "review_state": "pending",
+    "recorded_at": "2026-11-05T10:12:00Z",
+    "agent": "model:extractor",
+    "folder": "Области/Приборы",
+    "about": [
+      {
+        "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+        "label": "Датчик влажности В-2",
+        "entity_class": "artifact"
+      }
+    ],
+    "ancestors": [
+      {
+        "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000008",
+        "label": "Метеоплощадка",
+        "entity_class": "project"
+      },
+      {
+        "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+        "label": "Метеостанция МС-1",
+        "entity_class": "artifact"
+      }
+    ],
+    "sources": [
+      {
+        "object": "0193b7c2-5e1a-7d40-9f2e-0000000000a1",
+        "object_name": "Руководство_МС-1.pdf",
+        "object_kind": "file",
+        "media_type": "application/pdf",
+        "object_version": 2,
+        "selectors": [
+          {
+            "type": "page",
+            "value": "2",
+            "label": "12"
+          }
+        ],
+        "quote": "Погрешность ±2 % в диапазоне от 10 до 90 %",
+        "role": "primary",
+        "verdict": "ok"
+      }
+    ],
+    "open_items": [
+      {
+        "id": "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e5f",
+        "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+        "label": "Погрешность влажности В-2: ±2 %",
+        "kind_or_class": "parameter",
+        "reason": "semantic_doubt",
+        "state": "queued",
+        "details": {
+          "note": "Модель сомневается: в тексте два диапазона, взят средний."
+        },
+        "created_at": "2026-11-05T10:12:05Z",
+        "created_by": "model:checker"
+      }
+    ],
+    "usefulness": null
+  },
+  "atm:0193b7c2-5e1a-7d40-9f2e-000000000016": {
+    "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000016",
+    "target": "atom",
+    "revision": 1,
+    "payload": {
+      "kind": "lesson",
+      "label": {
+        "ru": "В-2 завышает влажность при обмерзании"
+      },
+      "summary_plain": {
+        "ru": "Когда на решётке В-2 иней, датчик показывает 97–100 %, хотя воздух суше."
+      },
+      "body": {
+        "ru": "Заметили в ноябре: утром после заморозка показания застывают у 100 % на час-два.\n\n- сверили с психрометром — расхождение до 12 %;\n- после оттаивания всё возвращается.\n\nСвязано с [[Погрешность влажности В-2: ±2 %]]: вне диапазона 10–90 % производитель ничего не обещает."
+      },
+      "about": ["ent:0193b7c2-5e1a-7d40-9f2e-000000000003"],
+      "tags": ["зима"]
+    },
+    "status": "verified",
+    "review_state": "none",
+    "recorded_at": "2026-11-06T08:40:00Z",
+    "agent": "person:anna",
+    "folder": "Области/Приборы",
+    "about": [
+      {
+        "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+        "label": "Датчик влажности В-2",
+        "entity_class": "artifact"
+      }
+    ],
+    "ancestors": [
+      {
+        "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000008",
+        "label": "Метеоплощадка",
+        "entity_class": "project"
+      },
+      {
+        "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+        "label": "Метеостанция МС-1",
+        "entity_class": "artifact"
+      }
+    ],
+    "sources": [
+      {
+        "object": "0193b7c2-5e1a-7d40-9f2e-0000000000a1",
+        "object_name": "Руководство_МС-1.pdf",
+        "object_kind": "file",
+        "media_type": "application/pdf",
+        "object_version": 2,
+        "selectors": [
+          {
+            "type": "page",
+            "value": "2",
+            "label": "12"
+          }
+        ],
+        "quote": "Погрешность ±2 % в диапазоне от 10 до 90 %, вне его погрешность не нормируется.",
+        "role": "primary",
+        "verdict": "fuzzy"
+      },
+      {
+        "object": "0193b7c2-5e1a-7d40-9f2e-0000000000a2",
+        "object_name": "Наблюдения_ноябрь.xlsx",
+        "object_kind": "file",
+        "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "object_version": 1,
+        "selectors": [
+          {
+            "type": "sheet",
+            "value": "В-2"
+          },
+          {
+            "type": "range",
+            "value": "B4:C9"
+          }
+        ],
+        "role": "secondary",
+        "verdict": "by_locator"
+      }
+    ],
+    "open_items": [],
+    "usefulness": null
+  },
+  "atm:0193b7c2-5e1a-7d40-9f2e-00000000001e": {
+    "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001e",
+    "target": "atom",
+    "revision": 1,
+    "payload": {
+      "kind": "note",
+      "label": {
+        "ru": "Проверить крепление мачты после ветра"
+      },
+      "summary_plain": {
+        "ru": "После порывов больше 15 м/с подтянуть хомуты мачты М-2 и проверить отвес."
+      },
+      "body": {
+        "ru": "Хомуты — **верхний и средний**. Отвес не больше *2°*.\n\n> Записал после бури 3 ноября."
+      },
+      "about": ["ent:0193b7c2-5e1a-7d40-9f2e-000000000005"],
+      "basis": "author"
+    },
+    "status": "draft",
+    "review_state": "none",
+    "recorded_at": "2026-11-04T17:02:00Z",
+    "agent": "person:anna",
+    "folder": null,
+    "about": [
+      {
+        "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000005",
+        "label": "Мачта М-2",
+        "entity_class": "artifact"
+      }
+    ],
+    "ancestors": [
+      {
+        "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000008",
+        "label": "Метеоплощадка",
+        "entity_class": "project"
+      },
+      {
+        "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+        "label": "Метеостанция МС-1",
+        "entity_class": "artifact"
+      }
+    ],
+    "sources": [],
+    "open_items": [],
+    "usefulness": null
+  },
+  "atm:0193b7c2-5e1a-7d40-9f2e-000000000014": {
+    "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000014",
+    "target": "atom",
+    "revision": 1,
+    "payload": {
+      "kind": "term",
+      "label": {
+        "ru": "Точка росы"
+      },
+      "summary_plain": {
+        "ru": "Температура, до которой надо охладить воздух, чтобы пар начал конденсироваться."
+      },
+      "body": {
+        "ru": "Приближение Магнуса: $T_d = \\frac{b\\gamma}{a-\\gamma}$, где $a = 17{,}62$, $b = 243{,}12$ °C."
+      },
+      "about": ["ent:0193b7c2-5e1a-7d40-9f2e-000000000003"]
+    },
+    "status": "verified",
+    "review_state": "none",
+    "recorded_at": "2026-11-05T10:12:00Z",
+    "agent": "model:extractor",
+    "folder": "Ресурсы/Методики и термины",
+    "about": [
+      {
+        "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+        "label": "Датчик влажности В-2",
+        "entity_class": "artifact"
+      }
+    ],
+    "ancestors": [
+      {
+        "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000008",
+        "label": "Метеоплощадка",
+        "entity_class": "project"
+      },
+      {
+        "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+        "label": "Метеостанция МС-1",
+        "entity_class": "artifact"
+      }
+    ],
+    "sources": [
+      {
+        "object": "0193b7c2-5e1a-7d40-9f2e-0000000000a1",
+        "object_name": "Руководство_МС-1.pdf",
+        "object_kind": "file",
+        "media_type": "application/pdf",
+        "object_version": 2,
+        "selectors": [],
+        "role": "secondary",
+        "verdict": "external"
+      }
+    ],
+    "open_items": [],
+    "usefulness": null
+  },
+  "ent:0193b7c2-5e1a-7d40-9f2e-000000000003": {
+    "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+    "target": "entity",
+    "revision": 1,
+    "payload": {
+      "entity_class": "artifact",
+      "label": {
+        "ru": "Датчик влажности В-2"
+      },
+      "codes": ["В-2"],
+      "description": {
+        "ru": "Ёмкостный датчик относительной влажности в составе МС-1."
+      }
+    },
+    "status": "verified",
+    "review_state": "none",
+    "recorded_at": "2026-11-05T10:12:00Z",
+    "agent": "model:extractor",
+    "folder": "Проекты/Метеоплощадка",
+    "about": [],
+    "ancestors": [
+      {
+        "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000008",
+        "label": "Метеоплощадка",
+        "entity_class": "project"
+      },
+      {
+        "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+        "label": "Метеостанция МС-1",
+        "entity_class": "artifact"
+      }
+    ],
+    "sources": [],
+    "open_items": [],
+    "usefulness": null
+  },
+  "atm:0193b7c2-5e1a-7d40-9f2e-000000000020": {
+    "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000020",
+    "target": "atom",
+    "revision": 1,
+    "payload": {
+      "kind": "note",
+      "label": {
+        "ru": "Руководство МС-1 — о чём файл"
+      },
+      "summary_plain": {
+        "ru": "Руководство по эксплуатации метеостанции: комплект, датчики, монтаж и обслуживание."
+      },
+      "body": {
+        "ru": "Главное для нас — раздел **4.2** с диапазонами и погрешностями датчиков. Монтаж и обслуживание ещё не разобраны."
+      },
+      "about": ["0193b7c2-5e1a-7d40-9f2e-0000000000a1"]
+    },
+    "status": "verified",
+    "review_state": "none",
+    "recorded_at": "2026-11-05T10:12:00Z",
+    "agent": "person:anna",
+    "folder": "Ресурсы/Источники",
+    "about": [],
+    "ancestors": [],
+    "sources": [],
+    "open_items": [],
+    "usefulness": null
+  }
+}

@@ -643,6 +643,10 @@ export interface components {
             recorded_at: string;
             agent: string;
             folder?: string | null;
+            /** @description payload.about с подписями и классами — для строки пути и свойств */
+            about?: components["schemas"]["RefLabel"][];
+            /** @description Цепочка part_of первой сущности about, от корня */
+            ancestors?: components["schemas"]["RefLabel"][];
             sources: components["schemas"]["SourceView"][];
             open_items: components["schemas"]["ReviewItem"][];
             usefulness?: number | null;
