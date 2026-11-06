@@ -66,6 +66,8 @@ def test_check_accepts_path():
     assert folders.check("я" * 100) == "я" * 100
     eight = "/".join("abcdefgh")
     assert folders.check(eight) == eight
+    assert folders.check("a-b/-c/d-") == "a-b/-c/d-"                         # «-» — только целым сегментом
+    assert folders.check("a\u200db/a\u200cb") == "a\u200db/a\u200cb"     # ZWJ и ZWNJ нужны письменностям
 
 
 def test_check_normalizes_nfc_and_trims_segments():
@@ -88,6 +90,13 @@ BAD_PATHS = {
     "9 уровней": "/".join("abcdefghi"),
     "путь «-»": "-",
     "путь «-» с пробелами": " - ",
+    "сегмент «-» первым": "-/x",
+    "сегмент «-» в середине": "a/ - /b",
+    "сегмент «-» последним": "a/-",
+    "пробел нулевой ширины": "\u200b",
+    "пробел нулевой ширины в конце": "Архив\u200b",
+    "смена направления письма": "a\u202eb",
+    "метка порядка байтов": "\ufeffАрхив",
 }
 
 
@@ -96,6 +105,21 @@ def test_check_rejects(case):
     with pytest.raises(FolderError) as e:
         folders.check(BAD_PATHS[case])
     assert code(e) == "invalid"
+
+
+def test_register_checks_every_parent(kb):
+    """Реестр не примет путь в обход check: «-» в родителе потом не удалить и не показать в контракте."""
+    for bad in ("-/x", "a/-/b", "a/\u200b/b"):
+        with pytest.raises(FolderError) as e:
+            with kb.transaction():
+                folders._register(kb, [bad], MODEL, datetime.now(timezone.utc))
+        assert code(e) == "invalid"
+    for call in (lambda: folders.create(kb, "-/x", agent=HUMAN), lambda: folders.move(kb, atom(kb), "a/-/b",
+                                                                                      agent=MODEL)):
+        with pytest.raises(FolderError) as e:
+            call()
+        assert code(e) == "invalid"
+    assert registry(kb) == DEFAULTS
 
 
 def test_check_rejects_non_string():
@@ -298,6 +322,42 @@ def test_rename_moves_subfolders_and_records(kb):
     assert kb.execute("SELECT count(*) FROM folder_log").fetchone()[0] == 6
 
 
+def test_rename_adds_no_revisions_or_changesets(kb):
+    refs = [atom(kb, f"Запись {i}") for i in range(3)] + [entity(kb, "zeta")]
+    for ref in refs:
+        folders.move(kb, ref, "a/x", agent=MODEL)
+    counts = "SELECT (SELECT count(*) FROM atom_revision), (SELECT count(*) FROM entity_revision), " \
+             "(SELECT count(*) FROM changeset), (SELECT count(*) FROM status_log)"
+    before = kb.execute(counts).fetchone()
+    assert folders.rename(kb, "a", "b", agent=HUMAN)["records"] == 4
+    assert kb.execute(counts).fetchone() == before
+    assert {folder_of(kb, ref) for ref in refs} == {"b/x"}
+
+
+def test_rename_of_large_folder_is_quick(kb):
+    """2 000 записей вперемешку (атомы и сущности): блокировки — конвейером по возрастанию id, остальное — пакетно."""
+    folders.create(kb, "Большая/Внутри", agent=HUMAN)
+    atom_ids, entity_ids = [], []
+    for i in range(2000):
+        (atom_ids if i % 3 else entity_ids).append(ids.uuid7())
+    kb.execute("INSERT INTO atom (id, kind, status, created_at, status_changed_at, folder) "
+               "SELECT unnest(%s::uuid[]), 'fact', 'draft', now(), now(), 'Большая/Внутри'", (atom_ids,))
+    kb.execute("INSERT INTO entity (id, entity_class, status, created_at, status_changed_at, folder) "
+               "SELECT unnest(%s::uuid[]), 'project', 'draft', now(), now(), 'Большая'", (entity_ids,))
+    started = time.monotonic()
+    result = folders.rename(kb, "Большая", "Архив/Большая", agent=HUMAN)
+    elapsed = time.monotonic() - started
+    assert result == {"from": "Большая", "to": "Архив/Большая", "folders": 2, "records": 2000}
+    assert elapsed < 5, f"переименование 2 000 записей заняло {elapsed:.1f} с"
+    placed = kb.execute("SELECT folder, count(*) FROM (SELECT folder FROM atom UNION ALL SELECT folder FROM entity) r "
+                        "GROUP BY folder").fetchall()
+    assert dict(placed) == {"Архив/Большая/Внутри": len(atom_ids), "Архив/Большая": len(entity_ids)}
+    logged = kb.execute("SELECT target, count(*), count(DISTINCT record_id), min(agent), max(agent) FROM folder_log "
+                        "GROUP BY target ORDER BY target").fetchall()
+    assert logged == [("atom", len(atom_ids), len(atom_ids), HUMAN, HUMAN),
+                      ("entity", len(entity_ids), len(entity_ids), HUMAN, HUMAN)]
+
+
 def test_rename_refuses_taken_path_descendant_and_missing(kb):
     folders.create(kb, "a/x", agent=HUMAN)
     ref = atom(kb)
@@ -346,7 +406,7 @@ def test_tree_of_new_base_has_four_empty_folders(kb):
 
 def test_tree_counts_nested_records_and_shows_empty(kb):
     folders.create(kb, "Ресурсы/Пусто", agent=HUMAN)
-    for name in ("Гамма", "бета", "Альфа"):
+    for name in ("Гамма", "Яблоко", "бета", "ель", "Альфа", "Ёлка", "Ель"):
         folders.create(kb, f"Проекты/{name}", agent=HUMAN)
     folders.move(kb, atom(kb, "один"), "Проекты", agent=MODEL)
     folders.move(kb, atom(kb, "два"), "Проекты/Альфа", agent=MODEL)
@@ -363,7 +423,8 @@ def test_tree_counts_nested_records_and_shows_empty(kb):
     assert _names(tree["folders"]) == ["Архив", "Вне", "Области", "Проекты", "Ресурсы"]
     projects = top["Проекты"]
     assert projects["count"] == 3
-    assert _names(projects["children"]) == ["Альфа", "бета", "Гамма"]
+    # по имени без учёта регистра, ё как е (как в поиске); при равенстве — как есть
+    assert _names(projects["children"]) == ["Альфа", "бета", "Гамма", "Ёлка", "Ель", "ель", "Яблоко"]
     alpha = projects["children"][0]
     assert (alpha["path"], alpha["count"]) == ("Проекты/Альфа", 2)
     assert alpha["children"] == [{"path": "Проекты/Альфа/Узлы", "name": "Узлы", "count": 1, "children": []}]
@@ -415,6 +476,11 @@ def test_what_changed_has_folder_events(kb):
     assert [e["id"] for e in whole if e["type"] == "folder"] == [e["id"] for e in events]
     assert not [e for e in recipes.what_changed(kb, ref=atom(kb, "Другая"))["events"] if e["type"] == "folder"]
     json.dumps(whole)
+    second = datetime.fromisoformat(events[1]["at"])
+    before = recipes.what_changed(kb, ref=ref, until=second)["events"]
+    assert [e["id"] for e in before if e["type"] == "folder"] == [events[0]["id"]]        # until — не включая
+    after = recipes.what_changed(kb, ref=ref, since=second)["events"]
+    assert [e["id"] for e in after if e["type"] == "folder"] == [events[1]["id"]]
 
 
 # --- таблицы ---
@@ -439,6 +505,29 @@ def test_folder_columns_refuse_empty_and_too_long(kb, table, value):
         sql, params = f"UPDATE {table} SET folder = %s WHERE id = %s", (value, ref[4:])
     with pytest.raises(psycopg.errors.CheckViolation):
         kb.execute(sql, params)
+
+
+def test_folder_columns_compare_as_is(kb):
+    """COLLATE "C": сравнение «как есть», и префикс starts_with идёт по индексу при любой локали базы."""
+    rows = kb.execute("SELECT table_name, column_name, collation_name FROM information_schema.columns "
+                      "WHERE table_schema = current_schema() AND column_name IN ('folder', 'path', 'folder_from', "
+                      "'folder_to') AND table_name IN ('atom', 'entity', 'folder', 'folder_log')").fetchall()
+    assert {(t, c): coll for t, c, coll in rows} == {
+        ("atom", "folder"): "C", ("entity", "folder"): "C", ("folder", "path"): "C",
+        ("folder_log", "folder_from"): "C", ("folder_log", "folder_to"): "C"}
+
+
+@pytest.mark.parametrize("table, column", [("atom", "folder"), ("entity", "folder"), ("folder", "path")])
+def test_prefix_query_can_use_index(kb, table, column):
+    kb.execute("SET enable_seqscan = off")
+    try:
+        plan = "\n".join(r[0] for r in kb.execute(
+            f"EXPLAIN SELECT 1 FROM {table} WHERE {column} = %(p)s OR starts_with({column}, %(p)s || '/')",
+            {"p": "Проекты"}))
+    finally:
+        kb.execute("RESET enable_seqscan")
+    # префикс — диапазоном по индексу; без COLLATE "C" вышел бы полный проход индекса с фильтром
+    assert "Seq Scan" not in plan and f"Index Cond: (({column} >= 'Проекты/'::text)" in plan, plan
 
 
 def test_folder_log_refuses_move_to_same_folder(kb):

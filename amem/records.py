@@ -148,17 +148,42 @@ def new_changeset(conn, *, agent: str, reason: str | None, at: datetime | None =
                           at=at or _now())
 
 
-def _lock(conn, target: Target, record_id: uuid.UUID) -> datetime:
-    """Заблокировать запись до конца транзакции; вернуть время её последнего изменения — новое не раньше его.
+def _last_change_sql(target: Target) -> str:
+    """Время последнего изменения записей вида target из массива %(ids)s: статус, ревизия, решение проверки,
+    перенос в папку (folder_log, amem/folders.py). Новое изменение — не раньше его."""
+    return (f"SELECT greatest(max(r.status_changed_at), "
+            f"(SELECT max(greatest(recorded_at, reviewed_at)) FROM {target}_revision "
+            f"WHERE {target}_id = ANY(%(ids)s::uuid[])), "
+            f"(SELECT max(changed_at) FROM folder_log WHERE target = '{target}' AND record_id = ANY(%(ids)s::uuid[]))) "
+            f"FROM {target} r WHERE r.id = ANY(%(ids)s::uuid[])")
 
-    Изменение — ревизия, решение проверки, статус и перенос в папку (folder_log, amem/folders.py)."""
+
+def _lock(conn, target: Target, record_id: uuid.UUID) -> datetime:
+    """Заблокировать запись до конца транзакции; вернуть время её последнего изменения — новое не раньше его."""
     if conn.execute(f"SELECT 1 FROM {target} WHERE id = %s FOR NO KEY UPDATE", (record_id,)).fetchone() is None:
         raise RecordError(f"{PREFIX[target]}:{record_id}: такой записи нет")
     # отдельным запросом, после блокировки: он видит и то, что записал писатель, которого ждали
-    return conn.execute(
-        f"SELECT greatest(status_changed_at, (SELECT max(greatest(recorded_at, reviewed_at)) FROM {target}_revision "
-        f"WHERE {target}_id = %(id)s), (SELECT max(changed_at) FROM folder_log WHERE record_id = %(id)s "
-        f"AND target = '{target}')) FROM {target} WHERE id = %(id)s", {"id": record_id}).fetchone()[0]
+    return conn.execute(_last_change_sql(target), {"ids": [record_id]}).fetchone()[0]
+
+
+def _lock_many(conn, pairs: Sequence[tuple[Target, uuid.UUID]]) -> datetime | None:
+    """Как _lock для многих записей: блокировки — одним проходом конвейера (pipeline), в порядке pairs, затем время
+    последнего изменения среди них (None — записей нет). Порядок задаёт вызывающий — по возрастанию id, как в commit:
+    тогда с пакетами по тем же записям тупика нет."""
+    if not pairs:
+        return None
+    with conn.pipeline():
+        locked = [conn.execute(f"SELECT 1 FROM {target} WHERE id = %s FOR NO KEY UPDATE", (record_id,))
+                  for target, record_id in pairs]
+    for (target, record_id), cur in zip(pairs, locked):
+        if cur.fetchone() is None:
+            raise RecordError(f"{PREFIX[target]}:{record_id}: такой записи нет")
+    marks = []
+    for target in PREFIX:
+        chosen = [record_id for t, record_id in pairs if t == target]
+        if chosen:
+            marks.append(conn.execute(_last_change_sql(target), {"ids": chosen}).fetchone()[0])
+    return max(marks)
 
 
 def resolve_ref(conn: psycopg.Connection, ref: str, refs: dict[str, str]) -> str:
