@@ -643,6 +643,73 @@
       "title": "Bundle",
       "type": "object"
     },
+    "BundleManifest": {
+      "additionalProperties": false,
+      "description": "Манифест подборки amem.bundle/1 (bundle.export, файл manifest.json): откуда и что отобрано, пакеты, состав и sha256 каждого файла подборки (parts). Пишется последним; bundle.inspect сверяет части без базы.",
+      "properties": {
+        "agent": {
+          "pattern": "^(person|model):[a-z0-9_.-]+$",
+          "type": "string"
+        },
+        "amem_version": {
+          "type": "string"
+        },
+        "base_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "counts": {
+          "$ref": "#/$defs/Any"
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "format": {
+          "pattern": "^amem\\.bundle/1$",
+          "type": "string"
+        },
+        "packs": {
+          "description": "Пакеты, которым принадлежат коды записей, с зависимостями — name, version, digest, requires.",
+          "items": {
+            "$ref": "#/$defs/Any"
+          },
+          "type": "array"
+        },
+        "parts": {
+          "$ref": "#/$defs/Any",
+          "description": "Путь файла в подборке → sha256 (hex); все файлы, кроме самого манифеста."
+        },
+        "selection": {
+          "$ref": "#/$defs/Any"
+        },
+        "with_files": {
+          "type": "boolean"
+        },
+        "with_history": {
+          "type": "boolean"
+        },
+        "with_packs": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "format",
+        "created_at",
+        "base_id",
+        "agent",
+        "amem_version",
+        "selection",
+        "packs",
+        "counts",
+        "parts",
+        "with_files",
+        "with_history",
+        "with_packs"
+      ],
+      "title": "BundleManifest",
+      "type": "object"
+    },
     "Card": {
       "additionalProperties": false,
       "description": "Карточка сущности amem.card/1 (profile.card): поля профиля её класса, величины вне профиля (extra), сводка и карточки предков по part_of. Вычисляется, не хранится.",
