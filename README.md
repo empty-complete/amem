@@ -73,15 +73,18 @@ always goes to a human.
 
 The review queue lives in `amem.review`. `claim(conn, agent=…)` hands out the oldest items the agent
 may decide, with a lease (15 minutes by default) so that parallel reviewers never take the same
-item; `release` gives an item back. `resolve(conn, item_id, outcome, agent=…)` records a verdict and
-applies it: a model (`model:…`) decides only `semantic`, never for its own batch, and gives a
-`confidence` (`confirmed` at 0.8 or more makes an atom `auto_verified`, anything else sends it to a
-human as `semantic_doubt`); a human (`person:…`) decides everything with `confirmed` or `refuted`,
-which makes the record `verified` or `rejected` and closes its other open items (except
-`source_changed`). `enqueue` lets a human put a record into the queue by hand (`calibration`,
-`audit`), `stats` reports queue sizes, decision times, rejected batches and audit results. When a
-file gets a new version (`objects.ingest`), every record citing an older version gets a
-`source_changed` item.
+item; `release` gives an item back, `items` lists items for interfaces. `resolve(conn, item_id,
+outcome, agent=…)` records a verdict and applies it, also without a prior claim. A model (`model:…`)
+decides only `semantic`, never for its own batch, and gives a `confidence`: `confirmed` at 0.8 or
+more makes an atom `auto_verified`, anything else sends it to a human as `semantic_doubt`; the
+status changes only while the atom is still `draft`, otherwise just the verdict is recorded. A human
+(`person:…`) decides everything with `confirmed` or `refuted`: the record becomes `verified` or
+`rejected` and its other open items (except `source_changed`) are closed; for `edit` the edit is
+accepted or declined and the record stays `verified`. `enqueue` lets a human put a record into the
+queue by hand (`calibration`, `audit`), `stats` reports queue sizes, decision times, rejected
+batches and audit results. When a file gets a new version (`objects.ingest`), the current and
+pending revisions citing an older version get a `source_changed` item; `rejected`, `deprecated` and
+`superseded` records are skipped.
 
 ## Backup
 
