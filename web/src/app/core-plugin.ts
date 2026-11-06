@@ -29,6 +29,12 @@ export const corePlugin: Plugin = {
       run: ({ navigate }) => navigate("/review"),
     },
     {
+      id: "amem.changes",
+      title: { ru: "Открыть изменения", en: "Open changes" },
+      keys: "G C",
+      run: ({ navigate }) => navigate("/changes"),
+    },
+    {
       id: "amem.settings",
       title: { ru: "Настройки", en: "Settings" },
       keys: "⌘,",

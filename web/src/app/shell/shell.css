@@ -18,6 +18,9 @@
   color: var(--foreground);
   text-decoration: none;
 }
+.bar__searchwrap {
+  display: contents;
+}
 .bar__search {
   display: flex;
   align-items: center;
