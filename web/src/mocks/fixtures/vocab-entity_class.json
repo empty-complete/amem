@@ -1,0 +1,83 @@
+[
+  {
+    "code": "project",
+    "label": {
+      "ru": "Проект",
+      "en": "Project"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "document",
+    "label": {
+      "ru": "Документ",
+      "en": "Document"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "edition",
+    "label": {
+      "ru": "Редакция",
+      "en": "Edition"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "organization",
+    "label": {
+      "ru": "Организация",
+      "en": "Organization"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "person",
+    "label": {
+      "ru": "Человек",
+      "en": "Person"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "place",
+    "label": {
+      "ru": "Место",
+      "en": "Place"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "software",
+    "label": {
+      "ru": "Программа",
+      "en": "Software"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "topic",
+    "label": {
+      "ru": "Тема",
+      "en": "Topic"
+    },
+    "pack": "core",
+    "broader": null
+  },
+  {
+    "code": "artifact",
+    "label": {
+      "ru": "Изделие",
+      "en": "Artifact"
+    },
+    "pack": "core",
+    "broader": null
+  }
+]

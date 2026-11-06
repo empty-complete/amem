@@ -1,0 +1,22 @@
+{
+  "base_id": "0193b000-0000-7000-8000-000000000001",
+  "name": "Метеоплощадка (образец)",
+  "amem_version": "0.1.0.dev0",
+  "packs": [
+    {
+      "name": "core",
+      "version": "1.2.0",
+      "digest": "sha256-c1:core"
+    },
+    {
+      "name": "meteo",
+      "version": "1.0.0",
+      "digest": "sha256-c1:meteo"
+    }
+  ],
+  "counts": {
+    "atoms": 23,
+    "entities": 8
+  },
+  "review_open": 3
+}

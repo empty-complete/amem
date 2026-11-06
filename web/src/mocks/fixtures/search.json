@@ -1,0 +1,111 @@
+{
+  "recipe": "exact_fact",
+  "ranking_version": "rrf-1",
+  "channels": {
+    "used": ["code_exact", "fts", "vector"],
+    "skipped": [],
+    "reasons": {}
+  },
+  "semantic": "used",
+  "candidate_count": 4,
+  "embedding_coverage": 1.0,
+  "items": [
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+      "revision": 1,
+      "label": "Погрешность влажности В-2: ±2 %",
+      "snippet": "Погрешность влажности В-2: ±2 %. Руководство по эксплуатации МС-1, раздел 4.2.",
+      "status": "needs_review",
+      "review_state": "pending",
+      "kind": "parameter",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+          "label": "Датчик влажности В-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "score": 0.95,
+      "matches": [
+        {
+          "channel": "code_exact",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000a",
+      "revision": 2,
+      "label": "Погрешность температуры Т-1: ±0,3 °C",
+      "snippet": "Погрешность температуры Т-1: ±0,3 °C. Руководство по эксплуатации МС-1, раздел 4.2.",
+      "status": "verified",
+      "review_state": "none",
+      "kind": "parameter",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000002",
+          "label": "Датчик температуры Т-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "score": 0.61,
+      "matches": [
+        {
+          "channel": "fts",
+          "rank": 1
+        },
+        {
+          "channel": "vector",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000013",
+      "revision": 2,
+      "label": "Погрешность температуры не хуже ±0,5 °C",
+      "snippet": "Погрешность температуры не хуже ±0,5 °C. Руководство по эксплуатации МС-1, раздел 4.2.",
+      "status": "verified",
+      "review_state": "none",
+      "kind": "requirement",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000008",
+          "label": "Метеоплощадка",
+          "entity_class": "artifact"
+        }
+      ],
+      "score": 0.44,
+      "matches": [
+        {
+          "channel": "fts",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000016",
+      "revision": 2,
+      "label": "В-2 завышает влажность при обмерзании",
+      "snippet": "В-2 завышает влажность при обмерзании. Руководство по эксплуатации МС-1, раздел 4.2.",
+      "status": "verified",
+      "review_state": "none",
+      "kind": "lesson",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+          "label": "Датчик влажности В-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "score": 0.31,
+      "matches": [
+        {
+          "channel": "vector",
+          "rank": 1
+        }
+      ]
+    }
+  ],
+  "retrieval_id": "00000000-0000-0000-0000-000000000007"
+}
