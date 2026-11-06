@@ -17,7 +17,7 @@ function Sub({ f }: { f: CardField }) {
   if (f.state === "conflict") return <>{t("card.waits")}</>;
   if (f.state === "asked" && f.ask) return <>{t("card.you_asked", { ask: f.ask })}</>;
   if (f.state === "missing" && f.hint) return <>{t("card.where", { hint: f.hint })}</>;
-  return src ? <>{src}</> : null;
+  return src ? src : null;
 }
 
 function Value({ f, open, toggle }: { f: CardField; open: boolean; toggle: () => void }) {
