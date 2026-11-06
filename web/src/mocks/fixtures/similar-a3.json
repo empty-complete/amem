@@ -1,0 +1,77 @@
+{
+  "recipe": "similar",
+  "semantic": "used",
+  "candidate_count": 3,
+  "retrieval_id": null,
+  "items": [
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001d",
+      "revision": 1,
+      "label": "Диапазон влажности В-2: 0…100 %",
+      "snippet": "Диапазон влажности В-2: 0…100 %",
+      "status": "verified",
+      "review_state": "none",
+      "kind": "parameter",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+          "label": "Датчик влажности В-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "score": 0.81,
+      "matches": [
+        {
+          "channel": "semantic",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000a",
+      "revision": 1,
+      "label": "Погрешность температуры Т-1: ±0,3 °C",
+      "snippet": "Погрешность температуры Т-1: ±0,3 °C",
+      "status": "verified",
+      "review_state": "none",
+      "kind": "parameter",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000002",
+          "label": "Датчик температуры Т-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "score": 0.74,
+      "matches": [
+        {
+          "channel": "semantic",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000016",
+      "revision": 1,
+      "label": "В-2 завышает влажность при обмерзании",
+      "snippet": "В-2 завышает влажность при обмерзании",
+      "status": "verified",
+      "review_state": "none",
+      "kind": "lesson",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+          "label": "Датчик влажности В-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "score": 0.69,
+      "matches": [
+        {
+          "channel": "semantic",
+          "rank": 1
+        }
+      ]
+    }
+  ]
+}

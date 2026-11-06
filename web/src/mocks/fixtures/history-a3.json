@@ -1,0 +1,36 @@
+{
+  "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+  "since": null,
+  "until": null,
+  "events": [
+    {
+      "type": "status",
+      "id": "ev-5",
+      "at": "2026-11-06T19:40:00Z",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+      "label": "Погрешность влажности В-2: ±2 %",
+      "agent": "model:checker",
+      "status": "needs_review"
+    },
+    {
+      "type": "link_retired",
+      "id": "ev-6",
+      "at": "2026-11-06T12:00:00Z",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+      "label": "Погрешность влажности В-2: ±2 %",
+      "agent": "model:linker",
+      "rel": "see_also",
+      "src": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+      "dst": "atm:0193b7c2-5e1a-7d40-9f2e-000000000014"
+    },
+    {
+      "type": "revision",
+      "id": "ev-8",
+      "at": "2026-11-04T08:30:00Z",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+      "label": "Погрешность влажности В-2: ±2 %",
+      "agent": "model:extractor",
+      "revision": 1
+    }
+  ]
+}

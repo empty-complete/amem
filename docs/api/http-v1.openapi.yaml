@@ -657,6 +657,8 @@ components:
         recorded_at: { type: string, format: date-time }
         agent: { type: string }
         folder: { type: [string, "null"] }
+        about: { type: array, items: { $ref: "#/components/schemas/RefLabel" }, description: "payload.about с подписями и классами — для строки пути и свойств" }
+        ancestors: { type: array, items: { $ref: "#/components/schemas/RefLabel" }, description: "Цепочка part_of первой сущности about, от корня" }
         sources: { type: array, items: { $ref: "#/components/schemas/SourceView" } }
         open_items: { type: array, items: { $ref: "#/components/schemas/ReviewItem" } }
         usefulness: { type: [number, "null"] }

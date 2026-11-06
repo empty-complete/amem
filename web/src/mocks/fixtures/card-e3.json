@@ -1,0 +1,126 @@
+{
+  "format": "amem.card/1",
+  "entity": {
+    "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+    "label": "Датчик влажности В-2",
+    "entity_class": "artifact"
+  },
+  "profile": "sensor",
+  "templates": ["sensor"],
+  "ancestors": [
+    {
+      "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000008",
+      "label": "Метеоплощадка",
+      "entity_class": "project"
+    },
+    {
+      "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+      "label": "Метеостанция МС-1",
+      "entity_class": "artifact"
+    }
+  ],
+  "fields": [
+    {
+      "property": "range",
+      "label": "Диапазон",
+      "required": true,
+      "group": "Измерение",
+      "state": "known",
+      "value": {
+        "lower_bound": 0,
+        "upper_bound": 100,
+        "unit": "%"
+      },
+      "atoms": ["atm:0193b7c2-5e1a-7d40-9f2e-00000000001d"],
+      "by": "model",
+      "status": "verified",
+      "sources": [
+        {
+          "object": "0193b7c2-5e1a-7d40-9f2e-0000000000a1",
+          "label": "Руководство МС-1, с. 12"
+        }
+      ]
+    },
+    {
+      "property": "error",
+      "label": "Погрешность",
+      "required": true,
+      "group": "Измерение",
+      "state": "conflict",
+      "atoms": ["atm:0193b7c2-5e1a-7d40-9f2e-00000000000b", "atm:0193b7c2-5e1a-7d40-9f2e-000000000016"],
+      "candidates": [
+        {
+          "value": {
+            "value_text": "±2",
+            "unit": "%"
+          },
+          "atom": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+          "quote": "Погрешность ±2 % в диапазоне от 10 до 90 %",
+          "source": "Руководство МС-1, с. 12"
+        },
+        {
+          "value": {
+            "value_text": "до 12",
+            "unit": "%"
+          },
+          "atom": "atm:0193b7c2-5e1a-7d40-9f2e-000000000016",
+          "quote": "расхождение до 12 % при инее",
+          "source": "Наблюдения, ноябрь, B4:C9"
+        }
+      ]
+    },
+    {
+      "property": "operating_temperature",
+      "label": "Рабочая температура",
+      "required": true,
+      "group": "Условия",
+      "state": "missing",
+      "hint": "паспорт датчика, раздел «Условия эксплуатации»"
+    },
+    {
+      "property": "heating",
+      "label": "Обогрев",
+      "required": false,
+      "group": "Условия",
+      "state": "asked",
+      "ask": "Нужен ли обогрев В-2 зимой?",
+      "atoms": ["atm:0193b7c2-5e1a-7d40-9f2e-000000000018"]
+    },
+    {
+      "property": "ip",
+      "label": "Степень защиты",
+      "required": false,
+      "group": "Условия",
+      "state": "known",
+      "value": {
+        "value_text": "IP65"
+      },
+      "atoms": ["atm:0193b7c2-5e1a-7d40-9f2e-000000000010"],
+      "inherited_from": "Метеостанция МС-1"
+    },
+    {
+      "property": "pressure_response",
+      "label": "Отклик на давление",
+      "required": false,
+      "group": "Измерение",
+      "state": "na"
+    },
+    {
+      "property": "poll_interval",
+      "label": "Интервал опроса",
+      "required": false,
+      "group": "Опрос",
+      "state": "missing",
+      "default": {
+        "amount": 60,
+        "unit": "s"
+      },
+      "basis": "default"
+    }
+  ],
+  "extra": [],
+  "summary": {
+    "known": 2,
+    "total": 7
+  }
+}
