@@ -12,6 +12,7 @@ type Sel = { type: string; value?: unknown; label?: string };
 type Src = { object?: string; object_version?: number; selectors?: Sel[]; quote?: string | null };
 type Value = { property?: string; amount?: number; value_text?: string; unit?: string; value_state?: string };
 type Payload = {
+  ref?: string;
   kind?: string;
   entity_class?: string;
   label?: L;
@@ -166,7 +167,7 @@ function write(proposals: Proposal[], links: LinkP[]) {
       };
     }
     const ref = newId(p.target === "entity" ? "ent" : "atm");
-    temp.set(`@${proposals.indexOf(p)}`, ref);
+    if (p.payload.ref) temp.set(String(p.payload.ref), ref);
     const about = (p.payload.about ?? []).map((r) => ({ ref: r, label: labelOf(r) }));
     const folder = p.payload.scope?.folder ?? null;
     db.views[ref] = {

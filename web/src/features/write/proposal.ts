@@ -59,6 +59,8 @@ export const emptyDraft = (kind = "note", target: "atom" | "entity" = "atom"): D
 });
 
 const ls = (ru: string) => ({ ru });
+/** Имя новой записи внутри пакета (`@[a-z0-9_]+`). */
+export const NEW_REF = "@n0";
 const WIKI = /\[\[([^\]\n]+)\]\]/g;
 const propIn = (path: string) => path.match(/\[property=([^\]]+)\]/)?.[1] ?? null;
 
@@ -151,7 +153,10 @@ export function toProposal(
   if (d.derived_from?.length) payload.derived_from = d.derived_from;
   if (d.folder !== undefined)
     payload.scope = { ...((payload.scope as object) ?? {}), folder: d.folder ?? undefined };
-  const src = opts.recordId ?? "@0";
+  // новой записи — имя в пакете: связи ссылаются на него, проверка ищет его в payload.ref
+  if (!opts.recordId) payload.ref = NEW_REF;
+  else delete payload.ref;
+  const src = opts.recordId ?? NEW_REF;
   const links = [...d.body.matchAll(WIKI)]
     .map((m) => opts.resolve?.(m[1] as string))
     .filter((x): x is string => !!x)
