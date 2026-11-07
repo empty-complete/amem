@@ -100,6 +100,30 @@ export const q = {
         ),
       staleTime: Infinity,
     }),
+  templates: (target?: "atom" | "entity") =>
+    queryOptions({
+      queryKey: ["templates", target ?? "all"],
+      queryFn: async () => data(await api.GET("/templates", { params: { query: { target } } })),
+      staleTime: 5 * 60_000,
+    }),
+  pick: (target: "atom" | "entity", text: string) =>
+    queryOptions({
+      queryKey: ["pick", target, text],
+      queryFn: async () =>
+        data(await api.GET("/search", { params: { query: { q: text || "*", target, limit: 8 } } })),
+      staleTime: 30_000,
+    }),
+  objects: (text: string) =>
+    queryOptions({
+      queryKey: ["objects", text],
+      queryFn: async () =>
+        data(await api.GET("/objects", { params: { query: { q: text || undefined, limit: 20 } } })),
+    }),
+  tasks: (object: string) =>
+    queryOptions({
+      queryKey: ["tasks", object],
+      queryFn: async () => data(await api.GET("/tasks", { params: { query: { object } } })),
+    }),
   graph: (p: { ref?: string; depth: number; project?: string; limit?: number }) =>
     queryOptions({
       queryKey: ["graph", p],
