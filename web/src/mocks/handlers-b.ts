@@ -31,10 +31,16 @@ function freshEvents() {
 }
 
 /** Сводка записи из её полного вида — для списков «о чём» (бриф источника, атомы объекта). */
+/** about=ent:… — записи о сущности; about=obj:<id> или голый id — записи, цитирующие объект (как в библиотеке). */
 function summaries(about: string) {
-  const fromA = records.items.filter((r) => r.about?.some((a) => a.ref === about));
+  const obj = about.startsWith("ent:") ? null : about.replace(/^obj:/, "");
+  const fromA = obj ? [] : records.items.filter((r) => r.about?.some((a) => a.ref === about));
   const fromB = Object.values(views)
-    .filter((v) => (v.payload as { about?: string[] }).about?.includes(about))
+    .filter((v) =>
+      obj
+        ? v.sources.some((s) => s.object === obj)
+        : (v.payload as { about?: string[] }).about?.includes(about),
+    )
     .filter((v) => !fromA.some((r) => r.ref === v.ref))
     .map((v) => ({
       ref: v.ref,

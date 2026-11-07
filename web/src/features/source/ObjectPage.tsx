@@ -56,8 +56,9 @@ export function unparsed(o: Obj, pageWord: (n: number) => string): string[] {
 }
 
 function Brief({ objectId }: { objectId: string }) {
-  const notes = useQuery(q.about(objectId));
-  const first = notes.data?.items[0];
+  const notes = useQuery(q.about(`obj:${objectId}`));
+  // бриф — заметка, которая ссылается на файл как на источник (about у атома ведёт только на сущности)
+  const first = notes.data?.items.find((r) => r.kind_or_class === "note");
   const rec = useQuery({ ...q.record(first?.ref ?? ""), enabled: !!first });
   const { t, i18n } = useTranslation();
   const p = rec.data?.payload as { summary_plain?: { ru: string }; body?: { ru: string } } | undefined;
