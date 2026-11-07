@@ -1,7 +1,7 @@
 /* Hallmark · v2.0.0 · shape: app screen · genre: modern-minimal · theme: custom (vibe: "calm apple grouped lists, a night sky of knowledge") · posture: full-palette · modes: light+dark · signature: the claim beside its source, the constellation beside the claim */
 /* critique: part A of the amem web UI: shell, folders, record list, search; the sweep runs per part */
 @import "tailwindcss";
-@import "@heroui/styles";
+@import "./heroui.css";
 @import "./theme.css";
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));

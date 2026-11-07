@@ -63,9 +63,9 @@
     "gzip": true
   },
   {
-    "name": "CSS приложения (все стили HeroUI; урезать в части G)",
+    "name": "CSS приложения (HeroUI — только используемые компоненты)",
     "path": ["python/amem_web/dist/assets/*.css", "!python/amem_web/dist/assets/katex-*.css"],
-    "limit": "58 kB",
+    "limit": "40 kB",
     "gzip": true
   }
 ]
