@@ -974,6 +974,7 @@ components:
         label: { type: object, properties: { ru: { type: string }, en: { type: string } } }
         pack: { type: string }
         broader: { type: [string, "null"] }
+        unit: { type: [string, "null"], description: "Только словарь property: единица UCUM по умолчанию" }
 
     Base:
       type: object

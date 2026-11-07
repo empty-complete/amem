@@ -32,8 +32,14 @@ import { setupI18n } from "../app/i18n";
 
 if (typeof document !== "undefined") await setupI18n("ru");
 
+import { db } from "../mocks/db";
+import { writeLog } from "../mocks/handlers-d";
 import { server } from "../mocks/node";
 
 beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  db.reset();
+  writeLog.length = 0;
+});
 afterAll(() => server.close());
