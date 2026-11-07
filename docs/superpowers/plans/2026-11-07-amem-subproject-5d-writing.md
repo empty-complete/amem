@@ -34,7 +34,7 @@
 
 **Ветка:** `subproject-5d-writing` от `main` после слияния части C (PR #20). Worktree: `~/projects/amem-web-d`.
 
-**Связь с подпроектом 4.** Папки (`POST/PATCH/DELETE /folders`, `FolderRenamed`) вносит в контракт служба своей веткой 4a. Если 4a ещё не в `main`, Task 7 берёт эти пути из её ветки. Остальные дополнения (Task 1) — этой веткой, со списком службе заранее. Библиотеке нужно:
+**Связь с подпроектом 4.** Папки (`POST/PATCH/DELETE /folders/{path}`, `PATCH /records/{ref}/folder`, `FolderRenamed`) и `/submit` (`Proposal`, `LinkProposal`) вносит в контракт служба своей веткой 4a; шаблоны, «Мои виды», объекты и задачи она реализует частью 4d. Если 4a ещё не в `main`, Task 7 берёт эти пути из её ветки. Остальные дополнения (Task 1, шаги 2–5) — этой веткой; со службой согласованы 07.11. Если 4a сольётся раньше — синхронизировать копию контракта в пакете службы (`amem/service/http-v1.openapi.yaml`). Библиотеке нужно:
 1. записывать шаблоны в пакет «Мои виды» (пакет в базе, не файл);
 2. хранить у шаблона блок `ui` (тело, виджеты, подписи и подсказки свойств);
 3. отдавать форму шаблона (`TemplateView.form`), выведенную из `FieldRule.path` и `parameters`.
@@ -79,18 +79,16 @@
 
 **Files:** Modify `docs/api/http-v1.openapi.yaml`, `docs/api/README.md`. Перед правкой — сообщение службе с перечнем.
 
-- [ ] **Step 1: `Proposal`.** У `/submit` `proposals.items` — `$ref: Proposal`:
-  - `target: atom|entity`, `payload: object`;
-  - `record_id: [string, "null"]` — есть: новая ревизия; нет: новая запись.
-
-  `links` — `items: LinkProposal` (`src`, `dst`, `rel`, `note`), где `src`/`dst` — `ref` или временное `@имя` из пакета. Ответ 422 — `Problem` с `issues` (`CheckIssue.path` — путь в теле предложения, `ref` — какое предложение).
+- [ ] **Step 1: `/submit` — не трогаем.** Схемы `Proposal` {target, payload, record_id|null}, `LinkProposal` {src, dst, rel, note, qualifiers, confidence} и 422 `check_rejected` (`issues[].path` — путь внутри предложения, `issues[].ref` — `@имя` или `proposals[i]`/`links[i]`; `private_removed` — в `warnings`) вносит служба веткой 4a (договорено 07.11). Веб берёт типы после её слияния; до того моки пишутся по этой форме.
 - [ ] **Step 2: Шаблоны.** `GET /templates?target=atom|entity` → `TemplateView[]`:
   - `code`, `pack`, `label`, `target`, `applies_to` (kind или класс), `description`;
   - `family: source|work|object`;
   - `form: FormField[]`;
   - `body: wanted|required|none`;
-  - `widgets: string[]`;
+  - `widgets: string[]` — из списка `sources | links | around | values_table | similar | children`;
   - `editable` (только пакет `mine`).
+
+  Служба выводит форму из `FieldRule.path` и `parameters`: подписи и подсказки — из словаря `property`, `unit` — из `FieldRule.ucum`, `accepts` — из `entity_classes` / `selector_types` / `rel`, `family` — из `Concept.family`. Блок `ui` шаблона (`{ body, widgets, fields: { <path>: { label, hint, type? } } }`) переопределяет подписи и задаёт тело и виджеты.
 
   У `FormField`:
   - `key` и `path` (путь в теле: `about`, `content.values[property=humidity_error]`, `valid_from`, `tags`, `basis`, `qualifiers[property=maturity]`);
@@ -102,8 +100,8 @@
   - `DELETE /packs/mine/templates/{code}` — `409`, если есть записи этого вида.
 - [ ] **Step 4: Объекты.**
   - `GET /objects?q=&limit=` → `ObjectView[]` (поиск по имени и пути).
-  - `POST /objects` (`multipart/form-data`: `file`, `path?`) → `201 ObjectView` (новый) или `200` (такой файл уже есть — по `digest`).
-- [ ] **Step 5: Задачи агентам.** `POST /tasks` `{ kind: "parse", object, version, note? }` → `202 { task_id }`. Служба ставит задачу; агенты видят её через MCP.
+  - `POST /objects` (`multipart/form-data`: `file`, `path?`) → `201 ObjectView` (новый объект или версия), `200` (тот же `digest`), `409` (по этому `path` уже другой файл), `413` (больше предела), `503` (нет папки документов). Служба кладёт файл в папку документов по `path`, без него — в «Загрузки/<имя>».
+- [ ] **Step 5: Задачи агентам.** `POST /tasks` `{ kind: "parse", object, version, note? }` → `202 { task_id }`; `GET /tasks?state=open|claimed|done|cancelled` → `TaskView[]` (`id`, `kind`, `object`, `version`, `note`, `state`, `created_by`, `claimed_by`, `claimed_until`). Агенты берут задачи через MCP (`amem_tasks`, `amem_task_claim`, `amem_task_done` — подпроект 4b).
 - [ ] **Step 6:** redocly lint, `npm run api:types` — чисто. **Commit** `api: Proposal и LinkProposal в /submit, шаблоны видов и «Мои виды», поиск и загрузка объектов, задачи агентам`.
 
 ### Task 2: Моки с состоянием
