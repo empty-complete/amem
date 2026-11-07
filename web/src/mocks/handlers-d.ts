@@ -142,9 +142,10 @@ function write(proposals: Proposal[], links: LinkP[]) {
       v.payload = p.payload as never;
       v.revision += 1;
       v.recorded_at = now;
+      v.status = "verified"; // запись человека по 3c — сразу проверена
       v.sources = sourceViews(p.payload) as never;
       const s = db.records.find((r) => r.ref === p.record_id);
-      if (s) Object.assign(s, { label, recorded_at: now });
+      if (s) Object.assign(s, { label, recorded_at: now, status: "verified" });
       db.events.push({
         type: "revision",
         id: newId("task"),
@@ -237,6 +238,37 @@ function write(proposals: Proposal[], links: LinkP[]) {
 
 /** Запись человека (часть D): /submit с правилами уровней 1–2 образца, шаблоны, объекты, задачи, папки. */
 export const handlersD = [
+  // поиск для выбора объекта или записи в правке: по подписи и кодам среди записей хранилища моков
+  http.get("/api/v1/search", ({ request }) => {
+    const u = new URL(request.url);
+    const target = u.searchParams.get("target");
+    if (!target) return; // обычный поиск — образец части A
+    const raw = (u.searchParams.get("q") ?? "").toLowerCase();
+    const q = raw === "*" ? "" : raw;
+    const items = db.records
+      .filter((r) => r.target === target && (!q || r.label.toLowerCase().includes(q)))
+      .slice(0, Number(u.searchParams.get("limit") ?? 8))
+      .map((r, i) => ({
+        ref: r.ref,
+        revision: 1,
+        label: r.label,
+        snippet: r.label,
+        status: r.status,
+        review_state: "none",
+        kind: r.target === "atom" ? r.kind_or_class : undefined,
+        entity_class: r.target === "entity" ? r.kind_or_class : undefined,
+        about: r.about ?? [],
+        score: 1 - i / 100,
+        matches: [{ channel: "label", rank: i + 1 }],
+      }));
+    return HttpResponse.json({
+      recipe: "exact_fact",
+      semantic: "used",
+      candidate_count: items.length,
+      items,
+      retrieval_id: null,
+    });
+  }),
   http.post("/api/v1/submit", async ({ request }) => {
     const body = (await request.json()) as { proposals: Proposal[]; links?: LinkP[] };
     writeLog.push("submit");
