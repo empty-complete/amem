@@ -1,0 +1,63 @@
+.basepage {
+  display: grid;
+  gap: var(--s-lg);
+}
+.basegrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: var(--s-lg);
+  align-items: start;
+}
+.basegrid table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-label);
+}
+.basegrid caption {
+  margin-bottom: var(--s-xs);
+  color: var(--muted);
+  font-weight: 500;
+  text-align: left;
+}
+.basegrid th,
+.basegrid td {
+  padding: var(--s-xs) var(--s-2xs);
+  border-bottom: 1px solid var(--separator);
+  text-align: left;
+  font-weight: 400;
+}
+.basegrid thead th {
+  color: var(--muted);
+  font-size: var(--t-meta);
+}
+.basegrid .n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.basegrid .mono,
+.basemeta .mono {
+  font-family: var(--mono);
+  font-size: var(--t-meta);
+  overflow-wrap: anywhere;
+}
+.basegrid tfoot td {
+  border-bottom: 0;
+}
+.basemeta {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--s-2xs) var(--s-md);
+  margin: 0;
+  font-size: var(--t-label);
+}
+.basemeta dt {
+  color: var(--muted);
+}
+.basemeta dd {
+  margin: 0;
+}
+.basegrid tfoot a {
+  display: block;
+  margin-top: var(--s-2xs);
+  color: var(--link);
+}

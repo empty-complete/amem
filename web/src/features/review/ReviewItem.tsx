@@ -1,0 +1,235 @@
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { errorText } from "../../api/errors";
+import { q } from "../../api/queries";
+import type { components } from "../../api/schema";
+import { agentName } from "../../ui/format";
+import { Icon } from "../../ui/icons";
+import { RegionState } from "../../ui/RegionState";
+import { StatusText } from "../../ui/StatusText";
+import { Body } from "../record/Body";
+import { text } from "../record/doc";
+import { Properties } from "../record/Properties";
+import { kindLabel, recordPath } from "../records/RecordList";
+import { Sky } from "../sky/Sky";
+import { SourcePanel } from "../source/SourcePanel";
+import { fieldDiff, wordDiff } from "./diff";
+import { REASON_ICON } from "./reasons";
+
+type View = components["schemas"]["ReviewItemView"];
+type Issue = { severity: "violation" | "warning" | "info"; message: string; path?: string };
+const SEV: Record<Issue["severity"], "bad" | "wait" | "quiet"> = {
+  violation: "bad",
+  warning: "wait",
+  info: "quiet",
+};
+
+function Diff({ v }: { v: View }) {
+  const { t, i18n } = useTranslation();
+  const cur = (v.current as { payload?: Record<string, unknown> } | null)?.payload ?? {};
+  const prop = v.proposed as { payload?: Record<string, unknown>; agent?: string } | null;
+  const changes = fieldDiff(cur, prop?.payload ?? {});
+  return (
+    <section className="widget" aria-label={t("review.diff")}>
+      <h2>
+        {t("review.diff")}
+        {prop?.agent && (
+          <span className="muted">
+            {" "}
+            · {t("review.diff_by", { who: agentName(prop.agent, i18n.language) })}
+          </span>
+        )}
+      </h2>
+      <dl className="diff">
+        {changes.map((c) => (
+          <div key={c.field}>
+            <dt>{t(`review.field.${c.field}`, { defaultValue: c.field })}</dt>
+            <dd>
+              {c.pieces.map((p, i) =>
+                p.op === "same" ? (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: куски сравнения неизменны и упорядочены
+                  <span key={i}>{p.text}</span>
+                ) : p.op === "del" ? (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: куски сравнения неизменны и упорядочены
+                  <del key={i}>{p.text}</del>
+                ) : (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: куски сравнения неизменны и упорядочены
+                  <ins key={i}>{p.text}</ins>
+                ),
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function Versions({ v }: { v: View }) {
+  const { t } = useTranslation();
+  const ver = v.versions as {
+    object_name?: string;
+    page?: string;
+    old: { version: number; text: string };
+    new: { version: number; text: string };
+  } | null;
+  if (!ver) return null;
+  const pieces = wordDiff(ver.old.text, ver.new.text);
+  return (
+    <section className="widget" aria-label={t("review.versions")}>
+      <h2>
+        {t("review.versions")}
+        {ver.object_name && (
+          <span className="muted">
+            {" "}
+            · {ver.object_name}
+            {ver.page ? `, ${t("source.page", { n: ver.page })}` : ""}
+          </span>
+        )}
+      </h2>
+      <div className="vers">
+        <figure>
+          <figcaption>{t("review.old", { n: ver.old.version })}</figcaption>
+          <blockquote className="quote diff">
+            {pieces
+              .filter((x) => x.op !== "add")
+              .map((x, i) =>
+                x.op === "del" ? (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: куски сравнения неизменны и упорядочены
+                  <del key={i}>{x.text}</del>
+                ) : (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: куски сравнения неизменны и упорядочены
+                  <span key={i}>{x.text}</span>
+                ),
+              )}
+          </blockquote>
+        </figure>
+        <figure>
+          <figcaption>{t("review.new", { n: ver.new.version })}</figcaption>
+          <blockquote className="quote diff">
+            {pieces
+              .filter((x) => x.op !== "del")
+              .map((x, i) =>
+                x.op === "add" ? (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: куски сравнения неизменны и упорядочены
+                  <ins key={i}>{x.text}</ins>
+                ) : (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: куски сравнения неизменны и упорядочены
+                  <span key={i}>{x.text}</span>
+                ),
+              )}
+          </blockquote>
+        </figure>
+      </div>
+    </section>
+  );
+}
+
+/** Пункт проверки (разд. 5.7): что спрошено, утверждение с источником, замечания, сравнение, версии, вердикт модели. */
+export function ReviewItemPane({ id, onBack }: { id: string; onBack?: () => void }) {
+  const { t, i18n } = useTranslation();
+  const v = useQuery(q.reviewItem(id));
+  const vocab = useQuery(q.vocab("kind"));
+  const [active, setActive] = useState(0);
+  if (v.isPending) return <RegionState state="loading" />;
+  if (v.isError)
+    return (
+      <RegionState
+        state="error"
+        message={errorText(v.error, t("region.offline"))}
+        retry={() => v.refetch()}
+      />
+    );
+  const { item, record } = v.data;
+  const d = (item.details ?? {}) as {
+    issues?: Issue[];
+    verdict?: string;
+    confidence?: number;
+    note?: string;
+    model?: string;
+  };
+  const p = record.payload as {
+    kind?: string;
+    label?: { ru: string };
+    summary_plain?: { ru: string };
+    body?: { ru: string };
+    basis?: string;
+  };
+  const kind = p.kind ?? "";
+  return (
+    <article className="ritem" aria-labelledby="ritem-title">
+      {onBack && (
+        <button type="button" className="navlink ritem__back" onClick={onBack}>
+          ← {t("review.back")}
+        </button>
+      )}
+      <p className="ritem__q">
+        <Icon name={REASON_ICON[item.reason]} />
+        {t(`review.q.${item.reason}`)}
+      </p>
+      <div className="ritem__head">
+        <h1 id="ritem-title" className="title">
+          <Link {...recordPath(record.ref)}>{text(p.label, i18n.language) || item.label}</Link>
+        </h1>
+        <StatusText status={record.status} />
+      </div>
+      <p className="muted">
+        {t("review.by", {
+          who: agentName(item.author ?? record.agent, i18n.language),
+          when: new Date(item.created_at).toLocaleString(i18n.language),
+        })}
+      </p>
+
+      {item.reason === "semantic_doubt" && d.verdict && (
+        <section className="widget verdict" aria-label={t("review.verdict")}>
+          <h2>{t("review.verdict")}</h2>
+          <p>
+            <strong>{t(`review.verdict_v.${d.verdict}`, { defaultValue: d.verdict })}</strong>
+            {d.confidence != null && (
+              <span className="muted">
+                {" "}
+                · {t("review.confidence", { n: Math.round(d.confidence * 100) })}
+              </span>
+            )}
+            {d.model && <span className="muted"> · {agentName(d.model, i18n.language)}</span>}
+          </p>
+          {d.note && <p>{d.note}</p>}
+        </section>
+      )}
+      {!!d.issues?.length && (
+        <section className="widget" aria-label={t("review.issues")}>
+          <h2>{t("review.issues")}</h2>
+          <ul className="issues">
+            {d.issues.map((i) => (
+              <li key={`${i.path}-${i.message}`}>
+                <span className="status" data-tone={SEV[i.severity]}>
+                  <Icon name={i.severity === "info" ? "dash" : "warn"} />
+                </span>
+                {i.message}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {item.reason === "edit" && v.data.proposed && <Diff v={v.data} />}
+      {item.reason === "source_changed" && <Versions v={v.data} />}
+
+      <Properties view={record} kindLabel={kindLabel(vocab.data, kind, i18n.language)} />
+      {p.summary_plain && <p className="lede">{text(p.summary_plain, i18n.language)}</p>}
+      {p.body && (
+        <Body text={text(p.body, i18n.language)} target={(l) => ({ to: "/search", search: { q: l } })} />
+      )}
+      {(record.sources.length > 0 || p.basis) && (
+        <div className="ritem__src">
+          <SourcePanel sources={record.sources} basis={p.basis} active={active} onActive={setActive} />
+        </div>
+      )}
+      <section className="widget" aria-label={t("review.sky")}>
+        <h2>{t("review.sky")}</h2>
+        <Sky centerRef={record.ref} height={340} />
+      </section>
+    </article>
+  );
+}

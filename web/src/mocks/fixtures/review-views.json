@@ -1,0 +1,651 @@
+{
+  "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e5f": {
+    "item": {
+      "id": "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e5f",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+      "label": "Погрешность влажности В-2: ±2 %",
+      "kind_or_class": "parameter",
+      "reason": "semantic_doubt",
+      "state": "queued",
+      "details": {
+        "verdict": "uncertain",
+        "confidence": 0.58,
+        "model": "model:checker",
+        "note": "Модель сомневается: в тексте два диапазона, взят средний."
+      },
+      "created_at": "2026-11-05T10:12:05Z",
+      "created_by": "model:checker",
+      "author": "model:claude",
+      "claimed_by": null,
+      "closed_at": null
+    },
+    "record": {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+      "target": "atom",
+      "revision": 1,
+      "payload": {
+        "kind": "parameter",
+        "label": {
+          "ru": "Погрешность влажности В-2: ±2 %"
+        },
+        "summary_plain": {
+          "ru": "Датчик влажности В-2 измеряет с погрешностью ±2 %, но только в диапазоне от 10 до 90 %."
+        },
+        "body": {
+          "ru": "## Суть источника\nПогрешность нормируется только в середине шкалы. У краёв — у сухого воздуха и у тумана — производитель не обещает ничего.\n\n## Моя мысль\nЗимой влажность у нас часто выше 90 %, а значит, погрешность в эти дни неизвестна. Точку росы по формуле Магнуса\n\n$$T_d = \\frac{b\\,\\gamma(T,RH)}{a - \\gamma(T,RH)}, \\qquad \\gamma = \\ln\\frac{RH}{100} + \\frac{aT}{b+T}$$\n\nпри $RH > 90\\,\\%$ лучше считать с запасом. См. [[Нужен ли обогрев В-2 зимой?]] и [[Точка росы]]."
+        },
+        "about": ["ent:0193b7c2-5e1a-7d40-9f2e-000000000003"],
+        "content": {
+          "values": [
+            {
+              "property": "humidity_error",
+              "label": {
+                "ru": "Погрешность"
+              },
+              "value_text": "±2",
+              "unit": "%",
+              "qualifiers": [
+                {
+                  "property": "range",
+                  "label": {
+                    "ru": "в диапазоне"
+                  },
+                  "lower_bound": 10,
+                  "upper_bound": 90,
+                  "unit": "%"
+                }
+              ]
+            }
+          ]
+        },
+        "tags": ["метрология", "зима"],
+        "qualifiers": [
+          {
+            "property": "maturity",
+            "label": {
+              "ru": "Зрелость"
+            },
+            "value_text": "🌱 росток"
+          }
+        ],
+        "confidence": 0.82,
+        "sources": [
+          {
+            "object": "0193b7c2-5e1a-7d40-9f2e-0000000000a1",
+            "object_version": 2,
+            "selectors": [
+              {
+                "type": "page",
+                "value": "2",
+                "label": "12"
+              }
+            ],
+            "quote": "Погрешность ±2 % в диапазоне от 10 до 90 %"
+          }
+        ]
+      },
+      "status": "needs_review",
+      "review_state": "pending",
+      "recorded_at": "2026-11-05T10:12:00Z",
+      "agent": "model:extractor",
+      "folder": "Области/Приборы",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+          "label": "Датчик влажности В-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "ancestors": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000008",
+          "label": "Метеоплощадка",
+          "entity_class": "project"
+        },
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "sources": [
+        {
+          "object": "0193b7c2-5e1a-7d40-9f2e-0000000000a1",
+          "object_name": "Руководство_МС-1.pdf",
+          "object_kind": "file",
+          "media_type": "application/pdf",
+          "object_version": 2,
+          "selectors": [
+            {
+              "type": "page",
+              "value": "2",
+              "label": "12"
+            }
+          ],
+          "quote": "Погрешность ±2 % в диапазоне от 10 до 90 %",
+          "role": "primary",
+          "verdict": "ok"
+        }
+      ],
+      "open_items": [
+        {
+          "id": "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e5f",
+          "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+          "label": "Погрешность влажности В-2: ±2 %",
+          "kind_or_class": "parameter",
+          "reason": "semantic_doubt",
+          "state": "queued",
+          "details": {
+            "note": "Модель сомневается: в тексте два диапазона, взят средний."
+          },
+          "created_at": "2026-11-05T10:12:05Z",
+          "created_by": "model:checker"
+        }
+      ],
+      "usefulness": null
+    },
+    "current": null,
+    "proposed": null,
+    "versions": null
+  },
+  "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e01": {
+    "item": {
+      "id": "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e01",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001e",
+      "label": "Проверить крепление мачты после ветра",
+      "kind_or_class": "note",
+      "reason": "edit",
+      "state": "queued",
+      "details": {
+        "changes": ["label", "body"]
+      },
+      "created_at": "2026-11-07T07:40:00Z",
+      "created_by": "model:linker",
+      "author": "person:alex",
+      "claimed_by": null,
+      "closed_at": null
+    },
+    "record": {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001e",
+      "target": "atom",
+      "revision": 1,
+      "payload": {
+        "kind": "note",
+        "label": {
+          "ru": "Проверить крепление мачты после ветра"
+        },
+        "summary_plain": {
+          "ru": "После порывов больше 15 м/с подтянуть хомуты мачты М-2 и проверить отвес."
+        },
+        "body": {
+          "ru": "Хомуты — **верхний и средний**. Отвес не больше *2°*.\n\n> Записал после бури 3 ноября."
+        },
+        "about": ["ent:0193b7c2-5e1a-7d40-9f2e-000000000005"],
+        "basis": "author"
+      },
+      "status": "draft",
+      "review_state": "none",
+      "recorded_at": "2026-11-04T17:02:00Z",
+      "agent": "person:anna",
+      "folder": null,
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000005",
+          "label": "Мачта М-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "ancestors": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000008",
+          "label": "Метеоплощадка",
+          "entity_class": "project"
+        },
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "sources": [],
+      "open_items": [],
+      "usefulness": null
+    },
+    "current": {
+      "revision": 1,
+      "payload": {
+        "kind": "note",
+        "label": {
+          "ru": "Проверить крепление мачты после ветра"
+        },
+        "summary_plain": {
+          "ru": "После порывов больше 15 м/с подтянуть хомуты мачты М-2 и проверить отвес."
+        },
+        "body": {
+          "ru": "Хомуты — **верхний и средний**. Отвес не больше *2°*.\n\n> Записал после бури 3 ноября."
+        },
+        "about": ["ent:0193b7c2-5e1a-7d40-9f2e-000000000005"],
+        "basis": "author"
+      }
+    },
+    "proposed": {
+      "payload": {
+        "kind": "note",
+        "label": {
+          "ru": "Проверить крепление мачты после сильного ветра"
+        },
+        "summary_plain": {
+          "ru": "После порывов больше 15 м/с подтянуть хомуты мачты М-2 и проверить отвес."
+        },
+        "body": {
+          "ru": "Хомуты — **верхний, средний и нижний**. Отвес не больше *2°*.\n\n> Записал после бури 3 ноября."
+        },
+        "about": ["ent:0193b7c2-5e1a-7d40-9f2e-000000000005"],
+        "basis": "author"
+      },
+      "changes": ["label", "body"],
+      "agent": "model:linker"
+    },
+    "versions": null
+  },
+  "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e02": {
+    "item": {
+      "id": "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e02",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000009",
+      "label": "Диапазон температуры Т-1: −40…+60 °C",
+      "kind_or_class": "parameter",
+      "reason": "source_changed",
+      "state": "queued",
+      "details": {
+        "object": "0193b7c2-5e1a-7d40-9f2e-0000000000a1",
+        "from_version": 1,
+        "to_version": 2
+      },
+      "created_at": "2026-11-06T16:20:00Z",
+      "created_by": "model:watcher",
+      "author": "model:claude",
+      "claimed_by": null,
+      "closed_at": null
+    },
+    "record": {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000009",
+      "target": "atom",
+      "revision": 1,
+      "payload": {
+        "kind": "parameter",
+        "label": {
+          "ru": "Диапазон температуры Т-1: −40…+60 °C"
+        },
+        "summary_plain": {
+          "ru": "Диапазон температуры Т-1: −40…+60 °C."
+        },
+        "about": ["ent:0193b7c2-5e1a-7d40-9f2e-000000000002"]
+      },
+      "status": "verified",
+      "review_state": "pending",
+      "recorded_at": "2026-11-06T10:00:00+00:00",
+      "agent": "model:claude",
+      "folder": "Области/Приборы",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000002",
+          "label": "Датчик температуры Т-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "ancestors": [],
+      "sources": [],
+      "open_items": [],
+      "usefulness": null
+    },
+    "current": null,
+    "proposed": null,
+    "versions": {
+      "object": "0193b7c2-5e1a-7d40-9f2e-0000000000a1",
+      "object_name": "Руководство_МС-1.pdf",
+      "page": "12",
+      "old": {
+        "version": 1,
+        "text": "Датчик температуры Т-1 измеряет температуру воздуха в диапазоне от −35 до +60 °C."
+      },
+      "new": {
+        "version": 2,
+        "text": "Датчик температуры Т-1 измеряет температуру воздуха в диапазоне от −40 до +60 °C с погрешностью не более ±0,3 °C."
+      }
+    }
+  },
+  "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e03": {
+    "item": {
+      "id": "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e03",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000c",
+      "label": "Диапазон давления Д-3: 300…1100 гПа",
+      "kind_or_class": "parameter",
+      "reason": "warning",
+      "state": "queued",
+      "details": {
+        "issues": [
+          {
+            "code": "unit_suspect",
+            "severity": "warning",
+            "message": "Единица гПа, а в источнике — мм рт. ст.: проверьте пересчёт",
+            "path": "content.values[0].unit"
+          },
+          {
+            "code": "range_wide",
+            "severity": "info",
+            "message": "Диапазон шире, чем у похожих датчиков",
+            "path": "content.values[0]"
+          }
+        ]
+      },
+      "created_at": "2026-11-06T09:00:00Z",
+      "created_by": "model:checker",
+      "author": "model:claude",
+      "claimed_by": null,
+      "closed_at": null
+    },
+    "record": {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000c",
+      "target": "atom",
+      "revision": 1,
+      "payload": {
+        "kind": "parameter",
+        "label": {
+          "ru": "Диапазон давления Д-3: 300…1100 гПа"
+        },
+        "summary_plain": {
+          "ru": "Диапазон давления Д-3: 300…1100 гПа."
+        },
+        "about": ["ent:0193b7c2-5e1a-7d40-9f2e-000000000004"]
+      },
+      "status": "auto_verified",
+      "review_state": "pending",
+      "recorded_at": "2026-11-06T04:00:00+00:00",
+      "agent": "model:claude",
+      "folder": "Области/Приборы",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000004",
+          "label": "Датчик давления Д-3",
+          "entity_class": "artifact"
+        }
+      ],
+      "ancestors": [],
+      "sources": [],
+      "open_items": [],
+      "usefulness": null
+    },
+    "current": null,
+    "proposed": null,
+    "versions": null
+  },
+  "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e04": {
+    "item": {
+      "id": "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e04",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001a",
+      "label": "Ток потребления МС-1: 0,4 А",
+      "kind_or_class": "parameter",
+      "reason": "high_risk",
+      "state": "queued",
+      "details": {
+        "rule": "electrical",
+        "message": "Электрическая величина — проверяет человек"
+      },
+      "created_at": "2026-11-07T06:30:00Z",
+      "created_by": "model:checker",
+      "author": "model:claude",
+      "claimed_by": null,
+      "closed_at": null
+    },
+    "record": {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001a",
+      "target": "atom",
+      "revision": 1,
+      "payload": {
+        "kind": "parameter",
+        "label": {
+          "ru": "Ток потребления МС-1: 0,4 А"
+        },
+        "summary_plain": {
+          "ru": "Ток потребления МС-1: 0,4 А."
+        },
+        "about": ["ent:0193b7c2-5e1a-7d40-9f2e-000000000001"]
+      },
+      "status": "needs_review",
+      "review_state": "pending",
+      "recorded_at": "2026-11-05T00:00:00+00:00",
+      "agent": "model:claude",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "ancestors": [],
+      "sources": [],
+      "open_items": [],
+      "usefulness": null
+    },
+    "current": null,
+    "proposed": null,
+    "versions": null
+  },
+  "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e05": {
+    "item": {
+      "id": "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e05",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001f",
+      "label": "Иней на корпусе искажает показания",
+      "kind_or_class": "lesson",
+      "reason": "imported",
+      "state": "queued",
+      "details": {
+        "bundle": "meteo-2025",
+        "from": "Станция прошлого сезона"
+      },
+      "created_at": "2026-11-04T12:00:00Z",
+      "created_by": "person:anna",
+      "author": "model:claude",
+      "claimed_by": null,
+      "closed_at": null
+    },
+    "record": {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001f",
+      "target": "atom",
+      "revision": 1,
+      "payload": {
+        "kind": "lesson",
+        "label": {
+          "ru": "Иней на корпусе искажает показания"
+        },
+        "summary_plain": {
+          "ru": "Иней на корпусе искажает показания."
+        },
+        "about": ["ent:0193b7c2-5e1a-7d40-9f2e-000000000003"]
+      },
+      "status": "needs_review",
+      "review_state": "pending",
+      "recorded_at": "2026-11-04T14:00:00+00:00",
+      "agent": "model:claude",
+      "folder": null,
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+          "label": "Датчик влажности В-2",
+          "entity_class": "artifact"
+        }
+      ],
+      "ancestors": [],
+      "sources": [],
+      "open_items": [],
+      "usefulness": null
+    },
+    "current": null,
+    "proposed": null,
+    "versions": null
+  },
+  "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e06": {
+    "item": {
+      "id": "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e06",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000010",
+      "label": "Степень защиты МС-1: IP65",
+      "kind_or_class": "parameter",
+      "reason": "audit",
+      "state": "queued",
+      "details": {
+        "note": "Выборочная проверка записей с итогом «проверено автоматически»"
+      },
+      "created_at": "2026-11-07T05:10:00Z",
+      "created_by": "person:anna",
+      "author": "model:claude",
+      "claimed_by": null,
+      "closed_at": null
+    },
+    "record": {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000010",
+      "target": "atom",
+      "revision": 1,
+      "payload": {
+        "kind": "parameter",
+        "label": {
+          "ru": "Степень защиты МС-1: IP65"
+        },
+        "summary_plain": {
+          "ru": "Степень защиты МС-1: IP65."
+        },
+        "about": ["ent:0193b7c2-5e1a-7d40-9f2e-000000000001"]
+      },
+      "status": "verified",
+      "review_state": "pending",
+      "recorded_at": "2026-11-05T20:00:00+00:00",
+      "agent": "model:claude",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "ancestors": [],
+      "sources": [],
+      "open_items": [],
+      "usefulness": null
+    },
+    "current": null,
+    "proposed": null,
+    "versions": null
+  },
+  "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e07": {
+    "item": {
+      "id": "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e07",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000e",
+      "label": "Интервал опроса: 60 с",
+      "kind_or_class": "parameter",
+      "reason": "calibration",
+      "state": "queued",
+      "details": {
+        "note": "Калибровка: сверка решения модели с человеком"
+      },
+      "created_at": "2026-11-03T15:00:00Z",
+      "created_by": "model:checker",
+      "author": "model:claude",
+      "claimed_by": null,
+      "closed_at": null
+    },
+    "record": {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000e",
+      "target": "atom",
+      "revision": 1,
+      "payload": {
+        "kind": "parameter",
+        "label": {
+          "ru": "Интервал опроса: 60 с"
+        },
+        "summary_plain": {
+          "ru": "Интервал опроса: 60 с."
+        },
+        "about": ["ent:0193b7c2-5e1a-7d40-9f2e-000000000001"]
+      },
+      "status": "verified",
+      "review_state": "pending",
+      "recorded_at": "2026-11-06T00:00:00+00:00",
+      "agent": "model:claude",
+      "folder": "Проекты/Метеоплощадка",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+          "label": "Метеостанция МС-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "ancestors": [],
+      "sources": [],
+      "open_items": [],
+      "usefulness": null
+    },
+    "current": null,
+    "proposed": null,
+    "versions": null
+  },
+  "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e08": {
+    "item": {
+      "id": "5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e08",
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000012",
+      "label": "Диапазон Т-1 по паспорту 2019 года: −30…+50 °C",
+      "kind_or_class": "fact",
+      "reason": "warning",
+      "state": "done",
+      "details": {
+        "issues": [
+          {
+            "code": "superseded",
+            "severity": "warning",
+            "message": "Есть более новая запись",
+            "path": "status"
+          }
+        ]
+      },
+      "created_at": "2026-11-02T10:00:00Z",
+      "created_by": "model:checker",
+      "author": "model:claude",
+      "claimed_by": null,
+      "closed_at": "2026-11-02T11:30:00Z"
+    },
+    "record": {
+      "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000012",
+      "target": "atom",
+      "revision": 1,
+      "payload": {
+        "kind": "fact",
+        "label": {
+          "ru": "Диапазон Т-1 по паспорту 2019 года: −30…+50 °C"
+        },
+        "summary_plain": {
+          "ru": "Диапазон Т-1 по паспорту 2019 года: −30…+50 °C."
+        },
+        "about": ["ent:0193b7c2-5e1a-7d40-9f2e-000000000002"]
+      },
+      "status": "superseded",
+      "review_state": "pending",
+      "recorded_at": "2026-11-05T16:00:00+00:00",
+      "agent": "model:claude",
+      "folder": "Архив/Станция 2024",
+      "about": [
+        {
+          "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000002",
+          "label": "Датчик температуры Т-1",
+          "entity_class": "artifact"
+        }
+      ],
+      "ancestors": [],
+      "sources": [],
+      "open_items": [],
+      "usefulness": null
+    },
+    "current": null,
+    "proposed": null,
+    "versions": null
+  }
+}

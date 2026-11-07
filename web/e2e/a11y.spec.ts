@@ -19,6 +19,12 @@ const pages = [
   "./object/0193b7c2-5e1a-7d40-9f2e-0000000000a2",
   "./changes?since=ever",
   `./new?about=${E3}`,
+  "./review",
+  "./review/5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e01",
+  "./review/5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e02",
+  "./review/5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e5f",
+  "./review/5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e03",
+  "./base",
 ];
 
 for (const theme of ["light", "dark"] as const) {
