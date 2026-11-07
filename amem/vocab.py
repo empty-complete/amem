@@ -35,7 +35,8 @@ def families(conn: psycopg.Connection) -> dict[str, str]:
 
 def entries(conn: psycopg.Connection, scheme: str) -> list[dict]:
     """Понятия схемы по коду: code, label (ru, en), definition (или None), pack — откуда понятие (имя пакета,
-    schema — служебный перечень схемы, agent — добавил агент), broader (или None); у вида атома ещё family.
+    schema — служебный перечень схемы, agent — добавил агент), broader (или None); у вида атома ещё family,
+    у величины (scheme property) — unit: единица UCUM по умолчанию из словаря или None.
     Схема без понятий — пустой список."""
     rows = conn.execute("SELECT code, data, origin FROM concept WHERE scheme = %s ORDER BY code",
                         (scheme,)).fetchall()
@@ -45,5 +46,7 @@ def entries(conn: psycopg.Connection, scheme: str) -> list[dict]:
                  "broader": data.get("broader")}
         if scheme == "kind":
             entry["family"] = data.get("family") or DEFAULT_FAMILY
+        elif scheme == "property":
+            entry["unit"] = data.get("unit")
         out.append(entry)
     return out

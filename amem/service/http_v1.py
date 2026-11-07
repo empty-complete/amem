@@ -17,6 +17,16 @@ Content-Length — только быстрый отказ, ему не веря�
 агента в теле не читается. Маршруты папок — {path:path}: Starlette сопоставляет уже раскодированный путь, и папка
 «a/b», пришедшая как a%2Fb, иначе в {path} не попала бы.
 
+Подборки (/bundles/*) лежат в AMEM_STATE (api.bundle_export и соседи: владелец, срок хранения — там же). Экспорт —
+bundle.export или, с anthology: true, anthology.export; zip отдаётся на скачивание (attachment, FILE_HEADERS), отчёт
+антологии — inline в песочнице без скриптов (REPORT_HEADERS). /bundles/inspect принимает multipart/form-data
+(Origin обязателен — session.Guard): поле file пишется потоком (python-multipart) во временный файл
+AMEM_STATE/uploads/.<id>.part с отсечкой на UPLOAD_LIMIT (413 too_large, недокачанное удаляется), остальное
+в форме — не больше FORM_LIMIT; затем bundle.inspect без базы. Владелец подборки — session.owner (токен или агент).
+
+Явный поиск (/search, /similar) пишет строку в журнал запросов (amem/journal.py, AMEM_QUERY_LOG): ошибка файла
+поиск не роняет.
+
 Контракт служба отдаёт по /api/v1/openapi.json — копию из пакета (amem/service/http-v1.openapi.yaml).
 """
 from __future__ import annotations
@@ -24,20 +34,32 @@ from __future__ import annotations
 import functools
 import importlib.resources
 import json
+import time
+from pathlib import Path
 
+import python_multipart
 import yaml
+from python_multipart.exceptions import MultipartParseError
+from python_multipart.multipart import parse_options_header
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, MalformedRangeHeader, RangeNotSatisfiable, Response
 from starlette.routing import Route
 
-from .. import api
+from .. import api, bundle, journal, private
 from . import problems, session
 from .app import API, connection, provider
 
 CONTRACT = "http-v1.openapi.yaml"
 FILE_HEADERS = {"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox"}
 BODY_LIMIT = 1 << 20          # байт JSON-тела записи: пакет submit — сотни атомов; больше — 413 too_large
+UPLOAD_LIMIT = bundle.MAX_UNPACKED      # байт файла подборки в /bundles/inspect (4 ГиБ); больше — 413 too_large
+FORM_LIMIT = 64 << 10         # байт заголовков и прочих полей формы /bundles/inspect вместе — сверх файла
+# отчёт антологии открывается в новой вкладке как документ без своего источника (sandbox без allow-scripts):
+# скрипты не идут, запросы к службе и cookie ему недоступны; стили — встроенные, картинки — только data:
+REPORT_HEADERS = {"X-Content-Type-Options": "nosniff", "Content-Disposition": "inline",
+                  "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:",
+                  "Referrer-Policy": "no-referrer"}
 
 
 class FileCopy(FileResponse):
@@ -73,18 +95,31 @@ def get_session(request: Request) -> JSONResponse:
                                         provider=provider(request)))
 
 
+def _journal(request: Request, result: dict, query: str, started: float) -> None:
+    """Строка журнала запросов о явном поиске (amem/journal.py): текст после private.strip, без находок."""
+    state = request.app.state
+    journal.record(state.settings.query_log, recipe=result["recipe"], query=private.strip(query),
+                   agent=request.state.agent, base_id=state.base_id, count=len(result["items"]),
+                   duration_ms=(time.monotonic() - started) * 1000, retrieval_id=result["retrieval_id"])
+
+
 def search(request: Request) -> JSONResponse:
+    started, q = time.monotonic(), _q(request, "q")
     with connection(request) as conn:
-        return JSONResponse(api.search(conn, _q(request, "q"), agent=request.state.agent, kind=_many(request, "kind"),
-                                       status=_many(request, "status"), entity_class=_many(request, "entity_class"),
-                                       target=_q(request, "target"), limit=_q(request, "limit"),
-                                       provider=provider(request)))
+        result = api.search(conn, q, agent=request.state.agent, kind=_many(request, "kind"),
+                            status=_many(request, "status"), entity_class=_many(request, "entity_class"),
+                            target=_q(request, "target"), limit=_q(request, "limit"), provider=provider(request))
+    _journal(request, result, q, started)
+    return JSONResponse(result)
 
 
 def similar(request: Request) -> JSONResponse:
+    started, ref, q = time.monotonic(), _q(request, "ref"), _q(request, "q")
     with connection(request) as conn:
-        return JSONResponse(api.similar(conn, agent=request.state.agent, ref=_q(request, "ref"), q=_q(request, "q"),
-                                        limit=_q(request, "limit"), provider=provider(request)))
+        result = api.similar(conn, agent=request.state.agent, ref=ref, q=q, limit=_q(request, "limit"),
+                             provider=provider(request))
+    _journal(request, result, ref or q, started)
+    return JSONResponse(result)
 
 
 def get_folders(request: Request) -> JSONResponse:
@@ -285,6 +320,155 @@ async def move_record(request: Request) -> JSONResponse:
         conn, request.path_params["ref"], body["folder"], agent=request.state.agent)))
 
 
+# --- подборки ---
+
+def _bundle_links(made: dict) -> dict:
+    bid = made["id"]
+    return {"id": bid, "summary": made["summary"], "download": f"{API}/bundles/{bid}/download",
+            "report": f"{API}/bundles/{bid}/report" if made["has_report"] else None}
+
+
+async def export_bundle(request: Request) -> JSONResponse:
+    body = await _body(request)
+    state = request.app.state
+    made = await _call(request, lambda conn: api.bundle_export(
+        conn, state.store, state.settings.state, agent=request.state.agent, owner=session.owner(request),
+        selection=body.get("selection"), with_files=body.get("with_files"), with_packs=body.get("with_packs"),
+        anthology=body.get("anthology"), title=body.get("title")))
+    return JSONResponse(_bundle_links(made))
+
+
+def download_bundle(request: Request) -> FileResponse:
+    found = api.bundle_download(request.app.state.settings.state, request.path_params["id"],
+                                owner=session.owner(request))
+    return FileCopy(found.path, media_type="application/zip", headers=FILE_HEADERS, filename=found.filename,
+                    content_disposition_type="attachment")
+
+
+def bundle_report(request: Request) -> FileResponse:
+    path = api.bundle_report(request.app.state.settings.state, request.path_params["id"],
+                             owner=session.owner(request))
+    return FileResponse(path, media_type="text/html; charset=utf-8", headers=REPORT_HEADERS)
+
+
+class _Upload:
+    """Приёмник multipart/form-data для /bundles/inspect: поле file — потоком в файл на диске, прочие поля
+    и заголовки частей — не больше FORM_LIMIT байт вместе; файл больше UPLOAD_LIMIT — 413, не дочитывая."""
+
+    def __init__(self, path: Path):
+        self.path, self.out = path, None
+        self.size = self.form = 0
+        self.field = self.header = b""
+        self.disposition = b""
+        self.in_file = self.got_file = self.file_done = self.ended = False
+
+    def callbacks(self) -> dict:
+        return {"on_part_begin": self.part_begin, "on_header_field": self.header_field,
+                "on_header_value": self.header_value, "on_header_end": self.header_end,
+                "on_headers_finished": self.headers_finished, "on_part_data": self.part_data,
+                "on_part_end": self.part_end, "on_end": self.end}
+
+    def _count_form(self, n: int) -> None:
+        self.form += n
+        if self.form > FORM_LIMIT:
+            raise problems.Problem(413, "too_large", f"поля формы загрузки больше {FORM_LIMIT // 1024} КиБ: "
+                                   "нужно одно поле file с zip подборки")
+
+    def part_begin(self) -> None:
+        self.disposition, self.in_file = b"", False
+
+    def header_field(self, data: bytes, start: int, end: int) -> None:
+        self._count_form(end - start)
+        self.field += data[start:end]
+
+    def header_value(self, data: bytes, start: int, end: int) -> None:
+        self._count_form(end - start)
+        self.header += data[start:end]
+
+    def header_end(self) -> None:
+        if self.field.lower() == b"content-disposition":
+            self.disposition = self.header
+        self.field = self.header = b""
+
+    def headers_finished(self) -> None:
+        _, options = parse_options_header(self.disposition)
+        if options.get(b"name") != b"file":
+            return                                # прочие поля читаются (в пределе FORM_LIMIT) и не нужны
+        if self.got_file:
+            raise problems.Problem(400, "bad_request", "загрузка подборки: поле file — одно")
+        self.got_file = self.in_file = True
+        self.out = open(self.path, "xb")
+
+    def part_data(self, data: bytes, start: int, end: int) -> None:
+        if not self.in_file:
+            self._count_form(end - start)
+            return
+        self.size += end - start
+        if self.size > UPLOAD_LIMIT:
+            raise _upload_too_large()
+        self.out.write(data[start:end])
+
+    def part_end(self) -> None:
+        if self.in_file:
+            self.out.close()
+            self.in_file, self.file_done = False, True
+
+    def end(self) -> None:
+        self.ended = True
+
+    def close(self) -> None:
+        if self.out is not None:
+            self.out.close()
+
+
+def _upload_too_large() -> problems.Problem:
+    return problems.Problem(413, "too_large", f"файл подборки больше {UPLOAD_LIMIT // (1 << 20)} МиБ — "
+                            f"предел распаковки подборки")
+
+
+async def inspect_bundle(request: Request) -> JSONResponse:
+    """Загрузка подборки (Origin обязателен — проверяет session.Guard): файл — потоком во временный файл
+    в AMEM_STATE/uploads, сверх UPLOAD_LIMIT — 413 и недокачанное удаляется; затем bundle.inspect без базы."""
+    _, params = parse_options_header(request.headers.get("content-type"))
+    boundary = params.get(b"boundary")
+    if not boundary:
+        raise problems.Problem(400, "bad_request", "загрузка подборки: в Content-Type нет boundary")
+    length = request.headers.get("content-length", "").strip()
+    if length.isascii() and length.isdigit() and (len(length) > 18 or int(length) > UPLOAD_LIMIT + FORM_LIMIT):
+        raise _upload_too_large()                 # быстрый отказ; сам счёт — по пришедшим байтам
+    state = request.app.state.settings.state
+    upload_id, part = await run_in_threadpool(api.upload_begin, state)
+    upload = _Upload(part)
+    parser = python_multipart.MultipartParser(boundary, upload.callbacks())
+    try:
+        try:
+            async for chunk in request.stream():
+                await run_in_threadpool(parser.write, chunk)     # запись на диск — не в цикле событий
+            parser.finalize()
+        except MultipartParseError as e:
+            raise problems.Problem(400, "bad_request", f"загрузка подборки: тело — не multipart/form-data: "
+                                   f"{e}") from None
+        finally:
+            upload.close()
+        if not upload.got_file:
+            raise problems.Problem(400, "bad_request", "загрузка подборки: нужно поле file с zip подборки")
+        if not (upload.file_done and upload.ended):
+            raise problems.Problem(400, "bad_request", "загрузка подборки: тело оборвано до конца файла")
+    except BaseException:
+        part.unlink(missing_ok=True)
+        raise
+    return JSONResponse(await run_in_threadpool(lambda: api.upload_finish(state, upload_id, part,
+                                                                          owner=session.owner(request))))
+
+
+async def import_bundle(request: Request) -> JSONResponse:
+    body = await _body(request)
+    state = request.app.state
+    return JSONResponse(await _call(request, lambda conn: api.bundle_import(
+        conn, state.store, state.settings.state, body.get("upload_id"), agent=request.state.agent,
+        owner=session.owner(request), trust=body.get("trust"), dry_run=body.get("dry_run"))))
+
+
 @functools.cache
 def contract() -> dict:
     """Контракт из пакета как JSON-объект (YAML читается один раз)."""
@@ -324,5 +508,10 @@ ROUTES = [
     Route(f"{API}/vocab/{{scheme}}", get_vocab, methods=["GET"]),
     Route(f"{API}/base", get_base, methods=["GET"]),
     Route(f"{API}/backups", get_backups, methods=["GET"]),
+    Route(f"{API}/bundles/export", export_bundle, methods=["POST"]),
+    Route(f"{API}/bundles/inspect", inspect_bundle, methods=["POST"]),
+    Route(f"{API}/bundles/import", import_bundle, methods=["POST"]),
+    Route(f"{API}/bundles/{{id}}/download", download_bundle, methods=["GET"]),
+    Route(f"{API}/bundles/{{id}}/report", bundle_report, methods=["GET"]),
     Route(f"{API}/openapi.json", get_openapi, methods=["GET"]),
 ]

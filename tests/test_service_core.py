@@ -376,7 +376,8 @@ def test_bundle_inspect_takes_multipart_and_requires_origin(serve):
     files = {"file": ("подборка.zip", b"PK", "application/zip")}
     body = is_problem(client.post("/api/v1/bundles/inspect", files=files), 403, "bad_origin")
     assert "Origin" in body["detail"]
-    is_problem(client.post("/api/v1/bundles/inspect", files=files, headers={"Origin": ORIGIN}), 404, "not_found")
+    is_problem(client.post("/api/v1/bundles/inspect", files=files, headers={"Origin": ORIGIN}), 422,
+               "bundle_invalid")                      # с Origin загрузка принята; «PK» — не zip подборки
     is_problem(client.post("/api/v1/bundles/inspect", json={}, headers={"Origin": ORIGIN}), 415,
                "unsupported_media_type")
 
