@@ -21,6 +21,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as AtomRefRouteImport } from './routes/atom/$ref'
 import { Route as EntityRefRouteImport } from './routes/entity/$ref'
 import { Route as ObjectIdRouteImport } from './routes/object/$id'
+import { Route as ReviewItemIdRouteImport } from './routes/review_.$itemId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -82,6 +83,11 @@ const ObjectIdRoute = ObjectIdRouteImport.update({
   path: '/object/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReviewItemIdRoute = ReviewItemIdRouteImport.update({
+  id: '/review_/$itemId',
+  path: '/review/$itemId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/atom/$ref': typeof AtomRefRoute
   '/entity/$ref': typeof EntityRefRoute
   '/object/$id': typeof ObjectIdRoute
+  '/review/$itemId': typeof ReviewItemIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -110,6 +117,7 @@ export interface FileRoutesByTo {
   '/atom/$ref': typeof AtomRefRoute
   '/entity/$ref': typeof EntityRefRoute
   '/object/$id': typeof ObjectIdRoute
+  '/review/$itemId': typeof ReviewItemIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -125,6 +133,7 @@ export interface FileRoutesById {
   '/atom/$ref': typeof AtomRefRoute
   '/entity/$ref': typeof EntityRefRoute
   '/object/$id': typeof ObjectIdRoute
+  '/review_/$itemId': typeof ReviewItemIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -141,6 +150,7 @@ export interface FileRouteTypes {
     | '/atom/$ref'
     | '/entity/$ref'
     | '/object/$id'
+    | '/review/$itemId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -155,6 +165,7 @@ export interface FileRouteTypes {
     | '/atom/$ref'
     | '/entity/$ref'
     | '/object/$id'
+    | '/review/$itemId'
   id:
     | '__root__'
     | '/'
@@ -169,6 +180,7 @@ export interface FileRouteTypes {
     | '/atom/$ref'
     | '/entity/$ref'
     | '/object/$id'
+    | '/review_/$itemId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -184,6 +196,7 @@ export interface RootRouteChildren {
   AtomRefRoute: typeof AtomRefRoute
   EntityRefRoute: typeof EntityRefRoute
   ObjectIdRoute: typeof ObjectIdRoute
+  ReviewItemIdRoute: typeof ReviewItemIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -272,6 +285,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ObjectIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/review_/$itemId': {
+      id: '/review_/$itemId'
+      path: '/review/$itemId'
+      fullPath: '/review/$itemId'
+      preLoaderRoute: typeof ReviewItemIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -288,6 +308,7 @@ const rootRouteChildren: RootRouteChildren = {
   AtomRefRoute: AtomRefRoute,
   EntityRefRoute: EntityRefRoute,
   ObjectIdRoute: ObjectIdRoute,
+  ReviewItemIdRoute: ReviewItemIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
