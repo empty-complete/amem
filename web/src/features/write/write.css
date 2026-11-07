@@ -309,3 +309,82 @@ textarea.fld {
   color: var(--ink-2);
   font-size: var(--t-label);
 }
+
+/* окно записи по N (разд. 5.9, п. 2) */
+.quick {
+  position: fixed;
+  z-index: 450;
+  top: calc(var(--bar-h) + var(--s-xs));
+  right: var(--s-md);
+  width: min(520px, calc(100vw - 2 * var(--s-md)));
+  border-radius: var(--r-panel);
+  background: var(--overlay);
+  color: var(--overlay-foreground);
+  box-shadow: var(--overlay-shadow);
+}
+.quick__in {
+  display: grid;
+  gap: var(--s-sm);
+  padding: var(--s-md);
+  outline: none;
+}
+.quick__about {
+  justify-self: start;
+}
+.quick__text {
+  width: 100%;
+  min-height: 5.5rem;
+  padding: var(--s-xs) 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--t-body);
+  line-height: 1.5;
+  resize: none;
+}
+.quick__text:focus-visible {
+  outline: 0;
+}
+.quick__text::placeholder {
+  color: var(--field-placeholder);
+}
+.quick__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s-xs);
+}
+.quick__foot .pillbtn {
+  margin-left: auto;
+  border: 0;
+  cursor: pointer;
+}
+.quick__foot .pillbtn[data-disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+.navbtn {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+}
+.note--new {
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+.kindinline {
+  display: grid;
+  gap: var(--s-2xs);
+}
+.kindinline__list {
+  max-height: 260px;
+  overflow: auto;
+  padding: var(--s-2xs);
+  border-radius: 8px;
+  background: var(--surface-secondary);
+}
+.quick__foot {
+  align-items: start;
+}

@@ -123,7 +123,9 @@ export function toProposal(
   else delete payload.summary_plain;
   if (d.body.trim() && t?.body !== "none") payload.body = ls(d.body.trim());
   else delete payload.body;
-  for (const f of t?.form ?? []) if (f.key in d.values) put(payload, f, d.values[f.key]);
+  // без шаблона (ещё не загрузился) простые ключи — это и есть пути в теле: about, tags, valid_from
+  const form = t?.form ?? Object.keys(d.values).map((k) => ({ key: k, path: k, type: "text" }) as FormField);
+  for (const f of form) if (f.key in d.values) put(payload, f, d.values[f.key]);
   if (d.extra.length) {
     const own = new Set(d.extra.map((x) => x.property));
     const qs = ((payload.qualifiers ?? []) as { property: string }[]).filter((q) => !own.has(q.property));

@@ -4,6 +4,8 @@ import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
 import { CommandField } from "../../features/palette/CommandField";
+import { placeStore, useQuickOpen } from "../../features/write/place";
+import { QuickWrite } from "../../features/write/QuickWrite";
 import { Icon } from "../../ui/icons";
 import { useHotkeys } from "../keys";
 import { applyTheme, readTheme, resolveTheme } from "../theme";
@@ -12,6 +14,8 @@ export function TopBar() {
   const { t } = useTranslation();
   const input = useRef<HTMLInputElement>(null);
   const base = useQuery(q.base());
+  const writeBtn = useRef<HTMLButtonElement>(null);
+  const quickOpen = useQuickOpen();
   useHotkeys({ focusSearch: () => input.current?.focus() });
 
   const toggleTheme = () => applyTheme(resolveTheme(readTheme()) === "dark" ? "light" : "dark");
@@ -33,10 +37,18 @@ export function TopBar() {
         <Link to="/changes" className="navlink hide-s">
           {t("nav.changes")}
         </Link>
-        <Link to="/new" className="navlink" title={`${t("nav.write")}, N`}>
+        <button
+          ref={writeBtn}
+          type="button"
+          className="navlink navbtn"
+          title={`${t("nav.write")}, N`}
+          aria-expanded={quickOpen}
+          onClick={() => placeStore.openQuick(!quickOpen)}
+        >
           <Icon name="plus" />
           <span className="hide-s">{t("nav.write")}</span>
-        </Link>
+        </button>
+        <QuickWrite trigger={writeBtn} />
         <button type="button" className="iconbtn" aria-label={t("nav.theme")} onClick={toggleTheme}>
           <Icon name="theme" />
         </button>
