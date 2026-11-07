@@ -13,6 +13,7 @@ test("заметка: заголовок, тело, о чём, слово авт
     record_id: null,
     payload: {
       kind: "note",
+      ref: "@n0",
       label: { ru: "Проверить мачту" },
       body: { ru: "после ветра" },
       about: [E3],
