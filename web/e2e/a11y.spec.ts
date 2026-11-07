@@ -25,6 +25,7 @@ const pages = [
   "./review/5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e5f",
   "./review/5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e03",
   "./base",
+  "./bundles",
 ];
 
 for (const theme of ["light", "dark"] as const) {
