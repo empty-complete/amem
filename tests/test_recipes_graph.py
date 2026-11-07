@@ -468,7 +468,10 @@ def test_overview_orders_by_degree_newest_first_cuts_and_keeps_inner_edges(kb):
     assert "depth" not in full["nodes"][0] and {"pending", "degree", "status", "revision"} <= set(full["nodes"][0])
 
     cut = recipes.overview(kb, limit=3)
-    assert [n["ref"] for n in cut["nodes"]] == [n["ref"] for n in full["nodes"]][:3]
+    order = [n["ref"] for n in full["nodes"]]
+    # хаб — один (3 // 4, не меньше одного), дальше его соседи по degree: a, затем b или c — кто раньше в порядке
+    near = [ref for ref in order if ref in {refs["@a"], refs["@b"], refs["@c"]}][:2]
+    assert [n["ref"] for n in cut["nodes"]] == sorted([refs["@hub"], *near], key=order.index)
     assert (cut["total"], cut["truncated"]) == (7, True)
     kept = {n["ref"] for n in cut["nodes"]}
     assert cut["edges"] and all(e["src"] in kept and e["dst"] in kept for e in cut["edges"])
@@ -506,12 +509,15 @@ def test_overview_of_a_project(kb):
     p1.payload["scope"] = {"project": "@proj"}
     p2 = atom("p2")
     p2.payload["scope"] = {"project": "@proj"}
+    p3 = atom("p3", about=["@e5"], status="deprecated")        # атом проекта вне фильтра статусов по умолчанию
+    p3.payload["scope"] = {"project": "@proj"}
     other = atom("other", about=["@e4"])
     other.payload["scope"] = {"project": "@else"}
     written = records.commit(kb, [
         Item("entity", {"ref": "@proj", "entity_class": "project", "key": "proj", "label": {"ru": "Проект"}}),
         Item("entity", {"ref": "@else", "entity_class": "project", "key": "else", "label": {"ru": "Другой"}}),
-        entity("e1"), entity("e2"), entity("e3"), entity("e4"), entity("lone"), p1, p2, moved, other,
+        entity("e1"), entity("e2"), entity("e3"), entity("e4"), entity("e5"), entity("lone"), p1, p2, p3, moved,
+        other,
         atom("plain", about=["@e1"]),
     ], [{"rel": "used_in", "src": "@p2", "dst": "@e2"}, {"rel": "see_also", "src": "@e1", "dst": "@e4"}],
         agent=AGENT)
@@ -525,6 +531,12 @@ def test_overview_of_a_project(kb):
     assert {n["ref"]: n["degree"] for n in found["nodes"]}[refs["@e1"]] == 3       # about p1, plain и see_also
     assert {(e["src"], e["dst"]) for e in found["edges"]} == {(refs["@p1"], refs["@e1"]), (refs["@p2"], refs["@e2"])}
     assert recipes.overview(kb, project=refs["@proj"], limit=1)["total"] == 4
+    wider = recipes.overview(kb, project="ent:proj", statuses=["draft", "deprecated"])
+    assert {n["ref"] for n in wider["nodes"]} == {refs["@p1"], refs["@p2"], refs["@p3"], refs["@e1"], refs["@e2"],
+                                                  refs["@e5"]}
+    # сама e5 — черновик: под фильтром только deprecated остаётся один атом проекта
+    assert {n["ref"] for n in recipes.overview(kb, project="ent:proj", statuses=["deprecated"])["nodes"]} == \
+        {refs["@p3"]}
     assert {n["ref"] for n in recipes.overview(kb, project="ent:else")["nodes"]} == \
         {refs["@other"], refs["@moved"], refs["@e4"], refs["@e3"]}
     with pytest.raises(RecordError, match="сущность"):
@@ -532,3 +544,39 @@ def test_overview_of_a_project(kb):
     with pytest.raises(RecordNotFound):
         recipes.overview(kb, project="ent:no_such")
     assert recipes.overview(kb, project="ent:lone")["total"] == 0
+
+
+def test_overview_takes_hubs_then_their_neighbours_so_the_sky_has_lines(kb):
+    """Top-N по degree на базе с хабами — одни хабы без линий. Отбор: limit // 4 хабов, их соседи по degree,
+    остальные места — прочие узлы по degree; выдача — по degree."""
+    items = []
+    for h in range(6):
+        items.append(entity(f"hub{h}"))
+        items.extend(atom(f"leaf{h}_{i}", about=[f"@hub{h}"]) for i in range(5))
+    items.extend([atom("lone1"), atom("lone2")])
+    refs = records.commit(kb, items, agent=AGENT).refs
+    hubs = {refs[f"@hub{h}"] for h in range(6)}
+    full = recipes.overview(kb, limit=None)
+    order = [n["ref"] for n in full["nodes"]]
+    assert set(order[:6]) == hubs and full["total"] == 38
+
+    six = recipes.overview(kb, limit=6)                       # раньше — шесть хабов и ни одной линии
+    picked = [n["ref"] for n in six["nodes"]]
+    first = order[0]
+    assert picked[0] == first and len(picked) == 6 and len(six["edges"]) == 5
+    h = next(h for h in range(6) if refs[f"@hub{h}"] == first)
+    assert set(picked[1:]) == {refs[f"@leaf{h}_{i}"] for i in range(5)}         # один хаб и его соседи
+    assert all(e["dst"] == first and e["rel"] == "about" for e in six["edges"])
+    assert [n["degree"] for n in six["nodes"]] == sorted((n["degree"] for n in six["nodes"]), reverse=True)
+
+    twelve = recipes.overview(kb, limit=12)                   # три хаба и девять их соседей
+    picked = {n["ref"] for n in twelve["nodes"]}
+    assert len(picked & hubs) == 3 and set(order[:3]) <= picked and len(twelve["edges"]) == 9
+    assert all(e["dst"] in picked & hubs for e in twelve["edges"])
+    assert (twelve["total"], twelve["truncated"]) == (38, True)
+
+    # соседей хабов меньше, чем мест: остаток — прочие узлы по degree
+    many = recipes.overview(kb, limit=32)                     # 8 хабов: шесть хабов, 30 листьев — 32 места
+    assert len(many["nodes"]) == 32 and hubs <= {n["ref"] for n in many["nodes"]}
+    assert {refs["@lone1"], refs["@lone2"]}.isdisjoint({n["ref"] for n in many["nodes"]})
+    assert len(recipes.overview(kb, limit=36)["edges"]) == 30                # все хабы и листья, без одиночек

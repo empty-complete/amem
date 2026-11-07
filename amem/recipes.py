@@ -738,9 +738,10 @@ _OVERVIEW_DEGREE = (
     "UNION ALL SELECT c.atom_id FROM cur c JOIN atom_derived f ON f.revision_id = c.id "
     "UNION ALL SELECT f.atom_id FROM cur c JOIN atom_derived f ON f.revision_id = c.id) e GROUP BY id)")
 _CURRENT_ENTITY = "EXISTS (SELECT 1 FROM entity_revision r WHERE r.entity_id = e.id AND r.review_state <> 'declined')"
-# Узлы обзора: записи с текущей ревизией и статусом из набора. С проектом — атомы, у текущей ревизии которых
-# scope.project — этот проект (кандидаты — по индексу 0010, текущая ли ревизия — по cur), и сущности на другом
-# конце текущего ребра хотя бы одного такого атома (смежность — по индексам рёбер, как в обходе).
+# Узлы обзора: записи с текущей ревизией и статусом из набора. С проектом — атомы со статусом из набора, у текущей
+# ревизии которых scope.project — этот проект (кандидаты — по индексу 0010, текущая ли ревизия — по cur), и сущности
+# на другом конце текущего ребра хотя бы одного такого атома (смежность — по индексам рёбер, как в обходе): сущность,
+# связанная только с атомом проекта вне фильтра статусов, в обзор не попадает.
 _OVERVIEW_NODES = {
     False: (
         # cur — одна строка на атом: соединение, а не IN, — PostgreSQL 16 иначе идёт по индексу atom 50 тыс. раз
@@ -749,30 +750,50 @@ _OVERVIEW_NODES = {
         f"UNION ALL SELECT 'ent', e.id, e.created_at FROM entity e WHERE e.status = ANY(%(statuses)s) "
         f"AND {_CURRENT_ENTITY})"),
     True: (
-        "project_atoms AS MATERIALIZED (SELECT r.atom_id AS id FROM atom_revision r "
-        "WHERE r.payload->'scope'->>'project' = %(project)s AND r.id IN (SELECT id FROM cur)), "
+        "project_atoms AS MATERIALIZED (SELECT r.atom_id AS id FROM atom_revision r JOIN atom a ON a.id = r.atom_id "
+        "WHERE r.payload->'scope'->>'project' = %(project)s AND r.id IN (SELECT id FROM cur) "
+        "AND a.status = ANY(%(statuses)s)), "
         "project_entities AS (SELECT far AS id FROM ("
         + _graph_adjacent_sql(None, ids="ARRAY(SELECT id FROM project_atoms)") + ") e), "
         "nodes AS (SELECT 'atm' AS prefix, a.id, a.created_at FROM atom a "
-        "WHERE a.status = ANY(%(statuses)s) AND a.id IN (SELECT id FROM project_atoms) "
+        "WHERE a.id IN (SELECT id FROM project_atoms) "
         "UNION ALL SELECT 'ent', e.id, e.created_at FROM entity e WHERE e.status = ANY(%(statuses)s) "
         f"AND e.id IN (SELECT id FROM project_entities) AND {_CURRENT_ENTITY})"),
 }
 
 
+# Отбор обзора: ranked — все узлы под фильтром по degree (при равенстве новые первыми) с номером и total; хабы —
+# первые %(hubs)s; near — соседи хабов по текущим рёбрам (тем же, что считает degree). Предел заполняется по очереди:
+# хабы, их соседи по degree, остальные по degree — иначе top-N по degree на базе с хабами — почти одни сущности,
+# и линий между ними нет.
+_OVERVIEW_PICK = (
+    "ranked AS MATERIALIZED (SELECT n.prefix, n.id, coalesce(d.n, 0) AS degree, row_number() OVER ("
+    "ORDER BY coalesce(d.n, 0) DESC, n.created_at DESC, n.id DESC) AS rank, count(*) OVER () AS total "
+    "FROM nodes n LEFT JOIN degree d ON d.id = n.id), "
+    "hubs AS MATERIALIZED (SELECT id FROM ranked WHERE rank <= %(hubs)s), "
+    "near AS (SELECT DISTINCT far AS id FROM (" + _graph_adjacent_sql(None, ids="ARRAY(SELECT id FROM hubs)") + ") e) "
+    "SELECT r.prefix, r.id, r.degree, r.total, r.rank FROM ranked r "
+    "ORDER BY CASE WHEN r.rank <= %(hubs)s THEN 0 WHEN r.id IN (SELECT id FROM near) THEN 1 ELSE 2 END, r.rank "
+    "LIMIT %(limit)s")
+
+
 def overview(conn: psycopg.Connection, *, limit: int | None = GRAPH_LIMIT, project: str | None = None,
              statuses=None, rels=None) -> dict:
-    """Обзор базы без начальной записи (небо на главной): текущие сущности и записи по degree по убыванию,
-    при равенстве — новые первыми (время создания записи, затем id); не больше limit узлов (None — все).
+    """Обзор базы без начальной записи (небо на главной): текущие сущности и записи, не больше limit узлов (None —
+    все). Отбор: хабы — limit // 4 узлов (не меньше одного) с наибольшим degree, затем их соседи по текущим рёбрам
+    по degree, оставшиеся места — прочие узлы по degree; при равенстве degree — новые первыми (время создания записи,
+    затем id). Так в выдаче есть и линии, а не одни хабы без связей между собой. Порядок выдачи — по degree тем же
+    правилом.
 
-    degree — число текущих связей узла во всей базе (входящих и исходящих), pending — открытый пункт очереди
-    проверки. Рёбра — только между вернувшимися узлами. total — сколько узлов было бы без предела (с тем же project
-    и статусами), truncated — total > limit. project — ent:<UUID или ключ>: атомы с scope.project этого проекта
-    и сущности, связанные хотя бы с одним из них. statuses — как у других рецептов; rels — виды рёбер выдачи
-    (как у around_entity), на выбор узлов и степень не влияют.
+    degree — число текущих связей узла во всей базе (входящих и исходящих, в том числе к узлам вне фильтра и вне
+    выдачи), pending — открытый пункт очереди проверки. Рёбра — только между вернувшимися узлами. total — сколько
+    узлов было бы без предела (с тем же project и статусами), truncated — total > limit. project — ent:<UUID или
+    ключ>: атомы с scope.project этого проекта и сущности, связанные хотя бы с одним из них (атомы — под фильтром
+    статусов). statuses — как у других рецептов, ко всем шагам отбора; rels — виды рёбер выдачи (как
+    у around_entity), на отбор узлов и степень не влияют.
 
-    Выбор узлов — один запрос: степень агрегатом по всем рёбрам, сортировка и предел — в базе (top-N), total —
-    оконным count до предела; в Python приходят только вернувшиеся узлы."""
+    Отбор — один запрос: степень агрегатом по всем рёбрам, номер по degree и total — оконными функциями, соседи
+    хабов — по индексам рёбер, предел — в базе; в Python приходят только вернувшиеся узлы."""
     if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
         raise records.RecordError(f"limit {limit!r}: нужно целое число от 1 или None")
     allowed_statuses = search._channel_statuses(statuses)
@@ -785,16 +806,15 @@ def overview(conn: psycopg.Connection, *, limit: int | None = GRAPH_LIMIT, proje
         if target != "entity":
             raise records.RecordError(f"project {project}: нужна сущность ent:, а не атом")
     rows = conn.execute(
-        f"WITH {_OVERVIEW_DEGREE}, {_OVERVIEW_NODES[project_ref is not None]} "
-        "SELECT n.prefix, n.id, coalesce(d.n, 0) AS degree, count(*) OVER () AS total "
-        "FROM nodes n LEFT JOIN degree d ON d.id = n.id "
-        "ORDER BY degree DESC, n.created_at DESC, n.id DESC LIMIT %(limit)s",
-        {"statuses": list(allowed_statuses), "project": project_ref, "limit": limit}).fetchall()
+        f"WITH {_OVERVIEW_DEGREE}, {_OVERVIEW_NODES[project_ref is not None]}, {_OVERVIEW_PICK}",
+        {"statuses": list(allowed_statuses), "project": project_ref, "limit": limit,
+         "hubs": max(1, limit // 4) if limit is not None else 0}).fetchall()
+    rows.sort(key=lambda row: row[4])                             # выдача — по degree, как номер в ranked
     total = rows[0][3] if rows else 0
-    refs = [f"{prefix}:{record_id}" for prefix, record_id, _, _ in rows]
+    refs = [f"{prefix}:{record_id}" for prefix, record_id, *_ in rows]
     found = _graph_node_rows(conn, refs)
-    nodes = {ref: found[ref] for ref in refs if ref in found}     # порядок — по степени, как в запросе
-    _graph_marks(conn, nodes, {record_id: degree for _, record_id, degree, _ in rows})
+    nodes = {ref: found[ref] for ref in refs if ref in found}
+    _graph_marks(conn, nodes, {record_id: degree for _, record_id, degree, *_ in rows})
     edges = _graph_edges(conn, list(nodes), rels, inner=True) if nodes else []
     return {
         "recipe": "overview", "project": project_ref,
