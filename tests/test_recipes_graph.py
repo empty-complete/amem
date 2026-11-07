@@ -363,3 +363,23 @@ def test_order_within_a_level_follows_path_edge_ids(kb):
 
     assert [node["ref"] for node in result["nodes"][1:]] == [refs["@a"], refs["@b"]]
     assert [path["nodes"][-1] for path in result["paths"]] == [refs["@a"], refs["@b"]]
+
+
+def test_limit_stops_the_walk_and_reports_truncated(kb):
+    """limit — узлов в выдаче не больше, ближние раньше дальних, тот же порядок, что без предела; truncated —
+    за пределом остались узлы."""
+    written = records.commit(kb, [
+        entity("root"), atom("a", about=["@root"]), atom("b", about=["@root"]), atom("c", derived_from=["@a"]),
+    ], agent=AGENT)
+    refs = written.refs
+    full = around(kb, refs["@root"], depth=2)
+    assert full["truncated"] is False and len(full["nodes"]) == 4
+    assert around(kb, refs["@root"], depth=2, limit=4)["truncated"] is False      # ровно столько, сколько есть
+    cut = around(kb, refs["@root"], depth=2, limit=3)
+    assert cut["truncated"] is True
+    assert [n["ref"] for n in cut["nodes"]] == [n["ref"] for n in full["nodes"]][:3]
+    assert max(n["depth"] for n in cut["nodes"]) == 1 and len(cut["edges"]) == 2
+    assert around(kb, refs["@root"], depth=2, limit=1)["nodes"] == full["nodes"][:1]
+    for bad in (0, -1, True, "3"):
+        with pytest.raises(RecordError, match="limit"):
+            around(kb, refs["@root"], limit=bad)

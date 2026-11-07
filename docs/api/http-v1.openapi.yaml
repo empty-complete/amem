@@ -664,6 +664,8 @@ components:
     Problem:
       type: object
       required: [type, title, status]
+      additionalProperties: true
+      description: "RFC 9457; кроме полей ниже — расширения по code (by и at у review_closed, missing и collisions у подборок…)"
       properties:
         type: { type: string }
         title: { type: string }
@@ -814,6 +816,10 @@ components:
         quote: { type: string }
         role: { type: string, enum: [primary, secondary, derived] }
         verdict: { type: [string, "null"], enum: [ok, moved, fuzzy, by_locator, unresolved, not_found, no_file, no_text, external, error, null], description: "null — источник ещё не сверялся с файлом" }
+        page: { type: integer, description: "Где сверка нашла цитату" }
+        anchor: { type: string }
+        edition: { type: string, description: "ent: редакции документа" }
+        checked_at: { type: string, format: date-time }
 
     RecordView:
       type: object
@@ -844,6 +850,8 @@ components:
         other: { $ref: "#/components/schemas/RefLabel" }
         note: { type: [string, "null"] }
         confidence: { type: [number, "null"] }
+        agent: { type: string, description: "Кто записал связь" }
+        created_at: { type: string, format: date-time }
 
     ChangeEvent:
       type: object
@@ -861,6 +869,15 @@ components:
         rel: { type: string }
         src: { type: string }
         dst: { type: string }
+        recorded_at: { type: string, format: date-time, description: "у revision" }
+        valid_from: { type: [string, "null"], description: "у revision — с какого момента ревизия верна о мире" }
+        valid_to: { type: [string, "null"] }
+        reviewed_at: { type: string, format: date-time, description: "у review" }
+        reviewed_by: { type: string }
+        changed_at: { type: string, format: date-time, description: "у status и folder" }
+        reason: { type: [string, "null"], description: "у status — причина смены статуса" }
+        created_at: { type: string, format: date-time, description: "у link_created" }
+        retired_at: { type: string, format: date-time, description: "у link_retired" }
         from: { type: [string, "null"], description: "у folder — прежняя папка; null — запись была без папки" }
         to: { type: [string, "null"], description: "у folder — новая папка; null — запись вынута из папки" }
         changes:
@@ -889,6 +906,8 @@ components:
         required: { type: boolean }
         group: { type: [string, "null"] }
         origin: { type: [string, "null"] }
+        rule: { type: [string, "null"], description: "Шаблон, чьё правило дало поле (code@version, как в Card.templates)" }
+        when: { type: [string, "null"], description: "Когда поле нужно (условие правила профиля)" }
         state: { type: string, enum: [known, missing, asked, na, conflict] }
         value: { type: [object, "null"] }
         default: { type: [object, "null"] }
@@ -899,6 +918,7 @@ components:
         status: { type: [string, "null"] }
         by: { type: [string, "null"], enum: [person, model, null] }
         basis: { type: [string, "null"] }
+        rank: { type: [string, "null"], enum: [preferred, normal, deprecated, null] }
         confidence: { type: [number, "null"] }
         source_role: { type: [string, "null"] }
         sources: { type: array, items: { type: object } }
@@ -963,7 +983,9 @@ components:
         kind: { type: string, enum: [file, web, message] }
         original_name: { type: string, description: "Нет у страницы сайта (у неё url)" }
         media_type: { type: [string, "null"] }
+        format_puid: { type: string, description: "Формат по PRONOM (у файлов из подборок)" }
         url: { type: [string, "null"] }
+        retrieved_at: { type: string, format: date, description: "У страницы сайта — дата обращения" }
         logical_paths: { type: array, items: { type: string } }
         versions: { type: array, items: { $ref: "#/components/schemas/ObjectVersionView" } }
         status: { type: [string, "null"], enum: [parsed, partial, skipped, null] }
@@ -996,6 +1018,7 @@ components:
         created_by: { type: string }
         author: { type: [string, "null"] }
         claimed_by: { type: [string, "null"] }
+        claimed_until: { type: [string, "null"], description: "До какого времени пункт держит claimed_by" }
         closed_at: { type: [string, "null"] }
 
     ReviewItemView:

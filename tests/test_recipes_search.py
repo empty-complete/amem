@@ -347,3 +347,49 @@ def test_availability_fastembed_model_without_the_package(kb, monkeypatch):
     embed.activate_model(kb, embed.register_model(kb, selected)["id"])
     monkeypatch.setattr(recipes.importlib.util, "find_spec", lambda name: None)
     assert recipes.availability(kb, selected) == {"semantic": "unavailable", "reason": "fastembed_missing"}
+
+
+def test_on_semantic_error_skip_degrades_to_lexical_channels(kb, provider, monkeypatch):
+    """on_semantic_error="skip": provider, который не может посчитать вектор запроса, не валит поиск — смысловой
+    канал пропускается с причиной; по умолчанию (raise) — EmbeddingError, как раньше. Журнал — одна строка."""
+    from amem import recipes
+
+    written = write(kb, atom("alpha", "alpha"), atom("near", "near alpha"))
+    activate(kb, provider)
+    alpha = f"atm:{written.revisions[0].record_id}"
+    wrong = FakeProvider()
+    wrong.version = "2"
+
+    class Broken(FakeProvider):
+        def _embed(self, texts):
+            raise embed.EmbeddingError("модель не считает вектора")
+
+    class Fastembed(FakeProvider):
+        name, version, backend = "fake-fastembed", "1", "fastembed"
+
+    class FastembedBroken(Fastembed, Broken):
+        pass
+
+    working = Fastembed()
+    model = embed.register_model(kb, working)
+    embed.sync_embeddings(kb, model["id"], working)
+    monkeypatch.setattr(recipes.importlib.util, "find_spec", lambda name: None)
+
+    cases = [(wrong, "provider_mismatch"), (Broken(), "embedding_failed")]
+    for recipe in ("exact_fact", "similar"):
+        for selected, reason in cases:
+            with pytest.raises(embed.EmbeddingError):
+                search_recipe(kb, recipe, "alpha", provider=selected)
+            before = kb.execute("SELECT count(*) FROM retrieval").fetchone()[0]
+            result = search_recipe(kb, recipe, "alpha", provider=selected, on_semantic_error="skip")
+            assert (result["semantic"], result["channels"]["reasons"]) == ("unavailable", {"vector": reason})
+            assert "vector" in result["channels"]["skipped"] and alpha in by_ref(result)
+            assert kb.execute("SELECT count(*) FROM retrieval").fetchone()[0] == before + 1
+    embed.activate_model(kb, model["id"])
+    result = search_recipe(kb, "exact_fact", "alpha", provider=FastembedBroken(), on_semantic_error="skip")
+    assert result["channels"]["reasons"] == {"vector": "fastembed_missing"}
+    monkeypatch.setenv("AMEM_BACKEND", "nonsense")
+    result = search_recipe(kb, "exact_fact", "alpha", on_semantic_error="skip")
+    assert result["channels"]["reasons"] == {"vector": "backend_unknown"} and alpha in by_ref(result)
+    with pytest.raises(ValueError, match="on_semantic_error"):
+        search_recipe(kb, "exact_fact", "alpha", on_semantic_error="ignore")

@@ -215,6 +215,19 @@ def test_tokens_file_must_be_a_regular_file(tmp_path):
         settings.load_tokens(tmp_path)
 
 
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="каналы FIFO — POSIX")
+def test_fifo_in_place_of_the_tokens_file_does_not_hang_the_start(tmp_path):
+    """Канал без пишущего на месте файла: открытие с O_NONBLOCK не ждёт, fstat отвергает его до чтения."""
+    import time
+
+    path = tmp_path / "amem-tokens.toml"
+    os.mkfifo(path)
+    started = time.perf_counter()
+    with pytest.raises(settings.SettingsError, match="не обычный файл"):
+        settings.load_tokens(path)
+    assert time.perf_counter() - started < 1
+
+
 def test_missing_tokens_file(tmp_path):
     with pytest.raises(settings.SettingsError, match="amem-tokens.toml"):
         settings.load_tokens(tmp_path / "нет" / "amem-tokens.toml")
@@ -241,6 +254,17 @@ def test_missing_tokens_file(tmp_path):
 ])
 def test_private_strip(text, expected):
     assert private.strip(text) == expected
+
+
+@pytest.mark.parametrize("tail", [" ", "\n", "\t ", "< "])
+def test_private_strip_is_linear_on_long_whitespace(tail):
+    """«<» с длинным хвостом пробелов или переводов строк разбирается без перебора (захватывающие квантификаторы)."""
+    import time
+
+    text = "<" + tail * (100_000 // len(tail))
+    started = time.perf_counter()
+    assert private.strip(text) == text
+    assert time.perf_counter() - started < 0.1
 
 
 # --- служба: фикстуры dsn и serve — в conftest.py ---
@@ -310,18 +334,24 @@ def test_foreign_origin_is_403(serve):
     is_problem(dev.post("/api/v1/submit", json={}, headers={"Origin": DEV_UI}), 404, "not_found")
 
 
-def test_write_from_foreign_site_without_origin_is_403(serve):
-    """Запасная проверка: запись без Origin, но с Sec-Fetch-Site чужой страницы — тоже 403."""
+def test_request_from_foreign_site_without_origin_is_403(serve, pg):
+    """Запасная проверка: запрос без Origin, но с Sec-Fetch-Site чужой страницы — 403 у записи и у любого /api/v1
+    (картинка с чужой страницы не пишет поиск в журнал выдачи); /health отвечает."""
     client = serve()
     for site in ("cross-site", "same-site", "Cross-Site"):
         body = is_problem(client.post("/api/v1/submit", json={}, headers={"Sec-Fetch-Site": site}), 403, "bad_origin")
         assert "Sec-Fetch-Site" in body["detail"]
         is_problem(client.delete("/api/v1/folders/a", headers={"Sec-Fetch-Site": site}), 403, "bad_origin")
+        is_problem(client.get("/api/v1/session", headers={"Sec-Fetch-Site": site}), 403, "bad_origin")
+        is_problem(client.get("/api/v1/search", params={"q": "x"}, headers={"Sec-Fetch-Site": site,
+                                                                           "Sec-Fetch-Dest": "image"}),
+                   403, "bad_origin")
+        assert client.get("/health", headers={"Sec-Fetch-Site": site}).status_code == 200
+    assert pg.execute("SELECT count(*) FROM retrieval").fetchone()[0] == 0
     # своя страница, ввод адреса и клиенты без заголовка проходят защиту — дальше маршрута нет
     for headers in ({"Sec-Fetch-Site": "same-origin"}, {"Sec-Fetch-Site": "none"}, {}):
         is_problem(client.post("/api/v1/submit", json={}, headers=headers), 404, "not_found")
-    # чтение с чужой страницы без Origin — не запись: проверка его не касается
-    assert client.get("/api/v1/session", headers={"Sec-Fetch-Site": "cross-site"}).status_code == 200
+        assert client.get("/api/v1/session", headers=headers).status_code == 200
 
 
 def test_write_accepts_only_json(serve):
@@ -392,9 +422,13 @@ def test_session_cookie_for_ui_origin_but_not_for_others(serve):
     assert response.headers["set-cookie"].startswith("amem_session=")
     client.cookies.clear()
 
-    for headers in ({"Sec-Fetch-Site": "cross-site"}, {"Sec-Fetch-Site": "same-site"}, {"Sec-Fetch-Site": "none"}, {}):
+    for headers in ({"Sec-Fetch-Site": "none"}, {}):
         response = client.get("/api/v1/session", headers=headers)
         assert response.json()["agent"] == "model:local", headers
+        assert "set-cookie" not in response.headers
+    for headers in ({"Sec-Fetch-Site": "cross-site"}, {"Sec-Fetch-Site": "same-site"}):    # чужая страница — отказ
+        response = client.get("/api/v1/session", headers=headers)
+        is_problem(response, 403, "bad_origin")
         assert "set-cookie" not in response.headers
     foreign = client.get("/api/v1/session", headers={"Origin": "http://evil.example", "Sec-Fetch-Site": "same-origin"})
     is_problem(foreign, 403, "bad_origin")
@@ -537,6 +571,21 @@ def test_problem_extensions_do_not_replace_main_fields(serve):
     problem = problems.Problem(400, "bad_request", "неверно", type="https://evil.example", code2="x")
     body = is_problem(serve(routes=[raising(problem)]).get("/api/v1/boom"), 400, "bad_request")
     assert (body["type"], body["code2"]) == ("about:blank", "x")
+
+
+def test_value_the_database_refuses_is_400_without_its_text(serve):
+    """psycopg.DataError (знак NUL, число вне integer…) — неверный ввод: 400 без текста ошибки базы."""
+    error = psycopg.DataError("PostgreSQL text fields cannot contain NUL (0x00) bytes")
+    body = is_problem(serve(routes=[raising(error)]).get("/api/v1/boom"), 400, "bad_request")
+    assert "PostgreSQL" not in body["detail"]
+
+
+def test_every_problem_has_nosniff(serve):
+    client = serve()
+    for response in (client.get("/api/v1/нет-такого"), client.get("/health", headers={"Host": "evil.example"}),
+                     client.post("/api/v1/submit", content=b"x", headers={"Content-Type": "text/plain"})):
+        assert response.headers["content-type"].startswith("application/problem+json")
+        assert response.headers["x-content-type-options"] == "nosniff"
 
 
 def test_database_unavailable_is_503_without_connection_details(serve):

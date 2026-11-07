@@ -2,9 +2,10 @@
 
 Для каждого запроса, в любом режиме:
 - Host — 127.0.0.1, localhost, [::1] или адрес из настроек (--host); чужой — 421 (DNS rebinding);
-- Origin, если пришёл, — свой источник или один из AMEM_UI_ORIGINS; чужой — 403. Запасная проверка — запись без
+- Origin, если пришёл, — свой источник или один из AMEM_UI_ORIGINS; чужой — 403. Запасная проверка — запрос без
   Origin, но с Sec-Fetch-Site: cross-site или same-site: так браузер помечает запрос с чужой страницы, даже если
-  Origin не прислал (старые браузеры и редкие случаи вроде переходов по формам), — тоже 403;
+  Origin не прислал (<img>, <script>, переход по форме), — 403 у любой записи и у любого запроса к /api/v1, кроме
+  /health: иначе чужая страница картинкой с /api/v1/search писала бы строки в журнал выдачи и засоряла полезность;
 - запись (POST, PUT, PATCH, DELETE) с телом — только application/json, иначе 415. Запись без тела (DELETE папки)
   проверять нечего: межсайтовый запрос без тела всё равно несёт Origin и упирается в проверку выше.
   Исключение — /bundles/inspect: multipart/form-data, и Origin для него обязателен.
@@ -36,6 +37,7 @@ WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 FOREIGN_SITES = frozenset({"cross-site", "same-site"})       # Sec-Fetch-Site запроса с чужой страницы
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "[::1]")
 WILDCARD_HOSTS = frozenset({"0.0.0.0", "::", "[::]", ""})      # адрес «на всех интерфейсах» — не имя службы
+API_PREFIX = "/api/v1/"
 INSPECT = "/api/v1/bundles/inspect"
 PUBLIC = frozenset({"/health"})          # без входа и в общей службе: проверка живости для compose и мониторинга
 
@@ -115,9 +117,10 @@ class Guard:
             return problems.response(403, "bad_origin", f"запрос со страницы {origin!r}: служба принимает только свой "
                                      f"источник и AMEM_UI_ORIGINS")
         site = headers.get("sec-fetch-site", "").strip().lower()
-        if method in WRITE_METHODS and origin is None and site in FOREIGN_SITES:
-            return problems.response(403, "bad_origin", f"запись с чужой страницы (Sec-Fetch-Site: {site}) без Origin: "
-                                     "служба принимает запись только со своей страницы и AMEM_UI_ORIGINS")
+        if origin is None and site in FOREIGN_SITES and path not in PUBLIC \
+                and (method in WRITE_METHODS or path.startswith(API_PREFIX)):
+            return problems.response(403, "bad_origin", f"запрос с чужой страницы (Sec-Fetch-Site: {site}) без Origin: "
+                                     "служба отвечает только своей странице и AMEM_UI_ORIGINS")
         if method in WRITE_METHODS:
             media = headers.get("content-type", "").partition(";")[0].strip().lower()
             if path == INSPECT:

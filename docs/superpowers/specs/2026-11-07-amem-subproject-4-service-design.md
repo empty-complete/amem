@@ -147,7 +147,7 @@ amem становится программой, которой пользуют�
 
 **Защита запросов** — для каждого запроса, в любом режиме:
 - `Host` — один из разрешённых: `127.0.0.1`, `localhost`, `[::1]` и адрес из `--host`. Чужой `Host` (DNS rebinding) — 421;
-- `Origin`, если пришёл, — тот же источник, что и служба, или один из `AMEM_UI_ORIGINS`. Чужой — 403. Запасная проверка: запись без `Origin`, но с `Sec-Fetch-Site: cross-site` или `same-site` — тоже 403;
+- `Origin`, если пришёл, — тот же источник, что и служба, или один из `AMEM_UI_ORIGINS`. Чужой — 403. Запасная проверка: запрос без `Origin`, но с `Sec-Fetch-Site: cross-site` или `same-site` — тоже 403, у любой записи и у любого `/api/v1/…`, кроме `/health` (иначе `<img>` с чужой страницы писал бы поиски в журнал выдачи и засорял полезность);
 - запись (`POST`, `PUT`, `PATCH`, `DELETE`) с телом принимает только `application/json`. Запись без тела (`DELETE /folders/{path}`) проверять нечего: межсайтовый запрос из браузера всё равно несёт `Origin` и упирается в проверку выше. Исключение — `/bundles/inspect` (multipart), для него `Origin` обязателен;
 - у `/mcp` — те же проверки через `TransportSecuritySettings` SDK.
 
@@ -189,13 +189,17 @@ amem становится программой, которой пользуют�
 | `ObjectError(code=invalid)` | 400 | `bad_request` |
 | `RecordNotFound`, `BaseNameError`, `VocabError` — по классу (у них нет `code`) | 404 / 400 / 400 | `not_found` / `bad_request` |
 | `CheckError`, `RecordError`, `ObjectError`, `db.BaseNameError`, `vocab.VocabError`, ошибка разбора запроса | 400 | `bad_request` |
-| `EmbeddingError` (нет модели, провайдер запроса не совпал с базой) | 503 | `semantic_unavailable` |
+| `EmbeddingError` (нет модели, провайдер запроса не совпал с базой) | 503 | `semantic_unavailable`. У `/search` и `/similar` по тексту — не ошибка: рецепт зовётся с `on_semantic_error="skip"`, смысловой канал пропускается (`semantic: unavailable`, `channels.reasons.vector` — `provider_mismatch`, `fastembed_missing`, `embedding_failed`, `backend_unknown`), марки и полнотекстовый канал отвечают |
 | `CanonError`, `PackError` | 400 | `bad_request` |
 | Прочий `ValueError` — последняя ступень перед 500 (так библиотека отвечает на неверный ввод: `limit`, неизвестный вид) | 400 | `bad_request`; в `detail` — сообщение библиотеки |
 | Нет входа / только чтение | 401 / 403 | `auth_required` / `read_only` |
 | Чужой `Host` / `Origin` | 421 / 403 | `bad_host` / `bad_origin` |
 | Запись не в `application/json` | 415 | `unsupported_media_type` |
 | База недоступна (`psycopg.OperationalError`) | 503 | `db_unavailable` |
+| Значение, которое база не принимает (`psycopg.DataError`: знак NUL, число вне `integer`) | 400 | `bad_request`; текста ошибки базы в ответе нет. Операции `amem/api.py` отвергают NUL в строковых параметрах сами |
+| Хранилище копий без корня OCFL (том данных не подключён) | 503 | `store_unavailable` |
+| Копии версии нет в хранилище при живом корне (удалена, ссылка за пределы папки объекта) | 404 | `not_found` с подсказкой; путь — предупреждением в журнал службы |
+| Неверный `Range` / диапазон вне файла | 400 / 416 | `bad_request` / `range_not_satisfiable` (с `Content-Range: bytes */<размер>`) |
 | Прочее | 500 | `internal`; подробности — в журнал службы, не в ответ |
 
 ### 3.3. Соответствие контракту
@@ -210,9 +214,9 @@ amem становится программой, которой пользуют�
 | `FolderTree`, `Folder` | `folders.tree` | пути `POST /folders` (201 `Folder`), `DELETE /folders/{path}` (204), `PATCH /folders/{path}` (`FolderRenamed`: `from`, `to`, `folders`, `records`) — по договорённости с вебом; `{path}` — путь целиком в `encodeURIComponent` |
 | `RecordView`, `SourceView` | `lookup.get`, `revisions_sources`, объекты, `review.items`, `usefulness.score`. У записи, чьи ревизии все отклонены, — последняя ревизия (как в списке записей), а не 404; `ancestors` — цепочка `part_of` от корня (у нескольких родителей — первый по id); `SourceView.object` — голый UUID объекта, как `ObjectView.id` | `SourceView.verdict` может быть `null` (источник не сверялся) |
 | `LinkView` | `lookup.links` + `lookup.labels` | — |
-| `ChangeEvent`, `ChangesResult` | `what_changed` + `lookup.labels`; у событий связи `ref` — запись истории (по базе — начало связи) | `changes` — массив (как в библиотеке); тип `folder` с `from`/`to` |
+| `ChangeEvent`, `ChangesResult` | `what_changed` + `lookup.labels`; у событий связи `ref` — запись истории (по базе — начало связи); служебные хэши тела (`content_hash`, `previous_content_hash`) наружу не отдаются | `changes` — массив (как в библиотеке); тип `folder` с `from`/`to`; времена и поля событий (`recorded_at`, `valid_from`/`valid_to`, `reviewed_at`/`reviewed_by`, `changed_at`, `reason`, `created_at`, `retired_at`) описаны |
 | `Card`, `CardField` | `profile.card`; `ancestors` — служба сворачивает карточки предков в `RefLabel` (от корня); `entity.label`, `ask`, `hint`, `when` — строкой (ru) из `LangString`; `label` поля — подпись величины из словаря `property` | — |
-| `GraphResult`, `GraphNode` | `around_entity` + `lookup.labels` + `family` вида; служба режет выдачу до 500 узлов и ставит `truncated` | — |
+| `GraphResult`, `GraphNode` | `around_entity(limit=500)` + `lookup.labels` + `family` вида: обход останавливается на 500 узлах (ближние раньше дальних), `truncated` — от рецепта | — |
 | `ObjectView`, `ObjectVersionView` | `lookup.object_view` (поля `cited_by`, `pages`, `sheets`, `status` — по договорённости с вебом, его PR) | `original_name` может отсутствовать (страница сайта); `digest` и `size` — `null` у сайта и переписки |
 | `ReviewItem`, `ReviewItemView` | `review.items` + `lookup.labels`; у `edit` и `imported` — текущая и предложенная ревизии (`lookup.history`), у `source_changed` — версии из `details` | — |
 | `ReviewStats` | `review.stats` | — |
@@ -226,7 +230,7 @@ amem становится программой, которой пользуют�
 Параметры запроса `amem/api.py` разбирает одинаково для HTTP, MCP и CLI: пустой список фильтра (`kind`, `status`, `entity_class`, `rels`, в строке запроса — и `?status=`) — «без фильтра», как отсутствующий параметр; пустой `range` листа — окно по умолчанию библиотеки; пределы и перечисления — по контракту, до вызова библиотеки (400 `bad_request`).
 
 Тест сверки:
-- ответ каждого пути контракта проверяется по схеме ответа из файла контракта (jsonschema, OpenAPI 3.1 = JSON Schema 2020-12);
+- ответ каждого пути контракта проверяется по схеме ответа из файла контракта (jsonschema, OpenAPI 3.1 = JSON Schema 2020-12) строго: у схем со списком `properties` лишние поля запрещены (кроме `Problem` — расширения RFC 9457), открытые объекты без `properties` (`payload`, `details`, `summary`, `channels`) остаются открытыми;
 - отдельный тест проверяет, что все пути контракта реализованы и что служба не отвечает на пути вне контракта. Исключения — `/api/v1/openapi.json`, `/health`, `/mcp`, `/ui`.
 
 ### 3.4. Файлы, загрузки и `/ui`

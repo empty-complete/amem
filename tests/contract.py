@@ -3,9 +3,14 @@
 OpenAPI 3.1 — это JSON Schema 2020-12, поэтому ответ проверяет jsonschema: документ контракта целиком — один ресурс
 реестра (referencing), схема ответа берётся ссылкой на своё место в документе (JSON Pointer), и ссылки
 «#/components/…» внутри неё разрешаются по тому же документу. Форматы uuid и date-time проверяются.
+
+Сверка строгая: у каждой схемы со списком properties лишние поля запрещены (additionalProperties: false), если
+контракт сам не сказал иначе (Problem — расширения RFC 9457). Открытые объекты без properties (payload, details,
+summary, channels…) остаются открытыми. Так поле, которого нет в контракте, не уходит вебу незамеченным.
 """
 from __future__ import annotations
 
+import copy
 from functools import cache
 from pathlib import Path
 from urllib.parse import quote
@@ -26,9 +31,26 @@ def spec() -> dict:
     return yaml.safe_load(PATH.read_text(encoding="utf-8"))
 
 
+def _strict(node):
+    """Копия схемы, где у объектов со списком properties лишние поля запрещены (если контракт не задал иначе)."""
+    if isinstance(node, dict):
+        node = {key: _strict(value) for key, value in node.items()}
+        if isinstance(node.get("properties"), dict) and "additionalProperties" not in node:
+            node["additionalProperties"] = False
+        return node
+    if isinstance(node, list):
+        return [_strict(value) for value in node]
+    return node
+
+
+@cache
+def strict_spec() -> dict:
+    return _strict(copy.deepcopy(spec()))
+
+
 @cache
 def _registry() -> Registry:
-    return Registry().with_resource(URI, Resource.from_contents(spec(), default_specification=DRAFT202012))
+    return Registry().with_resource(URI, Resource.from_contents(strict_spec(), default_specification=DRAFT202012))
 
 
 def pointer(*parts) -> str:

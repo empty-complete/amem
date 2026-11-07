@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import re
 
-_TAG = re.compile(r"<\s*(/?)\s*private\s*>", re.IGNORECASE)
+# захватывающие квантификаторы (*+, Python 3.11+): пробелы после «<» не перебираются заново, и «<» с длинным
+# хвостом пробелов или переводов строк разбирается за линейное время, а не за квадратичное
+_TAG = re.compile(r"<\s*+(/?)\s*+private\s*+>", re.IGNORECASE)
 
 
 def strip(text: str) -> str:
