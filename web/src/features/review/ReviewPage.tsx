@@ -1,4 +1,4 @@
-import { Button } from "@heroui/react";
+import { Button, ToggleButton, ToggleButtonGroup } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -60,6 +60,8 @@ export function ReviewPage({
   useEffect(() => {
     if (!itemId && ordered[0] && window.matchMedia?.("(min-width: 1100px)").matches) go(ordered[0].id, true);
   }, [itemId, ordered, go]);
+  // другой пункт — чистая заметка
+  // biome-ignore lint/correctness/useExhaustiveDependencies: сброс именно при смене пункта
   useEffect(() => setNote(""), [itemId]);
 
   const idx = current ? ordered.indexOf(current) : -1;
@@ -124,22 +126,24 @@ export function ReviewPage({
           </option>
         ))}
       </select>
-      <div className="seg" role="radiogroup" aria-label={t("review.state")}>
-        {(["open", "done"] as const).map((s) => (
-          <button
-            key={s}
-            type="button"
-            role="radio"
-            aria-checked={state === s}
-            className="seg__opt"
-            onClick={() =>
-              navigate({ to: "/review", search: { reason, state: s === "open" ? undefined : s } as never })
-            }
-          >
-            {t(`review.${s}`)}
-          </button>
+      <ToggleButtonGroup
+        size="sm"
+        selectionMode="single"
+        disallowEmptySelection
+        selectedKeys={new Set([state])}
+        onSelectionChange={(k) => {
+          const s2 = [...k][0] === "done" ? "done" : undefined;
+          navigate({ to: "/review", search: { reason, state: s2 } as never });
+        }}
+        aria-label={t("review.state")}
+      >
+        {(["open", "done"] as const).map((s2, i) => (
+          <ToggleButton key={s2} id={s2}>
+            {i > 0 && <ToggleButtonGroup.Separator />}
+            {t(`review.${s2}`)}
+          </ToggleButton>
         ))}
-      </div>
+      </ToggleButtonGroup>
     </div>
   );
 
@@ -177,7 +181,8 @@ export function ReviewPage({
               <ReviewItemPane key={itemId} id={itemId} onBack={() => go(null)} />
             </div>
             {state !== "done" && current && (
-              <div className="decide" role="group" aria-label={t("review.title")}>
+              <fieldset className="decide">
+                <legend className="sr-only">{t("review.title")}</legend>
                 <input
                   className="fld decide__note"
                   aria-label={t("review.note")}
@@ -198,7 +203,7 @@ export function ReviewPage({
                 >
                   {t("review.confirm")}
                 </Button>
-              </div>
+              </fieldset>
             )}
           </>
         ) : (

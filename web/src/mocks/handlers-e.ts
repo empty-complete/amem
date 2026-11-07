@@ -81,8 +81,9 @@ export const handlersE = [
     const days = Number(new URL(request.url).searchParams.get("days") ?? 7);
     const byReason: Record<string, { open: number; claimed: number }> = {};
     for (const i of open()) {
-      const b = (byReason[i.reason] ??= { open: 0, claimed: 0 });
+      const b = byReason[i.reason] ?? { open: 0, claimed: 0 };
       b[i.state === "claimed" ? "claimed" : "open"] += 1;
+      byReason[i.reason] = b;
     }
     const done = db.reviewItems.filter((i) => i.state === "done" && i.closed_at);
     const mins = done
