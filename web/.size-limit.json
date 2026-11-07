@@ -6,14 +6,17 @@
     "gzip": true
   },
   {
-    "name": "JS: приложение без ленивых кусков (pdf.js, KaTeX, CodeMirror)",
+    "name": "JS: приложение без ленивых кусков (pdf.js, KaTeX, CodeMirror, небо, 3D)",
     "path": [
       "python/amem_web/dist/assets/*.js",
       "!python/amem_web/dist/assets/PdfPage-*.js",
       "!python/amem_web/dist/assets/SourceView-*.js",
-      "!python/amem_web/dist/assets/katex-*.js"
+      "!python/amem_web/dist/assets/katex-*.js",
+      "!python/amem_web/dist/assets/SkyCanvas-*.js",
+      "!python/amem_web/dist/assets/Sky3D-*.js",
+      "!python/amem_web/dist/assets/float-tooltip-*.js"
     ],
-    "limit": "360 kB",
+    "limit": "380 kB",
     "gzip": true
   },
   {
@@ -41,9 +44,21 @@
     "gzip": true
   },
   {
+    "name": "Лениво: небо 2D (force-graph, d3)",
+    "path": ["python/amem_web/dist/assets/SkyCanvas-*.js", "python/amem_web/dist/assets/float-tooltip-*.js"],
+    "limit": "70 kB",
+    "gzip": true
+  },
+  {
+    "name": "Лениво: небо 3D (three.js; грузится только по переключателю «3D»)",
+    "path": "python/amem_web/dist/assets/Sky3D-*.js",
+    "limit": "360 kB",
+    "gzip": true
+  },
+  {
     "name": "CSS приложения (все стили HeroUI; урезать в части G)",
     "path": ["python/amem_web/dist/assets/*.css", "!python/amem_web/dist/assets/katex-*.css"],
-    "limit": "52 kB",
+    "limit": "54 kB",
     "gzip": true
   }
 ]

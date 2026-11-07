@@ -132,11 +132,11 @@ export function Sky(props: SkyProps) {
     if (!import.meta.env.VITE_MOCK || !sky) return;
     (window as unknown as { __amemSky?: object }).__amemSky = {
       screen: (id: string) => canvas.current?.screen(id) ?? null,
-      count: () => sky.nodes.length + extra.length,
+      count: () => sky.nodes.length,
       dim: () => [...dim],
       emit: skyBus.emit,
     };
-  }, [sky, dim, extra]);
+  }, [sky, dim]);
 
   const open = useCallback((id: string) => navigate(recordPath(id)), [navigate]);
 

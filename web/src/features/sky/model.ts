@@ -128,7 +128,14 @@ export function placeLabels(
   items: LabelItem[],
   gap = 3,
   stars: LabelItem[] = items,
+  bounds?: { x: number; y: number; w: number; h: number },
 ): Map<string, Placed | null> {
+  const inside = (b: Placed) =>
+    !bounds ||
+    (b.x >= bounds.x &&
+      b.y >= bounds.y &&
+      b.x + b.w <= bounds.x + bounds.w &&
+      b.y + b.h <= bounds.y + bounds.h);
   const out = new Map<string, Placed | null>();
   const boxes: Placed[] = [];
   const discs = stars.map((s) => ({
@@ -151,7 +158,7 @@ export function placeLabels(
       { side: "left", x: it.x - d - it.w, y: it.y - d - it.h, w: it.w, h: it.h },
     ];
     const ok = tries.find(
-      (b) => !boxes.some((p) => hits(b, p)) && !discs.some((d) => d.id !== it.id && hits(b, d)),
+      (b) => inside(b) && !boxes.some((p) => hits(b, p)) && !discs.some((d) => d.id !== it.id && hits(b, d)),
     );
     out.set(it.id, ok ?? null);
     if (ok) boxes.push(ok);

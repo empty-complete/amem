@@ -103,7 +103,8 @@ const SkyCanvas = forwardRef<SkyCanvasApi, SkyCanvasProps>(function SkyCanvas(pr
       .onRenderFramePost((ctx, scale) => drawLabels(ctx, scale, live.current, nodes.current))
       .onEngineStop(() => {
         // вписываем, когда укладка остыла, — один раз на новые данные
-        if (needFit.current) {
+        // вписываем на каждой остановке, пока небо не трогали руками
+        if (needFit.current || !touched.current) {
           needFit.current = false;
           fitCapped(g, live.current.reducedMotion);
         }
@@ -220,8 +221,8 @@ let lastFit = 0;
 function fitCapped(g: ForceGraph<N, L>, reduced: boolean) {
   const ms = reduced ? 0 : 400;
   lastFit = performance.now();
-  // поля — под подписи сбоку, заголовок и легенду: четверть узкой стороны, не больше 120 px
-  g.zoomToFit(ms, Math.min(120, Math.min(g.width(), g.height()) * 0.25));
+  // поля — под заголовок, легенду и подписи (подписи сами держатся внутри холста): 15 % узкой стороны, не больше 96 px
+  g.zoomToFit(ms, Math.min(96, Math.min(g.width(), g.height()) * 0.15));
   setTimeout(() => {
     if (g.zoom() > 1.6) g.zoom(1.6, ms);
   }, ms + 20);
@@ -306,7 +307,13 @@ function drawLabels(ctx: CanvasRenderingContext2D, scale: number, p: SkyCanvasPr
   const stars = [...nodes.values()]
     .filter((n) => n.object && n.x != null && n.y != null)
     .map((n) => ({ id: n.id, x: n.x ?? 0, y: n.y ?? 0, r: n.r, w: 0, h: 0 }));
-  const placed = placeLabels(items, 3 / scale, stars);
+  // границы холста в координатах графа: подписи не уходят за край окна
+  const m = ctx.getTransform().inverse();
+  const w = ctx.canvas.width;
+  const h2 = ctx.canvas.height;
+  const a = m.transformPoint({ x: 0, y: 0 });
+  const b = m.transformPoint({ x: w, y: h2 });
+  const placed = placeLabels(items, 3 / scale, stars, { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y });
   for (const it of items) {
     const b = placed.get(it.id);
     if (!b) continue;

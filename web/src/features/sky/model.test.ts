@@ -65,3 +65,13 @@ test("стрелки: ближайший сосед в направлении н
   expect(arrowNeighbour("c", nb, pos, "ArrowDown")).toBeNull();
   expect(arrowNeighbour("c", new Set(), pos, "ArrowUp")).toBeNull();
 });
+
+test("подпись не выходит за край холста: у правого края ставится слева", () => {
+  const placed = placeLabels([{ id: "e", x: 95, y: 50, r: 3, w: 40, h: 12 }], 2, [], {
+    x: 0,
+    y: 0,
+    w: 100,
+    h: 100,
+  });
+  expect(placed.get("e")?.side).toBe("left");
+});

@@ -22,7 +22,7 @@ export default defineConfig({
     strictPort: true,
     proxy: { "/api": { target: process.env.AMEM_URL ?? "http://127.0.0.1:8765", changeOrigin: true } },
   },
-  build: { outDir: "python/amem_web/dist", emptyOutDir: true },
+  build: { outDir: "python/amem_web/dist", emptyOutDir: true, manifest: true },
   test: {
     environment: "jsdom",
     globals: true,
