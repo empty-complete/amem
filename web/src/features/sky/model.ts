@@ -87,14 +87,16 @@ export function dimmed(sky: Sky, f: Filter): Set<string> {
   return out;
 }
 
-/** Подписи: у объектов всегда, у атомов — у выбранного и его соседей, и у центра неба. */
+/** Подписи: у объектов всегда, у атомов — у выбранного (без выбора — у центра неба) и его соседей. */
 export function visibleLabels(sky: Sky, selected: string | null): Set<string> {
   const out = new Set<string>();
   for (const s of sky.nodes) if (s.object) out.add(s.id);
   if (sky.center) out.add(sky.center);
-  if (selected) {
-    out.add(selected);
-    for (const n of sky.neighbours.get(selected) ?? []) out.add(n);
+  // без выбора соседей подписываем у центра неба (окрестность записи или объекта)
+  const focus = selected ?? sky.center;
+  if (focus) {
+    out.add(focus);
+    for (const n of sky.neighbours.get(focus) ?? []) out.add(n);
   }
   return out;
 }

@@ -22,16 +22,25 @@ export default function Sky3D(p: Omit<SkyCanvasProps, "onHover">) {
   useEffect(() => {
     const el = box.current;
     if (!el) return;
+    let fitted = false;
     const fg = new ForceGraph3D(el, { controlType: "orbit" })
       .backgroundColor("rgba(0,0,0,0)")
       .showNavInfo(false)
       .nodeId("id")
       .nodeLabel((n: object) => (n as N).label)
       .nodeVal((n: object) => (n as N).r * (n as N).r)
-      .nodeRelSize(1.2)
+      .nodeRelSize(2)
       .linkOpacity(0.35)
+      .nodeOpacity(1)
+      .nodeResolution(16)
       .onNodeClick((n: object) => live.current.onSelect((n as N).id))
-      .onBackgroundClick(() => live.current.onSelect(null));
+      .onBackgroundClick(() => live.current.onSelect(null))
+      .onEngineStop(() => {
+        if (!fitted) {
+          fitted = true;
+          fg.zoomToFit(live.current.reducedMotion ? 0 : 600, 40);
+        }
+      });
     g.current = fg;
     const ro = new ResizeObserver(() => fg.width(el.clientWidth).height(el.clientHeight));
     ro.observe(el);

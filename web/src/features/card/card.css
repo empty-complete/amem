@@ -1,8 +1,58 @@
+.main__in:has(> .entitypage) {
+  max-width: none;
+  height: 100%;
+  padding: 0;
+}
+.main:has(.entitypage) {
+  overflow: hidden;
+}
+.entitypage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(360px, 36%, 480px);
+  height: 100%;
+  min-height: 0;
+}
 .entity {
   display: grid;
+  align-content: start;
   gap: var(--s-sm);
+  overflow: auto;
+  padding: var(--s-lg) var(--s-xl) var(--s-xl);
+}
+.entity > * {
+  width: 100%;
   max-width: 760px;
   margin-inline: auto;
+}
+.entity__side {
+  --entity-sky-h: 440px;
+  overflow: auto;
+  padding: var(--s-md);
+  border-left: 1px solid var(--separator);
+  background: var(--surface-secondary);
+}
+@media (max-width: 64rem) {
+  .main:has(.entitypage) {
+    overflow: auto;
+  }
+  .main__in:has(> .entitypage) {
+    height: auto;
+  }
+  .entitypage {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+  .entity {
+    overflow: visible;
+    padding: var(--s-md);
+  }
+  .entity__side {
+    border-left: 0;
+    border-top: 1px solid var(--separator);
+  }
+  .entity__side {
+    --entity-sky-h: 340px;
+  }
 }
 .entity .note__bar {
   margin-bottom: 0;
