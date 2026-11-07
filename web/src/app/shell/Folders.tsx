@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, useSearch } from "@tanstack/react-router";
+import { Link, useRouterState, useSearch } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
@@ -11,7 +11,7 @@ const TOP_ICON: Record<string, IconName> = { Архив: "archive" };
 function FolderItem({ f, current }: { f: Folder; current: string | null }) {
   return (
     <li>
-      <Link to="/" search={{ folder: f.path }} aria-current={current === f.path ? "page" : undefined}>
+      <Link to="/records" search={{ folder: f.path }} aria-current={current === f.path ? "page" : undefined}>
         <Icon name={TOP_ICON[f.path] ?? "folder"} />
         <span>{f.name}</span>
         <span className="n">{f.count}</span>
@@ -33,6 +33,7 @@ export function Folders() {
   const tree = useQuery(q.folders());
   const search = useSearch({ strict: false }) as { folder?: string };
   const current = search.folder ?? null;
+  const onRecords = useRouterState({ select: (st) => st.location.pathname === "/records" });
   return (
     <nav className="folders" aria-label={t("folders.title")}>
       <ul>
@@ -42,14 +43,14 @@ export function Folders() {
       </ul>
       <ul className="sep">
         <li>
-          <Link to="/" search={{}} aria-current={current === null ? "page" : undefined}>
+          <Link to="/records" search={{}} aria-current={current === null && onRecords ? "page" : undefined}>
             <Icon name="stack" />
             <span>{t("folders.all")}</span>
             <span className="n">{tree.data?.total ?? ""}</span>
           </Link>
         </li>
         <li>
-          <Link to="/" search={{ folder: "-" }} aria-current={current === "-" ? "page" : undefined}>
+          <Link to="/records" search={{ folder: "-" }} aria-current={current === "-" ? "page" : undefined}>
             <Icon name="inbox" />
             <span>{t("folders.unfiled")}</span>
             <span className="n">{tree.data?.unfiled ?? ""}</span>

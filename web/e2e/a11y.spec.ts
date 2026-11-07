@@ -6,6 +6,8 @@ const N1 = "atm:0193b7c2-5e1a-7d40-9f2e-00000000001e";
 const E3 = "ent:0193b7c2-5e1a-7d40-9f2e-000000000003";
 const pages = [
   "./",
+  "./records",
+  `./?center=${E3}`,
   "./search?q=погрешность",
   "./settings",
   `./atom/${A3}`,

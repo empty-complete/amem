@@ -181,7 +181,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** recipes.around_entity */
+        /** recipes.around_entity; без ref — recipes.overview (обзор базы для неба на главной) */
         get: operations["getGraph"];
         put?: never;
         post?: never;
@@ -725,9 +725,13 @@ export interface components {
             family: "source" | "work" | "object";
             status: components["schemas"]["Status"];
             depth?: number;
+            /** @description Есть открытый пункт проверки (queued или claimed) */
+            pending: boolean;
+            /** @description Число текущих связей узла в базе, а не только в выдаче */
+            degree: number;
         };
         GraphResult: {
-            ref: string;
+            ref: string | null;
             nodes: components["schemas"]["GraphNode"][];
             edges: {
                 src: string;
@@ -736,6 +740,8 @@ export interface components {
                 confidence?: number | null;
             }[];
             truncated: boolean;
+            /** @description Сколько узлов было бы без предела limit */
+            total: number;
         };
         ObjectVersionView: {
             n: number;
@@ -1137,9 +1143,13 @@ export interface operations {
     };
     getGraph: {
         parameters: {
-            query: {
-                ref: string;
+            query?: {
+                /** @description Центр окрестности. Без ref — обзор: узлы по degree по убыванию (при равенстве — новые первыми) до limit, рёбра только между вернувшимися */
+                ref?: string;
                 depth?: number;
+                limit?: number;
+                /** @description Записи с payload.scope.project; сущность — если связана хотя бы с одной такой записью */
+                project?: string;
                 rels?: string[];
                 status?: components["parameters"]["StatusFilter"];
             };

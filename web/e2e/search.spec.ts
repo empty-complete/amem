@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("поиск из верхней строки: точное совпадение кода первым", async ({ page, isMobile }) => {
-  await page.goto("./");
+  await page.goto("./records");
   const box = page.getByRole("combobox", { name: "Поиск по базе" });
   await box.fill("погрешность");
   await box.press("Enter");
@@ -21,7 +21,7 @@ test("фильтр вида попадает в URL", async ({ page }) => {
 
 test("клавиша / ставит курсор в поиск", async ({ page, isMobile }) => {
   test.skip(isMobile, "клавиатура — на компьютере");
-  await page.goto("./");
+  await page.goto("./records");
   await expect(page.getByRole("link", { name: /Диапазон температуры Т-1/ })).toBeVisible();
   await page.keyboard.press("/");
   await expect(page.getByRole("combobox", { name: "Поиск по базе" })).toBeFocused();

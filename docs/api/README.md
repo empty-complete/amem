@@ -13,3 +13,4 @@
 ## Изменения
 
 - **Часть B веб-интерфейса (чтение).** `ObjectView.cited_by` — массив `ObjectCitation` (запись, версия, место, цитата, итог сверки) вместо подписей; у `ObjectView` — `pages` (из кэша текста, `null`, пока текст не извлекался) и `sheets` (только xlsx/xlsm); путь `GET /objects/{id}/versions/{n}/sheet` (ячейки листа, не больше 10 000, иначе 413); у `RecordView` — `about` и `ancestors` с подписями; фильтр `about` у `GET /records`.
+- **Часть C веб-интерфейса (небо).** `GET /graph`: `ref` не обязателен (без него — обзор базы, `recipes.overview`), параметры `limit` (1–1000, по умолчанию 300; и для окрестности) и `project`; `GraphResult.ref` может быть `null`, новое обязательное `total`; у `GraphNode` обязательные `pending` и `degree`.
