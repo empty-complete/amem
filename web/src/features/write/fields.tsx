@@ -257,7 +257,8 @@ export function PropertyEditor({
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   return (
-    <div className="props props--edit" role="group" aria-label={t("record.props")}>
+    <fieldset className="props props--edit">
+      <legend className="sr-only">{t("record.props")}</legend>
       {template?.form.map((f) => {
         const v = draft.values[f.key];
         const err = issues[f.key];
@@ -390,6 +391,6 @@ export function PropertyEditor({
           {t("edit.add_prop")}
         </button>
       )}
-    </div>
+    </fieldset>
   );
 }
