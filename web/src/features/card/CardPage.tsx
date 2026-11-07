@@ -4,14 +4,17 @@ import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { ApiError, errorText } from "../../api/errors";
 import { q } from "../../api/queries";
+import { formatValue, unitLabel } from "../../ui/format";
 import { KindChip } from "../../ui/KindChip";
 import { RegionState } from "../../ui/RegionState";
 import { text } from "../record/doc";
 import { HistoryList } from "../record/Widgets";
 import { kindLabel, RecordRow, recordPath } from "../records/RecordList";
 import { Sky } from "../sky/Sky";
-import { CardTable } from "./CardTable";
+import { useSubmit } from "../write/useSubmit";
+import { CardTable, type Fill } from "./CardTable";
 import { type Card, ORDER, summarize } from "./card";
+import { Notes } from "./Notes";
 import "../record/record.css";
 import "../records/records.css";
 import "./card.css";
@@ -66,6 +69,74 @@ export function CardPage({ entityRef }: { entityRef: string }) {
   const rec = useQuery(q.record(entityRef));
   const card = useQuery(q.card(entityRef));
   const classes = useQuery(q.vocab("entity_class"));
+  const submit = useSubmit();
+  const fill: Fill = {
+    value: (f, v) => {
+      const label = `${f.label ?? f.property}: ${[v.amount ?? v.value_text, v.unit ? unitLabel(v.unit, i18n.language) : ""].filter((x) => x != null && x !== "").join(" ")}`;
+      submit(
+        {
+          proposals: [
+            {
+              target: "atom",
+              record_id: null,
+              payload: {
+                kind: "parameter",
+                label: { ru: label },
+                about: [entityRef],
+                basis: "author",
+                content: { values: [{ property: f.property, ...v }] },
+              },
+            },
+          ],
+        },
+        { label, what: t("card.what_value"), kind: "parameter", about: [entityRef], family: "source" },
+      );
+    },
+    unknown: (f) => {
+      const label = t("card.question_label", { what: (f.label ?? f.property).toLowerCase() });
+      submit(
+        {
+          proposals: [
+            {
+              target: "atom",
+              record_id: null,
+              payload: {
+                kind: "question",
+                label: { ru: label },
+                about: [entityRef],
+                basis: "author",
+                content: { values: [{ property: f.property, value_state: "unknown" }] },
+              },
+            },
+          ],
+        },
+        { label, what: t("card.what_question"), kind: "question", about: [entityRef] },
+      );
+    },
+    accept: (f) => {
+      const v = (f.default ?? {}) as Record<string, unknown>;
+      const label = `${f.label ?? f.property}: ${formatValue(v as never, i18n.language)}`;
+      submit(
+        {
+          proposals: [
+            {
+              target: "atom",
+              record_id: null,
+              payload: {
+                kind: "parameter",
+                label: { ru: label },
+                about: [entityRef],
+                basis: "default",
+                derived_from: [`profile:${card.data?.profile ?? ""}#${f.property}`],
+                content: { values: [{ property: f.property, ...v }] },
+              },
+            },
+          ],
+        },
+        { label, what: t("card.what_default"), kind: "parameter", about: [entityRef], family: "source" },
+      );
+    },
+  };
   if (rec.isPending || card.isPending) return <RegionState state="loading" />;
   const noCard = card.isError && card.error instanceof ApiError && card.error.status === 404;
   if (rec.isError && (card.isError || !card.data)) {
@@ -141,7 +212,8 @@ export function CardPage({ entityRef }: { entityRef: string }) {
           </Tabs.ListContainer>
           {card.data && (
             <Tabs.Panel id="card">
-              <CardTable groups={summarize(card.data).groups} />
+              <CardTable groups={summarize(card.data).groups} fill={fill} />
+              <Notes entityRef={entityRef} />
             </Tabs.Panel>
           )}
           <Tabs.Panel id="atoms">

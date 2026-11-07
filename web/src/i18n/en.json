@@ -235,7 +235,16 @@
     "conflicts_one": "{{count}} conflict",
     "conflicts_few": "{{count}} conflicts",
     "conflicts_many": "{{count}} conflicts",
-    "conflicts_other": "{{count}} conflicts"
+    "conflicts_other": "{{count}} conflicts",
+    "accept": "Accept",
+    "dont_know": "Don't know, ask a question",
+    "notes": "Notes and decisions",
+    "add_note": "Add a note",
+    "saving": "saving",
+    "what_value": "value",
+    "what_question": "question",
+    "what_default": "default",
+    "question_label": "What is the {{what}}?"
   },
   "changes": {
     "title": "Changes",
@@ -369,5 +378,13 @@
     "beside": "Write your own beside it",
     "enqueued": "Put up for review",
     "new_title": "New record"
+  },
+  "quick": {
+    "title": "New record",
+    "about": "About: {{what}}",
+    "about_off": "No object",
+    "text": "Record text",
+    "placeholder": "The first line is the title. Ending with “?” makes a question, “Decided…” a decision, “Humidity: 87 %” a parameter. @ links an object, # adds a tag",
+    "all_fields": "All fields"
   }
 }

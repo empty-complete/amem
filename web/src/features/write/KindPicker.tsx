@@ -14,11 +14,14 @@ export function KindPicker({
   value,
   onChange,
   onConfigure,
+  inline = false,
 }: {
   target: "atom" | "entity";
   value: string;
   onChange: (t: Template) => void;
   onConfigure?: () => void;
+  /** Внутри другого всплывающего окна — список раскрывается на месте, а не вторым окном. */
+  inline?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const en = i18n.language.startsWith("en");
@@ -37,6 +40,79 @@ export function KindPicker({
   }, [list.data, text]);
   const packName = (p: string) =>
     p === "core" ? t("edit.pack_core") : p === "mine" ? t("edit.pack_mine") : p;
+  const list_ = (
+    <>
+      <input
+        className="fld"
+        autoFocus
+        placeholder={t("edit.kind_search")}
+        aria-label={t("edit.kind_search")}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
+      {groups.map(([pack, items]) => (
+        <section key={pack} aria-label={packName(pack)}>
+          <h4 className="palette__head">{packName(pack)}</h4>
+          {items.map((x) => (
+            <button
+              key={x.code}
+              type="button"
+              className="palette__opt kindopt"
+              data-family={x.family}
+              aria-pressed={x.code === value}
+              onClick={() => {
+                onChange(x);
+                setOpen(false);
+              }}
+            >
+              <i aria-hidden="true" />
+              <span className="palette__label">{(en ? x.label.en : x.label.ru) ?? x.code}</span>
+              {x.description?.ru && <span className="palette__meta">{x.description.ru}</span>}
+            </button>
+          ))}
+        </section>
+      ))}
+      {onConfigure && (
+        <button
+          type="button"
+          className="navlink"
+          onClick={() => {
+            setOpen(false);
+            onConfigure();
+          }}
+        >
+          <Icon name="pencil" />
+          {t("edit.kind_configure")}
+        </button>
+      )}
+    </>
+  );
+  const chip = (
+    <>
+      {(en ? cur?.label.en : cur?.label.ru) ?? value}
+      <Icon name="down" size={12} />
+    </>
+  );
+  if (inline)
+    return (
+      <div className="kindinline">
+        <button
+          type="button"
+          className="pill kind kindbtn"
+          data-family={cur?.family ?? "work"}
+          aria-expanded={open}
+          aria-label={t("edit.kind_change", { kind: cur?.label.ru ?? value })}
+          onClick={() => setOpen((o) => !o)}
+        >
+          {chip}
+        </button>
+        {open && (
+          <div className="kindpop__in kindinline__list" role="group" aria-label={t("record.p_kind")}>
+            {list_}
+          </div>
+        )}
+      </div>
+    );
   return (
     <DialogTrigger isOpen={open} onOpenChange={setOpen}>
       <Button
@@ -44,54 +120,11 @@ export function KindPicker({
         data-family={cur?.family ?? "work"}
         aria-label={t("edit.kind_change", { kind: cur?.label.ru ?? value })}
       >
-        {(en ? cur?.label.en : cur?.label.ru) ?? value}
-        <Icon name="down" size={12} />
+        {chip}
       </Button>
       <Popover className="palette kindpop" placement="bottom start">
         <Dialog aria-label={t("record.p_kind")} className="kindpop__in">
-          <input
-            className="fld"
-            autoFocus
-            placeholder={t("edit.kind_search")}
-            aria-label={t("edit.kind_search")}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
-          {groups.map(([pack, items]) => (
-            <section key={pack} aria-label={packName(pack)}>
-              <h4 className="palette__head">{packName(pack)}</h4>
-              {items.map((x) => (
-                <button
-                  key={x.code}
-                  type="button"
-                  className="palette__opt kindopt"
-                  data-family={x.family}
-                  aria-pressed={x.code === value}
-                  onClick={() => {
-                    onChange(x);
-                    setOpen(false);
-                  }}
-                >
-                  <i aria-hidden="true" />
-                  <span className="palette__label">{(en ? x.label.en : x.label.ru) ?? x.code}</span>
-                  {x.description?.ru && <span className="palette__meta">{x.description.ru}</span>}
-                </button>
-              ))}
-            </section>
-          ))}
-          {onConfigure && (
-            <button
-              type="button"
-              className="navlink"
-              onClick={() => {
-                setOpen(false);
-                onConfigure();
-              }}
-            >
-              <Icon name="pencil" />
-              {t("edit.kind_configure")}
-            </button>
-          )}
+          {list_}
         </Dialog>
       </Popover>
     </DialogTrigger>

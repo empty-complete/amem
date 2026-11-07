@@ -40,8 +40,17 @@ export const handlersC = [
         return HttpResponse.json({ ref: null, nodes: [], edges: [], truncated: false, total: 0 });
       return HttpResponse.json(project === "big" ? big : baseNow());
     }
-    const g = around[ref];
-    if (g) return HttpResponse.json(cut(g, depth));
+    const g0 = around[ref];
+    if (g0) {
+      // записанное в этой сессии рядом с окрестностью — тоже в небе
+      const inside = new Set(g0.nodes.map((n) => n.ref));
+      const edges = db.graph.edges.filter((e) => inside.has(e.dst) || inside.has(e.src));
+      const extra = db.graph.nodes
+        .filter((n) => edges.some((e) => e.src === n.ref || e.dst === n.ref))
+        .map((n) => ({ ...n, depth: 1 }));
+      const g = { ...g0, nodes: [...g0.nodes, ...extra], edges: [...g0.edges, ...edges] };
+      return HttpResponse.json(cut(g as typeof g0, depth));
+    }
     // остальные: центр и его прямые соседи из обзора базы
     const base = baseNow();
     const es = base.edges.filter((e) => e.src === ref || e.dst === ref);

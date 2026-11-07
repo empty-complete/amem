@@ -1,11 +1,72 @@
 import { Button } from "@heroui/react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { formatValue, type ValueLike } from "../../ui/format";
+import { q } from "../../api/queries";
+import { formatValue, unitLabel, type ValueLike } from "../../ui/format";
 import { Icon } from "../../ui/icons";
 import { recordPath } from "../records/RecordList";
 import type { CardField } from "./card";
+
+/** Заполнение карточки на месте (разд. 5.9, п. 3): значение, вопрос или принятое умолчание. */
+export interface Fill {
+  value: (f: CardField, v: { amount?: number; value_text?: string; unit?: string | null }) => void;
+  unknown: (f: CardField) => void;
+  accept: (f: CardField) => void;
+}
+
+function FillForm({ f, fill, onDone }: { f: CardField; fill: Fill; onDone: () => void }) {
+  const { t, i18n } = useTranslation();
+  const props = useQuery(q.vocab("property"));
+  const unit =
+    (f.default as ValueLike | null)?.unit ??
+    (props.data?.find((p) => p.code === f.property) as { unit?: string } | undefined)?.unit ??
+    null;
+  const [raw, setRaw] = useState("");
+  const save = () => {
+    const v = raw.trim();
+    if (!v) return;
+    const n = Number(v.replace("−", "-").replace(",", "."));
+    fill.value(f, Number.isFinite(n) ? { amount: n, unit } : { value_text: v, unit });
+    onDone();
+  };
+  return (
+    <div className="fillform">
+      <span className="qty">
+        <input
+          className="fld num"
+          // biome-ignore lint/a11y/noAutofocus: поле открыто нажатием на «Нет данных» — сразу вводить
+          autoFocus
+          inputMode="decimal"
+          aria-label={f.label ?? f.property}
+          placeholder="___"
+          value={raw}
+          onChange={(e) => setRaw(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") onDone();
+          }}
+        />
+        {unit && <span className="muted">{unitLabel(unit, i18n.language)}</span>}
+        <Button size="sm" className="pillbtn" onPress={save}>
+          {t("edit.save")}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onPress={() => {
+            fill.unknown(f);
+            onDone();
+          }}
+        >
+          {t("card.dont_know")}
+        </Button>
+      </span>
+      {f.hint && <span className="muted">{t("card.where", { hint: f.hint })}</span>}
+    </div>
+  );
+}
 
 type Candidate = { value?: ValueLike; atom?: string; quote?: string; source?: string };
 type Src = { label?: string };
@@ -20,7 +81,7 @@ function Sub({ f }: { f: CardField }) {
   return src ? src : null;
 }
 
-function Value({ f, open, toggle }: { f: CardField; open: boolean; toggle: () => void }) {
+function Value({ f, open, toggle, fill }: { f: CardField; open: boolean; toggle: () => void; fill?: Fill }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   switch (f.state) {
@@ -60,7 +121,22 @@ function Value({ f, open, toggle }: { f: CardField; open: boolean; toggle: () =>
               {t("card.default", { value: formatValue(f.default as ValueLike, lang) })}
             </span>
           )}
-          {f.required ? (
+          {f.default && fill && (
+            <Button size="sm" variant="ghost" onPress={() => fill.accept(f)}>
+              {t("card.accept")}
+            </Button>
+          )}
+          {fill ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className={f.required ? "need" : "muted"}
+              aria-expanded={open}
+              onPress={toggle}
+            >
+              {f.required ? t("card.need") : t("card.missing")}
+            </Button>
+          ) : f.required ? (
             <span className="need">{t("card.need")}</span>
           ) : (
             !f.default && <span className="muted">{t("card.missing")}</span>
@@ -70,7 +146,7 @@ function Value({ f, open, toggle }: { f: CardField; open: boolean; toggle: () =>
   }
 }
 
-function Row({ f }: { f: CardField }) {
+function Row({ f, fill }: { f: CardField; fill?: Fill }) {
   const { i18n, t } = useTranslation();
   const [open, setOpen] = useState(false);
   const atom = f.atoms?.[0];
@@ -82,7 +158,8 @@ function Row({ f }: { f: CardField }) {
           <Sub f={f} />
         </span>
       </span>
-      <Value f={f} open={open} toggle={() => setOpen((o) => !o)} />
+      <Value f={f} open={open} toggle={() => setOpen((o) => !o)} fill={fill} />
+      {f.state === "missing" && open && fill && <FillForm f={f} fill={fill} onDone={() => setOpen(false)} />}
       {f.state === "conflict" && open && (
         <ul className="cands" aria-label={t("card.candidates")}>
           {(f.candidates as Candidate[]).map((c) => (
@@ -101,7 +178,13 @@ function Row({ f }: { f: CardField }) {
 }
 
 /** Карточка профиля сгруппированными списками: имя, где взято, значение и состояние словом. */
-export function CardTable({ groups }: { groups: { name: string | null; fields: CardField[] }[] }) {
+export function CardTable({
+  groups,
+  fill,
+}: {
+  groups: { name: string | null; fields: CardField[] }[];
+  fill?: Fill;
+}) {
   const { t } = useTranslation();
   return (
     <div className="ctable">
@@ -110,7 +193,7 @@ export function CardTable({ groups }: { groups: { name: string | null; fields: C
           <h2>{g.name ?? t("card.other")}</h2>
           <ul>
             {g.fields.map((f) => (
-              <Row key={f.property} f={f} />
+              <Row key={f.property} f={f} fill={fill} />
             ))}
           </ul>
         </section>

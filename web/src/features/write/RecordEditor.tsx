@@ -32,6 +32,8 @@ export interface RecordEditorProps {
   issues?: FieldIssues | null;
   /** Отказ проверки после окна отмены — вернуть человека в правку с замечаниями. */
   onRejected?: (d: Draft, issues: FieldIssues) => void;
+  /** Связи, которые добавить к новой записи (например, «Записать своё рядом» → see_also). */
+  extraLinks?: { src: string; dst: string; rel: string }[];
 }
 
 const TOOLS: { key: string; label: string; text: string; run: (e: BodyEditorApi) => void }[] = [
@@ -144,7 +146,7 @@ export function RecordEditor(p: RecordEditorProps) {
     const { proposal, links } = toProposal(d, tpl, { recordId: p.recordId, base: p.base, resolve });
     const about = ((d.values.about as string[]) ?? []).filter((r) => r.startsWith("ent:"));
     submit(
-      { proposals: [proposal], links },
+      { proposals: [proposal], links: [...links, ...(p.extraLinks ?? [])] },
       {
         label: d.label,
         what: (tpl?.label.ru ?? d.kind).toLowerCase(),
