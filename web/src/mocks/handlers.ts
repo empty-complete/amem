@@ -1,7 +1,6 @@
 import { delay, HttpResponse, http } from "msw";
+import { db, folderTree } from "./db";
 import base from "./fixtures/base.json";
-import folders from "./fixtures/folders.json";
-import records from "./fixtures/records.json";
 import search from "./fixtures/search.json";
 import searchSemanticOff from "./fixtures/search-semantic-off.json";
 import session from "./fixtures/session.json";
@@ -18,13 +17,13 @@ const problem = (status: number, title: string, detail?: string) =>
 export const handlers = [
   http.get("/api/v1/session", () => HttpResponse.json(session)),
   http.get("/api/v1/base", () => HttpResponse.json(base)),
-  http.get("/api/v1/folders", () => HttpResponse.json(folders)),
+  http.get("/api/v1/folders", () => HttpResponse.json(folderTree())),
   http.get("/api/v1/records", async ({ request }) => {
     await delay(120);
     const url = new URL(request.url);
     const folder = url.searchParams.get("folder");
     const status = url.searchParams.getAll("status");
-    let items = records.items;
+    let items = db.records;
     if (folder === "-") items = items.filter((r) => !r.folder);
     else if (folder) items = items.filter((r) => r.folder === folder || r.folder?.startsWith(`${folder}/`));
     if (status.length) items = items.filter((r) => status.includes(r.status));

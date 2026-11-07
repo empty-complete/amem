@@ -23,7 +23,8 @@ export function StarCard({
   floating?: boolean;
 }) {
   const { t, i18n } = useTranslation();
-  const rec = useQuery({ ...q.record(star.id), retry: false });
+  // временная звезда (@new-…) ещё не записана — читать нечего
+  const rec = useQuery({ ...q.record(star.id), retry: false, enabled: !star.id.startsWith("@") });
   const vocab = useQuery(q.vocab(star.object ? "entity_class" : "kind"));
   const p = rec.data?.payload as { summary_plain?: { ru: string }; description?: { ru: string } } | undefined;
   const line = text(p?.summary_plain ?? p?.description, i18n.language);

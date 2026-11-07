@@ -1,4 +1,4 @@
-import { Label, Radio, RadioGroup } from "@heroui/react";
+import { Button, Label, Radio, RadioGroup } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { q } from "../api/queries";
 import { changeLocale, type Locale } from "../app/i18n";
 import { applyTheme, readTheme, type Theme } from "../app/theme";
+import { kindsStore } from "../features/kinds/store";
 import "../features/records/records.css";
 
 export const Route = createFileRoute("/settings")({ component: Settings });
@@ -87,6 +88,15 @@ function Settings() {
           <dd style={{ margin: 0 }}>{session.data.amem_version}</dd>
         </dl>
       )}
+      <h2 style={{ fontSize: "var(--t-label)", color: "var(--muted)", marginTop: "var(--s-lg)" }}>
+        {t("kinds.title")}
+      </h2>
+      <p className="muted">{t("kinds.intro")}</p>
+      <div>
+        <Button variant="outline" onPress={() => kindsStore.open()}>
+          {t("edit.kind_configure")}
+        </Button>
+      </div>
     </section>
   );
 }

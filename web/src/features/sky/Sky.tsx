@@ -8,6 +8,7 @@ import { q } from "../../api/queries";
 import { Icon } from "../../ui/icons";
 import { RegionState } from "../../ui/RegionState";
 import { kindLabel, recordPath } from "../records/RecordList";
+import { placeStore } from "../write/place";
 import { skyBus } from "./bus";
 import { useReducedMotion, useSkyColors } from "./colors";
 import { arrowNeighbour, buildSky, dimmed, type Filter } from "./model";
@@ -107,6 +108,11 @@ export function Sky(props: SkyProps) {
     [sky, props.filter],
   );
   const star = selected ? sky?.byId.get(selected) : undefined;
+  // выбранная звезда — место для «N»: запись о ней
+  useEffect(() => {
+    placeStore.setStar(star ? { ref: star.id, label: star.label } : null);
+  }, [star]);
+  useEffect(() => () => placeStore.setStar(null), []);
   const vocab = useQuery(q.vocab(star?.object ? "entity_class" : "kind"));
 
   useEffect(() => {
@@ -126,6 +132,8 @@ export function Sky(props: SkyProps) {
       }),
     [sky, select],
   );
+
+  useEffect(() => skyBus.onRetract((id) => setExtra((x) => x.filter((e) => e.star.id !== id))), []);
 
   // ручка для e2e — только в сборке с моками
   useEffect(() => {
@@ -164,7 +172,7 @@ export function Sky(props: SkyProps) {
     } else if (e.code === "KeyN" && selected) {
       e.preventDefault();
       e.stopPropagation();
-      navigate({ to: "/new", search: { about: selected } as never });
+      placeStore.openQuick(true);
     } else if (e.code === "KeyF") {
       setFull((f) => !f);
     }

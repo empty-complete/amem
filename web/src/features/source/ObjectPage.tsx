@@ -1,9 +1,10 @@
 import { Button } from "@heroui/react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { lazy, Suspense, useMemo } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { errorText } from "../../api/errors";
+import { api } from "../../api/client";
+import { type ApiError, errorText } from "../../api/errors";
 import { contentUrl, q } from "../../api/queries";
 import type { components } from "../../api/schema";
 import { formatDate, formatSize } from "../../ui/format";
@@ -53,6 +54,38 @@ export function unparsed(o: Obj, pageWord: (n: number) => string): string[] {
       .map(pageWord);
   }
   return [];
+}
+
+/** «Попросить агента» разобрать то, что не разобрано: задача через POST /tasks; агенты берут её через MCP. */
+function AskAgent({ object, version, what }: { object: string; version: number; what: string[] }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const tasks = useQuery(q.tasks(object));
+  const busy = tasks.data?.some((x) => x.state === "open" || x.state === "claimed");
+  const [msg, setMsg] = useState<string | null>(null);
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        isDisabled={busy}
+        onPress={async () => {
+          try {
+            await api.POST("/tasks", { body: { kind: "parse", object, version, note: what.join(", ") } });
+            setMsg(t("source.task_set"));
+            qc.invalidateQueries({ queryKey: ["tasks", object] });
+          } catch (e) {
+            setMsg((e as ApiError).detail ?? (e as ApiError).title);
+          }
+        }}
+      >
+        {busy ? t("source.task_open") : t("source.ask_agent")}
+      </Button>
+      <span role="status" className="muted">
+        {msg}
+      </span>
+    </>
+  );
 }
 
 function Brief({ objectId }: { objectId: string }) {
@@ -240,9 +273,7 @@ function ObjectView_({ o }: { o: Obj }) {
                     {r}
                   </span>
                 ))}
-                <Button size="sm" variant="outline" isDisabled aria-description={t("source.ask_later")}>
-                  {t("source.ask_agent")}
-                </Button>
+                <AskAgent object={o.id} version={last?.n ?? 1} what={rest} />
               </div>
             ) : (
               <p className="muted">{t("source.nothing_unparsed")}</p>

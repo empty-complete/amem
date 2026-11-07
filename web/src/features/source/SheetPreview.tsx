@@ -29,12 +29,29 @@ function Sheet({
   version,
   name,
   cited,
+  onPick,
 }: {
   id: string;
   version: number;
   name: string;
   cited: CitedRange[];
+  onPick?: (sheet: string, range: string) => void;
 }) {
+  const [drag, setDrag] = useState<{ r1: number; c1: number; r2: number; c2: number } | null>(null);
+  const [down, setDown] = useState(false);
+  const picked = (r: number, c: number) =>
+    !!drag &&
+    r >= Math.min(drag.r1, drag.r2) &&
+    r <= Math.max(drag.r1, drag.r2) &&
+    c >= Math.min(drag.c1, drag.c2) &&
+    c <= Math.max(drag.c1, drag.c2);
+  const finish = (d: typeof drag) => {
+    setDown(false);
+    if (!d || !onPick) return;
+    const a = `${letter(Math.min(d.c1, d.c2))}${Math.min(d.r1, d.r2)}`;
+    const b = `${letter(Math.max(d.c1, d.c2))}${Math.max(d.r1, d.r2)}`;
+    onPick(name, a === b ? a : `${a}:${b}`);
+  };
   const { t } = useTranslation();
   const s = useQuery(q.sheet(id, version, name));
   if (s.isPending) return <RegionState state="loading" />;
@@ -77,6 +94,22 @@ function Sheet({
                       <td
                         key={c}
                         data-cited={on || undefined}
+                        data-picked={picked(r, c) || undefined}
+                        onPointerDown={
+                          onPick
+                            ? (e) => {
+                                e.preventDefault();
+                                setDown(true);
+                                setDrag({ r1: r, c1: c, r2: r, c2: c });
+                              }
+                            : undefined
+                        }
+                        onPointerEnter={
+                          onPick && down ? () => setDrag((d) => (d ? { ...d, r2: r, c2: c } : d)) : undefined
+                        }
+                        onPointerUp={
+                          onPick ? () => finish(drag ? { ...drag, r2: r, c2: c } : null) : undefined
+                        }
                         className={typeof v === "number" ? "num" : undefined}
                       >
                         {v == null
@@ -108,11 +141,14 @@ export function SheetPreview({
   version,
   sheets,
   cited,
+  onPick,
 }: {
   id: string;
   version: number;
   sheets: string[];
   cited: CitedRange[];
+  /** Протяжка по ячейкам — диапазон для «+ Источник». */
+  onPick?: (sheet: string, range: string) => void;
 }) {
   const first = cited[0]?.sheet && sheets.includes(cited[0].sheet) ? cited[0].sheet : (sheets[0] ?? "");
   const [sel, setSel] = useState(first);
@@ -131,7 +167,7 @@ export function SheetPreview({
       </Tabs.ListContainer>
       {sheets.map((s) => (
         <Tabs.Panel key={s} id={s}>
-          {s === sel && <Sheet id={id} version={version} name={s} cited={cited} />}
+          {s === sel && <Sheet id={id} version={version} name={s} cited={cited} onPick={onPick} />}
         </Tabs.Panel>
       ))}
     </Tabs>

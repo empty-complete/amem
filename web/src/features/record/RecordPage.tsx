@@ -1,8 +1,9 @@
 import { Button, Dropdown, Label } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { api } from "../../api/client";
 import { errorText } from "../../api/errors";
 import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
@@ -14,6 +15,10 @@ import { useCopy } from "../../ui/useCopy";
 import { kindLabel, recordPath } from "../records/RecordList";
 import { Sky } from "../sky/Sky";
 import { SourcePanel } from "../source/SourcePanel";
+import { draftKey, loadDraft } from "../write/drafts";
+import { MoveDialog } from "../write/MoveDialog";
+import { type Draft, type FieldIssues, fromPayload } from "../write/proposal";
+import { RecordEditor } from "../write/RecordEditor";
 import { AgentView } from "./AgentView";
 import { Body, type WikiTarget } from "./Body";
 import { recordToDocument, text } from "./doc";
@@ -50,6 +55,31 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
   const vocab = useQuery(q.vocab(view.target === "entity" ? "entity_class" : "kind"));
   const links = useQuery(q.links(view.ref));
   const [active, setActive] = useState(0);
+  const session = useQuery(q.session());
+  const own = !!session.data && session.data.agent === view.agent && view.agent.startsWith("person:");
+  const [editing, setEditing] = useState(false);
+  const [note, setNote] = useState("");
+  const [moving, setMoving] = useState(false);
+  const [rejected, setRejected] = useState<{ draft: Draft; issues: FieldIssues } | null>(null);
+  const templates = useQuery({ ...q.templates(view.target), enabled: own });
+  const kindCode = String(
+    (view.payload as { kind?: string; entity_class?: string }).kind ??
+      (view.payload as { entity_class?: string }).entity_class ??
+      "",
+  );
+  const tpl = templates.data?.find((x) => x.code === kindCode);
+  const editKey = draftKey("edit", view.ref);
+  useEffect(() => {
+    if (!own) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.code === "KeyE") {
+        e.preventDefault();
+        setEditing((x) => !x);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [own]);
   const { copy, message } = useCopy(t("record.copy_failed"));
   const doc = useMemo(() => recordToDocument(p, view.about, view.sources as never, lang), [p, view, lang]);
   const kind = p.kind ?? p.entity_class ?? "";
@@ -82,9 +112,51 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
           <Crumbs view={view} />
           <StatusText status={view.status} />
           <span className="modes">
-            <Button isIconOnly size="sm" variant="ghost" isDisabled aria-label={t("record.edit_later")}>
-              <Icon name="pencil" />
-            </Button>
+            {own ? (
+              <Button
+                isIconOnly
+                size="sm"
+                variant="ghost"
+                aria-label={t("edit.edit")}
+                aria-pressed={editing}
+                onPress={() => setEditing((e) => !e)}
+              >
+                <Icon name="pencil" />
+              </Button>
+            ) : (
+              <Dropdown>
+                <Button
+                  isIconOnly
+                  size="sm"
+                  variant="ghost"
+                  aria-label={t("edit.not_own", { who: agentName(view.agent, lang) })}
+                >
+                  <Icon name="pencil" />
+                </Button>
+                <Dropdown.Popover>
+                  <Dropdown.Menu
+                    onAction={async (key) => {
+                      if (key === "enqueue") {
+                        await api.POST("/review/enqueue", { body: { ref: view.ref, reason: "audit" } });
+                        setNote(t("edit.enqueued"));
+                      }
+                      if (key === "beside")
+                        navigate({
+                          to: "/new",
+                          search: { about: view.about?.[0]?.ref, related: view.ref } as never,
+                        });
+                    }}
+                  >
+                    <Dropdown.Item id="enqueue" textValue={t("edit.enqueue")}>
+                      <Label>{t("edit.enqueue")}</Label>
+                    </Dropdown.Item>
+                    <Dropdown.Item id="beside" textValue={t("edit.beside")}>
+                      <Label>{t("edit.beside")}</Label>
+                    </Dropdown.Item>
+                  </Dropdown.Menu>
+                </Dropdown.Popover>
+              </Dropdown>
+            )}
             <Button
               isIconOnly
               size="sm"
@@ -105,6 +177,7 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
                     if (key === "agent") setMode(mode === "agent" ? "human" : "agent");
                     if (key === "ref") copy(view.ref, t("record.copied"));
                     if (key === "md") copy(doc, t("record.copied"));
+                    if (key === "move") setMoving(true);
                   }}
                 >
                   <Dropdown.Item id="agent" textValue={t("record.mode_agent")}>
@@ -116,57 +189,95 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
                   <Dropdown.Item id="md" textValue={t("record.copy_md")}>
                     <Label>{t("record.copy_md")}</Label>
                   </Dropdown.Item>
+                  <Dropdown.Item id="move" textValue={t("folders.move_to")}>
+                    <Label>{t("folders.move_to")}</Label>
+                  </Dropdown.Item>
                 </Dropdown.Menu>
               </Dropdown.Popover>
             </Dropdown>
           </span>
         </div>
-        <span role="status" aria-live="polite" className="sr-only">
-          {message}
+        <span role="status" aria-live="polite" className={note ? "note__status" : "sr-only"}>
+          {note || message}
         </span>
 
-        <h1 id="rec-title" className="title">
-          {label}
-        </h1>
-        {pending && (
-          <p className="pending">
-            <Icon name="clock" />
-            {t("record.pending", {
-              what:
-                (pending.details as { note?: string } | null)?.note ?? t(`record.reason.${pending.reason}`),
-            })}
-          </p>
-        )}
-
-        {mode === "source" ? (
-          <Suspense fallback={<RegionState state="loading" />}>
-            <SourceView doc={doc} label={t("record.source_view")} />
-          </Suspense>
-        ) : mode === "agent" ? (
-          <AgentView view={view} />
+        {editing && templates.data ? (
+          <RecordEditor
+            key={`${view.ref}-${view.revision}`}
+            initial={
+              rejected?.draft ?? loadDraft(editKey) ?? fromPayload(view.payload as never, tpl, view.target)
+            }
+            labels={Object.fromEntries((view.about ?? []).map((a) => [a.ref, a.label]))}
+            recordId={view.ref}
+            base={view.payload as never}
+            draftKey={editKey}
+            issues={rejected?.issues}
+            onQueued={() => {
+              setRejected(null);
+              setEditing(false);
+            }}
+            onCancel={() => {
+              setRejected(null);
+              setEditing(false);
+            }}
+            onRejected={(draft, issues) => {
+              setRejected({ draft, issues });
+              setEditing(true);
+            }}
+          />
         ) : (
           <>
-            <Properties view={view} kindLabel={kindLabel(vocab.data, kind, lang)} />
-            {main && kind === "parameter" && <p className="bigvalue">{valueLine(main, lang)}</p>}
-            {summary && <p className="lede">{summary}</p>}
-            {body ? (
-              <Body text={body} target={target} />
-            ) : (
-              !summary && <p className="muted">{t("record.no_body")}</p>
+            <h1 id="rec-title" className="title">
+              {label}
+            </h1>
+            {pending && (
+              <p className="pending">
+                <Icon name="clock" />
+                {t("record.pending", {
+                  what:
+                    (pending.details as { note?: string } | null)?.note ??
+                    t(`record.reason.${pending.reason}`),
+                })}
+              </p>
             )}
-            <div className="widgets">
-              <SourcesWidget sources={view.sources} active={active} onActive={setActive} />
-              <LinksWidget recordRef={view.ref} />
-              <section className="widget" aria-label={t("sky.widget")}>
-                <h2>{t("sky.widget")}</h2>
-                <Sky centerRef={view.ref} height={340} />
-              </section>
-              <HistoryWidget recordRef={view.ref} />
-              <SimilarWidget recordRef={view.ref} />
-            </div>
+
+            {mode === "source" ? (
+              <Suspense fallback={<RegionState state="loading" />}>
+                <SourceView doc={doc} label={t("record.source_view")} />
+              </Suspense>
+            ) : mode === "agent" ? (
+              <AgentView view={view} />
+            ) : (
+              <>
+                <Properties view={view} kindLabel={kindLabel(vocab.data, kind, lang)} />
+                {main && kind === "parameter" && <p className="bigvalue">{valueLine(main, lang)}</p>}
+                {summary && <p className="lede">{summary}</p>}
+                {body ? (
+                  <Body text={body} target={target} />
+                ) : (
+                  !summary && <p className="muted">{t("record.no_body")}</p>
+                )}
+                <div className="widgets">
+                  <SourcesWidget sources={view.sources} active={active} onActive={setActive} />
+                  <LinksWidget recordRef={view.ref} />
+                  <section className="widget" aria-label={t("sky.widget")}>
+                    <h2>{t("sky.widget")}</h2>
+                    <Sky centerRef={view.ref} height={340} />
+                  </section>
+                  <HistoryWidget recordRef={view.ref} />
+                  <SimilarWidget recordRef={view.ref} />
+                </div>
+              </>
+            )}
           </>
         )}
 
+        <MoveDialog
+          recordRef={view.ref}
+          current={view.folder ?? null}
+          open={moving}
+          onClose={() => setMoving(false)}
+        />
         <footer className="foot">
           <span>
             {agentName(view.agent, lang)} · {formatDate(view.recorded_at, lang)}

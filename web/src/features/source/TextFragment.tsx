@@ -13,11 +13,14 @@ export function TextFragment({
   version,
   page,
   quotes,
+  onSelectText,
 }: {
   id: string;
   version: number;
   page?: number;
   quotes: string[];
+  /** Выделение абзацев — цитата и строки для «+ Источник». */
+  onSelectText?: (text: string, lines: [number, number]) => void;
 }) {
   const { t } = useTranslation();
   const text = useQuery(q.objectText(id, version, page));
@@ -44,7 +47,21 @@ export function TextFragment({
   if (text.isPending) return <RegionState state="loading" />;
   if (text.isError) return <RegionState state="error" message={errorText(text.error, t("region.offline"))} />;
   return (
-    <div ref={box} className="textfrag">
+    // biome-ignore lint/a11y/noStaticElementInteractions: выделение мышью; с клавиатуры цитата вводится полем рядом
+    <div
+      ref={box}
+      className="textfrag"
+      onMouseUp={() => {
+        const sel = window.getSelection();
+        const text = sel?.toString().replace(/\s+/g, " ").trim();
+        if (!sel || !text || !onSelectText || !box.current) return;
+        const ps = [...box.current.querySelectorAll("p")];
+        const at = (n: Node | null) => ps.findIndex((p) => n && p.contains(n));
+        const a = at(sel.anchorNode);
+        const b = at(sel.focusNode);
+        onSelectText(text, [Math.min(a, b) + 1, Math.max(a, b) + 1]);
+      }}
+    >
       {paras.map((p, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: абзацы версии неизменны, порядок и есть ключ
         <p key={i}>{p}</p>

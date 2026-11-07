@@ -21,8 +21,10 @@ import search from "../src/mocks/fixtures/search.json";
 import searchOff from "../src/mocks/fixtures/search-semantic-off.json";
 import session from "../src/mocks/fixtures/session.json";
 import similar from "../src/mocks/fixtures/similar-a3.json";
+import templates from "../src/mocks/fixtures/templates.json";
 import vocabClass from "../src/mocks/fixtures/vocab-entity_class.json";
 import vocabKind from "../src/mocks/fixtures/vocab-kind.json";
+import vocabProperty from "../src/mocks/fixtures/vocab-property.json";
 
 const spec = parse(readFileSync(resolve(process.cwd(), "../docs/api/http-v1.openapi.yaml"), "utf8"));
 const ajv = new Ajv2020({ strict: false, allErrors: true });
@@ -63,4 +65,9 @@ test("similar-a3.json — SearchResult", () => check("SearchResult", similar));
 
 test("graph-*.json — GraphResult", () => {
   for (const g of [graphBase, graphE3, graphA3, graphBig]) check("GraphResult", g);
+});
+
+test("templates.json — TemplateView[], vocab-property.json — VocabEntry[]", () => {
+  for (const t of templates) check("TemplateView", t);
+  for (const v of vocabProperty) check("VocabEntry", v);
 });

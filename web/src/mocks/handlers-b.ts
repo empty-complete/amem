@@ -1,11 +1,8 @@
 import { delay, HttpResponse, http } from "msw";
-import card from "./fixtures/card-e3.json";
+import { db } from "./db";
 import changes from "./fixtures/changes.json";
 import history from "./fixtures/history-a3.json";
 import links from "./fixtures/links-a3.json";
-import objects from "./fixtures/objects-b.json";
-import records from "./fixtures/records.json";
-import recordsB from "./fixtures/records-b.json";
 import sheet from "./fixtures/sheet-v2.json";
 import similar from "./fixtures/similar-a3.json";
 import textManual from "./fixtures/text-manual.json";
@@ -16,9 +13,6 @@ export const problem = (status: number, title: string, detail?: string) =>
     { status, headers: { "content-type": "application/problem+json" } },
   );
 
-type Views = Record<string, (typeof recordsB)[keyof typeof recordsB]>;
-const views = recordsB as Views;
-const objs = objects as Record<string, (typeof objects)[keyof typeof objects]>;
 const MANUAL = "0193b7c2-5e1a-7d40-9f2e-0000000000a1";
 
 /** Сдвиг дат ленты так, чтобы последнее событие было сегодня: «Сегодня» и «Вчера» в образце не стареют. */
@@ -27,15 +21,17 @@ function freshEvents() {
   const now = new Date();
   const shift =
     Math.round((now.setHours(12, 0, 0, 0) - new Date(last).setHours(12, 0, 0, 0)) / 86_400_000) * 86_400_000;
-  return changes.events.map((e) => ({ ...e, at: new Date(Date.parse(e.at) + shift).toISOString() }));
+  const shifted = changes.events.map((e) => ({ ...e, at: new Date(Date.parse(e.at) + shift).toISOString() }));
+  // записанное в этой сессии — с настоящим временем
+  return [...shifted, ...db.events] as typeof shifted;
 }
 
 /** Сводка записи из её полного вида — для списков «о чём» (бриф источника, атомы объекта). */
 /** about=ent:… — записи о сущности; about=obj:<id> или голый id — записи, цитирующие объект (как в библиотеке). */
 function summaries(about: string) {
   const obj = about.startsWith("ent:") ? null : about.replace(/^obj:/, "");
-  const fromA = obj ? [] : records.items.filter((r) => r.about?.some((a) => a.ref === about));
-  const fromB = Object.values(views)
+  const fromA = obj ? [] : db.records.filter((r) => r.about?.some((a) => a.ref === about));
+  const fromB = Object.values(db.views)
     .filter((v) =>
       obj
         ? v.sources.some((s) => s.object === obj)
@@ -67,7 +63,7 @@ export const handlersB = (pdf: () => Promise<ArrayBuffer>) => [
   }),
   http.get("/api/v1/records/:ref", async ({ params }) => {
     await delay(100);
-    const v = views[String(params.ref)];
+    const v = db.views[String(params.ref)];
     return v ? HttpResponse.json(v) : problem(404, `Записи ${params.ref} нет`);
   }),
   http.get("/api/v1/records/:ref/history", ({ params }) =>
@@ -90,10 +86,12 @@ export const handlersB = (pdf: () => Promise<ArrayBuffer>) => [
     return HttpResponse.json(similar);
   }),
   http.get("/api/v1/entities/:ref/card", ({ params }) =>
-    params.ref === card.entity.ref ? HttpResponse.json(card) : problem(404, "У этой сущности нет профиля"),
+    params.ref === db.card.entity.ref
+      ? HttpResponse.json(db.card)
+      : problem(404, "У этой сущности нет профиля"),
   ),
   http.get("/api/v1/objects/:id", ({ params }) => {
-    const o = objs[String(params.id)];
+    const o = db.objects[String(params.id)];
     return o ? HttpResponse.json(o) : problem(404, `Объекта ${params.id} нет`);
   }),
   http.get("/api/v1/objects/:id/versions/:n/content", async ({ params }) => {

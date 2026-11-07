@@ -41,7 +41,18 @@ const open = (url: string) => {
   return p;
 };
 
-export default function PdfPage({ url, page, quotes }: { url: string; page: number; quotes: string[] }) {
+export default function PdfPage({
+  url,
+  page,
+  quotes,
+  onSelectText,
+}: {
+  url: string;
+  page: number;
+  quotes: string[];
+  /** Выделение в слое текста — цитата для «+ Источник». */
+  onSelectText?: (text: string) => void;
+}) {
   const { t } = useTranslation();
   const box = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<"loading" | "ok" | "missing" | "error">("loading");
@@ -148,7 +159,15 @@ export default function PdfPage({ url, page, quotes }: { url: string; page: numb
         aria-label={t("source.preview")}
         aria-busy={state === "loading"}
       >
-        <div ref={box} className="pdf__page" />
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: выделение мышью в слое текста; с клавиатуры цитата вводится полем рядом */}
+        <div
+          ref={box}
+          className="pdf__page"
+          onMouseUp={() => {
+            const sel = window.getSelection()?.toString().replace(/\s+/g, " ").trim();
+            if (sel && onSelectText) onSelectText(sel);
+          }}
+        />
       </section>
     </div>
   );
