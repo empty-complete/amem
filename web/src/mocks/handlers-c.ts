@@ -1,6 +1,7 @@
 import { delay, HttpResponse, http } from "msw";
+import { db } from "./db";
 import graphA3 from "./fixtures/graph-a3.json";
-import base from "./fixtures/graph-base.json";
+import baseFx from "./fixtures/graph-base.json";
 import big from "./fixtures/graph-big.json";
 import graphE3 from "./fixtures/graph-e3.json";
 
@@ -18,6 +19,14 @@ function cut(g: typeof graphE3, depth: number) {
   };
 }
 
+/** Обзор базы вместе с тем, что записано в этой сессии. */
+const baseNow = () => ({
+  ...baseFx,
+  nodes: [...baseFx.nodes, ...db.graph.nodes],
+  edges: [...baseFx.edges, ...db.graph.edges],
+  total: baseFx.total + db.graph.nodes.length,
+});
+
 /** Небо (часть C): обзор базы, окрестности объекта и записи, большая и пустая база. */
 export const handlersC = [
   http.get("/api/v1/graph", async ({ request }) => {
@@ -29,11 +38,21 @@ export const handlersC = [
     if (!ref) {
       if (project === "empty")
         return HttpResponse.json({ ref: null, nodes: [], edges: [], truncated: false, total: 0 });
-      return HttpResponse.json(project === "big" ? big : base);
+      return HttpResponse.json(project === "big" ? big : baseNow());
     }
-    const g = around[ref];
-    if (g) return HttpResponse.json(cut(g, depth));
+    const g0 = around[ref];
+    if (g0) {
+      // записанное в этой сессии рядом с окрестностью — тоже в небе
+      const inside = new Set(g0.nodes.map((n) => n.ref));
+      const edges = db.graph.edges.filter((e) => inside.has(e.dst) || inside.has(e.src));
+      const extra = db.graph.nodes
+        .filter((n) => edges.some((e) => e.src === n.ref || e.dst === n.ref))
+        .map((n) => ({ ...n, depth: 1 }));
+      const g = { ...g0, nodes: [...g0.nodes, ...extra], edges: [...g0.edges, ...edges] };
+      return HttpResponse.json(cut(g as typeof g0, depth));
+    }
     // остальные: центр и его прямые соседи из обзора базы
+    const base = baseNow();
     const es = base.edges.filter((e) => e.src === ref || e.dst === ref);
     const keep = new Set([ref, ...es.flatMap((e) => [e.src, e.dst])]);
     const nodes = base.nodes

@@ -1,0 +1,134 @@
+import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { Button, Dialog, DialogTrigger, Popover } from "react-aria-components";
+import { useTranslation } from "react-i18next";
+import { q } from "../../api/queries";
+import { Icon } from "../../ui/icons";
+import { kindsStore } from "../kinds/store";
+import type { Template } from "./proposal";
+
+const PACK_ORDER = (p: string) => (p === "core" ? 0 : p === "mine" ? 2 : 1);
+
+/** Вид записи плашкой; нажатие — список по пакетам с поиском и «настроить» (не ряд из всех видов: антипример v7). */
+export function KindPicker({
+  target,
+  value,
+  onChange,
+  onConfigure,
+  inline = false,
+}: {
+  target: "atom" | "entity";
+  value: string;
+  onChange: (t: Template) => void;
+  onConfigure?: () => void;
+  /** Внутри другого всплывающего окна — список раскрывается на месте, а не вторым окном. */
+  inline?: boolean;
+}) {
+  const { t, i18n } = useTranslation();
+  const en = i18n.language.startsWith("en");
+  const list = useQuery(q.templates(target));
+  const [text, setText] = useState("");
+  const [open, setOpen] = useState(false);
+  const cur = list.data?.find((x) => x.code === value);
+  const groups = useMemo(() => {
+    const s = text.trim().toLowerCase();
+    const items = (list.data ?? []).filter(
+      (x) => !s || x.label.ru?.toLowerCase().includes(s) || x.code.includes(s),
+    );
+    const by = new Map<string, Template[]>();
+    for (const x of items) by.set(x.pack, [...(by.get(x.pack) ?? []), x]);
+    return [...by.entries()].sort((a, b) => PACK_ORDER(a[0]) - PACK_ORDER(b[0]));
+  }, [list.data, text]);
+  const packName = (p: string) =>
+    p === "core" ? t("edit.pack_core") : p === "mine" ? t("edit.pack_mine") : p;
+  const list_ = (
+    <>
+      <input
+        className="fld"
+        // biome-ignore lint/a11y/noAutofocus: список видов открыт нажатием — сразу искать
+        autoFocus
+        placeholder={t("edit.kind_search")}
+        aria-label={t("edit.kind_search")}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
+      {groups.map(([pack, items]) => (
+        <section key={pack} aria-label={packName(pack)}>
+          <h4 className="palette__head">{packName(pack)}</h4>
+          {items.map((x) => (
+            <button
+              key={x.code}
+              type="button"
+              className="palette__opt kindopt"
+              data-family={x.family}
+              aria-pressed={x.code === value}
+              onClick={() => {
+                onChange(x);
+                setOpen(false);
+              }}
+            >
+              <i aria-hidden="true" />
+              <span className="palette__label">{(en ? x.label.en : x.label.ru) ?? x.code}</span>
+              {x.description?.ru && <span className="palette__meta">{x.description.ru}</span>}
+            </button>
+          ))}
+        </section>
+      ))}
+      <button
+        type="button"
+        className="navlink"
+        onClick={() => {
+          setOpen(false);
+          if (onConfigure) onConfigure();
+          else kindsStore.open();
+        }}
+      >
+        <Icon name="pencil" />
+        {t("edit.kind_configure")}
+      </button>
+    </>
+  );
+  const chip = (
+    <>
+      {(en ? cur?.label.en : cur?.label.ru) ?? value}
+      <Icon name="down" size={12} />
+    </>
+  );
+  if (inline)
+    return (
+      <div className="kindinline">
+        <button
+          type="button"
+          className="pill kind kindbtn"
+          data-family={cur?.family ?? "work"}
+          aria-expanded={open}
+          aria-label={t("edit.kind_change", { kind: cur?.label.ru ?? value })}
+          onClick={() => setOpen((o) => !o)}
+        >
+          {chip}
+        </button>
+        {open && (
+          <fieldset className="kindpop__in kindinline__list">
+            <legend className="sr-only">{t("record.p_kind")}</legend>
+            {list_}
+          </fieldset>
+        )}
+      </div>
+    );
+  return (
+    <DialogTrigger isOpen={open} onOpenChange={setOpen}>
+      <Button
+        className="pill kind kindbtn"
+        data-family={cur?.family ?? "work"}
+        aria-label={t("edit.kind_change", { kind: cur?.label.ru ?? value })}
+      >
+        {chip}
+      </Button>
+      <Popover className="palette kindpop" placement="bottom start">
+        <Dialog aria-label={t("record.p_kind")} className="kindpop__in">
+          {list_}
+        </Dialog>
+      </Popover>
+    </DialogTrigger>
+  );
+}

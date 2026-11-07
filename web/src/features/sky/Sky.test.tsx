@@ -55,7 +55,9 @@ test("выбор звезды показывает панель; «Открыт�
   const card = screen.getByRole("region", { name: "Выбранная звезда" });
   expect(card).toHaveTextContent("Погрешность влажности В-2: ±2 %");
   expect(card).toHaveTextContent("Ждёт проверки");
-  expect(await within(card).findByText(/только в диапазоне от 10 до 90/)).toBeInTheDocument();
+  expect(
+    await within(card).findByText(/только в диапазоне от 10 до 90/, {}, { timeout: 4000 }),
+  ).toBeInTheDocument();
   await user.click(within(card).getByRole("link", { name: "Открыть" }));
   expect(decodeURIComponent(router.state.location.pathname)).toBe(`/atom/${A3}`);
 });

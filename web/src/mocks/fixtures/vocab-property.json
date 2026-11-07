@@ -1,0 +1,82 @@
+[
+  {
+    "code": "relative_humidity",
+    "label": {
+      "ru": "Относительная влажность",
+      "en": "Relative humidity"
+    },
+    "pack": "core",
+    "broader": null,
+    "unit": "%"
+  },
+  {
+    "code": "humidity_error",
+    "label": {
+      "ru": "Погрешность влажности",
+      "en": "Humidity error"
+    },
+    "pack": "core",
+    "broader": null,
+    "unit": "%"
+  },
+  {
+    "code": "air_temperature",
+    "label": {
+      "ru": "Температура воздуха",
+      "en": "Air temperature"
+    },
+    "pack": "core",
+    "broader": null,
+    "unit": "Cel"
+  },
+  {
+    "code": "operating_temperature",
+    "label": {
+      "ru": "Рабочая температура",
+      "en": "Operating temperature"
+    },
+    "pack": "core",
+    "broader": null,
+    "unit": "Cel"
+  },
+  {
+    "code": "pressure",
+    "label": {
+      "ru": "Давление",
+      "en": "Pressure"
+    },
+    "pack": "core",
+    "broader": null,
+    "unit": "hPa"
+  },
+  {
+    "code": "poll_interval",
+    "label": {
+      "ru": "Интервал опроса",
+      "en": "Poll interval"
+    },
+    "pack": "core",
+    "broader": null,
+    "unit": "s"
+  },
+  {
+    "code": "voltage",
+    "label": {
+      "ru": "Напряжение",
+      "en": "Voltage"
+    },
+    "pack": "core",
+    "broader": null,
+    "unit": "V"
+  },
+  {
+    "code": "height",
+    "label": {
+      "ru": "Высота",
+      "en": "Height"
+    },
+    "pack": "core",
+    "broader": null,
+    "unit": "m"
+  }
+]

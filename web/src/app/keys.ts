@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { placeStore } from "../features/write/place";
 
 function inField(el: Element | null) {
   return !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || (el as HTMLElement).isContentEditable);
@@ -29,7 +30,7 @@ export function useHotkeys(h: { focusSearch: () => void }) {
         h.focusSearch();
       } else if (e.code === "KeyN") {
         e.preventDefault();
-        navigate({ to: "/new" });
+        placeStore.openQuick(true);
       } else if (e.code === "KeyG") {
         g = true;
         clearTimeout(gTimer);

@@ -21,6 +21,7 @@ tags:
   - { name: review }
   - { name: write }
   - { name: objects }
+  - { name: tasks }
   - { name: bundles }
   - { name: base }
 
@@ -180,6 +181,121 @@ paths:
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ChangesResult" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /objects:
+    get:
+      tags: [objects]
+      operationId: listObjects
+      summary: Поиск объектов хранилища по имени и пути — для «+ Источник»
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ObjectView" } }
+                  next_cursor: { type: [string, "null"] }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [objects]
+      operationId: uploadObject
+      summary: "Загрузить файл: служба кладёт его в папку документов (по path, иначе «Загрузки/<имя>») и разбирает"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                path: { type: string, description: "Путь в папке документов" }
+      responses:
+        "201": { description: Новый объект или новая версия, content: { application/json: { schema: { $ref: "#/components/schemas/ObjectView" } } } }
+        "200": { description: Такой файл уже есть (тот же digest), content: { application/json: { schema: { $ref: "#/components/schemas/ObjectView" } } } }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /templates:
+    get:
+      tags: [read]
+      operationId: listTemplates
+      summary: Шаблоны видов с формой для UI (из FieldRule, parameters и блока ui шаблона)
+      parameters:
+        - { name: target, in: query, schema: { type: string, enum: [atom, entity] } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/TemplateView" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /packs/mine/templates/{code}:
+    parameters:
+      - { name: code, in: path, required: true, schema: { type: string, pattern: "^[a-z][a-z0-9_]*$" } }
+    put:
+      tags: [write]
+      operationId: putMyTemplate
+      summary: "Свой вид в пакете «Мои виды»: новая версия шаблона, те же проверки, что у пакета из файла"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TemplateDraft" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TemplateView" } } } }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      tags: [write]
+      operationId: deleteMyTemplate
+      summary: Удалить свой вид; 409, если есть записи этого вида
+      responses:
+        "204": { description: Удалено }
+        "409": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /tasks:
+    get:
+      tags: [tasks]
+      operationId: listTasks
+      summary: Задачи агентам (например, разобрать файл)
+      parameters:
+        - { name: state, in: query, schema: { type: string, enum: [open, claimed, done, cancelled] } }
+        - { name: object, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/TaskView" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [tasks]
+      operationId: createTask
+      summary: Поставить задачу агентам; они берут её через MCP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, object, version]
+              properties:
+                kind: { type: string, enum: [parse] }
+                object: { type: string }
+                version: { type: integer }
+                note: { type: string }
+      responses:
+        "202":
+          description: Принято
+          content: { application/json: { schema: { type: object, required: [task_id], properties: { task_id: { type: string, format: uuid } } } } }
         default: { $ref: "#/components/responses/Problem" }
 
   /objects/{id}:
@@ -858,6 +974,7 @@ components:
         label: { type: object, properties: { ru: { type: string }, en: { type: string } } }
         pack: { type: string }
         broader: { type: [string, "null"] }
+        unit: { type: [string, "null"], description: "Только словарь property: единица UCUM по умолчанию" }
 
     Base:
       type: object
@@ -874,6 +991,69 @@ components:
             properties: { name: { type: string }, version: { type: string }, digest: { type: string } }
         counts: { type: object }
         review_open: { type: integer }
+
+    FormField:
+      type: object
+      required: [key, path, label, type]
+      properties:
+        key: { type: string }
+        path: { type: string, description: "Путь в теле записи: about, content.values[property=X], valid_from, tags, qualifiers[property=K]" }
+        label: { type: object, properties: { ru: { type: string }, en: { type: string } } }
+        type: { type: string, enum: [object, record, quantity, date, period, choice, tags, text] }
+        required: { type: boolean }
+        hint: { type: [object, "null"], properties: { ru: { type: string }, en: { type: string } } }
+        scheme: { type: [string, "null"], description: "Словарь для choice" }
+        property: { type: [string, "null"], description: "Величина для quantity" }
+        unit: { type: [string, "null"], description: "Единица UCUM по умолчанию" }
+        accepts:
+          type: [object, "null"]
+          properties:
+            entity_classes: { type: array, items: { type: string } }
+            kinds: { type: array, items: { type: string } }
+            rel: { type: string }
+
+    TemplateView:
+      type: object
+      required: [code, pack, label, target, family, form, body, widgets, editable]
+      properties:
+        code: { type: string }
+        pack: { type: string }
+        label: { type: object, properties: { ru: { type: string }, en: { type: string } } }
+        target: { type: string, enum: [atom, entity] }
+        applies_to: { type: [string, "null"] }
+        description: { type: [object, "null"], properties: { ru: { type: string }, en: { type: string } } }
+        family: { type: string, enum: [source, work, object] }
+        form: { type: array, items: { $ref: "#/components/schemas/FormField" } }
+        body: { type: string, enum: [wanted, required, none] }
+        widgets: { type: array, items: { type: string, enum: [sources, links, around, values_table, similar, children] } }
+        editable: { type: boolean }
+        records: { type: integer, description: "Сколько записей этого вида" }
+
+    TemplateDraft:
+      type: object
+      required: [label, target, family, form, body, widgets]
+      properties:
+        label: { type: object, required: [ru], properties: { ru: { type: string }, en: { type: string } } }
+        target: { type: string, enum: [atom, entity] }
+        family: { type: string, enum: [source, work, object] }
+        description: { type: object, properties: { ru: { type: string }, en: { type: string } } }
+        form: { type: array, items: { $ref: "#/components/schemas/FormField" } }
+        body: { type: string, enum: [wanted, required, none] }
+        widgets: { type: array, items: { type: string, enum: [sources, links, around, values_table, similar, children] } }
+
+    TaskView:
+      type: object
+      required: [id, kind, object, state, created_by]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [parse] }
+        object: { type: string }
+        version: { type: integer }
+        note: { type: [string, "null"] }
+        state: { type: string, enum: [open, claimed, done, cancelled] }
+        created_by: { type: string }
+        claimed_by: { type: [string, "null"] }
+        claimed_until: { type: [string, "null"], format: date-time }
 
     Backup:
       type: object
