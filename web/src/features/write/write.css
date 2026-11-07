@@ -1,0 +1,41 @@
+.toasts {
+  position: fixed;
+  z-index: 500;
+  left: 50%;
+  bottom: var(--s-lg);
+  display: grid;
+  gap: var(--s-xs);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--s-md);
+  height: 44px;
+  padding: 0 var(--s-2xs) 0 var(--s-md);
+  border-radius: 999px;
+  background: var(--press);
+  color: var(--press-ink);
+  font-size: var(--t-label);
+  box-shadow: var(--overlay-shadow);
+  pointer-events: auto;
+}
+.toast button {
+  height: 36px;
+  padding: 0 var(--s-md);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--press-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.toast button:hover {
+  background: color-mix(in oklab, var(--press-ink) 14%, transparent);
+}
+.toast button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
