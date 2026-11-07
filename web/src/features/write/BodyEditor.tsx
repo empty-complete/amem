@@ -61,6 +61,8 @@ const BodyEditor = forwardRef<
   const live = useRef(p);
   live.current = p;
 
+  // редактор создаётся один раз; внешние смены значения — эффектом ниже
+  // biome-ignore lint/correctness/useExhaustiveDependencies: создаём один раз на монтирование
   useEffect(() => {
     if (!box.current) return;
     const source = async (ctx: CompletionContext) => {
@@ -93,7 +95,13 @@ const BodyEditor = forwardRef<
             { key: "Mod-b", run: (v) => wrap(v, "**") },
             { key: "Mod-i", run: (v) => wrap(v, "*") },
             { key: "Mod-k", run: (v) => wrap(v, "[[", "]]") },
-            { key: "Mod-Enter", run: () => (live.current.onSubmit?.(), true) },
+            {
+              key: "Mod-Enter",
+              run: () => {
+                live.current.onSubmit?.();
+                return true;
+              },
+            },
             ...defaultKeymap,
             ...historyKeymap,
           ]),
@@ -106,8 +114,6 @@ const BodyEditor = forwardRef<
     });
     view.current = v;
     return () => v.destroy();
-    // редактор создаётся один раз; внешние смены значения — эффектом ниже
-    // biome-ignore lint/correctness/useExhaustiveDependencies: создаём один раз на монтирование
   }, []);
 
   useEffect(() => {

@@ -51,7 +51,6 @@ export function KindPicker({
         <Dialog aria-label={t("record.p_kind")} className="kindpop__in">
           <input
             className="fld"
-            // biome-ignore lint/a11y/noAutofocus: список видов открыт по нажатию — сразу искать
             autoFocus
             placeholder={t("edit.kind_search")}
             aria-label={t("edit.kind_search")}
@@ -59,7 +58,7 @@ export function KindPicker({
             onChange={(e) => setText(e.target.value)}
           />
           {groups.map(([pack, items]) => (
-            <div key={pack} role="group" aria-label={packName(pack)}>
+            <section key={pack} aria-label={packName(pack)}>
               <h4 className="palette__head">{packName(pack)}</h4>
               {items.map((x) => (
                 <button
@@ -78,7 +77,7 @@ export function KindPicker({
                   {x.description?.ru && <span className="palette__meta">{x.description.ru}</span>}
                 </button>
               ))}
-            </div>
+            </section>
           ))}
           {onConfigure && (
             <button
