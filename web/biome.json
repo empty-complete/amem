@@ -10,7 +10,8 @@
       "!test-results",
       "!playwright-report",
       "!index.html",
-      "!.impeccable"
+      "!.impeccable",
+      "!DESIGN.md"
     ]
   },
   "formatter": {
