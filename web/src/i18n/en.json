@@ -564,6 +564,7 @@
     "minutes_few": "{{count}} minutes",
     "minutes_many": "{{count}} minutes",
     "minutes_other": "{{count}} minutes",
-    "mine": "My kinds"
+    "mine": "My kinds",
+    "to_review": "Open the queue"
   }
 }

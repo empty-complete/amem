@@ -56,3 +56,8 @@
 .basemeta dd {
   margin: 0;
 }
+.basegrid tfoot a {
+  display: block;
+  margin-top: var(--s-2xs);
+  color: var(--link);
+}

@@ -564,6 +564,7 @@
     "minutes_few": "{{count}} минуты",
     "minutes_many": "{{count}} минут",
     "minutes_other": "{{count}} минуты",
-    "mine": "Мои виды"
+    "mine": "Мои виды",
+    "to_review": "Открыть очередь"
   }
 }
