@@ -31,7 +31,8 @@ export interface Sky {
   truncated: boolean;
 }
 
-export const radius = (object: boolean, degree: number) => (object ? Math.min(14, 5 + 1.6 * Math.sqrt(degree)) : 2.6);
+export const radius = (object: boolean, degree: number) =>
+  object ? Math.min(14, 5 + 1.6 * Math.sqrt(degree)) : 2.6;
 
 export function buildSky(g: Graph): Sky {
   const ids = new Set(g.nodes.map((n) => n.ref));
@@ -121,10 +122,20 @@ const hits = (a: { x: number; y: number; w: number; h: number }, b: typeof a) =>
  * Жадная раскладка подписей в порядке важности (порядок входа): справа → слева → под → над.
  * Подпись не пересекает поставленные подписи и чужие звёзды; места нет — null (подсказка при наведении остаётся).
  */
-export function placeLabels(items: LabelItem[], gap = 3, stars: LabelItem[] = items): Map<string, Placed | null> {
+export function placeLabels(
+  items: LabelItem[],
+  gap = 3,
+  stars: LabelItem[] = items,
+): Map<string, Placed | null> {
   const out = new Map<string, Placed | null>();
   const boxes: Placed[] = [];
-  const discs = stars.map((s) => ({ id: s.id, x: s.x - s.r - 1, y: s.y - s.r - 1, w: 2 * s.r + 2, h: 2 * s.r + 2 }));
+  const discs = stars.map((s) => ({
+    id: s.id,
+    x: s.x - s.r - 1,
+    y: s.y - s.r - 1,
+    w: 2 * s.r + 2,
+    h: 2 * s.r + 2,
+  }));
   for (const it of items) {
     const tries: Placed[] = [
       { side: "right", x: it.x + it.r + gap, y: it.y - it.h / 2, w: it.w, h: it.h },

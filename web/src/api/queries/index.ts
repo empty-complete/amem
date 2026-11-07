@@ -100,6 +100,17 @@ export const q = {
         ),
       staleTime: Infinity,
     }),
+  graph: (p: { ref?: string; depth: number; project?: string; limit?: number }) =>
+    queryOptions({
+      queryKey: ["graph", p],
+      queryFn: async () =>
+        data(
+          await api.GET("/graph", {
+            params: { query: { ref: p.ref, depth: p.depth, project: p.project, limit: p.limit } },
+          }),
+        ),
+      staleTime: 60_000,
+    }),
   changes: (p: { who: "all" | "person" | "model"; since?: string }) =>
     queryOptions({
       queryKey: ["changes", p],

@@ -1,6 +1,6 @@
 import { delay, HttpResponse, http } from "msw";
-import base from "./fixtures/graph-base.json";
 import graphA3 from "./fixtures/graph-a3.json";
+import base from "./fixtures/graph-base.json";
 import big from "./fixtures/graph-big.json";
 import graphE3 from "./fixtures/graph-e3.json";
 
@@ -10,7 +10,12 @@ const around: Record<string, typeof graphE3> = { [graphE3.ref]: graphE3, [graphA
 function cut(g: typeof graphE3, depth: number) {
   const nodes = g.nodes.filter((n) => (n.depth ?? 0) <= depth);
   const keep = new Set(nodes.map((n) => n.ref));
-  return { ...g, nodes, edges: g.edges.filter((e) => keep.has(e.src) && keep.has(e.dst)), total: nodes.length };
+  return {
+    ...g,
+    nodes,
+    edges: g.edges.filter((e) => keep.has(e.src) && keep.has(e.dst)),
+    total: nodes.length,
+  };
 }
 
 /** Небо (часть C): обзор базы, окрестности объекта и записи, большая и пустая база. */
@@ -22,7 +27,8 @@ export const handlersC = [
     const project = url.searchParams.get("project");
     const depth = Number(url.searchParams.get("depth") ?? 1);
     if (!ref) {
-      if (project === "empty") return HttpResponse.json({ ref: null, nodes: [], edges: [], truncated: false, total: 0 });
+      if (project === "empty")
+        return HttpResponse.json({ ref: null, nodes: [], edges: [], truncated: false, total: 0 });
       return HttpResponse.json(project === "big" ? big : base);
     }
     const g = around[ref];
@@ -30,7 +36,9 @@ export const handlersC = [
     // остальные: центр и его прямые соседи из обзора базы
     const es = base.edges.filter((e) => e.src === ref || e.dst === ref);
     const keep = new Set([ref, ...es.flatMap((e) => [e.src, e.dst])]);
-    const nodes = base.nodes.filter((n) => keep.has(n.ref)).map((n) => ({ ...n, depth: n.ref === ref ? 0 : 1 }));
+    const nodes = base.nodes
+      .filter((n) => keep.has(n.ref))
+      .map((n) => ({ ...n, depth: n.ref === ref ? 0 : 1 }));
     return HttpResponse.json({ ref, nodes, edges: es, truncated: false, total: nodes.length });
   }),
 ];
