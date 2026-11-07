@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import importlib.util
 import time
 from datetime import datetime
 
@@ -32,6 +33,28 @@ def _check_query_provider(model, provider: embed.EmbeddingProvider) -> None:
     if actual != expected:
         raise embed.EmbeddingError(
             f"provider не соответствует активной модели: ожидалось {expected!r}, получено {actual!r}")
+
+
+def availability(conn: psycopg.Connection, provider: embed.EmbeddingProvider | None = None) -> dict:
+    """Пойдёт ли смысловой канал у exact_fact и similar по тексту: {"semantic": "used" | "unavailable", "reason"}.
+
+    reason у unavailable: no_active_model — в базе нет активной модели; backend_disabled — AMEM_BACKEND=none;
+    backend_unknown — неизвестный AMEM_BACKEND; provider_mismatch — provider не той модели, что активна в базе
+    (поиск по тексту тогда отвечает EmbeddingError); fastembed_missing — модель fastembed, а пакета нет. У used
+    reason — None. Вектора не считаются: проверка дешёвая, служба зовёт её на каждый /session."""
+    try:
+        model, selected, reason = _availability(conn, provider)
+    except embed.EmbeddingError:
+        return {"semantic": "unavailable", "reason": "backend_unknown"}
+    if selected is None:
+        return {"semantic": "unavailable", "reason": reason}
+    try:
+        _check_query_provider(model, selected)
+    except embed.EmbeddingError:
+        return {"semantic": "unavailable", "reason": "provider_mismatch"}
+    if selected.backend == "fastembed" and importlib.util.find_spec("fastembed") is None:
+        return {"semantic": "unavailable", "reason": "fastembed_missing"}
+    return {"semantic": "used", "reason": None}
 
 
 def _timed(channel, function, durations):

@@ -8,7 +8,6 @@ psycopg_pool на запрос (autocommit — как db.connect: каждый c
 from __future__ import annotations
 
 import contextlib
-import importlib.util
 import secrets
 
 import anyio
@@ -87,23 +86,9 @@ def get_session(request: Request) -> JSONResponse:
     with connection(request) as conn:
         base = conn.execute("SELECT value FROM meta WHERE key = 'base_id'").fetchone()
         name = db.base_name(conn)
-        semantic = _semantic(conn, request.app.state.provider)
+        semantic = recipes.availability(conn, request.app.state.provider)["semantic"]
     view = {"agent": request.state.agent, "base": base[0] if base else None, "amem_version": __version__,
             "semantic": semantic, "can_write": request.state.can_write}
     if name is not None:
         view["base_name"] = name
     return JSONResponse(view)
-
-
-def _semantic(conn, provider) -> str:
-    """used — есть активная модель и provider под неё (как у рецептов поиска); иначе unavailable."""
-    try:
-        model, selected, _ = recipes._availability(conn, provider)
-        if selected is None:
-            return "unavailable"
-        recipes._check_query_provider(model, selected)
-    except embed.EmbeddingError:
-        return "unavailable"
-    if selected.backend == "fastembed" and importlib.util.find_spec("fastembed") is None:
-        return "unavailable"
-    return "used"
