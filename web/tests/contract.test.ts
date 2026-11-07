@@ -8,6 +8,10 @@ import base from "../src/mocks/fixtures/base.json";
 import card from "../src/mocks/fixtures/card-e3.json";
 import changes from "../src/mocks/fixtures/changes.json";
 import folders from "../src/mocks/fixtures/folders.json";
+import graphA3 from "../src/mocks/fixtures/graph-a3.json";
+import graphBase from "../src/mocks/fixtures/graph-base.json";
+import graphBig from "../src/mocks/fixtures/graph-big.json";
+import graphE3 from "../src/mocks/fixtures/graph-e3.json";
 import history from "../src/mocks/fixtures/history-a3.json";
 import links from "../src/mocks/fixtures/links-a3.json";
 import objects from "../src/mocks/fixtures/objects-b.json";
@@ -56,3 +60,7 @@ test("links-a3.json — LinkView[]", () => {
   for (const l of links) check("LinkView", l);
 });
 test("similar-a3.json — SearchResult", () => check("SearchResult", similar));
+
+test("graph-*.json — GraphResult", () => {
+  for (const g of [graphBase, graphE3, graphA3, graphBig]) check("GraphResult", g);
+});
