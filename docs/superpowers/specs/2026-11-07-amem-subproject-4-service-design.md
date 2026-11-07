@@ -204,24 +204,26 @@ amem становится программой, которой пользуют�
 
 | Схема контракта | Откуда | Правка контракта |
 |---|---|---|
-| `Session` | разд. 3.1 | — |
-| `SearchHit` | выдача `exact_fact` и `similar` + `kind`, `entity_class`, `about` из `lookup.labels` и текущей ревизии | `matches[].source_rank` может быть `null` (у каналов кода ранга нет) |
+| `Session` | разд. 3.1; `semantic` — `recipes.availability` | `base_name` может быть `null` (имя базе не давали) |
+| `SearchHit` | выдача `exact_fact` и `similar` + `kind`, `entity_class`, `about` из `lookup.labels` и текущей ревизии; `label` — русская подпись строкой | `matches[].source_rank` может быть `null` (у каналов кода ранга нет); `SearchResult.embedding_coverage` — доля (0–1) покрытия активной модели, а не объект библиотеки |
 | `RecordSummary`, `RecordList` | `lookup.list_records` | фильтр `about` у `GET /records` |
-| `FolderTree`, `Folder` | `folders.tree` | пути `POST /folders`, `DELETE /folders/{path}`, `PATCH /folders/{path}` (по договорённости с вебом) |
-| `RecordView`, `SourceView` | `lookup.get`, `revisions_sources`, объекты, `review.items`, `usefulness.score` | `SourceView.verdict` может быть `null` (источник не сверялся) |
+| `FolderTree`, `Folder` | `folders.tree` | пути `POST /folders` (201 `Folder`), `DELETE /folders/{path}` (204), `PATCH /folders/{path}` (`FolderRenamed`: `from`, `to`, `folders`, `records`) — по договорённости с вебом; `{path}` — путь целиком в `encodeURIComponent` |
+| `RecordView`, `SourceView` | `lookup.get`, `revisions_sources`, объекты, `review.items`, `usefulness.score`. У записи, чьи ревизии все отклонены, — последняя ревизия (как в списке записей), а не 404; `ancestors` — цепочка `part_of` от корня (у нескольких родителей — первый по id); `SourceView.object` — голый UUID объекта, как `ObjectView.id` | `SourceView.verdict` может быть `null` (источник не сверялся) |
 | `LinkView` | `lookup.links` + `lookup.labels` | — |
-| `ChangeEvent`, `ChangesResult` | `what_changed` + `lookup.labels` | `changes` — массив (как в библиотеке); тип `folder` с `from`/`to` |
-| `Card`, `CardField` | `profile.card`; `ancestors` — служба сворачивает карточки предков в `RefLabel` | — |
+| `ChangeEvent`, `ChangesResult` | `what_changed` + `lookup.labels`; у событий связи `ref` — запись истории (по базе — начало связи) | `changes` — массив (как в библиотеке); тип `folder` с `from`/`to` |
+| `Card`, `CardField` | `profile.card`; `ancestors` — служба сворачивает карточки предков в `RefLabel` (от корня); `entity.label`, `ask`, `hint`, `when` — строкой (ru) из `LangString`; `label` поля — подпись величины из словаря `property` | — |
 | `GraphResult`, `GraphNode` | `around_entity` + `lookup.labels` + `family` вида; служба режет выдачу до 500 узлов и ставит `truncated` | — |
 | `ObjectView`, `ObjectVersionView` | `lookup.object_view` (поля `cited_by`, `pages`, `sheets`, `status` — по договорённости с вебом, его PR) | `original_name` может отсутствовать (страница сайта); `digest` и `size` — `null` у сайта и переписки |
 | `ReviewItem`, `ReviewItemView` | `review.items` + `lookup.labels`; у `edit` и `imported` — текущая и предложенная ревизии (`lookup.history`), у `source_changed` — версии из `details` | — |
 | `ReviewStats` | `review.stats` | — |
 | `Submitted` | `check.submit`. Тело запроса: `proposals: [{target, payload, record_id?}]`; поле агента в теле не принимается | — |
 | `CheckIssue` | служба превращает `where` («`@a: sources[0].quote`») в `ref` (`@a`) и `path` (`sources[0].quote`) | — |
-| `VocabEntry` | `concept` по схеме: код, подписи `ru`/`en`, определение, `family` | — |
-| `Base` | `meta` (`base_id`, `base_name`), `pack`, счётчики записей и открытых пунктов | — |
-| `Backup` | `backup.backups`: имя, время, размер; пути наружу не отдаются | — |
+| `VocabEntry` | `concept` по схеме: код, подписи `ru`/`en`, определение, `family` | `definition` (`LangString` или `null`) и `family` (у видов) описаны в схеме |
+| `Base` | `meta` (`base_id`, `base_name`), `pack` (последняя загруженная версия каждого), счётчики `atoms`, `entities`, `objects`, `links` и открытых пунктов | `name` может быть `null` |
+| `Backup` | `backup.backups`: имя, время, размер; пути наружу не отдаются | `created_at` может быть `null` (время не прочесть ни из манифеста, ни из имени) |
 | `Selection`, `Imported` | `bundle.Selection`, `bundle.import_` | `Imported.warnings` и `collisions` — массивы строк (как в библиотеке) |
+
+Параметры запроса `amem/api.py` разбирает одинаково для HTTP, MCP и CLI: пустой список фильтра (`kind`, `status`, `entity_class`, `rels`, в строке запроса — и `?status=`) — «без фильтра», как отсутствующий параметр; пустой `range` листа — окно по умолчанию библиотеки; пределы и перечисления — по контракту, до вызова библиотеки (400 `bad_request`).
 
 Тест сверки:
 - ответ каждого пути контракта проверяется по схеме ответа из файла контракта (jsonschema, OpenAPI 3.1 = JSON Schema 2020-12);
