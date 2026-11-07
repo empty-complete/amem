@@ -1,6 +1,7 @@
 import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { Folders } from "../app/shell/Folders";
 import { TopBar } from "../app/shell/TopBar";
+import { KindDrawer } from "../features/kinds/KindDrawer";
 import { UndoToasts } from "../features/write/UndoToast";
 import "../app/shell/shell.css";
 
@@ -17,6 +18,7 @@ export const Route = createRootRoute({
         </main>
       </div>
       <UndoToasts />
+      <KindDrawer />
     </div>
   ),
 });

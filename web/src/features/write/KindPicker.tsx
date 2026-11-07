@@ -4,6 +4,7 @@ import { Button, Dialog, DialogTrigger, Popover } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
 import { Icon } from "../../ui/icons";
+import { kindsStore } from "../kinds/store";
 import type { Template } from "./proposal";
 
 const PACK_ORDER = (p: string) => (p === "core" ? 0 : p === "mine" ? 2 : 1);
@@ -73,19 +74,18 @@ export function KindPicker({
           ))}
         </section>
       ))}
-      {onConfigure && (
-        <button
-          type="button"
-          className="navlink"
-          onClick={() => {
-            setOpen(false);
-            onConfigure();
-          }}
-        >
-          <Icon name="pencil" />
-          {t("edit.kind_configure")}
-        </button>
-      )}
+      <button
+        type="button"
+        className="navlink"
+        onClick={() => {
+          setOpen(false);
+          if (onConfigure) onConfigure();
+          else kindsStore.open();
+        }}
+      >
+        <Icon name="pencil" />
+        {t("edit.kind_configure")}
+      </button>
     </>
   );
   const chip = (
