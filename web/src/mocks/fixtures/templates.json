@@ -1,0 +1,536 @@
+[
+  {
+    "code": "note",
+    "pack": "core",
+    "label": {
+      "ru": "Заметка",
+      "en": "Note"
+    },
+    "target": "atom",
+    "applies_to": "note",
+    "description": null,
+    "family": "work",
+    "form": [
+      {
+        "key": "about",
+        "path": "about",
+        "label": {
+          "ru": "О чём",
+          "en": "About"
+        },
+        "type": "object",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": {
+          "entity_classes": [],
+          "kinds": []
+        }
+      },
+      {
+        "key": "tags",
+        "path": "tags",
+        "label": {
+          "ru": "Теги",
+          "en": "Tags"
+        },
+        "type": "tags",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": null
+      }
+    ],
+    "body": "wanted",
+    "widgets": ["sources", "links", "around", "similar"],
+    "editable": false,
+    "records": 0
+  },
+  {
+    "code": "question",
+    "pack": "core",
+    "label": {
+      "ru": "Вопрос",
+      "en": "Question"
+    },
+    "target": "atom",
+    "applies_to": "question",
+    "description": null,
+    "family": "work",
+    "form": [
+      {
+        "key": "about",
+        "path": "about",
+        "label": {
+          "ru": "О чём",
+          "en": "About"
+        },
+        "type": "object",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": {
+          "entity_classes": [],
+          "kinds": []
+        }
+      },
+      {
+        "key": "tags",
+        "path": "tags",
+        "label": {
+          "ru": "Теги",
+          "en": "Tags"
+        },
+        "type": "tags",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": null
+      }
+    ],
+    "body": "wanted",
+    "widgets": ["sources", "links", "around", "similar"],
+    "editable": false,
+    "records": 0
+  },
+  {
+    "code": "decision",
+    "pack": "core",
+    "label": {
+      "ru": "Решение",
+      "en": "Decision"
+    },
+    "target": "atom",
+    "applies_to": "decision",
+    "description": null,
+    "family": "work",
+    "form": [
+      {
+        "key": "about",
+        "path": "about",
+        "label": {
+          "ru": "О чём",
+          "en": "About"
+        },
+        "type": "object",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": {
+          "entity_classes": [],
+          "kinds": []
+        }
+      },
+      {
+        "key": "valid_from",
+        "path": "valid_from",
+        "label": {
+          "ru": "Действует с",
+          "en": "Valid from"
+        },
+        "type": "date",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": null
+      },
+      {
+        "key": "tags",
+        "path": "tags",
+        "label": {
+          "ru": "Теги",
+          "en": "Tags"
+        },
+        "type": "tags",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": null
+      }
+    ],
+    "body": "wanted",
+    "widgets": ["sources", "links", "around", "similar"],
+    "editable": false,
+    "records": 0
+  },
+  {
+    "code": "lesson",
+    "pack": "core",
+    "label": {
+      "ru": "Урок",
+      "en": "Lesson"
+    },
+    "target": "atom",
+    "applies_to": "lesson",
+    "description": null,
+    "family": "work",
+    "form": [
+      {
+        "key": "about",
+        "path": "about",
+        "label": {
+          "ru": "О чём",
+          "en": "About"
+        },
+        "type": "object",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": {
+          "entity_classes": [],
+          "kinds": []
+        }
+      },
+      {
+        "key": "tags",
+        "path": "tags",
+        "label": {
+          "ru": "Теги",
+          "en": "Tags"
+        },
+        "type": "tags",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": null
+      }
+    ],
+    "body": "wanted",
+    "widgets": ["sources", "links", "around", "similar"],
+    "editable": false,
+    "records": 0
+  },
+  {
+    "code": "parameter",
+    "pack": "core",
+    "label": {
+      "ru": "Параметр",
+      "en": "Parameter"
+    },
+    "target": "atom",
+    "applies_to": "parameter",
+    "description": null,
+    "family": "source",
+    "form": [
+      {
+        "key": "about",
+        "path": "about",
+        "label": {
+          "ru": "О чём",
+          "en": "About"
+        },
+        "type": "object",
+        "required": true,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": {
+          "entity_classes": [],
+          "kinds": []
+        }
+      },
+      {
+        "key": "value",
+        "path": "content.values[0]",
+        "label": {
+          "ru": "Значение",
+          "en": "Value"
+        },
+        "type": "quantity",
+        "required": true,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": null
+      },
+      {
+        "key": "valid",
+        "path": "valid_from",
+        "label": {
+          "ru": "Действует",
+          "en": "Valid"
+        },
+        "type": "period",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": null
+      },
+      {
+        "key": "tags",
+        "path": "tags",
+        "label": {
+          "ru": "Теги",
+          "en": "Tags"
+        },
+        "type": "tags",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": null
+      }
+    ],
+    "body": "wanted",
+    "widgets": ["sources", "links", "around", "values_table", "similar"],
+    "editable": false,
+    "records": 0
+  },
+  {
+    "code": "fact",
+    "pack": "core",
+    "label": {
+      "ru": "Факт",
+      "en": "Fact"
+    },
+    "target": "atom",
+    "applies_to": "fact",
+    "description": null,
+    "family": "source",
+    "form": [
+      {
+        "key": "about",
+        "path": "about",
+        "label": {
+          "ru": "О чём",
+          "en": "About"
+        },
+        "type": "object",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": {
+          "entity_classes": [],
+          "kinds": []
+        }
+      },
+      {
+        "key": "tags",
+        "path": "tags",
+        "label": {
+          "ru": "Теги",
+          "en": "Tags"
+        },
+        "type": "tags",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": null
+      }
+    ],
+    "body": "wanted",
+    "widgets": ["sources", "links", "around", "similar"],
+    "editable": false,
+    "records": 0
+  },
+  {
+    "code": "term",
+    "pack": "core",
+    "label": {
+      "ru": "Термин",
+      "en": "Term"
+    },
+    "target": "atom",
+    "applies_to": "term",
+    "description": null,
+    "family": "source",
+    "form": [
+      {
+        "key": "about",
+        "path": "about",
+        "label": {
+          "ru": "О чём",
+          "en": "About"
+        },
+        "type": "object",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": {
+          "entity_classes": [],
+          "kinds": []
+        }
+      },
+      {
+        "key": "tags",
+        "path": "tags",
+        "label": {
+          "ru": "Теги",
+          "en": "Tags"
+        },
+        "type": "tags",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": null
+      }
+    ],
+    "body": "required",
+    "widgets": ["sources", "links", "around", "similar"],
+    "editable": false,
+    "records": 0
+  },
+  {
+    "code": "artifact",
+    "pack": "core",
+    "label": {
+      "ru": "Изделие",
+      "en": "Artifact"
+    },
+    "target": "entity",
+    "applies_to": "artifact",
+    "description": null,
+    "family": "object",
+    "form": [
+      {
+        "key": "part_of",
+        "path": "part_of",
+        "label": {
+          "ru": "Входит в",
+          "en": "Part of"
+        },
+        "type": "object",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": {
+          "entity_classes": ["artifact", "project"],
+          "kinds": []
+        }
+      },
+      {
+        "key": "codes",
+        "path": "codes",
+        "label": {
+          "ru": "Коды",
+          "en": "Codes"
+        },
+        "type": "tags",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": null
+      }
+    ],
+    "body": "wanted",
+    "widgets": ["children", "links", "around"],
+    "editable": false,
+    "records": 0
+  },
+  {
+    "code": "sensor_reading",
+    "pack": "meteo",
+    "label": {
+      "ru": "Показание датчика",
+      "en": "Sensor reading"
+    },
+    "target": "atom",
+    "applies_to": "sensor_reading",
+    "description": null,
+    "family": "source",
+    "form": [
+      {
+        "key": "about",
+        "path": "about",
+        "label": {
+          "ru": "О чём",
+          "en": "About"
+        },
+        "type": "object",
+        "required": true,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": {
+          "entity_classes": ["artifact"],
+          "kinds": []
+        }
+      },
+      {
+        "key": "value",
+        "path": "content.values[property=relative_humidity]",
+        "label": {
+          "ru": "Влажность",
+          "en": "Humidity"
+        },
+        "type": "quantity",
+        "required": true,
+        "hint": null,
+        "scheme": null,
+        "property": "relative_humidity",
+        "unit": "%",
+        "accepts": null
+      },
+      {
+        "key": "when",
+        "path": "valid_from",
+        "label": {
+          "ru": "Когда",
+          "en": "When"
+        },
+        "type": "date",
+        "required": true,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": null
+      },
+      {
+        "key": "tags",
+        "path": "tags",
+        "label": {
+          "ru": "Теги",
+          "en": "Tags"
+        },
+        "type": "tags",
+        "required": false,
+        "hint": null,
+        "scheme": null,
+        "property": null,
+        "unit": null,
+        "accepts": null
+      }
+    ],
+    "body": "none",
+    "widgets": ["sources", "values_table", "around"],
+    "editable": false,
+    "records": 0
+  }
+]

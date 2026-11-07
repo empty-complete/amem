@@ -896,6 +896,8 @@ export interface components {
             };
             pack?: string;
             broader?: string | null;
+            /** @description Только словарь property: единица UCUM по умолчанию */
+            unit?: string | null;
         };
         Base: {
             /** Format: uuid */
