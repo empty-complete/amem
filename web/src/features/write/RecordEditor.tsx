@@ -56,7 +56,7 @@ export function RecordEditor(p: RecordEditorProps) {
   const [source, setSource] = useState(false);
   const [sourceText, setSourceText] = useState("");
   const [sourceErr, setSourceErr] = useState<string | null>(null);
-  const [issues, setIssues] = useState<FieldIssues | null>(p.issues ?? null);
+  const issues = p.issues ?? null;
   const [asking, setAsking] = useState(false);
   const dirty = useRef(false);
   const editor = useRef<BodyEditorApi>(null);
