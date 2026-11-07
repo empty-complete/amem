@@ -388,3 +388,67 @@ textarea.fld {
 .quick__foot {
   align-items: start;
 }
+
+/* «+ Источник» */
+.modal--wide {
+  width: min(760px, calc(100% - 2 * var(--s-md)));
+  max-height: calc(100dvh - 2 * var(--s-lg));
+  overflow: auto;
+}
+.pick__find,
+.pick__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-xs);
+  font-size: var(--t-label);
+}
+.pick__find .fld {
+  flex: 1;
+}
+.pick__list {
+  display: grid;
+  gap: var(--s-3xs);
+  max-height: 50dvh;
+  overflow: auto;
+}
+.pick__list .cite {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pick__list .cite:focus-visible {
+  outline: 2px solid var(--focus);
+}
+.pick__place {
+  display: grid;
+  gap: var(--s-sm);
+}
+.pick__preview {
+  max-height: 52dvh;
+  overflow: auto;
+}
+.pick__quote {
+  display: grid;
+  gap: var(--s-2xs);
+  font-size: var(--t-label);
+  color: var(--muted);
+}
+.boxpick {
+  position: relative;
+  cursor: crosshair;
+  touch-action: none;
+}
+.boxpick img {
+  display: block;
+  max-width: 100%;
+  user-select: none;
+}
+.boxpick__rect {
+  position: absolute;
+  border: 2px solid var(--focus);
+  background: color-mix(in oklab, var(--focus) 16%, transparent);
+}
