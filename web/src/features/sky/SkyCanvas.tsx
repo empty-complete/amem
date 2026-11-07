@@ -35,6 +35,7 @@ const SkyCanvas = forwardRef<SkyCanvasApi, SkyCanvasProps>(function SkyCanvas(pr
   const nodes = useRef(new Map<string, N>());
   const flashes = useRef(new Map<string, number>());
   const needFit = useRef(true);
+  const touched = useRef(false);
 
   // один экземпляр force-graph на окно
   useEffect(() => {
@@ -91,6 +92,10 @@ const SkyCanvas = forwardRef<SkyCanvasApi, SkyCanvasProps>(function SkyCanvas(pr
         else live.current.onSelect(null);
         lastBg = now;
       })
+      .onZoom((t) => {
+        // зум от колеса или перетаскивания фона — небо «тронуто»
+        if (t && performance.now() - lastFit > 600) touched.current = true;
+      })
       .onNodeDragEnd((n) => {
         n.fx = undefined;
         n.fy = undefined;
@@ -105,8 +110,12 @@ const SkyCanvas = forwardRef<SkyCanvasApi, SkyCanvasProps>(function SkyCanvas(pr
       });
     const charge = g.d3Force("charge") as unknown as { strength?: (v: number) => void } | undefined;
     charge?.strength?.(-38);
+    let resizeT: ReturnType<typeof setTimeout> | undefined;
     const ro = new ResizeObserver(() => {
       g.width(el.clientWidth).height(el.clientHeight);
+      // пока небо не трогали руками, после смены размера вписываем заново
+      clearTimeout(resizeT);
+      if (!touched.current) resizeT = setTimeout(() => fitCapped(g, true), 60);
     });
     ro.observe(el);
     return () => {
@@ -205,10 +214,14 @@ const SkyCanvas = forwardRef<SkyCanvasApi, SkyCanvasProps>(function SkyCanvas(pr
 
 export default SkyCanvas;
 
+let lastFit = 0;
+
 /** Вписать небо с полями под заголовок и легенду; маленькую базу не раздувать сильнее 1.6×. */
 function fitCapped(g: ForceGraph<N, L>, reduced: boolean) {
   const ms = reduced ? 0 : 400;
-  g.zoomToFit(ms, 96);
+  lastFit = performance.now();
+  // поля — под подписи сбоку, заголовок и легенду: четверть узкой стороны, не больше 120 px
+  g.zoomToFit(ms, Math.min(120, Math.min(g.width(), g.height()) * 0.25));
   setTimeout(() => {
     if (g.zoom() > 1.6) g.zoom(1.6, ms);
   }, ms + 20);

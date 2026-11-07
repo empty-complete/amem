@@ -12,6 +12,7 @@ import { RegionState } from "../../ui/RegionState";
 import { StatusText } from "../../ui/StatusText";
 import { useCopy } from "../../ui/useCopy";
 import { kindLabel, recordPath } from "../records/RecordList";
+import { Sky } from "../sky/Sky";
 import { SourcePanel } from "../source/SourcePanel";
 import { AgentView } from "./AgentView";
 import { Body, type WikiTarget } from "./Body";
@@ -156,6 +157,10 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
             <div className="widgets">
               <SourcesWidget sources={view.sources} active={active} onActive={setActive} />
               <LinksWidget recordRef={view.ref} />
+              <section className="widget" aria-label={t("sky.widget")}>
+                <h2>{t("sky.widget")}</h2>
+                <Sky centerRef={view.ref} height={340} />
+              </section>
               <HistoryWidget recordRef={view.ref} />
               <SimilarWidget recordRef={view.ref} />
             </div>

@@ -9,6 +9,7 @@ import { RegionState } from "../../ui/RegionState";
 import { text } from "../record/doc";
 import { HistoryList } from "../record/Widgets";
 import { kindLabel, RecordRow, recordPath } from "../records/RecordList";
+import { Sky } from "../sky/Sky";
 import { CardTable } from "./CardTable";
 import { type Card, ORDER, summarize } from "./card";
 import "../record/record.css";
@@ -85,70 +86,75 @@ export function CardPage({ entityRef }: { entityRef: string }) {
   const desc = payload?.description ? text(payload.description, i18n.language) : "";
 
   return (
-    <article className="entity" aria-labelledby="ent-title">
-      <div className="note__bar">
-        {ancestors.length > 0 && (
-          <nav className="crumbs" aria-label={t("record.about")}>
-            {ancestors.map((a, i) => (
-              <span key={a.ref}>
-                {i > 0 && <span aria-hidden="true"> / </span>}
-                <Link {...recordPath(a.ref)}>{a.label}</Link>
-              </span>
-            ))}
-          </nav>
+    <div className="entitypage">
+      <article className="entity" aria-labelledby="ent-title">
+        <div className="note__bar">
+          {ancestors.length > 0 && (
+            <nav className="crumbs" aria-label={t("record.about")}>
+              {ancestors.map((a, i) => (
+                <span key={a.ref}>
+                  {i > 0 && <span aria-hidden="true"> / </span>}
+                  <Link {...recordPath(a.ref)}>{a.label}</Link>
+                </span>
+              ))}
+            </nav>
+          )}
+        </div>
+        <div className="entity__head">
+          <h1 id="ent-title" className="title">
+            {label}
+          </h1>
+          {cls && <KindChip kind={cls} target="entity" label={kindLabel(classes.data, cls, i18n.language)} />}
+          {card.data?.profile && (
+            <span className="muted">{t("card.profile", { name: card.data.profile })}</span>
+          )}
+        </div>
+        {desc && <p className="lede">{desc}</p>}
+        {card.data && <Summary card={card.data} />}
+        {card.isError && !noCard && (
+          <RegionState
+            state="error"
+            message={errorText(card.error, t("region.offline"))}
+            retry={() => card.refetch()}
+          />
         )}
-      </div>
-      <div className="entity__head">
-        <h1 id="ent-title" className="title">
-          {label}
-        </h1>
-        {cls && <KindChip kind={cls} target="entity" label={kindLabel(classes.data, cls, i18n.language)} />}
-        {card.data?.profile && (
-          <span className="muted">{t("card.profile", { name: card.data.profile })}</span>
-        )}
-      </div>
-      {desc && <p className="lede">{desc}</p>}
-      {card.data && <Summary card={card.data} />}
-      {card.isError && !noCard && (
-        <RegionState
-          state="error"
-          message={errorText(card.error, t("region.offline"))}
-          retry={() => card.refetch()}
-        />
-      )}
-      {noCard && <p className="muted">{t("card.no_profile")}</p>}
+        {noCard && <p className="muted">{t("card.no_profile")}</p>}
 
-      <Tabs defaultSelectedKey={card.data ? "card" : "atoms"}>
-        <Tabs.ListContainer>
-          <Tabs.List aria-label={label}>
-            {card.data && (
-              <Tabs.Tab id="card">
-                {t("card.tab_card")}
+        <Tabs defaultSelectedKey={card.data ? "card" : "atoms"}>
+          <Tabs.ListContainer>
+            <Tabs.List aria-label={label}>
+              {card.data && (
+                <Tabs.Tab id="card">
+                  {t("card.tab_card")}
+                  <Tabs.Indicator />
+                </Tabs.Tab>
+              )}
+              <Tabs.Tab id="atoms">
+                {t("card.tab_atoms")}
                 <Tabs.Indicator />
               </Tabs.Tab>
-            )}
-            <Tabs.Tab id="atoms">
-              {t("card.tab_atoms")}
-              <Tabs.Indicator />
-            </Tabs.Tab>
-            <Tabs.Tab id="history">
-              {t("card.tab_history")}
-              <Tabs.Indicator />
-            </Tabs.Tab>
-          </Tabs.List>
-        </Tabs.ListContainer>
-        {card.data && (
-          <Tabs.Panel id="card">
-            <CardTable groups={summarize(card.data).groups} />
+              <Tabs.Tab id="history">
+                {t("card.tab_history")}
+                <Tabs.Indicator />
+              </Tabs.Tab>
+            </Tabs.List>
+          </Tabs.ListContainer>
+          {card.data && (
+            <Tabs.Panel id="card">
+              <CardTable groups={summarize(card.data).groups} />
+            </Tabs.Panel>
+          )}
+          <Tabs.Panel id="atoms">
+            <Atoms entityRef={entityRef} />
           </Tabs.Panel>
-        )}
-        <Tabs.Panel id="atoms">
-          <Atoms entityRef={entityRef} />
-        </Tabs.Panel>
-        <Tabs.Panel id="history">
-          <HistoryList recordRef={entityRef} />
-        </Tabs.Panel>
-      </Tabs>
-    </article>
+          <Tabs.Panel id="history">
+            <HistoryList recordRef={entityRef} />
+          </Tabs.Panel>
+        </Tabs>
+      </article>
+      <aside className="entity__side" aria-label={t("sky.widget")}>
+        <Sky centerRef={entityRef} height="var(--entity-sky-h)" />
+      </aside>
+    </div>
   );
 }
