@@ -156,10 +156,12 @@ paths:
     get:
       tags: [read]
       operationId: getGraph
-      summary: recipes.around_entity
+      summary: "recipes.around_entity; без ref — recipes.overview (обзор базы для неба на главной)"
       parameters:
-        - { name: ref, in: query, required: true, schema: { type: string } }
+        - { name: ref, in: query, schema: { type: string }, description: "Центр окрестности. Без ref — обзор: узлы по degree по убыванию (при равенстве — новые первыми) до limit, рёбра только между вернувшимися" }
         - { name: depth, in: query, schema: { type: integer, minimum: 1, maximum: 3, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 300 } }
+        - { name: project, in: query, schema: { type: string }, description: "Записи с payload.scope.project; сущность — если связана хотя бы с одной такой записью" }
         - { name: rels, in: query, schema: { type: array, items: { type: string } }, style: form, explode: true }
         - { $ref: "#/components/parameters/StatusFilter" }
       responses:
@@ -740,7 +742,7 @@ components:
 
     GraphNode:
       type: object
-      required: [ref, label, kind_or_class, family, status]
+      required: [ref, label, kind_or_class, family, status, pending, degree]
       properties:
         ref: { type: string }
         label: { type: string }
@@ -748,12 +750,14 @@ components:
         family: { type: string, enum: [source, work, object] }
         status: { $ref: "#/components/schemas/Status" }
         depth: { type: integer }
+        pending: { type: boolean, description: "Есть открытый пункт проверки (queued или claimed)" }
+        degree: { type: integer, description: "Число текущих связей узла в базе, а не только в выдаче" }
 
     GraphResult:
       type: object
-      required: [ref, nodes, edges, truncated]
+      required: [ref, nodes, edges, truncated, total]
       properties:
-        ref: { type: string }
+        ref: { type: [string, "null"] }
         nodes: { type: array, items: { $ref: "#/components/schemas/GraphNode" } }
         edges:
           type: array
@@ -762,6 +766,7 @@ components:
             required: [src, dst, rel]
             properties: { src: { type: string }, dst: { type: string }, rel: { type: string }, confidence: { type: [number, "null"] } }
         truncated: { type: boolean }
+        total: { type: integer, description: "Сколько узлов было бы без предела limit" }
 
     ObjectVersionView:
       type: object
