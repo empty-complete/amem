@@ -523,7 +523,9 @@ paths:
               properties:
                 selection: { $ref: "#/components/schemas/Selection" }
                 with_files: { type: boolean, default: false }
+                with_packs: { type: boolean, default: false, description: "Копии пакетов, в том числе «Мои виды»: получатель увидит те же виды и формы" }
                 anthology: { type: boolean, default: false }
+                title: { type: string, description: "Заголовок HTML-отчёта антологии" }
       responses:
         "200":
           description: OK

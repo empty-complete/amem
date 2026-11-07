@@ -1925,8 +1925,15 @@ export interface operations {
                     selection: components["schemas"]["Selection"];
                     /** @default false */
                     with_files?: boolean;
+                    /**
+                     * @description Копии пакетов, в том числе «Мои виды»: получатель увидит те же виды и формы
+                     * @default false
+                     */
+                    with_packs?: boolean;
                     /** @default false */
                     anthology?: boolean;
+                    /** @description Заголовок HTML-отчёта антологии */
+                    title?: string;
                 };
             };
         };

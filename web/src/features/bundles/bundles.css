@@ -1,0 +1,82 @@
+.bundles {
+  display: grid;
+  gap: var(--s-sm);
+  max-width: 760px;
+}
+.bform,
+.bimport {
+  display: grid;
+  gap: var(--s-md);
+  padding-top: var(--s-md);
+}
+.bgroup {
+  display: grid;
+  gap: var(--s-sm);
+  margin: 0;
+  padding: var(--s-md);
+  border: 1px solid var(--separator);
+  border-radius: var(--r-panel);
+}
+.bgroup > legend {
+  padding: 0 var(--s-2xs);
+  color: var(--muted);
+  font-size: var(--t-label);
+}
+.bgroup fieldset:disabled {
+  opacity: 0.6;
+}
+.bpreset {
+  align-items: flex-start;
+  padding: var(--s-sm) var(--s-md);
+  border-radius: var(--r-panel);
+  background: var(--surface-secondary);
+}
+.bpreset > span {
+  display: grid;
+  gap: var(--s-3xs);
+}
+.bcard {
+  display: grid;
+  gap: var(--s-xs);
+  padding: var(--s-md);
+  border-radius: var(--r-panel);
+  background: var(--surface);
+  box-shadow: var(--surface-shadow);
+  font-size: var(--t-label);
+}
+.bcard h2,
+.bdone h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--s-xs);
+  margin: 0;
+  font-size: var(--t-section);
+}
+.bcard h3 {
+  margin: var(--s-xs) 0 0;
+  font-size: var(--t-label);
+  color: var(--muted);
+}
+.bcard p,
+.bdone p {
+  margin: 0;
+}
+.bdone {
+  display: grid;
+  gap: var(--s-sm);
+  padding-top: var(--s-md);
+}
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-sm);
+  font-size: var(--t-label);
+  color: var(--muted);
+}
+.steps li[aria-current="step"] {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.steps li[data-done] {
+  color: var(--success);
+}

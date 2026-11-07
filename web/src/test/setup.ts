@@ -1,4 +1,8 @@
 import "@testing-library/jest-dom/vitest";
+import { configure } from "@testing-library/react";
+
+// под нагрузкой (полный прогон, CI) ленивые куски и моки отвечают дольше секунды
+configure({ asyncUtilTimeout: 3000 });
 
 if (typeof window !== "undefined" && !window.matchMedia) {
   window.matchMedia = (query: string) =>
