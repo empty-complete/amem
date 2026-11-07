@@ -139,6 +139,45 @@ def pgdb(request):
         admin.close()
 
 
+SERVICE_URL = "http://127.0.0.1:8767"        # адрес службы в тестах: порт не слушается (starlette.testclient)
+
+
+@pytest.fixture
+def dsn(pg) -> str:
+    """DSN своей схемы для пула службы: search_path лежит в options, как у соединения pg."""
+    from psycopg.conninfo import conninfo_to_dict, make_conninfo
+
+    params = conninfo_to_dict(pg.info.dsn)
+    params["password"] = pg.info.password
+    return make_conninfo(**params)
+
+
+@pytest.fixture
+def serve(dsn, tmp_path):
+    """Запустить службу (lifespan: пул и db.prepare) на своей схеме; клиенты закрываются после теста.
+
+    Хранилище объектов — tmp_path/objects (как у фикстуры store), каталог бэкапов — tmp_path/backups."""
+    from starlette.testclient import TestClient
+
+    from amem import service, settings
+
+    clients = []
+
+    def start(env=None, *, provider=None, routes=(), raise_server_exceptions=True, **explicit) -> TestClient:
+        environ = {"AMEM_DSN": dsn, "HOME": str(tmp_path / "home"), "USER": "ann",
+                   "AMEM_DATA": str(tmp_path / "objects"), "AMEM_BACKUPS": str(tmp_path / "backups"), **(env or {})}
+        app = service.create_app(settings.load(environ, **explicit), provider=provider)
+        app.router.routes.extend(routes)
+        client = TestClient(app, base_url=SERVICE_URL, raise_server_exceptions=raise_server_exceptions)
+        client.__enter__()
+        clients.append(client)
+        return client
+
+    yield start
+    for client in reversed(clients):
+        client.__exit__(None, None, None)
+
+
 @pytest.fixture
 def store(tmp_path):
     """Хранилище объектов OCFL во временной папке теста (корень создаёт первая запись файла)."""

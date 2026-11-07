@@ -20,7 +20,7 @@ from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from .. import bundle, db, embed, objects, records, review, vocab
+from .. import api, bundle, db, embed, objects, records, review, vocab
 from ..canon import CanonError
 from ..check import CheckError
 from ..folders import FolderError
@@ -92,7 +92,8 @@ def to_problem(exc: BaseException) -> Problem:
     if isinstance(exc, objects.ObjectError):
         status, code = OBJECT.get(exc.code, (400, "bad_request"))
         return Problem(status, code, message)
-    if isinstance(exc, (records.RecordError, CheckError, db.BaseNameError, vocab.VocabError, CanonError, PackError)):
+    if isinstance(exc, (api.BadRequest, records.RecordError, CheckError, db.BaseNameError, vocab.VocabError,
+                        CanonError, PackError)):
         return Problem(400, "bad_request", message)
     if isinstance(exc, embed.EmbeddingError):
         return Problem(503, "semantic_unavailable", f"смысловой поиск недоступен: {message}")
@@ -117,7 +118,7 @@ async def handle(request: Request, exc: Exception) -> JSONResponse:
 
 # классы, которые ловит ExceptionMiddleware (поиск по MRO исключения); Exception — последний рубеж
 # (ServerErrorMiddleware): он отвечает 500 и передаёт исключение серверу дальше
-HANDLED = (Problem, records.RecordError, review.ReviewError, FolderError, bundle.BundleError, objects.ObjectError,
-           CheckError, db.BaseNameError, vocab.VocabError, CanonError, PackError, embed.EmbeddingError,
-           psycopg.OperationalError, HTTPException, ValueError, Exception)
+HANDLED = (Problem, api.BadRequest, records.RecordError, review.ReviewError, FolderError, bundle.BundleError,
+           objects.ObjectError, CheckError, db.BaseNameError, vocab.VocabError, CanonError, PackError,
+           embed.EmbeddingError, psycopg.OperationalError, HTTPException, ValueError, Exception)
 HANDLERS = {cls: handle for cls in HANDLED}

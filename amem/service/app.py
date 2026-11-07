@@ -15,10 +15,11 @@ from psycopg_pool import ConnectionPool
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, PlainTextResponse
+from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
-from .. import __version__, db, embed, recipes
+from .. import db, embed
+from ..ocfl_store import ObjectStore
 from ..settings import Settings, SettingsError, load_tokens
 from . import problems, session
 
@@ -46,17 +47,17 @@ def create_app(settings: Settings, *, provider: embed.EmbeddingProvider | None =
         finally:
             await anyio.to_thread.run_sync(pool.close)
 
+    from . import http_v1           # маршруты зовут connection() отсюда: импорт — после того, как модуль готов
+
     app = Starlette(
-        routes=[
-            Route("/health", health, methods=["GET"]),
-            Route(f"{API}/session", get_session, methods=["GET"]),
-        ],
+        routes=[Route("/health", health, methods=["GET"]), *http_v1.ROUTES],
         middleware=[Middleware(session.Guard, settings=settings, secret=secrets.token_urlsafe(32), tokens=tokens)],
         exception_handlers=problems.HANDLERS,
         lifespan=lifespan,
     )
     app.state.settings = settings
     app.state.provider = provider
+    app.state.store = ObjectStore(settings.data)      # только чтение копий: корень создаёт первая запись файла
     return app
 
 
@@ -79,16 +80,3 @@ def health(request: Request) -> PlainTextResponse:
     with connection(request) as conn:            # база недоступна — 503, а не «ok»
         conn.execute("SELECT 1")
     return PlainTextResponse("ok")
-
-
-def get_session(request: Request) -> JSONResponse:
-    session.grant(request)
-    with connection(request) as conn:
-        base = conn.execute("SELECT value FROM meta WHERE key = 'base_id'").fetchone()
-        name = db.base_name(conn)
-        semantic = recipes.availability(conn, request.app.state.provider)["semantic"]
-    view = {"agent": request.state.agent, "base": base[0] if base else None, "amem_version": __version__,
-            "semantic": semantic, "can_write": request.state.can_write}
-    if name is not None:
-        view["base_name"] = name
-    return JSONResponse(view)

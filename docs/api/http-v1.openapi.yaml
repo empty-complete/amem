@@ -72,6 +72,47 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FolderTree" } } } }
         default: { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [write]
+      operationId: createFolder
+      summary: "folders.create: пустая папка в реестре вместе с родителями; уже есть — 409 folder_exists, неверный путь — 422 folder_invalid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [path], properties: { path: { type: string } } }
+      responses:
+        "201": { description: Создана, content: { application/json: { schema: { $ref: "#/components/schemas/Folder" } } } }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /folders/{path}:
+    parameters: [{ $ref: "#/components/parameters/FolderPath" }]
+    delete:
+      tags: [write]
+      operationId: deleteFolder
+      summary: "folders.delete: только пустая папка — без вложенных и без записей (иначе 409 folder_not_empty); нет такой — 404 folder_not_found"
+      responses:
+        "204": { description: Удалена }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+    patch:
+      tags: [write]
+      operationId: renameFolder
+      summary: "folders.rename: перенести папку с вложенными и записями (по строке журнала на запись); новый путь занят — 409 folder_exists"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [path], properties: { path: { type: string, description: Новый путь } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FolderRenamed" } } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
 
   /records:
     get:
@@ -607,6 +648,7 @@ components:
     ObjectId: { name: id, in: path, required: true, schema: { type: string } }
     VersionN: { name: n, in: path, required: true, schema: { type: integer, minimum: 1 } }
     ItemId: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    FolderPath: { name: path, in: path, required: true, schema: { type: string }, description: "Путь папки целиком в encodeURIComponent: «/» внутри пути — %2F" }
     Kind: { name: kind, in: query, schema: { type: array, items: { type: string } }, style: form, explode: true }
     StatusFilter: { name: status, in: query, schema: { type: array, items: { $ref: "#/components/schemas/Status" } }, style: form, explode: true }
     EntityClass: { name: entity_class, in: query, schema: { type: array, items: { type: string } }, style: form, explode: true }
@@ -646,7 +688,7 @@ components:
       properties:
         agent: { type: string, pattern: "^(person|model):.+" }
         base: { type: string, format: uuid }
-        base_name: { type: string }
+        base_name: { type: [string, "null"], description: "null — имя базе не давали" }
         amem_version: { type: string }
         semantic: { type: string, enum: [used, unavailable] }
         can_write: { type: boolean }
@@ -695,7 +737,7 @@ components:
           items:
             type: object
             required: [channel, rank]
-            properties: { channel: { type: string }, rank: { type: integer }, source_rank: { type: number } }
+            properties: { channel: { type: string }, rank: { type: integer }, source_rank: { type: [number, "null"], description: "null — у каналов кода (code_exact, code_prefix) своего ранга нет" } }
 
     SearchResult:
       type: object
@@ -706,7 +748,7 @@ components:
         channels: { type: object }
         semantic: { type: string, enum: [used, unavailable] }
         candidate_count: { type: integer }
-        embedding_coverage: { type: [number, "null"] }
+        embedding_coverage: { type: [number, "null"], description: "Доля текущих ревизий с вектором активной модели (0–1); null — активной модели нет" }
         items: { type: array, items: { $ref: "#/components/schemas/SearchHit" } }
         retrieval_id: { type: [string, "null"] }
 
@@ -742,6 +784,15 @@ components:
         count: { type: integer }
         children: { type: array, items: { $ref: "#/components/schemas/Folder" } }
 
+    FolderRenamed:
+      type: object
+      required: [from, to, folders, records]
+      properties:
+        from: { type: string }
+        to: { type: string }
+        folders: { type: integer, description: "Сколько папок реестра переименовано (с вложенными)" }
+        records: { type: integer, description: "Сколько записей перенесено" }
+
     FolderTree:
       type: object
       required: [folders, unfiled, total]
@@ -762,7 +813,7 @@ components:
         selectors: { type: array, items: { type: object } }
         quote: { type: string }
         role: { type: string, enum: [primary, secondary, derived] }
-        verdict: { type: string, enum: [ok, moved, fuzzy, by_locator, unresolved, not_found, no_file, no_text, external, error] }
+        verdict: { type: [string, "null"], enum: [ok, moved, fuzzy, by_locator, unresolved, not_found, no_file, no_text, external, error, null], description: "null — источник ещё не сверялся с файлом" }
 
     RecordView:
       type: object
@@ -798,7 +849,7 @@ components:
       type: object
       required: [type, id, at]
       properties:
-        type: { type: string, enum: [revision, review, status, link_created, link_retired] }
+        type: { type: string, enum: [revision, review, status, folder, link_created, link_retired] }
         id: { type: string }
         at: { type: string, format: date-time }
         ref: { type: string }
@@ -810,7 +861,15 @@ components:
         rel: { type: string }
         src: { type: string }
         dst: { type: string }
-        changes: { type: object }
+        from: { type: [string, "null"], description: "у folder — прежняя папка; null — запись была без папки" }
+        to: { type: [string, "null"], description: "у folder — новая папка; null — запись вынута из папки" }
+        changes:
+          type: array
+          description: "у revision — отличия тела от прежней ревизии: путь RFC 6901, before и/или after"
+          items:
+            type: object
+            required: [path]
+            properties: { path: { type: string }, before: {}, after: {} }
 
     ChangesResult:
       type: object
@@ -891,18 +950,18 @@ components:
       required: [n, digest, size, recorded_at]
       properties:
         n: { type: integer }
-        digest: { type: string }
-        size: { type: integer }
+        digest: { type: [string, "null"], description: "null — у сайта и переписки (копии файла нет)" }
+        size: { type: [integer, "null"] }
         recorded_at: { type: string, format: date-time }
         cited_by: { type: integer }
 
     ObjectView:
       type: object
-      required: [id, kind, original_name, versions]
+      required: [id, kind, versions]
       properties:
         id: { type: string }
         kind: { type: string, enum: [file, web, message] }
-        original_name: { type: string }
+        original_name: { type: string, description: "Нет у страницы сайта (у неё url)" }
         media_type: { type: [string, "null"] }
         url: { type: [string, "null"] }
         logical_paths: { type: array, items: { type: string } }
@@ -974,16 +1033,18 @@ components:
       properties:
         code: { type: string }
         label: { type: object, properties: { ru: { type: string }, en: { type: string } } }
-        pack: { type: string }
+        definition: { type: [object, "null"], properties: { ru: { type: string }, en: { type: string } } }
+        pack: { type: string, description: "Имя пакета; schema — служебный перечень схемы, agent — добавил агент" }
         broader: { type: [string, "null"] }
         unit: { type: [string, "null"], description: "Только словарь property: единица UCUM по умолчанию" }
+        family: { type: string, enum: [source, work], description: "Только у вида атома (scheme kind)" }
 
     Base:
       type: object
       required: [base_id, amem_version, packs]
       properties:
         base_id: { type: string, format: uuid }
-        name: { type: string }
+        name: { type: [string, "null"], description: "null — имя базе не давали" }
         amem_version: { type: string }
         packs:
           type: array
@@ -1062,7 +1123,7 @@ components:
       required: [name, created_at]
       properties:
         name: { type: string }
-        created_at: { type: string, format: date-time }
+        created_at: { type: [string, "null"], format: date-time, description: "null — время не прочесть ни из манифеста, ни из имени" }
         size: { type: integer }
         kind: { type: string }
 
@@ -1085,7 +1146,7 @@ components:
         changeset_id: { type: [string, "null"] }
         counts: { type: object }
         queued: { type: array, items: { type: object } }
-        warnings: { type: array, items: { type: object } }
-        collisions: { type: array, items: { type: object } }
+        warnings: { type: array, items: { type: string } }
+        collisions: { type: array, items: { type: string } }
         report: { type: object }
         complete: { type: boolean }

@@ -9,9 +9,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
-from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from starlette.routing import Route
-from starlette.testclient import TestClient
 
 from amem import __version__, bundle, db, embed, objects, private, records, review, service, settings, vocab
 from amem.canon import CanonError
@@ -19,9 +17,9 @@ from amem.check import CheckError
 from amem.folders import FolderError
 from amem.packs import PackError
 from amem.service import problems
-from conftest import FakeProvider
+from conftest import SERVICE_URL, FakeProvider
 
-BASE_URL = "http://127.0.0.1:8767"
+BASE_URL = SERVICE_URL
 ORIGIN = BASE_URL
 DEV_UI = "http://127.0.0.1:5173"
 
@@ -245,34 +243,7 @@ def test_private_strip(text, expected):
     assert private.strip(text) == expected
 
 
-# --- служба: фикстуры ---
-
-@pytest.fixture
-def dsn(pg) -> str:
-    """DSN своей схемы для пула службы: search_path лежит в options, как у соединения pg."""
-    params = conninfo_to_dict(pg.info.dsn)
-    params["password"] = pg.info.password
-    return make_conninfo(**params)
-
-
-@pytest.fixture
-def serve(dsn, tmp_path):
-    """Запустить службу (lifespan: пул и db.prepare) на своей схеме; клиенты закрываются после теста."""
-    clients = []
-
-    def start(env=None, *, provider=None, routes=(), raise_server_exceptions=True, **explicit) -> TestClient:
-        environ = {"AMEM_DSN": dsn, "HOME": str(tmp_path / "home"), "USER": "ann", **(env or {})}
-        app = service.create_app(settings.load(environ, **explicit), provider=provider)
-        app.router.routes.extend(routes)
-        client = TestClient(app, base_url=BASE_URL, raise_server_exceptions=raise_server_exceptions)
-        client.__enter__()
-        clients.append(client)
-        return client
-
-    yield start
-    for client in reversed(clients):
-        client.__exit__(None, None, None)
-
+# --- служба: фикстуры dsn и serve — в conftest.py ---
 
 def is_problem(response, status: int, code: str) -> dict:
     assert response.status_code == status, response.text
@@ -387,8 +358,8 @@ def test_session_without_cookie_is_the_model(serve, pg):
     response = client.get("/api/v1/session")
     assert response.status_code == 200
     assert "set-cookie" not in response.headers
-    assert response.json() == {"agent": "model:local", "base": base_id(pg), "amem_version": __version__,
-                               "semantic": "unavailable", "can_write": True}
+    assert response.json() == {"agent": "model:local", "base": base_id(pg), "base_name": None,
+                               "amem_version": __version__, "semantic": "unavailable", "can_write": True}
 
 
 def test_session_cookie_from_own_page_makes_the_person(serve):
