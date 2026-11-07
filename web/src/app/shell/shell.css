@@ -260,3 +260,32 @@ kbd {
     display: none;
   }
 }
+.frow {
+  display: flex;
+  align-items: center;
+}
+.frow > a {
+  flex: 1;
+  min-width: 0;
+}
+.frow .fmenu {
+  opacity: 0;
+}
+.frow:hover .fmenu,
+.frow:focus-within .fmenu,
+.fmenu[aria-expanded="true"] {
+  opacity: 1;
+}
+.folders li[data-drop] > .frow > a,
+.folders li[data-drop] > a {
+  background: color-mix(in oklab, var(--focus) 18%, transparent);
+  outline: 2px solid var(--focus);
+}
+.fname {
+  display: grid;
+  gap: var(--s-3xs);
+  padding: var(--s-3xs) var(--s-xs);
+}
+.fname .fld {
+  width: 100%;
+}

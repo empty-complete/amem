@@ -18,6 +18,8 @@ export interface Pending {
   about: string[];
   kind: string;
   body: { proposals: Proposal[]; links: LinkProposal[] };
+  /** Не запись, а действие (перенос в папку): выполняется после окна отмены вместо /submit. */
+  run?: (keepalive: boolean) => Promise<void>;
   timer: ReturnType<typeof setTimeout> | null;
   onDone?: (r: Submitted) => void;
   onIssues?: (issues: CheckIssue[], message: string) => void;
@@ -35,6 +37,16 @@ const url = () => `${typeof location === "undefined" ? "http://localhost" : loca
 async function send(p: Pending, keepalive = false) {
   items = items.filter((x) => x.id !== p.id);
   emit();
+  if (p.run) {
+    try {
+      await p.run(keepalive);
+      p.onDone?.({} as Submitted);
+    } catch (e) {
+      const err = e instanceof ApiError ? e : null;
+      p.onIssues?.([], err?.detail ?? err?.title ?? "Нет связи со службой amem");
+    }
+    return;
+  }
   try {
     const res = await globalThis.fetch(url(), {
       method: "POST",

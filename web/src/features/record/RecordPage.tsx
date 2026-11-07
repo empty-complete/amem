@@ -16,6 +16,7 @@ import { kindLabel, recordPath } from "../records/RecordList";
 import { Sky } from "../sky/Sky";
 import { SourcePanel } from "../source/SourcePanel";
 import { draftKey, loadDraft } from "../write/drafts";
+import { MoveDialog } from "../write/MoveDialog";
 import { type Draft, type FieldIssues, fromPayload } from "../write/proposal";
 import { RecordEditor } from "../write/RecordEditor";
 import { AgentView } from "./AgentView";
@@ -58,6 +59,7 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
   const own = !!session.data && session.data.agent === view.agent && view.agent.startsWith("person:");
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState("");
+  const [moving, setMoving] = useState(false);
   const [rejected, setRejected] = useState<{ draft: Draft; issues: FieldIssues } | null>(null);
   const templates = useQuery({ ...q.templates(view.target), enabled: own });
   const kindCode = String(
@@ -175,6 +177,7 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
                     if (key === "agent") setMode(mode === "agent" ? "human" : "agent");
                     if (key === "ref") copy(view.ref, t("record.copied"));
                     if (key === "md") copy(doc, t("record.copied"));
+                    if (key === "move") setMoving(true);
                   }}
                 >
                   <Dropdown.Item id="agent" textValue={t("record.mode_agent")}>
@@ -185,6 +188,9 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
                   </Dropdown.Item>
                   <Dropdown.Item id="md" textValue={t("record.copy_md")}>
                     <Label>{t("record.copy_md")}</Label>
+                  </Dropdown.Item>
+                  <Dropdown.Item id="move" textValue={t("folders.move_to")}>
+                    <Label>{t("folders.move_to")}</Label>
                   </Dropdown.Item>
                 </Dropdown.Menu>
               </Dropdown.Popover>
@@ -266,6 +272,12 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
           </>
         )}
 
+        <MoveDialog
+          recordRef={view.ref}
+          current={view.folder ?? null}
+          open={moving}
+          onClose={() => setMoving(false)}
+        />
         <footer className="foot">
           <span>
             {agentName(view.agent, lang)} · {formatDate(view.recorded_at, lang)}
