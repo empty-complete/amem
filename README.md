@@ -31,8 +31,10 @@ There is no server, CLI or web UI yet — they come in the next subprojects.
   (`amem/packs/core` is the kernel itself; more packs via the `AMEM_PACKS`
   environment variable). Codes used by records are enforced by foreign keys.
   A pack may depend on others (`requires`: pack name → version range); packs load
-  in dependency order, the core (version 1.2.0) first, cycles and unmet ranges are errors,
-  and a concept's `broader` must lead to a code of the same scheme in a loaded pack.
+  in dependency order, the core (version 1.3.0) first, cycles and unmet ranges are errors,
+  and a concept's `broader` must lead to a code of the same scheme in a loaded pack. An atom kind
+  has a `family`: `source` (knowledge from a document) or `work` (from the work itself); a kind
+  without one counts as `work`.
 - **Basis and confidence** — an atom whose value does not come from a document about
   the object carries a `basis`: `default` (the domain's rule, "on the safe side"), `assumed`
   (accepted to go on, needs confirmation) or `author` (the person's own word; only a
@@ -49,7 +51,7 @@ Four named recipes in `amem.recipes`, each returning plain JSON-compatible data:
 - `exact_fact(conn, query, agent=…)` — codes and marks (exact and prefix), Russian full text
   and vectors merged with RRF; an exact code always comes first, ambiguity returns all candidates;
 - `similar(conn, query, agent=…)` — semantic neighbours of a text or of a record (`atm:` / `ent:` ref), with a text fallback;
-- `what_changed(conn, ref=…, since=…, until=…)` — revisions, review decisions, statuses and links over time;
+- `what_changed(conn, ref=…, since=…, until=…)` — revisions, review decisions, statuses, folder moves and links over time;
 - `around_entity(conn, ref, depth=1, rels=…, statuses=…)` — shortest paths over links and the
   `about` / `derived_from` fields; a path's confidence is its weakest scored link, and its
   `evidence_role` is the weakest source role.
@@ -197,6 +199,29 @@ does not take the exclusive lock, except for an object whose copy was skipped (n
 version in the store): it is taken in again on every import until the copies arrive.
 `dry_run=True` writes nothing and returns the plan: counts per action, warnings, collisions and the
 level 1 report. The returned `Imported` also carries `changeset_id`, `queued` and `complete`.
+
+## Folders, lists and object cards
+
+- **Folders** (`amem.folders`) sort records for people; a folder is a path like `Projects/Alpha`
+  and is not part of a revision. The registry holds the folders (`create`, `delete`, `rename`;
+  a new base gets four: Projects, Areas, Resources, Archive); `move(conn, ref, folder, agent=...)`
+  moves an atom or an entity without a new revision and logs the move; `tree(conn)` returns the tree
+  with counts (a record in `a/b` counts in `a` too) and the number of records with no folder.
+  `lookup.get` shows the record's `folder`.
+- **References** — `atm:` and `ent:` take a UUID or a `key` (`ent:sp20_13330`); an old key does not
+  resolve (`records.resolve`, `RecordNotFound`). The database has a name: `db.set_base_name` / `db.base_name`.
+- **Lists** — `lookup.list_records(conn, folder=, kinds=, statuses=, tag=, about=, limit=, cursor=)`
+  returns summaries, newest first, by cursor, with `total` of the filter. `about` is an entity
+  (`ent:...`) or an object (`obj:<UUID>` or a bare UUID): records whose current revision cites it.
+  `lookup.labels(conn, refs)` gives labels for many references in one query.
+- **Object card** — `lookup.object_view(conn, id)`: the object with versions, `status` (last mark),
+  `cited_by` (sources of current revisions: record, object version, selectors, quote, verdict),
+  `pages` (from the text cache, `None` if the text was never extracted; reading never extracts)
+  and `sheets` (sheet names of xlsx/xlsm, else `None`).
+- **Sheet window** — `objects.sheet(conn, store, id, n, name, "B2:D10")` returns `{name, range, rows}`
+  with cell values as in the text used by checks. At most 10 000 cells per call (counted as a rectangle,
+  empty cells too); without a range the window is `A1:L40`, cut at the data. `ObjectError.code` is
+  `not_found`, `invalid` or `too_large`.
 
 ## Backup
 

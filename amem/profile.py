@@ -19,9 +19,8 @@ from dataclasses import dataclass
 
 import psycopg
 
-from . import lookup
+from . import lookup, records
 from .check import templates, units
-from .records import as_uuid
 
 RETIRED = ("rejected", "deprecated", "superseded")
 FORMAT = "amem.card/1"
@@ -41,10 +40,11 @@ def rules_for_entity(conn: psycopg.Connection, entity_class: str) -> templates.R
     return templates.rules_for(templates.active(conn), "entity", entity_class)
 
 
-def _entity_uuid(ref: str) -> uuid.UUID:
+def _entity_uuid(conn, ref: str) -> uuid.UUID:
+    """ent: с UUID или ключом → id сущности; не сущность — RecordError, нет такой — RecordNotFound."""
     if not isinstance(ref, str) or not ref.startswith("ent:"):
-        raise LookupError(f"{ref!r}: карточка строится только для сущности (ent:<UUID>)")
-    return as_uuid(ref.split(":", 1)[1], "ref")
+        raise records.RecordError(f"{ref!r}: карточка строится только для сущности (ent:<UUID или ключ>)")
+    return records.resolve(conn, ref)[1]
 
 
 def _atoms_about(conn, entity_id: uuid.UUID) -> dict[str, list[dict]]:
@@ -176,7 +176,7 @@ def _profile(rules: templates.Rules) -> str | None:
 def _one(conn, ctx: _Context, entity_id: uuid.UUID) -> dict:
     record = lookup.get(conn, "entity", entity_id)
     if record is None:
-        raise LookupError(f"ent:{entity_id}: нет такой сущности")
+        raise records.RecordNotFound(f"ent:{entity_id}: нет такой сущности")
     cls = record["entity_class"]
     rules = templates.rules_for(ctx.active, "entity", cls)
     about = _atoms_about(conn, entity_id)
@@ -213,12 +213,13 @@ def _parents(conn, entity_id: uuid.UUID) -> list[uuid.UUID]:
 
 
 def card(conn: psycopg.Connection, ref: str, *, ancestors: bool = True) -> dict:
-    """Карточка сущности формата amem.card/1; ancestors — карточки предков по part_of, обход в ширину.
+    """Карточка сущности формата amem.card/1; ref — ent: с UUID или ключом; ancestors — карточки предков
+    по part_of, обход в ширину.
 
     Цикл part_of обрывается по посещённым; глубина не ограничена. Статус и автор значений не решают спор:
     черновик модели с другим значением даёт conflict и с проверенным значением человека — выбор делает только
     rank preferred (или отклонение лишнего атома)."""
-    root = _entity_uuid(ref)
+    root = _entity_uuid(conn, ref)
     ctx = _Context(active=templates.active(conn), prop_units=dict(conn.execute(
         "SELECT code, data->>'unit' FROM concept WHERE scheme = 'property'").fetchall()))
     out = _one(conn, ctx, root)

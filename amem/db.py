@@ -1,6 +1,9 @@
 """Подключение к PostgreSQL схемы v1, миграции SQL, загрузка словарей и шаблонов.
 
-  prepare(conn) — то, что делает сервер при старте: миграции → словари и шаблоны → счётчик id.
+  prepare(conn) — то, что делает сервер при старте: миграции → словари и шаблоны → base_id и четыре папки новой
+  базы → счётчик id.
+  set_base_name(conn, name), base_name(conn) — имя базы для людей (ключ base_name в meta); base_id от него
+  не зависит.
 
 Соединение — в режиме autocommit: тогда каждый `with conn.transaction()` — настоящая транзакция и фиксируется
 при выходе из блока. Без autocommit первое же чтение открывает неявную транзакцию, все дальнейшие блоки становятся
@@ -15,20 +18,28 @@ UTF8: миграции и данные в UTF-8, имена и пути объе
 from __future__ import annotations
 
 import hashlib
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg
 from psycopg.types.json import Jsonb
 
-from . import canon, ids, packs
+from . import canon, folders, ids, packs
 
 SQL_DIR = Path(__file__).with_name("sql")
 MIGRATION_LOCK = 0x616D656D00000001          # ключ pg_advisory_lock для миграций: «amem» + 1
 
 
+BASE_NAME_MAX = 200
+
+
 class MigrationError(RuntimeError):
     pass
+
+
+class BaseNameError(ValueError):
+    """Неверное имя базы: не строка, пустое, длиннее BASE_NAME_MAX или с невидимыми и управляющими знаками."""
 
 
 def connect(dsn: str, **kwargs) -> psycopg.Connection:
@@ -163,8 +174,40 @@ def seed_ids(conn: psycopg.Connection) -> None:
 def prepare(conn: psycopg.Connection) -> list[str]:
     applied = migrate(conn)
     load_vocab(conn)
-    # идентичность базы — один раз и навсегда: дамп и экспорт несут её с собой (задел под хаб)
-    conn.execute("INSERT INTO meta (key, value) VALUES ('base_id', %s) ON CONFLICT (key) DO NOTHING",
-                 (Jsonb(str(ids.uuid7())),))
+    # идентичность базы — один раз и навсегда: дамп и экспорт несут её с собой (задел под хаб).
+    # Четыре папки новой базы — в той же транзакции: база с base_id их больше не получает — ни после миграции 0008,
+    # ни после того, как пользователь удалил папку
+    with conn.transaction():
+        born = conn.execute("INSERT INTO meta (key, value) VALUES ('base_id', %s) ON CONFLICT (key) DO NOTHING "
+                            "RETURNING key", (Jsonb(str(ids.uuid7())),)).fetchone()
+        if born is not None:
+            folders.seed_defaults(conn)
     seed_ids(conn)
     return applied
+
+
+def set_base_name(conn: psycopg.Connection, name: str) -> str:
+    """Задать имя базы — ключ base_name в meta; вернуть сохранённое имя. Имя — в NFC, без пробелов по краям,
+    1–BASE_NAME_MAX знаков, без управляющих и невидимых знаков (правило то же, что у сегмента папки)."""
+    require_autocommit(conn)
+    if not isinstance(name, str):
+        raise BaseNameError(f"имя базы {name!r}: нужна строка")
+    value = unicodedata.normalize("NFC", name).strip()
+    if not value:
+        raise BaseNameError("имя базы: пустое")
+    if len(value) > BASE_NAME_MAX:
+        raise BaseNameError(f"имя базы: {len(value)} знаков, можно до {BASE_NAME_MAX}")
+    bad = next((ch for ch in value if ch not in folders._ALLOWED and unicodedata.category(ch) in folders._FORBIDDEN),
+               None)
+    if bad is not None:
+        raise BaseNameError(f"имя базы: невидимый или управляющий знак U+{ord(bad):04X}")
+    with conn.transaction():
+        conn.execute("INSERT INTO meta (key, value) VALUES ('base_name', %s) "
+                     "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", (Jsonb(value),))
+    return value
+
+
+def base_name(conn: psycopg.Connection) -> str | None:
+    """Имя базы или None, если его не задавали."""
+    row = conn.execute("SELECT value FROM meta WHERE key = 'base_name'").fetchone()
+    return row[0] if row is not None else None

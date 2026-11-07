@@ -369,6 +369,16 @@ enums:
       conflict:
         annotations: {label_ru: "расхождение", label_en: "conflict", definition_ru: "Несколько различных значений, ни одно не preferred."}
 
+  KindFamily:
+    description: >-
+      Семья вида атома (Concept.family, спецификация подпроекта 4, разд. 1.2): откуда знание — из документа или
+      из работы. По ней интерфейс группирует виды и раскрашивает граф. Вид без family считается work.
+    permissible_values:
+      source:
+        annotations: {label_ru: "источник", label_en: "source", definition_ru: "Знание взято из документа: факт, параметр, термин, требование, норма, формула."}
+      work:
+        annotations: {label_ru: "работа", label_en: "work", definition_ru: "Знание появилось в работе: решение, урок, методика, вопрос, заметка."}
+
 classes:
   Any:
     class_uri: linkml:Any
@@ -658,6 +668,8 @@ classes:
         range: Status
       review_state:
         range: ReviewState
+      folder:
+        description: Папка записи — метаданные, не часть ревизии (amem/folders.py); null — без папки.
       created_at:
         range: datetime
       recorded_at:
@@ -728,6 +740,8 @@ classes:
         range: Status
       review_state:
         range: ReviewState
+      folder:
+        description: Папка записи — метаданные, не часть ревизии (amem/folders.py); null — без папки.
       created_at:
         range: datetime
       recorded_at:
@@ -870,6 +884,9 @@ classes:
       symmetric:
         range: boolean
       via_field: {}
+      family:
+        description: Семья вида атома — только у понятий scheme kind; без неё вид считается work.
+        range: KindFamily
 
   FieldRule:
     description: >-
