@@ -1,0 +1,225 @@
+import { Button } from "@heroui/react";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { api } from "../../api/client";
+import type { ApiError } from "../../api/errors";
+import { q } from "../../api/queries";
+import type { components } from "../../api/schema";
+import { Icon } from "../../ui/icons";
+
+type Status = components["schemas"]["Status"];
+const STATUSES: Status[] = ["verified", "auto_verified", "needs_review", "draft", "deprecated", "superseded"];
+type Result = {
+  id: string;
+  summary: { counts?: Record<string, number> };
+  download: string;
+  report: string | null;
+};
+
+/** Экспорт (разд. 5.10): отбор, «с файлами», «с пакетами и моими видами», готовый отбор «Антология». */
+export function ExportForm() {
+  const { t, i18n } = useTranslation();
+  const kinds = useQuery(q.vocab("kind"));
+  const classes = useQuery(q.vocab("entity_class"));
+  const projects = useQuery({
+    ...q.records(null),
+    select: (d) => d.items.filter((r) => r.kind_or_class === "project"),
+  });
+  const [anthology, setAnthology] = useState(false);
+  const [title, setTitle] = useState("");
+  const [tags, setTags] = useState("");
+  const [project, setProject] = useState("");
+  const [kindSel, setKindSel] = useState<string[]>([]);
+  const [classSel, setClassSel] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<Status[]>(
+    STATUSES.filter((s) => s !== "superseded" && s !== "deprecated"),
+  );
+  const [since, setSince] = useState("");
+  const [withFiles, setWithFiles] = useState(false);
+  const [withPacks, setWithPacks] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [res, setRes] = useState<Result | null>(null);
+  const lab = (l: { ru?: string; en?: string }) =>
+    (i18n.language.startsWith("en") ? (l.en ?? l.ru) : l.ru) ?? "";
+  const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+
+  const build = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await api.POST("/bundles/export", {
+        body: {
+          selection: {
+            tags: tags
+              .split(/[,\s]+/)
+              .map((x) => x.replace(/^#/, "").trim())
+              .filter(Boolean),
+            project: project || null,
+            kinds: kindSel,
+            entity_classes: classSel,
+            statuses: anthology ? ["verified"] : statuses,
+            since: since ? new Date(since).toISOString() : null,
+          },
+          with_files: withFiles,
+          with_packs: withPacks,
+          anthology,
+          ...(anthology && title.trim() ? { title: title.trim() } : {}),
+        },
+      });
+      if (r.data) setRes(r.data as Result);
+    } catch (e) {
+      const a = e as ApiError;
+      setErr(a.detail ? `${a.title}: ${a.detail}` : (a.title ?? String(e)));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (res) {
+    const c = res.summary.counts ?? {};
+    return (
+      <section className="bdone" aria-labelledby="bdone-title">
+        <h2 id="bdone-title">
+          <Icon name="check" /> {t("bundles.done")}
+        </h2>
+        <p>
+          {t("bundles.counts", {
+            atoms: c.atoms ?? 0,
+            entities: c.entities ?? 0,
+            links: c.links ?? 0,
+            objects: c.objects ?? 0,
+          })}
+        </p>
+        <div className="editor__foot">
+          <a className="pillbtn" href={res.download} download>
+            {t("bundles.download")}
+          </a>
+          {res.report && (
+            <a className="navlink" href={res.report} target="_blank" rel="noreferrer">
+              <Icon name="external" />
+              {t("bundles.report")}
+            </a>
+          )}
+          <Button variant="ghost" onPress={() => setRes(null)}>
+            {t("bundles.again")}
+          </Button>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <form
+      className="bform"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void build();
+      }}
+    >
+      <label className="chk bpreset">
+        <input type="checkbox" checked={anthology} onChange={(e) => setAnthology(e.target.checked)} />
+        <span>
+          <strong>{t("bundles.anthology")}</strong>
+          <span className="muted">{t("bundles.anthology_hint")}</span>
+        </span>
+      </label>
+      {anthology && (
+        <label className="fl">
+          {t("bundles.anthology_title")}
+          <input
+            className="fld"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Антология"
+          />
+        </label>
+      )}
+      <fieldset className="bgroup">
+        <legend>{t("bundles.selection")}</legend>
+        <label className="fl">
+          {t("bundles.tags")}
+          <input
+            className="fld"
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            placeholder={t("bundles.tags_ph")}
+          />
+        </label>
+        <label className="fl">
+          {t("bundles.project")}
+          <select className="fld" value={project} onChange={(e) => setProject(e.target.value)}>
+            <option value="">{t("bundles.any_project")}</option>
+            {projects.data?.map((p) => (
+              <option key={p.ref} value={p.ref}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <fieldset className="fl fl--row">
+          <legend>{t("bundles.kinds")}</legend>
+          {kinds.data?.map((k) => (
+            <label key={k.code} className="chk">
+              <input
+                type="checkbox"
+                checked={kindSel.includes(k.code)}
+                onChange={() => setKindSel(toggle(kindSel, k.code))}
+              />
+              {lab(k.label)}
+            </label>
+          ))}
+        </fieldset>
+        <fieldset className="fl fl--row">
+          <legend>{t("bundles.classes")}</legend>
+          {classes.data?.map((k) => (
+            <label key={k.code} className="chk">
+              <input
+                type="checkbox"
+                checked={classSel.includes(k.code)}
+                onChange={() => setClassSel(toggle(classSel, k.code))}
+              />
+              {lab(k.label)}
+            </label>
+          ))}
+        </fieldset>
+        <fieldset className="fl fl--row" disabled={anthology}>
+          <legend>{t("bundles.statuses")}</legend>
+          {STATUSES.map((s) => (
+            <label key={s} className="chk">
+              <input
+                type="checkbox"
+                checked={anthology ? s === "verified" : statuses.includes(s)}
+                onChange={() => setStatuses(toggle(statuses, s))}
+              />
+              {t(`status.${s}`)}
+            </label>
+          ))}
+        </fieldset>
+        <label className="fl">
+          {t("bundles.since")}
+          <input className="fld" type="date" value={since} onChange={(e) => setSince(e.target.value)} />
+        </label>
+      </fieldset>
+      <label className="chk">
+        <input type="checkbox" checked={withFiles} onChange={(e) => setWithFiles(e.target.checked)} />
+        {t("bundles.with_files")}
+      </label>
+      <label className="chk">
+        <input type="checkbox" checked={withPacks} onChange={(e) => setWithPacks(e.target.checked)} />
+        {t("bundles.with_packs")}
+      </label>
+      {err && (
+        <p className="fielderr" role="alert">
+          {err}
+        </p>
+      )}
+      <div className="editor__foot">
+        <Button type="submit" className="pillbtn" isDisabled={busy}>
+          {busy ? t("bundles.building") : t("bundles.build")}
+        </Button>
+      </div>
+    </form>
+  );
+}

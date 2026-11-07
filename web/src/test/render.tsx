@@ -16,6 +16,7 @@ export async function renderWithApp(ui: ReactNode, path = "/") {
   const root = createRootRoute({ component: () => <Outlet /> });
   const routes = [
     "/",
+    "/bundles",
     "/search",
     "/atom/$ref",
     "/entity/$ref",

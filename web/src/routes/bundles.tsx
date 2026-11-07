@@ -1,4 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Stub } from "../app/shell/Stub";
+import { BundlesPage } from "../features/bundles/BundlesPage";
 
-export const Route = createFileRoute("/bundles")({ component: () => <Stub /> });
+export const Route = createFileRoute("/bundles")({ component: BundlesPage });
