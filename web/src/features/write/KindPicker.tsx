@@ -44,6 +44,7 @@ export function KindPicker({
     <>
       <input
         className="fld"
+        // biome-ignore lint/a11y/noAutofocus: список видов открыт нажатием — сразу искать
         autoFocus
         placeholder={t("edit.kind_search")}
         aria-label={t("edit.kind_search")}
@@ -107,9 +108,10 @@ export function KindPicker({
           {chip}
         </button>
         {open && (
-          <div className="kindpop__in kindinline__list" role="group" aria-label={t("record.p_kind")}>
+          <fieldset className="kindpop__in kindinline__list">
+            <legend className="sr-only">{t("record.p_kind")}</legend>
             {list_}
-          </div>
+          </fieldset>
         )}
       </div>
     );
