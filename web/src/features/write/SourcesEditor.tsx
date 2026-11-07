@@ -3,6 +3,9 @@ import { Icon } from "../../ui/icons";
 import { fileType, placeText } from "../source/SourcePanel";
 import type { DraftSource } from "./proposal";
 
+/** «Ближайшее в файле: «…»» из замечания уровня 2 — то, что можно взять цитатой одним нажатием. */
+const near = (m?: string) => m?.match(/«([^»]+)»/)?.[1];
+
 /** Источники в правке: карточки с крестиком; «+ Источник» — Task 7 (SourcePicker). */
 export function SourcesEditor({
   sources,
@@ -40,6 +43,17 @@ export function SourcesEditor({
               {issues[i] && (
                 <span className="fielderr" role="alert">
                   {issues[i]}
+                  {near(issues[i]) && (
+                    <button
+                      type="button"
+                      className="addprop"
+                      onClick={() =>
+                        onChange(sources.map((x, j) => (j === i ? { ...x, quote: near(issues[i]) } : x)))
+                      }
+                    >
+                      {t("pick.take")}
+                    </button>
+                  )}
                 </span>
               )}
             </span>

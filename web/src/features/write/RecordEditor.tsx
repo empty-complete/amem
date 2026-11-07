@@ -13,6 +13,7 @@ import { dropDraft, saveDraft } from "./drafts";
 import { PropertyEditor } from "./fields";
 import { KindPicker } from "./KindPicker";
 import { type Draft, type FieldIssues, issuesToFields, type Template, toProposal } from "./proposal";
+import { SourcePicker } from "./SourcePicker";
 import { SourcesEditor } from "./SourcesEditor";
 import { useSubmit } from "./useSubmit";
 import "./write.css";
@@ -60,6 +61,7 @@ export function RecordEditor(p: RecordEditorProps) {
   const [sourceErr, setSourceErr] = useState<string | null>(null);
   const issues = p.issues ?? null;
   const [asking, setAsking] = useState(false);
+  const [picking, setPicking] = useState(false);
   const dirty = useRef(false);
   const editor = useRef<BodyEditorApi>(null);
   const submit = useSubmit();
