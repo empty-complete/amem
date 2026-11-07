@@ -14,8 +14,10 @@ from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from amem import __version__, bundle, db, embed, objects, private, records, review, service, settings, vocab
+from amem.canon import CanonError
 from amem.check import CheckError
 from amem.folders import FolderError
+from amem.packs import PackError
 from amem.service import problems
 from conftest import FakeProvider
 
@@ -177,6 +179,44 @@ def test_tokens_file_permissions(tmp_path, caplog):
     assert "chmod 600" in caplog.text
 
 
+@pytest.mark.parametrize("field", ["hash", "agent"])
+def test_tokens_file_value_with_trailing_newline_is_rejected(tmp_path, field):
+    """Шаблон — целиком: у re.match с «$» значение с переводом строки на конце проходило."""
+    values = {"hash": settings.token_hash("x"), "agent": "person:anna"}
+    values[field] += "\n"
+    path = tmp_path / "amem-tokens.toml"
+    path.write_text(f'[[token]]\nhash = """{values["hash"]}"""\nagent = """{values["agent"]}"""\n', encoding="utf-8")
+    path.chmod(0o600)
+    with pytest.raises(settings.SettingsError, match=field):
+        settings.load_tokens(path)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="владелец файла — POSIX")
+def test_tokens_file_of_another_user_is_rejected(tmp_path, monkeypatch):
+    path = tokens_file(tmp_path, ("t", "person:anna", True))
+    owner = Path(path).stat().st_uid
+    if owner == 0:
+        pytest.skip("файл root принимается всегда: от root другого владельца не подменить")
+    monkeypatch.setattr(settings.os, "getuid", lambda: owner + 1)       # служба — другой пользователь
+    with pytest.raises(settings.SettingsError, match="другому пользователю"):
+        settings.load_tokens(path)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="права файла — POSIX")
+def test_tokens_file_permissions_are_checked_on_the_opened_file(tmp_path, monkeypatch):
+    """Права — по fstat уже открытого файла: подмена между проверкой и чтением ничего не даёт."""
+    path = tokens_file(tmp_path, ("t", "person:anna", True))
+    Path(path).chmod(0o620)
+    monkeypatch.setattr(Path, "stat", lambda self, **kw: (_ for _ in ()).throw(AssertionError("stat по имени")))
+    with pytest.raises(settings.SettingsError, match="chmod 600"):
+        settings.load_tokens(path)
+
+
+def test_tokens_file_must_be_a_regular_file(tmp_path):
+    with pytest.raises(settings.SettingsError, match=str(tmp_path)):
+        settings.load_tokens(tmp_path)
+
+
 def test_missing_tokens_file(tmp_path):
     with pytest.raises(settings.SettingsError, match="amem-tokens.toml"):
         settings.load_tokens(tmp_path / "нет" / "amem-tokens.toml")
@@ -194,6 +234,12 @@ def test_missing_tokens_file(tmp_path):
     ("без меток", "без меток"),
     ("a</private>b", "a</private>b"),                                    # закрывающая без открывающей — просто текст
     ("", ""),
+    ("a<private >1</private>b", "ab"),                                    # пробелы и переводы строк внутри метки
+    ("a< private>1</ private >b", "ab"),
+    ("a<private\n>1</private\n>b", "ab"),
+    ("a<\tPRIVATE\t>1< / Private >b", "ab"),
+    ("a< private >хвост", "a"),
+    ("a<privat>b", "a<privat>b"),                                         # не метка
 ])
 def test_private_strip(text, expected):
     assert private.strip(text) == expected
@@ -291,6 +337,20 @@ def test_foreign_origin_is_403(serve):
     is_problem(client.post("/api/v1/submit", json={}, headers={"Origin": DEV_UI}), 403, "bad_origin")
     dev = serve({"AMEM_UI_ORIGINS": DEV_UI})
     is_problem(dev.post("/api/v1/submit", json={}, headers={"Origin": DEV_UI}), 404, "not_found")
+
+
+def test_write_from_foreign_site_without_origin_is_403(serve):
+    """Запасная проверка: запись без Origin, но с Sec-Fetch-Site чужой страницы — тоже 403."""
+    client = serve()
+    for site in ("cross-site", "same-site", "Cross-Site"):
+        body = is_problem(client.post("/api/v1/submit", json={}, headers={"Sec-Fetch-Site": site}), 403, "bad_origin")
+        assert "Sec-Fetch-Site" in body["detail"]
+        is_problem(client.delete("/api/v1/folders/a", headers={"Sec-Fetch-Site": site}), 403, "bad_origin")
+    # своя страница, ввод адреса и клиенты без заголовка проходят защиту — дальше маршрута нет
+    for headers in ({"Sec-Fetch-Site": "same-origin"}, {"Sec-Fetch-Site": "none"}, {}):
+        is_problem(client.post("/api/v1/submit", json={}, headers=headers), 404, "not_found")
+    # чтение с чужой страницы без Origin — не запись: проверка его не касается
+    assert client.get("/api/v1/session", headers={"Sec-Fetch-Site": "cross-site"}).status_code == 200
 
 
 def test_write_accepts_only_json(serve):
@@ -462,6 +522,10 @@ PROBLEMS = [
     (db.BaseNameError("имя базы: пустое"), 400, "bad_request"),
     (vocab.VocabError("нет такого кода"), 400, "bad_request"),
     (problems.Problem(501, "not_implemented", "антологии ещё нет"), 501, "not_implemented"),
+    (embed.EmbeddingError("provider не соответствует активной модели"), 503, "semantic_unavailable"),
+    (CanonError("число не переводится в JSON"), 400, "bad_request"),
+    (PackError("пакет example: нет pack.yaml"), 400, "bad_request"),
+    (ValueError("limit должен быть целым числом от 1 до 100"), 400, "bad_request"),   # прочий — последняя ступень
 ]
 
 
@@ -490,6 +554,18 @@ def test_problem_details(serve):
     issue = {"code": "x", "severity": "violation", "message": "m", "ref": "@a", "path": "label"}
     check = problems.Problem(422, "check_rejected", "пакет отклонён", issues=[issue])
     assert is_problem(serve(routes=[raising(check)]).get("/api/v1/boom"), 422, "check_rejected")["issues"] == [issue]
+
+
+def test_problem_extensions_do_not_replace_main_fields(serve):
+    """Детали BundleError с ключами detail, headers, status, type, title не ломают ответ и не заменяют поля."""
+    exc = bundle.BundleError("подборка не принята", code="bundle_key_collision", detail="чужое", headers={"x": 1},
+                             status=200, type="https://evil.example", title="чужое", collisions=["k"])
+    body = is_problem(serve(routes=[raising(exc)]).get("/api/v1/boom"), 422, "bundle_key_collision")
+    assert (body["type"], body["detail"]) == ("about:blank", "подборка не принята")
+    assert body["title"] != "чужое" and body["collisions"] == ["k"]
+    problem = problems.Problem(400, "bad_request", "неверно", type="https://evil.example", code2="x")
+    body = is_problem(serve(routes=[raising(problem)]).get("/api/v1/boom"), 400, "bad_request")
+    assert (body["type"], body["code2"]) == ("about:blank", "x")
 
 
 def test_database_unavailable_is_503_without_connection_details(serve):

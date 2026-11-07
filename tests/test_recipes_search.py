@@ -313,3 +313,37 @@ def test_query_provider_must_match_active_model(kb, provider):
 
     with pytest.raises(embed.EmbeddingError, match="активной модели"):
         search_recipe(kb, "exact_fact", "alpha", provider=wrong)
+
+
+def test_availability_reports_why_the_semantic_channel_is_off(kb, provider, monkeypatch):
+    """recipes.availability — то же решение, что у поиска по тексту, без счёта векторов."""
+    from amem import recipes
+
+    assert recipes.availability(kb, provider) == {"semantic": "unavailable", "reason": "no_active_model"}
+    activate(kb, provider)
+    calls = len(provider.calls)
+    assert recipes.availability(kb, provider) == {"semantic": "used", "reason": None}
+    assert len(provider.calls) == calls                       # вектора не считаются
+
+    wrong = FakeProvider()
+    wrong.version = "2"
+    assert recipes.availability(kb, wrong) == {"semantic": "unavailable", "reason": "provider_mismatch"}
+    with pytest.raises(embed.EmbeddingError):                 # поиск по тексту с этим provider — отказ
+        search_recipe(kb, "exact_fact", "alpha", provider=wrong)
+
+    monkeypatch.setenv("AMEM_BACKEND", "none")
+    assert recipes.availability(kb, provider) == {"semantic": "unavailable", "reason": "backend_disabled"}
+    monkeypatch.setenv("AMEM_BACKEND", "nonsense")
+    assert recipes.availability(kb) == {"semantic": "unavailable", "reason": "backend_unknown"}
+
+
+def test_availability_fastembed_model_without_the_package(kb, monkeypatch):
+    from amem import recipes
+
+    class Fastembed(FakeProvider):
+        name, version, backend = "intfloat/multilingual-e5-small", "1", "fastembed"
+
+    selected = Fastembed()
+    embed.activate_model(kb, embed.register_model(kb, selected)["id"])
+    monkeypatch.setattr(recipes.importlib.util, "find_spec", lambda name: None)
+    assert recipes.availability(kb, selected) == {"semantic": "unavailable", "reason": "fastembed_missing"}

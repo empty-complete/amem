@@ -6,7 +6,9 @@ tokens, query_log); неизвестный ключ — ошибка, а не т
 от папки файла, в окружении и аргументе — от текущей папки; «~» раскрывается везде.
 
 Токены общей службы — amem-tokens.toml с правами 0600: строки [[token]] с hash = "sha256:…", agent и write. Сам токен
-в файле не хранится: служба сравнивает sha256 предъявленного токена с записанными.
+в файле не хранится: служба сравнивает sha256 предъявленного токена с записанными. Файл принадлежит пользователю
+службы (или root); права и владелец проверяются по уже открытому файлу (fstat), а не по имени: между проверкой
+и чтением файл не подменить.
 """
 from __future__ import annotations
 
@@ -15,6 +17,7 @@ import hmac
 import logging
 import os
 import re
+import stat
 import tomllib
 import unicodedata
 from dataclasses import dataclass
@@ -27,10 +30,11 @@ DEFAULT_PORT = 8767            # 8765 на машинах разработчик
 DEFAULT_MODEL_AGENT = "model:local"
 FALLBACK_NAME = "local"        # имя человека, если от имени пользователя ОС ничего не осталось
 QUERY_LOG_OFF = "off"
-PERSON = re.compile(r"^person:[a-z0-9_.-]+$")       # шаблон агента — как CHECK таблицы agent (objects.AGENT)
-MODEL = re.compile(r"^model:[a-z0-9_.-]+$")
-AGENT = re.compile(r"^(person|model):[a-z0-9_.-]+$")
-TOKEN_HASH = re.compile(r"^sha256:[0-9a-f]{64}$")
+# шаблоны — только целиком (fullmatch): у re.match с «$» проходит и строка с переводом строки на конце
+PERSON = re.compile(r"person:[a-z0-9_.-]+")         # шаблон агента — как CHECK таблицы agent (objects.AGENT)
+MODEL = re.compile(r"model:[a-z0-9_.-]+")
+AGENT = re.compile(r"(person|model):[a-z0-9_.-]+")
+TOKEN_HASH = re.compile(r"sha256:[0-9a-f]{64}")
 log = logging.getLogger("amem.settings")
 
 # поле → переменная окружения; порядок — как в таблице разд. 2
@@ -144,18 +148,29 @@ def load_tokens(path: Path | str) -> tuple[Token, ...]:
     """Токены из amem-tokens.toml; нет файла или он неверен — SettingsError с местом."""
     path = Path(path)
     try:
-        mode = path.stat().st_mode
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        with open(path, "rb") as f:
+            info = os.fstat(f.fileno())          # права и владелец — того файла, который читаем
+            raw = f.read() if stat.S_ISREG(info.st_mode) else None
     except FileNotFoundError:
         raise SettingsError(f"{path}: файла токенов нет — создайте токен (amem token create) или уберите AMEM_TOKENS")
-    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
+    except OSError as e:
         raise SettingsError(f"{path}: не читается: {e}") from e
+    if raw is None:
+        raise SettingsError(f"{path}: это не обычный файл")
     if os.name == "posix":
-        # кто может писать в файл, тот впишет свой токен с правом записи; хэши сами по себе не раскрывают токены
-        if mode & 0o022:
+        # кто может писать в файл, тот впишет свой токен с правом записи; хэши сами по себе не раскрывают токены.
+        # Чужой файл (владелец — другой пользователь, кроме root) его владелец перепишет когда угодно
+        if info.st_uid not in (os.getuid(), 0):
+            raise SettingsError(f"{path}: файл токенов принадлежит другому пользователю (uid {info.st_uid}) — "
+                                f"создайте его от пользователя службы")
+        if info.st_mode & 0o022:
             raise SettingsError(f"{path}: файл токенов доступен на запись другим пользователям — chmod 600 {path}")
-        if mode & 0o044:
+        if info.st_mode & 0o044:
             log.warning("%s: файл токенов читают другие пользователи — chmod 600 %s", path, path)
+    try:
+        data = tomllib.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
+        raise SettingsError(f"{path}: не читается: {e}") from e
     entries = data.get("token", [])
     if set(data) - {"token"} or not isinstance(entries, list):
         raise SettingsError(f"{path}: нужны только таблицы [[token]]")
@@ -164,9 +179,9 @@ def load_tokens(path: Path | str) -> tuple[Token, ...]:
         where = f"{path}: token {i}"
         if not isinstance(entry, dict):
             raise SettingsError(f"{where}: нужна таблица [[token]]")
-        if not isinstance(entry.get("hash"), str) or not TOKEN_HASH.match(entry["hash"]):
+        if not isinstance(entry.get("hash"), str) or not TOKEN_HASH.fullmatch(entry["hash"]):
             raise SettingsError(f"{where}: hash — нужно sha256:<64 шестнадцатеричных знака>")
-        if not isinstance(entry.get("agent"), str) or not AGENT.match(entry["agent"]):
+        if not isinstance(entry.get("agent"), str) or not AGENT.fullmatch(entry["agent"]):
             raise SettingsError(f"{where}: agent {entry.get('agent')!r} — нужен person:<имя> или model:<имя>")
         write = entry.get("write", False)              # без явного права — только чтение
         if not isinstance(write, bool):
@@ -245,7 +260,7 @@ def _agent(entry, pattern: re.Pattern, prefix: str, *, default: str) -> str:
     if entry is None:
         return default
     value, where, _ = entry
-    if not isinstance(value, str) or not pattern.match(value.strip()):
+    if not isinstance(value, str) or not pattern.fullmatch(value.strip()):
         raise SettingsError(f"{where}: агент {value!r} — нужен {prefix}<имя> из строчных латинских букв, цифр, «_.-»")
     return value.strip()
 

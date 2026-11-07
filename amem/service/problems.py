@@ -1,15 +1,18 @@
 """Ошибки службы в application/problem+json (RFC 9457) по таблице разд. 3.2 спецификации подпроекта 4.
 
-Тело: type, title, status, detail, code и, где есть, расширения (issues, by, at, missing…). Исключения библиотеки —
-наследники ValueError, поэтому перевод идёт от частного к общему одной цепочкой (to_problem): RecordNotFound раньше
-RecordError, коды ReviewError, FolderError и ObjectError раньше «прочего». Необработанная ошибка — 500 internal:
-подробности уходят в журнал службы (logger amem.service), в ответе их нет. Недоступная база — 503 без строки
-соединения: в тексте ошибки psycopg бывают адрес и порт сервера.
+Тело: type, title, status, detail, code и, где есть, расширения (issues, by, at, missing…); расширение не заменяет
+пять основных полей. Исключения библиотеки — наследники ValueError, поэтому перевод идёт от частного к общему одной
+цепочкой (to_problem): RecordNotFound раньше RecordError, коды ReviewError, FolderError и ObjectError раньше
+«прочего», EmbeddingError (503) раньше прочего ValueError — последней ступени перед 500: так библиотека отвечает на
+неверный ввод, и ответ — 400 с её сообщением. Необработанная ошибка — 500 internal: подробности уходят в журнал службы
+(logger amem.service), в ответе их нет. Недоступная база — 503 без строки соединения: в тексте ошибки psycopg бывают
+адрес и порт сервера.
 """
 from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
 from datetime import datetime
 
 import psycopg
@@ -17,9 +20,11 @@ from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from .. import bundle, db, objects, records, review, vocab
+from .. import bundle, db, embed, objects, records, review, vocab
+from ..canon import CanonError
 from ..check import CheckError
 from ..folders import FolderError
+from ..packs import PackError
 
 MEDIA_TYPE = "application/problem+json"
 log = logging.getLogger("amem.service")
@@ -31,7 +36,9 @@ TITLES = {
     422: "Отклонено проверкой", 500: "Внутренняя ошибка службы", 501: "Ещё не сделано", 503: "Служба недоступна",
 }
 CODE_TITLES = {"read_only": "Только чтение", "review_closed": "Уже решено", "bad_origin": "Чужой источник запроса",
-               "folder_exists": "Папка уже есть", "folder_not_empty": "Папка не пуста"}
+               "folder_exists": "Папка уже есть", "folder_not_empty": "Папка не пуста",
+               "semantic_unavailable": "Смысловой поиск недоступен", "db_unavailable": "База недоступна"}
+RESERVED = frozenset({"type", "title", "status", "code", "detail"})       # расширения их не заменяют
 REVIEW = {"closed": (409, "review_closed"), "forbidden": (403, "review_forbidden"),
           "claimed": (403, "review_forbidden"), "stale": (400, "review_bad"), "bad_outcome": (400, "review_bad"),
           "invalid": (400, "review_bad"), "not_found": (404, "not_found")}
@@ -50,13 +57,14 @@ class Problem(Exception):
 
 
 def response(status: int, code: str, detail: str | None = None, *, headers: dict | None = None,
-             **extra) -> JSONResponse:
+             extra: Mapping | None = None) -> JSONResponse:
     body = {"type": "about:blank", "title": CODE_TITLES.get(code) or TITLES.get(status, "Ошибка"), "status": status,
             "code": code}
     if detail:
         body["detail"] = detail
     # расширения — только то, что переводится в JSON: в деталях BundleError бывают произвольные значения
-    body.update(json.loads(json.dumps(extra, ensure_ascii=False, default=str)))
+    extensions = {str(k): v for k, v in (extra or {}).items() if str(k) not in RESERVED}
+    body.update(json.loads(json.dumps(extensions, ensure_ascii=False, default=str)))
     return JSONResponse(body, status_code=status, headers=headers, media_type=MEDIA_TYPE)
 
 
@@ -78,31 +86,38 @@ def to_problem(exc: BaseException) -> Problem:
         status, code = FOLDER.get(exc.code, (422, "folder_invalid"))
         return Problem(status, code, message)
     if isinstance(exc, bundle.BundleError):
-        return Problem(422, exc.code or "bundle_invalid", message, **exc.details)
+        problem = Problem(422, exc.code or "bundle_invalid", message)
+        problem.extra = dict(exc.details)        # ключи деталей — любые, в том числе detail и headers
+        return problem
     if isinstance(exc, objects.ObjectError):
         status, code = OBJECT.get(exc.code, (400, "bad_request"))
         return Problem(status, code, message)
-    if isinstance(exc, (records.RecordError, CheckError, db.BaseNameError, vocab.VocabError)):
+    if isinstance(exc, (records.RecordError, CheckError, db.BaseNameError, vocab.VocabError, CanonError, PackError)):
         return Problem(400, "bad_request", message)
+    if isinstance(exc, embed.EmbeddingError):
+        return Problem(503, "semantic_unavailable", f"смысловой поиск недоступен: {message}")
     if isinstance(exc, psycopg.OperationalError):
         return Problem(503, "db_unavailable", "база недоступна — проверьте, что PostgreSQL запущен и AMEM_DSN верен")
     if isinstance(exc, HTTPException):
         code = HTTP.get(exc.status_code, f"http_{exc.status_code}")
         return Problem(exc.status_code, code, None, headers=exc.headers)
+    if isinstance(exc, ValueError):          # последняя ступень перед 500: неверный ввод, который пропустила служба
+        return Problem(400, "bad_request", message)
     return Problem(500, "internal", "внутренняя ошибка службы; подробности — в журнале службы")
 
 
 async def handle(request: Request, exc: Exception) -> JSONResponse:
     problem = to_problem(exc)
-    if problem.status == 503:
+    if problem.code == "db_unavailable":
         log.warning("%s %s: база недоступна: %s", request.method, request.url.path, exc)
-    elif problem.status >= 500 and problem is not exc:
+    elif problem.status >= 500 and problem is not exc and problem.code == "internal":
         log.error("%s %s: необработанная ошибка", request.method, request.url.path, exc_info=exc)
-    return response(problem.status, problem.code, problem.detail, headers=problem.headers, **problem.extra)
+    return response(problem.status, problem.code, problem.detail, headers=problem.headers, extra=problem.extra)
 
 
 # классы, которые ловит ExceptionMiddleware (поиск по MRO исключения); Exception — последний рубеж
 # (ServerErrorMiddleware): он отвечает 500 и передаёт исключение серверу дальше
 HANDLED = (Problem, records.RecordError, review.ReviewError, FolderError, bundle.BundleError, objects.ObjectError,
-           CheckError, db.BaseNameError, vocab.VocabError, psycopg.OperationalError, HTTPException, Exception)
+           CheckError, db.BaseNameError, vocab.VocabError, CanonError, PackError, embed.EmbeddingError,
+           psycopg.OperationalError, HTTPException, ValueError, Exception)
 HANDLERS = {cls: handle for cls in HANDLED}
