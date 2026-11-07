@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import time
+import uuid
 from datetime import datetime
 
 import psycopg
@@ -424,6 +425,7 @@ def similar(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
                      reasons=reasons, model=model, durations_ms=durations, useful=usefulness, log=log, now=now)
 
 
+GRAPH_LIMIT = 300                    # узлов графа по умолчанию (around_entity, overview); контракт /graph — до 1000
 _GRAPH_STRUCTURAL = {"about", "derived_from"}
 _GRAPH_ROLE_RANK = {"primary": 0, "secondary": 1, "derived": 2}
 
@@ -474,9 +476,11 @@ def _graph_rels(conn: psycopg.Connection, rels) -> frozenset[str] | None:
     return values
 
 
-def _graph_edges(conn: psycopg.Connection, frontier, rels: frozenset[str] | None) -> list[dict]:
-    """Активные link и структурные ребра только текущих ревизий, прилегающие к frontier."""
+def _graph_edges(conn: psycopg.Connection, frontier, rels: frozenset[str] | None, *, inner: bool = False) -> list[dict]:
+    """Активные link и структурные ребра только текущих ревизий, прилегающие к frontier; inner — только рёбра,
+    оба конца которых во frontier (обзор: рёбра между вернувшимися узлами)."""
     ids = [ref.split(":", 1)[1] for ref in frontier]
+    join = "AND" if inner else "OR"
     link_rels = None if rels is None else sorted(rels - _GRAPH_STRUCTURAL)
     params = {"ids": ids, "rels": link_rels}
     edges = []
@@ -490,7 +494,7 @@ def _graph_edges(conn: psycopg.Connection, frontier, rels: frozenset[str] | None
                 "CASE WHEN l.dst_atom IS NULL THEN 'ent' ELSE 'atm' END AS dst_prefix, "
                 "l.qualifiers, l.confidence, l.changeset_id, l.agent, l.created_at FROM link l "
                 "WHERE l.retired_at IS NULL AND (coalesce(l.src_atom, l.src_entity) = ANY(%(ids)s::uuid[]) "
-                f"OR coalesce(l.dst_atom, l.dst_entity) = ANY(%(ids)s::uuid[])) {condition} ORDER BY l.id",
+                f"{join} coalesce(l.dst_atom, l.dst_entity) = ANY(%(ids)s::uuid[])) {condition} ORDER BY l.id",
                 params).fetchall()
             for row in rows:
                 edges.append({
@@ -509,12 +513,16 @@ def _graph_edges(conn: psycopg.Connection, frontier, rels: frozenset[str] | None
             select = (f"SELECT r.atom_id, f.{other} AS other_id, r.id AS revision_id, r.changeset_id, cs.agent, "
                       f"r.recorded_at AS created_at FROM atom_current r JOIN {table} f ON f.revision_id = r.id "
                       f"JOIN changeset cs ON cs.id = r.changeset_id ")
-            rows = cur.execute(
-                f"{select} WHERE r.atom_id = ANY(%(ids)s::uuid[]) UNION "
-                f"{select} WHERE f.{other} = ANY(%(ids)s::uuid[]) AND r.atom_id = ANY(ARRAY("
-                f"SELECT ar.atom_id FROM {table} g JOIN atom_revision ar ON ar.id = g.revision_id "
-                f"WHERE g.{other} = ANY(%(ids)s::uuid[]))) "
-                "ORDER BY revision_id, other_id", params).fetchall()
+            if inner:
+                query = (f"{select} WHERE r.atom_id = ANY(%(ids)s::uuid[]) AND f.{other} = ANY(%(ids)s::uuid[]) "
+                         "ORDER BY revision_id, other_id")
+            else:
+                query = (f"{select} WHERE r.atom_id = ANY(%(ids)s::uuid[]) UNION "
+                         f"{select} WHERE f.{other} = ANY(%(ids)s::uuid[]) AND r.atom_id = ANY(ARRAY("
+                         f"SELECT ar.atom_id FROM {table} g JOIN atom_revision ar ON ar.id = g.revision_id "
+                         f"WHERE g.{other} = ANY(%(ids)s::uuid[]))) "
+                         "ORDER BY revision_id, other_id")
+            rows = cur.execute(query, params).fetchall()
             for row in rows:
                 edges.append({
                     "id": f"{field}:{row['revision_id']}:{row['other_id']}", "rel": field,
@@ -523,6 +531,70 @@ def _graph_edges(conn: psycopg.Connection, frontier, rels: frozenset[str] | None
                     "created_at": row["created_at"].isoformat(), "confidence": None,
                 })
     return edges
+
+
+# структурные поля: таблица и столбец второго конца (atom_about → сущность, atom_derived → атом)
+_GRAPH_FIELD_TABLES = {"about": ("atom_about", "entity_id"), "derived_from": ("atom_derived", "atom_id")}
+
+
+def _graph_adjacent_sql(rels: frozenset[str] | None, *, ids: str = "%(ids)s::uuid[]") -> str:
+    """Строки (near, far) — текущие рёбра, у которых конец near в массиве ids (параметр %(ids)s или подзапрос
+    ARRAY(…) — выражение из кода, не из запроса): действующие link (с %(rels)s, если набор видов задан) и поля
+    about/derived_from текущих ревизий. Ребро с обоими концами в ids — две строки, по одной на конец: так степень
+    считает его у обоих. Таблицы и столбцы — из _GRAPH_FIELD_TABLES."""
+    link_rels = None if rels is None else rels - _GRAPH_STRUCTURAL
+    parts = []
+    if link_rels is None or link_rels:
+        condition = " AND l.rel = ANY(%(rels)s)" if link_rels is not None else ""
+        for near, far in (("src", "dst"), ("dst", "src")):
+            parts.append(f"SELECT coalesce(l.{near}_atom, l.{near}_entity) AS near, "
+                         f"coalesce(l.{far}_atom, l.{far}_entity) AS far FROM link l WHERE l.retired_at IS NULL "
+                         f"AND coalesce(l.{near}_atom, l.{near}_entity) = ANY({ids}){condition}")
+    for field in sorted(_GRAPH_STRUCTURAL if rels is None else _GRAPH_STRUCTURAL & rels):
+        table, other = _GRAPH_FIELD_TABLES[field]
+        joined = f"FROM atom_current r JOIN {table} f ON f.revision_id = r.id"
+        parts.append(f"SELECT r.atom_id AS near, f.{other} AS far {joined} WHERE r.atom_id = ANY({ids})")
+        # входящие: условие на atom_id без OR — PostgreSQL подставляет его внутрь atom_current (см. _graph_edges)
+        parts.append(f"SELECT f.{other} AS near, r.atom_id AS far {joined} WHERE f.{other} = ANY({ids}) "
+                     f"AND r.atom_id = ANY(ARRAY(SELECT ar.atom_id FROM {table} g JOIN atom_revision ar "
+                     f"ON ar.id = g.revision_id WHERE g.{other} = ANY({ids})))")
+    return " UNION ALL ".join(parts) or "SELECT NULL::uuid AS near, NULL::uuid AS far WHERE false"
+
+
+def _graph_marks(conn: psycopg.Connection, nodes: dict, degrees: dict | None = None) -> None:
+    """degree — число текущих связей узла во всей базе (входящих и исходящих, с любыми соседями), одним агрегатом
+    (degrees — уже посчитанные, UUID → число); pending — у записи есть открытый пункт очереди проверки (queued или
+    claimed), одним запросом."""
+    ids = [ref.split(":", 1)[1] for ref in nodes]
+    if not ids:
+        return
+    if degrees is None:
+        degrees = dict(conn.execute(f"SELECT near, count(*) FROM ({_graph_adjacent_sql(None)}) e GROUP BY near",
+                                    {"ids": ids}).fetchall())
+    pending = {row[0] for row in conn.execute(
+        "SELECT DISTINCT record_id FROM review_item WHERE record_id = ANY(%s::uuid[]) "
+        "AND state IN ('queued', 'claimed')", (ids,))}
+    for ref, node in nodes.items():
+        record_id = uuid.UUID(ref.split(":", 1)[1])
+        node["degree"] = degrees.get(record_id, 0)
+        node["pending"] = record_id in pending
+
+
+def _graph_neighbours(conn: psycopg.Connection, frontier, rels: frozenset[str] | None, statuses) -> set[str]:
+    """Соседи frontier по текущим рёбрам, у которых есть текущая ревизия и статус из statuses, — только ссылки:
+    счёт узлов за пределом обхода (total) без путей и подписей."""
+    ids = [ref.split(":", 1)[1] for ref in frontier]
+    if not ids:
+        return set()
+    rows = conn.execute(
+        f"WITH n AS (SELECT DISTINCT far AS id FROM ({_graph_adjacent_sql(rels)}) e) "
+        "SELECT 'atm', a.id FROM atom a JOIN n ON n.id = a.id WHERE a.status = ANY(%(statuses)s) "
+        "AND EXISTS (SELECT 1 FROM atom_revision r WHERE r.atom_id = a.id AND r.review_state <> 'declined') "
+        "UNION ALL SELECT 'ent', e.id FROM entity e JOIN n ON n.id = e.id WHERE e.status = ANY(%(statuses)s) "
+        "AND EXISTS (SELECT 1 FROM entity_revision r WHERE r.entity_id = e.id AND r.review_state <> 'declined')",
+        {"ids": ids, "rels": None if rels is None else sorted(rels - _GRAPH_STRUCTURAL),
+         "statuses": list(statuses)}).fetchall()
+    return {f"{prefix}:{record_id}" for prefix, record_id in rows}
 
 
 def _graph_source_roles(conn: psycopg.Connection, nodes: dict) -> dict:
@@ -561,7 +633,7 @@ def _path_evidence_role(path: dict, nodes: dict, roles: dict):
 
 
 def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=None, statuses=None,
-                  limit: int | None = None) -> dict:
+                  limit: int | None = GRAPH_LIMIT) -> dict:
     """Кратчайшие пути от записи (ref — atm:/ent: с UUID или ключом) по link/about/derived_from; узел посещается
     один раз.
 
@@ -570,7 +642,9 @@ def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=No
     путей (параллельные связи, связи между уже найденными узлами) не возвращаются.
 
     limit — сколько узлов (вместе с начальным) найти, не больше: обход останавливается на нём, ближние узлы —
-    раньше дальних, в том же порядке, что без предела; truncated — были узлы сверх предела. None — без предела."""
+    раньше дальних, в том же порядке, что без предела; truncated — были узлы сверх предела. None — без предела.
+    total — сколько узлов было бы без предела: за пределом обход досчитывает только ссылки соседей, без путей.
+    У узла degree — число его текущих связей во всей базе, pending — открытый пункт очереди проверки."""
     if isinstance(depth, bool) or not isinstance(depth, int) or not 1 <= depth <= 3:
         raise records.RecordError("depth должен быть целым числом от 1 до 3")
     if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
@@ -605,6 +679,7 @@ def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=No
                 path_key = (*paths[current]["edges"], edge["id"])
                 candidates.append((path_key, neighbor, current, edge, direction, info))
         candidates.sort(key=lambda item: (item[0], item[1], item[2]))
+        level_refs = {item[1] for item in candidates}
         next_frontier = []
         for _, neighbor, current, edge, direction, info in candidates:
             if neighbor in visited:
@@ -621,9 +696,20 @@ def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=No
             visited.add(neighbor)
             next_frontier.append(neighbor)
         frontier = next_frontier
-        if not frontier or truncated:
+        if truncated:
+            seen = visited | level_refs
+            reached = level_refs
+            for _ in range(level + 1, depth + 1):
+                reached = _graph_neighbours(conn, reached, rels, allowed_statuses) - seen
+                seen |= reached
+            total = len(seen)
             break
+        if not frontier:
+            break
+    if not truncated:
+        total = len(nodes)
 
+    _graph_marks(conn, nodes)
     edge_by_id = {edge["id"]: edge for edge in result_edges}
     roles = _graph_source_roles(conn, nodes)
     public_paths = []
@@ -636,5 +722,82 @@ def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=No
         "recipe": "around_entity", "start": start, "depth": depth,
         "nodes": [{key: value for key, value in node.items() if not key.startswith("_")}
                   for node in nodes.values()],
-        "edges": result_edges, "paths": public_paths, "truncated": truncated, "retrieval_id": None,
+        "edges": result_edges, "paths": public_paths, "truncated": truncated, "total": total, "retrieval_id": None,
+    }
+
+
+# Степень всех узлов базы — один агрегат по концам текущих рёбер: действующие link и поля about/derived_from текущих
+# ревизий (то же, что _graph_adjacent_sql для набора узлов). Ребро даёт по единице обоим концам.
+_OVERVIEW_DEGREE = (
+    "cur AS MATERIALIZED (SELECT id, atom_id FROM atom_current), "
+    "degree AS (SELECT id, count(*) AS n FROM ("
+    "SELECT coalesce(src_atom, src_entity) AS id FROM link WHERE retired_at IS NULL "
+    "UNION ALL SELECT coalesce(dst_atom, dst_entity) FROM link WHERE retired_at IS NULL "
+    "UNION ALL SELECT c.atom_id FROM cur c JOIN atom_about f ON f.revision_id = c.id "
+    "UNION ALL SELECT f.entity_id FROM cur c JOIN atom_about f ON f.revision_id = c.id "
+    "UNION ALL SELECT c.atom_id FROM cur c JOIN atom_derived f ON f.revision_id = c.id "
+    "UNION ALL SELECT f.atom_id FROM cur c JOIN atom_derived f ON f.revision_id = c.id) e GROUP BY id)")
+_CURRENT_ENTITY = "EXISTS (SELECT 1 FROM entity_revision r WHERE r.entity_id = e.id AND r.review_state <> 'declined')"
+# Узлы обзора: записи с текущей ревизией и статусом из набора. С проектом — атомы, у текущей ревизии которых
+# scope.project — этот проект (кандидаты — по индексу 0010, текущая ли ревизия — по cur), и сущности на другом
+# конце текущего ребра хотя бы одного такого атома (смежность — по индексам рёбер, как в обходе).
+_OVERVIEW_NODES = {
+    False: (
+        # cur — одна строка на атом: соединение, а не IN, — PostgreSQL 16 иначе идёт по индексу atom 50 тыс. раз
+        "nodes AS (SELECT 'atm' AS prefix, a.id, a.created_at FROM atom a JOIN cur c ON c.atom_id = a.id "
+        "WHERE a.status = ANY(%(statuses)s) "
+        f"UNION ALL SELECT 'ent', e.id, e.created_at FROM entity e WHERE e.status = ANY(%(statuses)s) "
+        f"AND {_CURRENT_ENTITY})"),
+    True: (
+        "project_atoms AS MATERIALIZED (SELECT r.atom_id AS id FROM atom_revision r "
+        "WHERE r.payload->'scope'->>'project' = %(project)s AND r.id IN (SELECT id FROM cur)), "
+        "project_entities AS (SELECT far AS id FROM ("
+        + _graph_adjacent_sql(None, ids="ARRAY(SELECT id FROM project_atoms)") + ") e), "
+        "nodes AS (SELECT 'atm' AS prefix, a.id, a.created_at FROM atom a "
+        "WHERE a.status = ANY(%(statuses)s) AND a.id IN (SELECT id FROM project_atoms) "
+        "UNION ALL SELECT 'ent', e.id, e.created_at FROM entity e WHERE e.status = ANY(%(statuses)s) "
+        f"AND e.id IN (SELECT id FROM project_entities) AND {_CURRENT_ENTITY})"),
+}
+
+
+def overview(conn: psycopg.Connection, *, limit: int | None = GRAPH_LIMIT, project: str | None = None,
+             statuses=None, rels=None) -> dict:
+    """Обзор базы без начальной записи (небо на главной): текущие сущности и записи по degree по убыванию,
+    при равенстве — новые первыми (время создания записи, затем id); не больше limit узлов (None — все).
+
+    degree — число текущих связей узла во всей базе (входящих и исходящих), pending — открытый пункт очереди
+    проверки. Рёбра — только между вернувшимися узлами. total — сколько узлов было бы без предела (с тем же project
+    и статусами), truncated — total > limit. project — ent:<UUID или ключ>: атомы с scope.project этого проекта
+    и сущности, связанные хотя бы с одним из них. statuses — как у других рецептов; rels — виды рёбер выдачи
+    (как у around_entity), на выбор узлов и степень не влияют.
+
+    Выбор узлов — один запрос: степень агрегатом по всем рёбрам, сортировка и предел — в базе (top-N), total —
+    оконным count до предела; в Python приходят только вернувшиеся узлы."""
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+        raise records.RecordError(f"limit {limit!r}: нужно целое число от 1 или None")
+    allowed_statuses = search._channel_statuses(statuses)
+    rels = _graph_rels(conn, rels)
+    project_ref = None
+    if project is not None:
+        if not isinstance(project, str):
+            raise records.RecordError("project должен быть ссылкой ent:<UUID или ключ>")
+        target, _, project_ref = _history_ref(conn, project)
+        if target != "entity":
+            raise records.RecordError(f"project {project}: нужна сущность ent:, а не атом")
+    rows = conn.execute(
+        f"WITH {_OVERVIEW_DEGREE}, {_OVERVIEW_NODES[project_ref is not None]} "
+        "SELECT n.prefix, n.id, coalesce(d.n, 0) AS degree, count(*) OVER () AS total "
+        "FROM nodes n LEFT JOIN degree d ON d.id = n.id "
+        "ORDER BY degree DESC, n.created_at DESC, n.id DESC LIMIT %(limit)s",
+        {"statuses": list(allowed_statuses), "project": project_ref, "limit": limit}).fetchall()
+    total = rows[0][3] if rows else 0
+    refs = [f"{prefix}:{record_id}" for prefix, record_id, _, _ in rows]
+    found = _graph_node_rows(conn, refs)
+    nodes = {ref: found[ref] for ref in refs if ref in found}     # порядок — по степени, как в запросе
+    _graph_marks(conn, nodes, {record_id: degree for _, record_id, degree, _ in rows})
+    edges = _graph_edges(conn, list(nodes), rels, inner=True) if nodes else []
+    return {
+        "recipe": "overview", "project": project_ref,
+        "nodes": [{key: value for key, value in node.items() if not key.startswith("_")} for node in nodes.values()],
+        "edges": edges, "truncated": limit is not None and total > limit, "total": total, "retrieval_id": None,
     }

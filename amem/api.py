@@ -35,7 +35,7 @@ STATUSES = tuple(s.value for s in Status)
 TARGETS = ("atom", "entity")
 WHO = recipes.WHO
 REVIEW_OPEN = ("queued", "claimed")
-GRAPH_NODES = 500                   # узлов графа в ответе, не больше: дальше — truncated
+GRAPH_LIMIT_MAX = 1000              # limit у /graph — до 1000 узлов (по умолчанию recipes.GRAPH_LIMIT = 300)
 ANCESTORS_DEPTH = 32                # цепочка part_of длиннее — обрывается (циклы обрываются по посещённым)
 # файлы версий, которые браузер показывает сам; остальное отдаётся на скачивание (application/octet-stream)
 INLINE_TYPES = frozenset({"application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "text/plain"})
@@ -505,12 +505,27 @@ def card(conn: psycopg.Connection, ref, *, ancestors=None) -> dict:
             "ancestors": [entity(parent["entity"]) for parent in reversed(full["ancestors"])]}
 
 
-def graph(conn: psycopg.Connection, ref, *, depth=None, rels=None, status=None) -> dict:
-    """GraphResult: кратчайшие пути от записи до depth шагов; больше GRAPH_NODES узлов — ближние и truncated."""
-    # предел — в самом обходе: граф глубины 3 не обходится целиком ради 500 ближних узлов
-    found = recipes.around_entity(conn, _ref(ref), depth=_int(depth, "depth", low=1, high=3, default=1),
-                                  rels=_codes(rels, "rels"), statuses=_statuses(status), limit=GRAPH_NODES)
-    nodes, truncated = found["nodes"], found["truncated"]
+def graph(conn: psycopg.Connection, ref=None, *, depth=None, limit=None, project=None, rels=None,
+          status=None) -> dict:
+    """GraphResult. С ref — recipes.around_entity: кратчайшие пути от записи до depth шагов, не больше limit узлов
+    (ближние раньше дальних). Без ref — recipes.overview: обзор базы по degree, project — атомы проекта и связанные
+    с ними сущности. total — узлов без предела, truncated — total > limit; у узла degree и pending.
+
+    project — только для обзора: с ref он проверяется, но окрестность не сужает (небо шлёт его и при выбранном
+    центре); depth без ref — так же."""
+    depth = _int(depth, "depth", low=1, high=3, default=1)
+    limit = _int(limit, "limit", low=1, high=GRAPH_LIMIT_MAX, default=recipes.GRAPH_LIMIT)
+    project = _ref(project, "project") if project not in (None, "") else None
+    rels, statuses = _codes(rels, "rels"), _statuses(status)
+    if ref is None or ref == "":
+        # предел — в самом запросе: степень, порядок и обрезка считаются в базе
+        found = recipes.overview(conn, limit=limit, project=project, statuses=statuses, rels=rels)
+        start = None
+    else:
+        # предел — в самом обходе: граф глубины 3 не обходится целиком ради ближних узлов
+        found = recipes.around_entity(conn, _ref(ref), depth=depth, rels=rels, statuses=statuses, limit=limit)
+        start = found["start"]
+    nodes = found["nodes"]
     kept = {node["ref"] for node in nodes}
     labels = _labels(conn, kept)
     families = vocab.families(conn)
@@ -519,10 +534,13 @@ def graph(conn: psycopg.Connection, ref, *, depth=None, rels=None, status=None) 
         code = node.get("kind") or node.get("entity_class")
         family = families.get(code, vocab.DEFAULT_FAMILY) if node["target"] == "atom" else "object"
         out_nodes.append({"ref": node["ref"], "label": labels[node["ref"]]["label"], "kind_or_class": code,
-                          "family": family, "status": node["status"], "depth": node["depth"]})
+                          "family": family, "status": node["status"],
+                          **({"depth": node["depth"]} if "depth" in node else {}),
+                          "pending": node["pending"], "degree": node["degree"]})
     edges = [{"src": edge["src"], "dst": edge["dst"], "rel": edge["rel"], "confidence": edge["confidence"]}
              for edge in found["edges"] if edge["src"] in kept and edge["dst"] in kept]
-    return {"ref": found["start"], "nodes": out_nodes, "edges": edges, "truncated": truncated}
+    return {"ref": start, "nodes": out_nodes, "edges": edges, "truncated": found["truncated"],
+            "total": found["total"]}
 
 
 # --- объекты ---

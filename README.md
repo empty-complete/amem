@@ -319,14 +319,15 @@ The agent never sets the status; the checks and people do.
 | **Pack** | A domain vocabulary with templates and entity profiles. The core is a pack too |
 | **Bundle** | A portable selection of records (`amem.bundle/1`), with or without files |
 
-**Search recipes.** Four named recipes return plain JSON, so agents can work with them directly:
+**Search recipes.** Five named recipes return plain JSON, so agents can work with them directly:
 
 | Recipe | Answers |
 |---|---|
 | `exact_fact` | *What exactly is X?* Codes, marks, full text and vectors merged with RRF |
 | `similar` | *What else is like this?* Semantic neighbours of a text or a record |
 | `what_changed` | *What changed since Monday?* Revisions, decisions, statuses, moves and links |
-| `around_entity` | *What do we know around X?* Shortest paths over links, rated by the weakest link |
+| `around_entity` | *What do we know around X?* Shortest paths over links, rated by the weakest link; stops at `limit` (300 by default, was unlimited before), `total` counts nodes without it |
+| `overview` | *What does the whole base look like?* Hubs by number of links (`degree`), their neighbours, the edges between them; filter by `project` |
 
 Agents mark the atoms that helped them. These marks decay over time and give a small, capped boost in
 ranking. They never change a status or skip a check.
