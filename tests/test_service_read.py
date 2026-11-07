@@ -486,7 +486,7 @@ def test_graph_without_ref_is_the_overview(serve, world):
     kept = {n["ref"] for n in cut["nodes"]}
     assert (len(kept), cut["total"], cut["truncated"]) == (2, 5, True)
     assert [n["ref"] for n in cut["nodes"]] == [n["ref"] for n in body["nodes"]][:2]
-    assert all(e["src"] in kept and e["dst"] in kept for e in cut["edges"])
+    assert cut["edges"] and all(e["src"] in kept and e["dst"] in kept for e in cut["edges"])   # хаб и сосед
     verified = contract.check(client.get(f"{V1}/graph", params={"status": "verified"}), "/graph")
     assert [n["ref"] for n in verified["nodes"]] == [world.w0] and verified["edges"] == []
     assert contract.check(client.get(f"{V1}/graph", params={"rels": "part_of"}), "/graph")["total"] == 5

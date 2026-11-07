@@ -1015,7 +1015,7 @@ components:
         status: { $ref: "#/components/schemas/Status" }
         depth: { type: integer }
         pending: { type: boolean, description: "Есть открытый пункт проверки (queued или claimed)" }
-        degree: { type: integer, description: "Число текущих связей узла в базе, а не только в выдаче" }
+        degree: { type: integer, description: "Число всех текущих связей узла в базе, в том числе к узлам вне фильтра статусов и вне выдачи; может быть больше числа видимых линий" }
 
     GraphResult:
       type: object
