@@ -1,0 +1,29 @@
+/* HeroUI — только компоненты, которые есть в интерфейсе (разд. 9.2: CSS ≤ 40 КБ).
+ * Порядок — как в @heroui/styles/dist/components/index.css: общие примитивы раньше составных.
+ * Новый компонент HeroUI в коде — добавить его стили сюда. */
+@layer theme, base, components, utilities;
+
+@import "@heroui/styles/base" layer(base);
+@import "@heroui/styles/base/scrollbar.css" layer(base);
+
+@import "@heroui/styles/components/label.css" layer(components);
+@import "@heroui/styles/components/disclosure.css" layer(components);
+@import "@heroui/styles/components/tabs.css" layer(components);
+@import "@heroui/styles/components/button.css" layer(components);
+@import "@heroui/styles/components/toggle-button.css" layer(components);
+@import "@heroui/styles/components/toggle-button-group.css" layer(components);
+@import "@heroui/styles/components/dropdown.css" layer(components);
+@import "@heroui/styles/components/list-box-item.css" layer(components);
+@import "@heroui/styles/components/list-box-section.css" layer(components);
+@import "@heroui/styles/components/list-box.css" layer(components);
+@import "@heroui/styles/components/menu-item.css" layer(components);
+@import "@heroui/styles/components/menu-section.css" layer(components);
+@import "@heroui/styles/components/menu.css" layer(components);
+@import "@heroui/styles/components/radio-group.css" layer(components);
+@import "@heroui/styles/components/radio.css" layer(components);
+@import "@heroui/styles/components/separator.css" layer(components);
+@import "@heroui/styles/components/popover.css" layer(components);
+
+@import "@heroui/styles/themes/default";
+@import "@heroui/styles/utilities";
+@import "@heroui/styles/variants";

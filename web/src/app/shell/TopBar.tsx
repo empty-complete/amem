@@ -9,6 +9,7 @@ import { QuickWrite } from "../../features/write/QuickWrite";
 import { Icon } from "../../ui/icons";
 import { useHotkeys } from "../keys";
 import { applyTheme, readTheme, resolveTheme } from "../theme";
+import { menuStore, useMenuOpen } from "./menu";
 
 export function TopBar() {
   const { t } = useTranslation();
@@ -16,12 +17,23 @@ export function TopBar() {
   const base = useQuery(q.base());
   const writeBtn = useRef<HTMLButtonElement>(null);
   const quickOpen = useQuickOpen();
+  const menuOpen = useMenuOpen();
   useHotkeys({ focusSearch: () => input.current?.focus() });
 
   const toggleTheme = () => applyTheme(resolveTheme(readTheme()) === "dark" ? "light" : "dark");
 
   return (
     <header className="bar">
+      <button
+        type="button"
+        className="iconbtn show-s"
+        aria-label={t("nav.menu")}
+        aria-expanded={menuOpen}
+        aria-controls="folders"
+        onClick={() => menuStore.set(!menuOpen)}
+      >
+        <Icon name={menuOpen ? "cross" : "menu"} />
+      </button>
       <Link to="/" className="wordmark" aria-label={t("app.home")}>
         amem
       </Link>
@@ -49,10 +61,10 @@ export function TopBar() {
           <span className="hide-s">{t("nav.write")}</span>
         </button>
         <QuickWrite trigger={writeBtn} />
-        <button type="button" className="iconbtn" aria-label={t("nav.theme")} onClick={toggleTheme}>
+        <button type="button" className="iconbtn hide-s" aria-label={t("nav.theme")} onClick={toggleTheme}>
           <Icon name="theme" />
         </button>
-        <Link to="/settings" className="iconbtn" aria-label={t("nav.settings")}>
+        <Link to="/settings" className="iconbtn hide-s" aria-label={t("nav.settings")}>
           <Icon name="user" />
         </Link>
       </nav>

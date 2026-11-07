@@ -1,7 +1,7 @@
 import { Button, Dropdown, Label } from "@heroui/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useRouterState, useSearch } from "@tanstack/react-router";
-import { type KeyboardEvent, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { type DropItem, useDrop } from "react-aria";
 import { useTranslation } from "react-i18next";
 import { ApiError } from "../../api/errors";
@@ -10,10 +10,13 @@ import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
 import { useMoveRecord } from "../../features/write/move";
 import { Icon, type IconName } from "../../ui/icons";
+import { applyTheme, readTheme, resolveTheme } from "../theme";
+import { menuStore, useMenuOpen } from "./menu";
 
 type Folder = components["schemas"]["Folder"];
 const TOP_ICON: Record<string, IconName> = { Архив: "archive" };
 export const RECORD_MIME = "application/x-amem-ref";
+const toggleTheme = () => applyTheme(resolveTheme(readTheme()) === "dark" ? "light" : "dark");
 
 /** Имя папки на месте: Enter — готово, Esc — отмена; ошибки службы словами под полем. */
 function NameInput({
@@ -200,6 +203,7 @@ function NewFolder({ parent, onClose }: { parent: string | null; onClose: () => 
 export function Folders() {
   const { t } = useTranslation();
   const tree = useQuery(q.folders());
+  const base = useQuery(q.base());
   const session = useQuery(q.session());
   const person = !!session.data?.agent.startsWith("person:");
   const search = useSearch({ strict: false }) as { folder?: string };
@@ -207,6 +211,10 @@ export function Folders() {
   const onRecords = useRouterState({ select: (st) => st.location.pathname === "/records" });
   const [adding, setAdding] = useState(false);
   const move = useMoveRecord();
+  const menuOpen = useMenuOpen();
+  const href = useRouterState({ select: (st) => st.location.href });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: закрываем меню при каждом переходе
+  useEffect(() => menuStore.set(false), [href]);
   const unfiled = useRef<HTMLLIElement>(null);
   const { dropProps, isDropTarget } = useDrop({
     ref: unfiled,
@@ -218,7 +226,7 @@ export function Folders() {
     },
   });
   return (
-    <nav className="folders" aria-label={t("folders.title")}>
+    <nav id="folders" className="folders" aria-label={t("folders.title")} data-open={menuOpen || undefined}>
       <ul>
         {tree.data?.folders.map((f) => (
           <FolderItem key={f.path} f={f} current={current} person={person} />
@@ -251,6 +259,45 @@ export function Folders() {
           {t("folders.new")}
         </button>
       )}
+      <ul className="sep show-s">
+        <li>
+          <Link to="/review">
+            <Icon name="check" />
+            <span>{t("nav.review")}</span>
+            <span className="n">{base.data?.review_open || ""}</span>
+          </Link>
+        </li>
+        <li>
+          <Link to="/changes">
+            <Icon name="history" />
+            <span>{t("nav.changes")}</span>
+          </Link>
+        </li>
+        <li>
+          <Link to="/base">
+            <Icon name="shield" />
+            <span>{t("nav.base")}</span>
+          </Link>
+        </li>
+        <li>
+          <Link to="/bundles">
+            <Icon name="archive" />
+            <span>{t("nav.bundles")}</span>
+          </Link>
+        </li>
+        <li>
+          <Link to="/settings">
+            <Icon name="user" />
+            <span>{t("nav.settings")}</span>
+          </Link>
+        </li>
+        <li>
+          <button type="button" className="frow-btn" onClick={toggleTheme}>
+            <Icon name="theme" />
+            <span>{t("nav.theme")}</span>
+          </button>
+        </li>
+      </ul>
     </nav>
   );
 }
