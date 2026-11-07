@@ -15,6 +15,9 @@ import psycopg
 from . import ids, records
 
 _HALF_LIFE_SECONDS = 180 * 24 * 60 * 60
+# блокировка задачи сессии — pg_advisory_xact_lock(int, int): первый ключ «amem», второй — hashtext метки;
+# двухключевые блокировки не пересекаются с одноключевыми (миграции, объекты, папки)
+SESSION_LOCK = 0x616D656D
 
 
 def _at(value: datetime | None) -> datetime:
@@ -83,6 +86,28 @@ def record_retrieval(conn: psycopg.Connection, *, agent: str, activity: uuid.UUI
             cur.executemany("INSERT INTO retrieval_item (retrieval_id, atom_id, rank) VALUES (%s, %s, %s)",
                             atom_items)
     return str(retrieval_id)
+
+
+def session_activity(conn: psycopg.Connection, label: str, *, now: datetime | None = None) -> uuid.UUID:
+    """Задача вида session с меткой label (например mcp:<id процесса и время>): та же метка — та же задача.
+
+    Польза отмечается только в задаче выдачи, поэтому сервер MCP берёт задачу на сессию и передаёт её во все поиски
+    и отметки этой сессии. Задачи других видов с той же меткой не в счёт. Поиск и создание — под рекомендательной
+    блокировкой метки: параллельные вызовы с одной меткой не создают двух задач."""
+    records._require_autocommit(conn)
+    if not isinstance(label, str) or not label.strip():
+        raise ValueError(f"метка задачи сессии {label!r}: нужна непустая строка")
+    at = _at(now)
+    with conn.transaction():
+        conn.execute("SELECT pg_advisory_xact_lock(%s::int, hashtext(%s))", (SESSION_LOCK, label))
+        row = conn.execute("SELECT id FROM activity WHERE kind = 'session' AND label = %s ORDER BY id LIMIT 1",
+                           (label,)).fetchone()
+        if row is not None:
+            return row[0]
+        activity = ids.uuid7()
+        conn.execute("INSERT INTO activity (id, kind, label, started_at) VALUES (%s, 'session', %s, %s)",
+                     (activity, label, at))
+    return activity
 
 
 def mark_helpful(conn: psycopg.Connection, retrieval_id: uuid.UUID | str, refs: Sequence[str], *,

@@ -42,7 +42,24 @@ LEASE = timedelta(minutes=15)
 
 
 class ReviewError(ValueError):
-    """Неверное действие с очередью: нет прав, недопустимый исход, пункт закрыт, захвачен другим или устарел."""
+    """Неверное действие с очередью: нет прав, недопустимый исход, пункт закрыт, захвачен другим или устарел.
+
+    code — для служб (HTTP, MCP, CLI), сообщение — для человека:
+    - closed — пункт уже закрыт; by — кто решил (агент вердикта, None у устаревшего), at — когда закрыт;
+    - forbidden — у агента нет права на это действие;
+    - bad_outcome — исход или уверенность недопустимы для агента;
+    - stale — ревизия пункта больше не та, о которой спрашивали: пункт закрыт obsolete;
+    - claimed — пункт держит другой агент;
+    - not_found — нет пункта или записи;
+    - invalid — неверный аргумент."""
+
+    CODES = ("closed", "forbidden", "bad_outcome", "stale", "claimed", "not_found", "invalid")
+
+    def __init__(self, message: str, *, code: str, by: str | None = None, at: datetime | None = None):
+        super().__init__(message)
+        self.code = code
+        self.by = by
+        self.at = at
 
 
 def in_audit(revision_id: uuid.UUID, rate: float) -> bool:
@@ -144,7 +161,7 @@ def _now(now: datetime | None) -> datetime:
     if now is None:
         return datetime.now(timezone.utc)
     if now.tzinfo is None or now.utcoffset() is None:
-        raise ReviewError(f"now {now!r}: нужно время с часовым поясом (datetime с tzinfo)")
+        raise ReviewError(f"now {now!r}: нужно время с часовым поясом (datetime с tzinfo)", code="invalid")
     return now
 
 
@@ -154,12 +171,13 @@ def _kind(agent: str) -> str:
         return "human"
     if agent.startswith("model:"):
         return "llm_judge"
-    raise ReviewError(f"агент {agent!r}: нужен person:<имя> или model:<имя>")
+    raise ReviewError(f"агент {agent!r}: нужен person:<имя> или model:<имя>", code="invalid")
 
 
 def _require_autocommit(conn: psycopg.Connection) -> None:
     if not conn.autocommit:
-        raise ReviewError("очередь: нужно соединение с autocommit=True (db.connect): иначе решение не фиксируется")
+        raise ReviewError("очередь: нужно соединение с autocommit=True (db.connect): иначе решение не фиксируется",
+                          code="invalid")
 
 
 def _allowed(agent: str) -> frozenset[str]:
@@ -210,14 +228,14 @@ def claim(conn: psycopg.Connection, *, agent: str, reasons: Sequence[str] | None
     allowed = _allowed(agent)
     if reasons is not None:
         if not isinstance(reasons, (list, tuple, set, frozenset)):
-            raise ReviewError(f"claim: reasons {reasons!r} — нужен список причин, а не строка")
+            raise ReviewError(f"claim: reasons {reasons!r} — нужен список причин, а не строка", code="invalid")
         unknown = sorted(set(reasons) - set(REASONS))
         if unknown:
             raise ReviewError(f"claim: неизвестные причины {', '.join(map(str, unknown))}; "
-                              f"допустимы {', '.join(REASONS)}")
+                              f"допустимы {', '.join(REASONS)}", code="invalid")
     wanted = sorted(allowed if reasons is None else allowed & set(reasons))
     if limit < 1:
-        raise ReviewError(f"claim: limit {limit} — нужно хотя бы 1")
+        raise ReviewError(f"claim: limit {limit} — нужно хотя бы 1", code="invalid")
     now = _now(now)
     if not wanted:
         return []
@@ -253,12 +271,15 @@ def release(conn: psycopg.Connection, item_id: uuid.UUID | str, *, agent: str) -
     _require_autocommit(conn)
     item_id = _id(item_id)
     with conn.transaction():
-        row = conn.execute("SELECT state, claimed_by FROM review_item WHERE id = %s FOR UPDATE",
+        row = conn.execute("SELECT state, claimed_by, closed_at FROM review_item WHERE id = %s FOR UPDATE",
                            (item_id,)).fetchone()
         if row is None:
-            raise ReviewError(f"пункта очереди {item_id} нет")
+            raise ReviewError(f"пункта очереди {item_id} нет", code="not_found")
         if row[0] != "claimed" or row[1] != agent:
-            raise ReviewError(f"пункт {item_id}: его держит не {agent} (состояние {row[0]}, захвачен {row[1]})")
+            message = f"пункт {item_id}: его держит не {agent} (состояние {row[0]}, захвачен {row[1]})"
+            if row[0] in ("done", "obsolete"):
+                raise _closed(conn, message, item_id, row[2])
+            raise ReviewError(message, code="claimed" if row[0] == "claimed" else "invalid")
         conn.execute("UPDATE review_item SET state = 'queued', claimed_by = NULL, claimed_until = NULL WHERE id = %s",
                      (item_id,))
 
@@ -267,7 +288,18 @@ def _id(value) -> uuid.UUID:
     try:
         return records.as_uuid(value, "item_id")
     except records.RecordError as e:
-        raise ReviewError(str(e)) from e
+        raise ReviewError(str(e), code="invalid") from e
+
+
+def _closed(conn, message: str, item_id: uuid.UUID, closed_at: datetime | None) -> ReviewError:
+    """Ошибка закрытого пункта: кто решил (агент последнего вердикта; у устаревшего его нет) и когда закрыт."""
+    row = conn.execute("SELECT agent FROM verification WHERE review_item_id = %s ORDER BY created_at DESC, id DESC "
+                       "LIMIT 1", (item_id,)).fetchone()
+    return ReviewError(message, code="closed", by=row[0] if row else None, at=closed_at)
+
+
+def _record_error(message: str, e: records.RecordError) -> ReviewError:
+    return ReviewError(message, code="not_found" if isinstance(e, records.RecordNotFound) else "invalid")
 
 
 # --- решение ---
@@ -285,15 +317,15 @@ def resolve(conn: psycopg.Connection, item_id: uuid.UUID | str, outcome: str, *,
     outcomes = HUMAN_OUTCOMES if method == "human" else MODEL_OUTCOMES
     if outcome not in outcomes:
         raise ReviewError(f"исход {outcome!r} {'человеку' if method == 'human' else 'модели'} недоступен: "
-                          f"допустимы {', '.join(sorted(outcomes))}")
+                          f"допустимы {', '.join(sorted(outcomes))}", code="bad_outcome")
     if method == "llm_judge" and confidence is None:
-        raise ReviewError("решение модели — с уверенностью: нужен confidence от 0 до 1")
+        raise ReviewError("решение модели — с уверенностью: нужен confidence от 0 до 1", code="bad_outcome")
     if confidence is not None and not 0 <= confidence <= 1:
-        raise ReviewError(f"confidence {confidence}: нужна доля от 0 до 1")
+        raise ReviewError(f"confidence {confidence}: нужна доля от 0 до 1", code="bad_outcome")
     now = _now(now)
     head = conn.execute("SELECT target, record_id FROM review_item WHERE id = %s", (item_id,)).fetchone()
     if head is None:
-        raise ReviewError(f"пункта очереди {item_id} нет")
+        raise ReviewError(f"пункта очереди {item_id} нет", code="not_found")
     target, record_id = head
     try:
         with conn.transaction():
@@ -303,7 +335,7 @@ def resolve(conn: psycopg.Connection, item_id: uuid.UUID | str, outcome: str, *,
             item = _row(conn.execute(f"{_ITEM} WHERE ri.id = %s FOR UPDATE OF ri", (item_id,)).fetchone())
             # порядок: закрыт ли → устарел ли (закрыть, даже если решающий не вправе) → аренда и права
             if item["state"] in ("done", "obsolete"):
-                raise ReviewError(f"пункт {item_id} уже закрыт ({item['state']})")
+                raise _closed(conn, f"пункт {item_id} уже закрыт ({item['state']})", item_id, item["closed_at"])
             stale = _stale(conn, item)
             if stale:
                 _close(conn, item_id, "obsolete", at)     # закрытие фиксируется: ошибка — уже после транзакции
@@ -311,21 +343,23 @@ def resolve(conn: psycopg.Connection, item_id: uuid.UUID | str, outcome: str, *,
                 _check(item, agent, method, now)
                 result = _apply(conn, item, outcome, method, agent=agent, confidence=confidence, note=note, at=at)
     except records.RecordError as e:
-        raise ReviewError(f"пункт {item_id}: {e}") from e
+        raise _record_error(f"пункт {item_id}: {e}", e) from e
     if stale:
         raise ReviewError(f"пункт {item_id} устарел: его ревизия больше не та, о которой спрашивали, — "
-                          "пункт закрыт obsolete")
+                          "пункт закрыт obsolete", code="stale")
     return result
 
 
 def _check(item: dict, agent: str, method: str, now: datetime) -> None:
     """Перепроверка под блокировкой: аренда и права на причину (закрытый и устаревший отсеяны раньше)."""
     if item["state"] == "claimed" and item["claimed_by"] != agent and item["claimed_until"] >= now:
-        raise ReviewError(f"пункт {item['id']} захвачен {item['claimed_by']} до {item['claimed_until']}")
+        raise ReviewError(f"пункт {item['id']} захвачен {item['claimed_by']} до {item['claimed_until']}",
+                          code="claimed")
     if item["reason"] not in _allowed(agent):
-        raise ReviewError(f"пункт {item['id']} ({item['reason']}) решает только человек (person:)")
+        raise ReviewError(f"пункт {item['id']} ({item['reason']}) решает только человек (person:)", code="forbidden")
     if method == "llm_judge" and item["author"] == agent:
-        raise ReviewError(f"пункт {item['id']}: модель — автор пакета и не подтверждает свой же текст")
+        raise ReviewError(f"пункт {item['id']}: модель — автор пакета и не подтверждает свой же текст",
+                          code="forbidden")
 
 
 def _review_state(conn, target: str, revision_id: uuid.UUID) -> str:
@@ -397,14 +431,12 @@ def _record(conn, ref: str) -> tuple[str, uuid.UUID]:
     try:
         prefix = ref.split(":", 1)[0]
         if prefix not in records.TARGET:
-            raise ReviewError(f"ref {ref!r}: нужна ссылка atm:… или ent:…")
-        canonical = records.resolve_ref(conn, ref, {})
+            raise ReviewError(f"ref {ref!r}: нужна ссылка atm:… или ent:…", code="invalid")
+        return records.resolve(conn, ref)
     except records.RecordError as e:
-        raise ReviewError(str(e)) from e
+        raise _record_error(str(e), e) from e
     except AttributeError as e:
-        raise ReviewError(f"ref {ref!r}: нужна строка atm:… или ent:…") from e
-    prefix, rest = canonical.split(":", 1)
-    return records.TARGET[prefix], uuid.UUID(rest)
+        raise ReviewError(f"ref {ref!r}: нужна строка atm:… или ent:…", code="invalid") from e
 
 
 def enqueue(conn: psycopg.Connection, ref: str, reason: str, *, agent: str, note: str | None = None) -> uuid.UUID:
@@ -412,9 +444,9 @@ def enqueue(conn: psycopg.Connection, ref: str, reason: str, *, agent: str, note
     Открытый пункт той же причины не дублируется — возвращается его id."""
     _require_autocommit(conn)
     if reason not in MANUAL_REASONS:
-        raise ReviewError(f"вручную ставятся только {', '.join(MANUAL_REASONS)}, а не {reason!r}")
+        raise ReviewError(f"вручную ставятся только {', '.join(MANUAL_REASONS)}, а не {reason!r}", code="invalid")
     if _kind(agent) != "human":
-        raise ReviewError(f"вручную пункт ставит только человек (person:), а не {agent}")
+        raise ReviewError(f"вручную пункт ставит только человек (person:), а не {agent}", code="forbidden")
     target, record_id = _record(conn, ref)
     with conn.transaction():
         records._ensure_agent(conn, agent)
@@ -422,10 +454,10 @@ def enqueue(conn: psycopg.Connection, ref: str, reason: str, *, agent: str, note
         at = max(datetime.now(timezone.utc), last)
         status = conn.execute(f"SELECT status FROM {target} WHERE id = %s", (record_id,)).fetchone()[0]
         if status in CLOSING_STATUSES:
-            raise ReviewError(f"{ref}: запись со статусом {status} в очередь не ставится")
+            raise ReviewError(f"{ref}: запись со статусом {status} в очередь не ставится", code="invalid")
         current = conn.execute(f"SELECT id FROM {target}_current WHERE {target}_id = %s", (record_id,)).fetchone()
         if current is None:
-            raise ReviewError(f"{ref}: у записи нет текущей ревизии")
+            raise ReviewError(f"{ref}: у записи нет текущей ревизии", code="invalid")
         item = insert_item(conn, target, record_id, current[0], reason, changeset_id=None,
                            details={"note": note} if note else {}, agent=agent, at=at)
         if item is not None:
@@ -442,7 +474,7 @@ def _record_id(conn, record) -> uuid.UUID:
         return records.as_uuid(record, "record")
     except records.RecordError as e:
         raise ReviewError(f"items: record {record!r} — нужна ссылка atm:… или ent:… (UUID или ключ, например "
-                          f"atm:{record}) либо UUID записи") from e
+                          f"atm:{record}) либо UUID записи", code="invalid") from e
 
 
 def items(conn: psycopg.Connection, *, state: str | None = None, reason: str | None = None,
@@ -450,11 +482,11 @@ def items(conn: psycopg.Connection, *, state: str | None = None, reason: str | N
     """Пункты очереди для интерфейсов — по времени постановки; record — ref (atm:/ent:<UUID или ключ>) или UUID
     записи. Неизвестные state и reason, limit меньше 1, неверная ссылка — ReviewError."""
     if state is not None and state not in STATES:
-        raise ReviewError(f"items: состояние {state!r} — допустимы {', '.join(STATES)}")
+        raise ReviewError(f"items: состояние {state!r} — допустимы {', '.join(STATES)}", code="invalid")
     if reason is not None and reason not in REASONS:
-        raise ReviewError(f"items: причина {reason!r} — допустимы {', '.join(REASONS)}")
+        raise ReviewError(f"items: причина {reason!r} — допустимы {', '.join(REASONS)}", code="invalid")
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-        raise ReviewError(f"items: limit {limit!r} — нужно целое число от 1")
+        raise ReviewError(f"items: limit {limit!r} — нужно целое число от 1", code="invalid")
     where, params = [], {"limit": limit}
     if state is not None:
         where.append("ri.state = %(state)s")

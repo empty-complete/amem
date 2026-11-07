@@ -203,6 +203,13 @@
             "null"
           ]
         },
+        "folder": {
+          "description": "Папка записи — метаданные, не часть ревизии (amem/folders.py); null — без папки.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "id": {
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
           "type": "string"
@@ -1217,6 +1224,17 @@
             }
           ]
         },
+        "family": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KindFamily"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Семья вида атома — только у понятий scheme kind; без неё вид считается work."
+        },
         "inverse_label": {
           "anyOf": [
             {
@@ -1425,6 +1443,13 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "folder": {
+          "description": "Папка записи — метаданные, не часть ревизии (amem/folders.py); null — без папки.",
+          "type": [
+            "string",
+            "null"
           ]
         },
         "id": {
@@ -1770,6 +1795,15 @@
         "low_confidence"
       ],
       "title": "HighRiskRule",
+      "type": "string"
+    },
+    "KindFamily": {
+      "description": "Семья вида атома (Concept.family, спецификация подпроекта 4, разд. 1.2): откуда знание — из документа или из работы. По ней интерфейс группирует виды и раскрашивает граф. Вид без family считается work.",
+      "enum": [
+        "source",
+        "work"
+      ],
+      "title": "KindFamily",
       "type": "string"
     },
     "LangString": {

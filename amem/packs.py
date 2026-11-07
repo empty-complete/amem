@@ -22,6 +22,7 @@ skills/*.md (тексты для агентов — раздаёт устано�
 
 Служебные перечни (Status, Rank, ValueState, SourceRole, Visibility) остаются закрытыми
 перечислениями amem/schema/amem_v1.yaml и грузятся в concept с origin='schema' — как раньше.
+Семья family (source или work) задаётся только у видов атома (scheme kind); вид без неё — work (amem/vocab.py).
 Опечатка в аннотации или в файле словаря — ошибка с указанием места.
 """
 from __future__ import annotations
@@ -275,10 +276,17 @@ def load_pack(path: Path) -> Pack:
         if not isinstance(data, dict) or not data.get("scheme") or not data.get("concepts"):
             raise PackError(f"{file}: нужны scheme и непустой список concepts")
         for c in data["concepts"]:
+            code = c.get("code", "?") if isinstance(c, dict) else "?"
             try:
-                concepts.append(Concept.model_validate({"scheme": data["scheme"], **c}, strict=True))
-            except ValueError as e:
-                raise PackError(f"{file}: {c.get('code', '?')}: {e}") from e
+                # строгая проверка JSON, как у шаблонов: перечисления (family, status) принимаются строками
+                concept = Concept.model_validate_json(
+                    json.dumps({"scheme": data["scheme"], **c}, ensure_ascii=False), strict=True)
+            except (TypeError, ValueError) as e:
+                raise PackError(f"{file}: {code}: {e}") from e
+            if concept.family is not None and concept.scheme != "kind":
+                raise PackError(f"{file}: {code}: family бывает только у вида атома (scheme kind), "
+                                f"а не у {concept.scheme}")
+            concepts.append(concept)
 
     templates, template_files = [], {}
     for file in sorted((path / "templates").glob("*.yaml")) if (path / "templates").is_dir() else []:

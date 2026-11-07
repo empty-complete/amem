@@ -10,6 +10,9 @@
   resolve_sources(conn, store, docs, payload, agent=…) — path источников тела → object, object_version, digest.
   text(conn, store, object_id, n) — текст версии по страницам, в NFC; кэш object_text по digest.
   mark(conn, object_id, status, agent=…) — отметка, что из объекта атомизировано (читает lookup.object_status).
+  sheet(conn, store, object_id, n, name, cell_range) — окно листа xlsx: ячейки как в тексте для сверки,
+    до SHEET_MAX_CELLS за вызов, без диапазона — A1:L40; ObjectError.code: not_found, invalid, too_large
+    (not_found — и там, где нет объекта или версии: text, mark).
 id объекта в этих функциях и в lookup — UUID или ссылка obj:<UUID>, как её отдаёт lookup.object_by_path.
 
 Путь в папке документов — от её корня, как его прислали: «\\» читается как «/», имена сравниваются в NFC (имена
@@ -40,7 +43,7 @@ from pathlib import Path, PurePosixPath
 
 import psycopg
 
-from . import model_v1, review, sources
+from . import extract, model_v1, review, sources
 from .ids import uuid7
 from .ocfl_store import ObjectStore, StoreError
 from .records import as_uuid
@@ -55,7 +58,11 @@ STATUSES = {s.value for s in model_v1.ObjectStatus}
 
 
 class ObjectError(ValueError):
-    pass
+    """Ошибка данных объекта; code (если есть) — машинный признак для службы: not_found, invalid, too_large."""
+
+    def __init__(self, *args, code: str | None = None):
+        super().__init__(*args)
+        self.code = code
 
 
 @dataclass
@@ -388,7 +395,7 @@ def text(conn: psycopg.Connection, store: ObjectStore, object_id: uuid.UUID | st
     object_id = object_uuid(object_id)
     row = conn.execute("SELECT digest FROM object_version WHERE object_id = %s AND n = %s", (object_id, n)).fetchone()
     if row is None:
-        raise ObjectError(f"obj:{object_id}: нет версии {n}")
+        raise ObjectError(f"obj:{object_id}: нет версии {n}", code="not_found")
     digest = row[0]
     if digest is None:
         return None
@@ -417,9 +424,88 @@ def mark(conn: psycopg.Connection, object_id: uuid.UUID | str, status: str, *, a
     with conn.transaction():
         conn.execute("INSERT INTO agent (id) VALUES (%s) ON CONFLICT (id) DO NOTHING", (agent,))
         if conn.execute("SELECT 1 FROM object WHERE id = %s FOR NO KEY UPDATE", (object_id,)).fetchone() is None:
-            raise ObjectError(f"obj:{object_id}: такого объекта нет")
+            raise ObjectError(f"obj:{object_id}: такого объекта нет", code="not_found")
         last = conn.execute("SELECT max(changed_at) FROM object_status WHERE object_id = %s", (object_id,)).fetchone()[0]
         conn.execute("INSERT INTO object_status (id, object_id, status, note, agent, changed_at) "
                      "VALUES (%s, %s, %s, %s, %s, %s)",
                      (uuid7(), object_id, status, note, agent,
                       max(_now(), last + timedelta(microseconds=1)) if last else _now()))
+
+
+SHEET_MAX_CELLS = 10_000                  # лист отдаётся окном: больше ячеек за раз не читаем
+SHEET_WINDOW = (40, 12)                   # окно по умолчанию — первые 40 строк и 12 столбцов (A1:L40)
+_RANGE = re.compile(r"^([A-Z]{1,3})([0-9]{1,7})(?::([A-Z]{1,3})([0-9]{1,7}))?$")
+
+
+def _a1(cell_range: str) -> tuple[int, int, int, int]:
+    """Диапазон A1 («B2:D10», «C3») → (первая строка, первый столбец, последняя строка, последний столбец)."""
+    from openpyxl.utils import column_index_from_string
+
+    m = _RANGE.match(cell_range.strip().replace("$", "").upper())
+    if m is None:
+        raise ObjectError(f"диапазон {cell_range!r}: нужна запись A1, например B2:D10", code="invalid")
+    c1, r1, c2, r2 = m.group(1), int(m.group(2)), m.group(3) or m.group(1), int(m.group(4) or m.group(2))
+    c1, c2 = column_index_from_string(c1), column_index_from_string(c2)
+    if min(r1, r2) < 1 or max(r1, r2) > 1_048_576 or max(c1, c2) > 16_384 or r1 > r2 or c1 > c2:
+        raise ObjectError(f"диапазон {cell_range!r}: ячейки вне листа или начало правее и ниже конца", code="invalid")
+    return r1, c1, r2, c2
+
+
+def sheet(conn: psycopg.Connection, store: ObjectStore, object_id: uuid.UUID | str, n: int, name: str,
+          cell_range: str | None = None) -> dict:
+    """Ячейки листа xlsx версии n: {name, range, rows}; значения — как в тексте для сверки (extract._cell_text).
+
+    cell_range в нотации A1. Размер окна считается как прямоугольник (строки, включая пустые, на столбцы) до
+    чтения: больше SHEET_MAX_CELLS ячеек — ObjectError(code="too_large"), даже если в окне почти пусто.
+    Без cell_range (None или пустая строка) — окно по умолчанию A1:L40, обрезанное по данным: range и rows
+    кончаются на последней непустой строке и столбце; на пустом листе range — A1:L40, rows — []. Явный
+    диапазон отдаётся целиком, пустые ячейки — "".
+    Нет версии или листа — "not_found"; не книга xlsx, версия без файла или неверный диапазон — "invalid"."""
+    from openpyxl import load_workbook
+    from openpyxl.utils import get_column_letter
+    from openpyxl.utils.exceptions import InvalidFileException
+
+    object_id = object_uuid(object_id)
+    default = not cell_range or not cell_range.strip()
+    r1, c1, r2, c2 = (1, 1, *SHEET_WINDOW) if default else _a1(cell_range)
+    width, height = c2 - c1 + 1, r2 - r1 + 1
+    if width * height > SHEET_MAX_CELLS:
+        raise ObjectError(f"диапазон {cell_range!r}: больше {SHEET_MAX_CELLS} ячеек", code="too_large")
+    row = conn.execute("SELECT digest FROM object_version WHERE object_id = %s AND n = %s", (object_id, n)).fetchone()
+    if row is None:
+        raise ObjectError(f"obj:{object_id}: нет версии {n}", code="not_found")
+    if row[0] is None:
+        raise ObjectError(f"obj:{object_id}: у версии {n} нет файла", code="invalid")
+    try:
+        wb = load_workbook(store.content(object_id, n), read_only=True, data_only=True)
+    except (InvalidFileException, *extract._BAD_FILE) as e:
+        raise ObjectError(f"obj:{object_id}: версия {n} не книга xlsx", code="invalid") from e
+    try:
+        wanted = _nfc(name).casefold()
+        found = [ws for ws in wb.worksheets if ws.title == name] or \
+                [ws for ws in wb.worksheets if _nfc(ws.title).casefold() == wanted]
+        if not found:
+            raise ObjectError(f"obj:{object_id}: в версии {n} нет листа {name!r}", code="not_found")
+        ws = found[0]
+        ws.reset_dimensions()                       # заявленный размер листа в файле бывает неверным
+        rows: list[list[str]] = []
+        try:
+            for line in ws.iter_rows(min_row=r1, max_row=r2, min_col=c1, max_col=c2):
+                if len(rows) >= height:
+                    break
+                rows.append([extract._cell_text(c.value, getattr(c, "number_format", "")) for c in line][:width])
+        except (InvalidFileException, *extract._BAD_FILE) as e:
+            raise ObjectError(f"obj:{object_id}: версия {n} не читается как xlsx", code="invalid") from e
+    finally:
+        wb.close()
+    # окно целиком, даже за краем данных: пустые ячейки — ""; каждая строка — свой список
+    rows = [(r + [""] * width)[:width] for r in rows] + [[""] * width for _ in range(height - len(rows))]
+    if default:                                     # обрезка по данным: пустой хвост строк и столбцов не отдаётся
+        last_row = max((i + 1 for i, r in enumerate(rows) if any(r)), default=0)
+        last_col = max((j + 1 for r in rows for j, v in enumerate(r) if v), default=0)
+        if last_row:
+            rows = [r[:last_col] for r in rows[:last_row]]
+            r2, c2 = last_row, last_col
+        else:
+            rows = []
+    return {"name": ws.title, "range": f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}", "rows": rows}

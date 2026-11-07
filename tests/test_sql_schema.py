@@ -30,17 +30,18 @@ ENUM_COLUMNS = [
 ]
 # перечни, которых нет в схеме LinkML: служебные значения базы
 NOT_ENUM = {("status_log", "target"), ("search_document", "target"), ("search_code", "target"),
-            ("embedding", "target"), ("review_item", "target"), ("import_history", "target")}
+            ("embedding", "target"), ("review_item", "target"), ("import_history", "target"),
+            ("folder_log", "target")}
 
 # поля записей схемы, которых нет в теле ревизии, → где они хранятся (у концов связи — пара столбцов)
 RECORD_COLUMNS = {
     "Atom": {"id": "atom.id", "schema_version": "atom_revision.schema_version", "revision": "atom_revision.n",
-             "content_hash": "atom_revision.content_hash", "status": "atom.status",
+             "content_hash": "atom_revision.content_hash", "status": "atom.status", "folder": "atom.folder",
              "review_state": "atom_revision.review_state", "created_at": "atom.created_at",
              "recorded_at": "atom_revision.recorded_at", "changeset": "atom_revision.changeset_id",
              "agent": "changeset.agent", "activity": "changeset.activity"},
     "Entity": {"id": "entity.id", "schema_version": "entity_revision.schema_version", "revision": "entity_revision.n",
-               "content_hash": "entity_revision.content_hash", "status": "entity.status",
+               "content_hash": "entity_revision.content_hash", "status": "entity.status", "folder": "entity.folder",
                "review_state": "entity_revision.review_state", "created_at": "entity.created_at",
                "recorded_at": "entity_revision.recorded_at", "changeset": "entity_revision.changeset_id",
                "agent": "changeset.agent", "activity": "changeset.activity"},

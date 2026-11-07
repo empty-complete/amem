@@ -1,4 +1,4 @@
-"""Ядро 1.2.0: заметка, изделие, прямоугольник и has_source со skip_if_set."""
+"""Ядро 1.2.0–1.3.0: заметка, изделие, прямоугольник, has_source со skip_if_set; семья видов (1.3.0)."""
 from amem import packs
 from amem.check import templates
 
@@ -10,7 +10,7 @@ def _codes(scheme):
 
 
 def test_core_version():
-    assert CORE.version == "1.2.0"
+    assert CORE.version == "1.3.0"
 
 
 def test_core_new_codes():

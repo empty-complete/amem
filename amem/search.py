@@ -151,12 +151,44 @@ _DEFAULT_STATUSES = ("draft", "needs_review", "auto_verified", "verified")
 _STATUSES = _DEFAULT_STATUSES + ("rejected", "deprecated", "superseded")
 
 
-def _channel_targets(target, kind, entity_class) -> tuple[Target, ...]:
+def _codes(value, name: str) -> tuple[str, ...] | None:
+    """Фильтр kind или entity_class: одно значение строкой или несколько последовательностью; повторы убираются.
+    None и пустой набор — без фильтра (как у lookup.list_records)."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        values = (value,)
+    else:
+        try:
+            values = tuple(value)
+        except TypeError:
+            raise ValueError(f"{name} {value!r}: нужен код или последовательность кодов") from None
+    for v in values:
+        if not isinstance(v, str) or not v:
+            raise ValueError(f"{name}: код {v!r} — нужна непустая строка")
+    return tuple(dict.fromkeys(values)) or None
+
+
+def _channel_targets(target, kinds, classes) -> tuple[Target, ...]:
+    """Виды записей канала. kinds отбирает атомы, classes — сущности: заданный фильтр одного вида записей
+    исключает другой вид, если для него фильтра нет; заданы оба — атомы этих видов и сущности этих классов."""
     if target is not None and target not in _REF_PREFIX:
         raise ValueError(f"неизвестный вид записи {target!r}")
     targets = (target,) if target is not None else ("atom", "entity")
-    return tuple(t for t in targets if not (t == "atom" and entity_class is not None)
-                 and not (t == "entity" and kind is not None))
+    if kinds is None and classes is None:
+        return targets
+    return tuple(t for t in targets
+                 if (t == "atom" and kinds is not None) or (t == "entity" and classes is not None))
+
+
+def _kind_conditions(table: str, kinds, classes, conditions: list[str], params: dict) -> None:
+    """Условие вида атома или класса сущности для ветки канала; table — только из закрытого _REF_PREFIX."""
+    if table == "atom" and kinds is not None:
+        conditions.append("rec.kind = ANY(%(kinds)s)")
+        params["kinds"] = list(kinds)
+    if table == "entity" and classes is not None:
+        conditions.append("rec.entity_class = ANY(%(classes)s)")
+        params["classes"] = list(classes)
 
 
 def _channel_statuses(statuses) -> tuple[str, ...]:
@@ -180,9 +212,10 @@ def _lexical_channel(conn: psycopg.Connection, query: str, channel: str, *, targ
                      kind=None, entity_class=None, statuses=None, exclude=None) -> list[dict]:
     if not isinstance(query, str):
         raise ValueError("запрос должен быть строкой")
+    kinds, classes = _codes(kind, "kind"), _codes(entity_class, "entity_class")
     if not query.strip():
         return []
-    targets = _channel_targets(target, kind, entity_class)
+    targets = _channel_targets(target, kinds, classes)
     allowed_statuses = _channel_statuses(statuses)
     if not targets or not allowed_statuses:
         return []
@@ -202,12 +235,7 @@ def _lexical_channel(conn: psycopg.Connection, query: str, channel: str, *, targ
         params[f"target_{table}"] = table
         if exclude is not None:
             conditions.append("NOT (d.target = %(exclude_target)s AND d.record_id = %(exclude_record_id)s)")
-        if table == "atom" and kind is not None:
-            conditions.append("rec.kind = %(kind)s")
-            params["kind"] = kind
-        if table == "entity" and entity_class is not None:
-            conditions.append("rec.entity_class = %(entity_class)s")
-            params["entity_class"] = entity_class
+        _kind_conditions(table, kinds, classes, conditions, params)
         if channel == "code_exact":
             source_rank = "NULL::float"
             conditions.append("EXISTS (SELECT 1 FROM search_code c WHERE c.target = d.target "
@@ -285,7 +313,8 @@ def _current_embedding(conn: psycopg.Connection, target: Target, record_id, mode
 def _vector(conn: psycopg.Connection, vector, model_id, *, target=None, kind=None,
             entity_class=None, statuses=None, exclude=None) -> list[dict]:
     """Топ-50 по фактическому cosine distance среди свежих векторов активной модели."""
-    targets = _channel_targets(target, kind, entity_class)
+    kinds, classes = _codes(kind, "kind"), _codes(entity_class, "entity_class")
+    targets = _channel_targets(target, kinds, classes)
     allowed_statuses = _channel_statuses(statuses)
     if not targets or not allowed_statuses:
         return []
@@ -309,12 +338,7 @@ def _vector(conn: psycopg.Connection, vector, model_id, *, target=None, kind=Non
         params[f"target_{table}"] = table
         if exclude is not None:
             conditions.append("NOT (d.target = %(exclude_target)s AND d.record_id = %(exclude_record_id)s)")
-        if table == "atom" and kind is not None:
-            conditions.append("rec.kind = %(kind)s")
-            params["kind"] = kind
-        if table == "entity" and entity_class is not None:
-            conditions.append("rec.entity_class = %(entity_class)s")
-            params["entity_class"] = entity_class
+        _kind_conditions(table, kinds, classes, conditions, params)
         selects.append(
             f"SELECT d.target, d.record_id, d.revision_id, e.vec <=> %(query_vector)s AS source_rank "
             f"FROM search_document d JOIN {table} rec ON rec.id = d.record_id "

@@ -1,7 +1,8 @@
 """Именованные поисковые рецепты: компактная выдача без скрытого выбора ответа.
 
-Каждый успешный поиск пишет retrieval с происхождением. Семантический канал либо действительно
-выполняется активной моделью, либо явно пропускается с причиной; FTS остаётся доступен.
+Каждый успешный поиск пишет retrieval с происхождением, если вызов не попросил обратного (log=False — подсказки
+хука, служебные запросы: отметить пользу такой выдачи нельзя, её нет в журнале). Семантический канал либо
+действительно выполняется активной моделью, либо явно пропускается с причиной; FTS остаётся доступен.
 """
 from __future__ import annotations
 
@@ -42,7 +43,7 @@ def _timed(channel, function, durations):
 
 def _response(conn: psycopg.Connection, recipe: str, channels: dict, *, query: str, agent: str,
               activity, limit: int, include_record: bool, semantic: str, reasons: dict, model,
-              durations_ms: dict, useful: bool, now) -> dict:
+              durations_ms: dict, useful: bool, log: bool, now) -> dict:
     candidates = [row for rows in channels.values() if rows is not None for row in rows]
     multipliers = usefulness.multipliers(conn, candidates, now=now) if useful else None
     ranked = search._rrf(channels, search.RANKING_V1["recipes"][recipe], limit=limit,
@@ -53,7 +54,7 @@ def _response(conn: psycopg.Connection, recipe: str, channels: dict, *, query: s
              for hit, card in zip(ranked["hits"], cards)]
     retrieval_id = usefulness.record_retrieval(
         conn, agent=agent, activity=activity, recipe=recipe, query=query,
-        ranking_version=ranked["ranking_version"], hits=ranked["hits"], now=now)
+        ranking_version=ranked["ranking_version"], hits=ranked["hits"], now=now) if log else None
     return {
         "recipe": recipe,
         "ranking_version": ranked["ranking_version"],
@@ -78,18 +79,12 @@ def _history_moment(value, name: str):
 
 
 def _history_ref(conn: psycopg.Connection, ref: str | None):
-    """Проверить ref даже для пустого интервала: отсутствующая запись — не пустая история."""
+    """Проверить ref (UUID или ключ) даже для пустого интервала: отсутствующая запись — не пустая история,
+    а RecordNotFound."""
     if ref is None:
         return None, None, None
-    try:
-        prefix, value = ref.split(":", 1)
-        target = records.TARGET[prefix]
-    except (AttributeError, ValueError, KeyError) as e:
-        raise records.RecordError(f"ref {ref!r}: нужна ссылка atm:<UUID> или ent:<UUID>") from e
-    record_id = records.as_uuid(value, what="ref")
-    if conn.execute(f"SELECT 1 FROM {target} WHERE id = %s", (record_id,)).fetchone() is None:
-        raise records.RecordError(f"{ref}: такой записи нет")
-    return target, record_id, f"{prefix}:{record_id}"
+    target, record_id = records.resolve(conn, ref)
+    return target, record_id, f"{records.PREFIX[target]}:{record_id}"
 
 
 def _history_interval(column: str, since, until) -> str:
@@ -100,10 +95,6 @@ def _history_interval(column: str, since, until) -> str:
     if until is not None:
         clauses.append(f"{column} < %(until)s")
     return " AND ".join(clauses) or "TRUE"
-
-
-def _history_in(value, since, until) -> bool:
-    return (since is None or value >= since) and (until is None or value < until)
 
 
 def _json_equal(before, after) -> bool:
@@ -145,15 +136,43 @@ def _diff(before, after) -> list[dict]:
     return changes
 
 
+WHO = ("all", "person", "model")
+
+
+def _history_limit(limit) -> int | None:
+    if limit is None:
+        return None
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise records.RecordError(f"limit {limit!r}: нужно целое число от 1 или None")
+    return limit
+
+
+def _history_who(column: str, who: str) -> str:
+    """Отбор по автору события — приставке агента (person: или model:); имя столбца выбирает только код ниже."""
+    return "TRUE" if who == "all" else f"starts_with({column}, %(who)s)"
+
+
 def what_changed(conn: psycopg.Connection, *, ref: str | None = None,
-                 since: datetime | None = None, until: datetime | None = None) -> dict:
-    """События записи или всей базы за [since, until), без поиска и журнала retrieval."""
+                 since: datetime | None = None, until: datetime | None = None,
+                 limit: int | None = None, who: str = "all") -> dict:
+    """События записи (ref — atm:/ent: с UUID или ключом) или всей базы за [since, until), без поиска и журнала
+    retrieval. Порядок — по времени, затем по виду события и id.
+
+    У каждого события agent — кто его сделал: у ревизии и новой связи — автор пакета, у решения о ревизии —
+    решивший, у выведенной связи — автор пакета, который её вывел, у статуса и папки — сменивший их.
+    who — person, model или all: события людей, моделей или все. limit — только самые новые limit событий (порядок
+    тот же), None — все. Каждый источник событий читает не больше limit самых новых: иначе ради одной страницы
+    читалась бы и сравнивалась вся история базы."""
     since = _history_moment(since, "since")
     until = _history_moment(until, "until")
     if since is not None and until is not None and since >= until:
         raise records.RecordError("since должен быть строго раньше until")
+    if not isinstance(who, str) or who not in WHO:
+        raise records.RecordError(f"who {who!r}: допустимы {', '.join(WHO)}")
+    limit = _history_limit(limit)
     target, record_id, normalized_ref = _history_ref(conn, ref)
-    params = {"since": since, "until": until, "record_id": record_id, "target": target}
+    params = {"since": since, "until": until, "record_id": record_id, "target": target, "limit": limit,
+              "who": f"{who}:"}
     timed_events = []
 
     def add(kind, event_id, at, **fields):
@@ -161,79 +180,102 @@ def what_changed(conn: psycopg.Connection, *, ref: str | None = None,
 
     with conn.cursor(row_factory=dict_row) as cur:
         for item_target in ("atom", "entity"):
-            recorded = _history_interval("r.recorded_at", since, until)
-            reviewed = _history_interval("r.reviewed_at", since, until)
-            scope = f"AND r.{item_target}_id = %(record_id)s" if target == item_target else ""
             if target is not None and target != item_target:
                 continue
+            t = item_target                                  # только из закрытого набора выше
+            scope = f"AND r.{t}_id = %(record_id)s" if target == t else ""
+            # сначала limit новых ревизий, потом их предшественницы: тела старых ревизий не читаются
             rows = cur.execute(
-                f"SELECT r.id, r.{item_target}_id AS record_id, r.n, r.payload, r.content_hash, "
-                f"r.valid_from, r.valid_to, r.recorded_at, r.review_state, r.reviewed_by, r.reviewed_at, "
-                f"p.payload AS previous_payload, p.content_hash AS previous_content_hash "
-                f"FROM {item_target}_revision r "
-                f"LEFT JOIN {item_target}_revision p ON p.{item_target}_id = r.{item_target}_id AND p.n = r.n - 1 "
-                f"WHERE ({recorded} OR {reviewed}) {scope}", params).fetchall()
-            item_ref = f"{records.PREFIX[item_target]}:"
+                f"SELECT r.*, p.payload AS previous_payload, p.content_hash AS previous_content_hash FROM ("
+                f"SELECT r.id, r.{t}_id AS record_id, r.n, r.payload, r.content_hash, r.valid_from, r.valid_to, "
+                f"r.recorded_at, cs.agent FROM {t}_revision r JOIN changeset cs ON cs.id = r.changeset_id "
+                f"WHERE {_history_interval('r.recorded_at', since, until)} AND {_history_who('cs.agent', who)} "
+                f"{scope} ORDER BY r.recorded_at DESC, r.id DESC LIMIT %(limit)s) r "
+                f"LEFT JOIN {t}_revision p ON p.{t}_id = r.record_id AND p.n = r.n - 1", params).fetchall()
             for row in rows:
-                event_ref = f"{item_ref}{row['record_id']}"
-                if _history_in(row["recorded_at"], since, until):
-                    previous = row["previous_payload"]
-                    add("revision", row["id"], row["recorded_at"], ref=event_ref, revision=row["n"],
-                        recorded_at=row["recorded_at"].isoformat(),
-                        previous_content_hash=row["previous_content_hash"], content_hash=row["content_hash"],
-                        valid_from=row["valid_from"].isoformat() if row["valid_from"] else None,
-                        valid_to=row["valid_to"].isoformat() if row["valid_to"] else None,
-                        changes=_diff(previous if previous is not None else {}, row["payload"]))
-                if row["reviewed_at"] is not None and _history_in(row["reviewed_at"], since, until):
-                    add("review", row["id"], row["reviewed_at"], ref=event_ref, revision=row["n"],
-                        review_state=row["review_state"], reviewed_at=row["reviewed_at"].isoformat(),
-                        reviewed_by=row["reviewed_by"])
+                previous = row["previous_payload"]
+                add("revision", row["id"], row["recorded_at"], ref=f"{records.PREFIX[t]}:{row['record_id']}",
+                    revision=row["n"], agent=row["agent"], recorded_at=row["recorded_at"].isoformat(),
+                    previous_content_hash=row["previous_content_hash"], content_hash=row["content_hash"],
+                    valid_from=row["valid_from"].isoformat() if row["valid_from"] else None,
+                    valid_to=row["valid_to"].isoformat() if row["valid_to"] else None,
+                    changes=_diff(previous if previous is not None else {}, row["payload"]))
+            rows = cur.execute(
+                f"SELECT r.id, r.{t}_id AS record_id, r.n, r.review_state, r.reviewed_by, r.reviewed_at "
+                f"FROM {t}_revision r WHERE r.reviewed_at IS NOT NULL "
+                f"AND {_history_interval('r.reviewed_at', since, until)} AND {_history_who('r.reviewed_by', who)} "
+                f"{scope} ORDER BY r.reviewed_at DESC, r.id DESC LIMIT %(limit)s", params).fetchall()
+            for row in rows:
+                add("review", row["id"], row["reviewed_at"], ref=f"{records.PREFIX[t]}:{row['record_id']}",
+                    revision=row["n"], agent=row["reviewed_by"], review_state=row["review_state"],
+                    reviewed_at=row["reviewed_at"].isoformat(), reviewed_by=row["reviewed_by"])
 
         changed_at = _history_interval("changed_at", since, until)
         scope = "AND target = %(target)s AND record_id = %(record_id)s" if target is not None else ""
         rows = cur.execute(
             f"SELECT id, target, record_id, status, agent, reason, changed_at FROM status_log "
-            f"WHERE {changed_at} {scope}", params).fetchall()
+            f"WHERE {changed_at} AND {_history_who('agent', who)} {scope} "
+            "ORDER BY changed_at DESC, id DESC LIMIT %(limit)s", params).fetchall()
         for row in rows:
             add("status", row["id"], row["changed_at"],
                 ref=f"{records.PREFIX[row['target']]}:{row['record_id']}", status=row["status"],
                 changed_at=row["changed_at"].isoformat(), agent=row["agent"], reason=row["reason"])
 
-        created = _history_interval("created_at", since, until)
-        retired = _history_interval("retired_at", since, until)
+        # переносы по папкам (amem/folders.py): from / to — путь или None («без папки»)
+        rows = cur.execute(
+            f"SELECT id, target, record_id, folder_from, folder_to, agent, changed_at FROM folder_log "
+            f"WHERE {changed_at} AND {_history_who('agent', who)} {scope} "
+            "ORDER BY changed_at DESC, id DESC LIMIT %(limit)s", params).fetchall()
+        for row in rows:
+            add("folder", row["id"], row["changed_at"],
+                ref=f"{records.PREFIX[row['target']]}:{row['record_id']}",
+                changed_at=row["changed_at"].isoformat(), agent=row["agent"],
+                **{"from": row["folder_from"], "to": row["folder_to"]})
+
         if target == "atom":
-            scope = "AND (src_atom = %(record_id)s OR dst_atom = %(record_id)s)"
+            scope = "AND (l.src_atom = %(record_id)s OR l.dst_atom = %(record_id)s)"
         elif target == "entity":
-            scope = "AND (src_entity = %(record_id)s OR dst_entity = %(record_id)s)"
+            scope = "AND (l.src_entity = %(record_id)s OR l.dst_entity = %(record_id)s)"
         else:
             scope = ""
-        rows = cur.execute(
-            f"SELECT id, rel, src_atom, src_entity, dst_atom, dst_entity, created_at, retired_at "
-            f"FROM link WHERE ({created} OR {retired}) {scope}", params).fetchall()
-        for row in rows:
-            src = f"{'atm' if row['src_atom'] is not None else 'ent'}:{row['src_atom'] or row['src_entity']}"
-            dst = f"{'atm' if row['dst_atom'] is not None else 'ent'}:{row['dst_atom'] or row['dst_entity']}"
-            if _history_in(row["created_at"], since, until):
-                add("link_created", row["id"], row["created_at"], rel=row["rel"], src=src, dst=dst,
-                    created_at=row["created_at"].isoformat())
-            if row["retired_at"] is not None and _history_in(row["retired_at"], since, until):
-                add("link_retired", row["id"], row["retired_at"], rel=row["rel"], src=src, dst=dst,
-                    retired_at=row["retired_at"].isoformat())
+        ends = "l.id, l.rel, l.src_atom, l.src_entity, l.dst_atom, l.dst_entity"
+        created = cur.execute(
+            f"SELECT {ends}, l.created_at AS at, l.agent FROM link l "
+            f"WHERE {_history_interval('l.created_at', since, until)} AND {_history_who('l.agent', who)} {scope} "
+            "ORDER BY l.created_at DESC, l.id DESC LIMIT %(limit)s", params).fetchall()
+        # вывел связь пакет retired_by — его автор, не автор связи
+        retired = cur.execute(
+            f"SELECT {ends}, l.retired_at AS at, rc.agent FROM link l JOIN changeset rc ON rc.id = l.retired_by "
+            f"WHERE l.retired_at IS NOT NULL AND {_history_interval('l.retired_at', since, until)} "
+            f"AND {_history_who('rc.agent', who)} {scope} "
+            "ORDER BY l.retired_at DESC, l.id DESC LIMIT %(limit)s", params).fetchall()
+        for kind, rows, moment in (("link_created", created, "created_at"), ("link_retired", retired, "retired_at")):
+            for row in rows:
+                src = f"{'atm' if row['src_atom'] is not None else 'ent'}:{row['src_atom'] or row['src_entity']}"
+                dst = f"{'atm' if row['dst_atom'] is not None else 'ent'}:{row['dst_atom'] or row['dst_entity']}"
+                add(kind, row["id"], row["at"], rel=row["rel"], src=src, dst=dst, agent=row["agent"],
+                    **{moment: row["at"].isoformat()})
 
-    events = [event for _, event in sorted(timed_events, key=lambda item: (item[0], item[1]["type"], item[1]["id"]))]
+    timed_events.sort(key=lambda item: (item[0], item[1]["type"], item[1]["id"]))
+    if limit is not None:
+        timed_events = timed_events[-limit:]
     return {
         "recipe": "what_changed", "ref": normalized_ref,
         "since": since.isoformat() if since else None, "until": until.isoformat() if until else None,
-        "events": events, "retrieval_id": None,
+        "events": [event for _, event in timed_events], "retrieval_id": None,
     }
 
 
 def exact_fact(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
                limit: int = 10, target=None, kind=None, entity_class=None, statuses=None,
                include_record: bool = False, provider: embed.EmbeddingProvider | None = None,
-               usefulness: bool = True, now=None) -> dict:
-    """Найти марку или формулировку всеми четырьмя каналами, не выбирая один «лучший» ответ."""
-    filters = {"target": target, "kind": kind, "entity_class": entity_class, "statuses": statuses}
+               usefulness: bool = True, log: bool = True, now=None) -> dict:
+    """Найти марку или формулировку всеми четырьмя каналами, не выбирая один «лучший» ответ.
+
+    kind и entity_class — код строкой или несколько кодов (search._codes); log=False — выдача не пишется
+    в retrieval, retrieval_id равен None."""
+    filters = {"target": target, "kind": search._codes(kind, "kind"),
+               "entity_class": search._codes(entity_class, "entity_class"), "statuses": statuses}
     durations = {}
     channels = {
         "code_exact": _timed("code_exact", lambda: search._code_exact(conn, query, **filters), durations),
@@ -253,13 +295,12 @@ def exact_fact(conn: psycopg.Connection, query: str, *, agent: str, activity=Non
     return _response(conn, "exact_fact", channels, query=query, agent=agent, activity=activity,
                      limit=limit, include_record=include_record,
                      semantic="used" if channels["vector"] is not None else "unavailable",
-                     reasons=reasons, model=model, durations_ms=durations, useful=usefulness, now=now)
+                     reasons=reasons, model=model, durations_ms=durations, useful=usefulness, log=log, now=now)
 
 
 def _source_document(conn: psycopg.Connection, ref: str):
-    prefix, value = ref.split(":", 1)
-    target = records.TARGET[prefix]
-    record_id = records.as_uuid(value, what="ref")
+    """Запись-образец similar (atm:/ent: с UUID или ключом) и поисковый документ её текущей ревизии."""
+    target, record_id = records.resolve(conn, ref)
     table = target
     row = conn.execute(
         f"SELECT rec.id, r.id, d.document FROM {table} rec "
@@ -269,7 +310,7 @@ def _source_document(conn: psycopg.Connection, ref: str):
         f"WHERE rec.id = %(record_id)s",
         {"target": target, "record_id": record_id}).fetchone()
     if row is None:
-        raise records.RecordError(f"{ref}: такой записи нет")
+        raise records.RecordNotFound(f"{ref}: такой записи нет")
     if row[1] is None:
         raise records.RecordError(f"{ref}: у записи нет текущей ревизии")
     if row[2] is None:
@@ -280,10 +321,13 @@ def _source_document(conn: psycopg.Connection, ref: str):
 def similar(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
             limit: int = 10, target=None, kind=None, entity_class=None, statuses=None,
             include_record: bool = False, provider: embed.EmbeddingProvider | None = None,
-            usefulness: bool = True, now=None) -> dict:
-    """Найти похожие записи по тексту либо по atm:/ent: ссылке на существующую запись."""
+            usefulness: bool = True, log: bool = True, now=None) -> dict:
+    """Найти похожие записи по тексту либо по atm:/ent: ссылке (UUID или ключ) на существующую запись.
+
+    Фильтры и log — как у exact_fact."""
     if not isinstance(query, str):
         raise ValueError("запрос должен быть строкой")
+    kind, entity_class = search._codes(kind, "kind"), search._codes(entity_class, "entity_class")
     source = None
     fts_query = query
     if query.startswith(("atm:", "ent:")):
@@ -318,7 +362,7 @@ def similar(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
     return _response(conn, "similar", channels, query=query, agent=agent, activity=activity,
                      limit=limit, include_record=include_record,
                      semantic="used" if channels["vector"] is not None else "unavailable",
-                     reasons=reasons, model=model, durations_ms=durations, useful=usefulness, now=now)
+                     reasons=reasons, model=model, durations_ms=durations, useful=usefulness, log=log, now=now)
 
 
 _GRAPH_STRUCTURAL = {"about", "derived_from"}
@@ -458,7 +502,8 @@ def _path_evidence_role(path: dict, nodes: dict, roles: dict):
 
 
 def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=None, statuses=None) -> dict:
-    """Кратчайшие пути от записи по link/about/derived_from; узел посещается один раз.
+    """Кратчайшие пути от записи (ref — atm:/ent: с UUID или ключом) по link/about/derived_from; узел посещается
+    один раз.
 
     rels — набор видов связей (about и derived_from — тоже), statuses — статусы соседей, как у других рецептов.
     При равной длине путь выбирается по последовательности id рёбер, затем по ref; рёбра вне дерева кратчайших
