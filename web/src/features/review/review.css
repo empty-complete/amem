@@ -84,7 +84,7 @@
   background: var(--surface-secondary);
 }
 .qrow[aria-selected="true"] {
-  background: var(--surface-tertiary);
+  background: var(--surface-secondary);
   box-shadow: inset 3px 0 0 var(--foreground);
 }
 .qrow:focus-visible {
@@ -101,7 +101,7 @@
 .qrow__meta {
   display: flex;
   gap: var(--s-sm);
-  color: var(--muted);
+  color: var(--ink-2);
   font-size: var(--t-meta);
 }
 .qrow__reason {
@@ -268,5 +268,16 @@
   }
   .vers {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 60rem) {
+  .main:has(.review) {
+    overflow: visible;
+  }
+  .main__in:has(> .review) {
+    height: auto;
+  }
+  .review {
+    height: calc(100dvh - var(--bar-h));
   }
 }

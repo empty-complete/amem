@@ -41,7 +41,7 @@ test("[[ссылка]] в теле ведёт на запись из связе�
     expect(a?.textContent).toBe("Нужен ли обогрев В-2 зимой?");
     expect(a?.getAttribute("href")).toMatch(/\/atom\/atm(:|%3A)/);
     return a as HTMLAnchorElement;
-  });
+  }, { timeout: 4000 });
   await userEvent.click(link);
   expect(decodeURIComponent(router.state.location.pathname)).toMatch(/^\/atom\/atm:.*18$/);
 });

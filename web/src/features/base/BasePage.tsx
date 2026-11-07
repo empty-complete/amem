@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { errorText } from "../../api/errors";
 import { q } from "../../api/queries";
@@ -88,7 +89,8 @@ export function BasePage() {
                       n: days,
                       m: t("basepage.minutes", { count: s.done.median_minutes }),
                     })
-                  : t("basepage.no_median", { n: days })}
+                  : t("basepage.no_median", { n: days })}{" "}
+                <Link to="/review">{t("basepage.to_review")}</Link>
               </td>
             </tr>
           </tfoot>
