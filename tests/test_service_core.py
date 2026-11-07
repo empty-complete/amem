@@ -1,0 +1,520 @@
+"""Служба (подпроект 4, часть 4a, задача 5): настройки, private.strip, защита Host/Origin/415, сессия и cookie
+человека, общая служба по токенам, перевод исключений в problem+json — starlette.testclient на настоящей базе
+(PostgreSQL 18 и 16), порт не слушается."""
+import hashlib
+import logging
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
+import psycopg
+import pytest
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
+from starlette.routing import Route
+from starlette.testclient import TestClient
+
+from amem import __version__, bundle, db, embed, objects, private, records, review, service, settings, vocab
+from amem.check import CheckError
+from amem.folders import FolderError
+from amem.service import problems
+from conftest import FakeProvider
+
+BASE_URL = "http://127.0.0.1:8767"
+ORIGIN = BASE_URL
+DEV_UI = "http://127.0.0.1:5173"
+
+
+# --- настройки ---
+
+def test_settings_explicit_argument_beats_environment_and_environment_beats_toml(tmp_path):
+    config = tmp_path / "amem.toml"
+    config.write_text('dsn = "postgresql://toml/db"\nport = 9001\nhost = "127.0.0.2"\n', encoding="utf-8")
+    env = {"AMEM_CONFIG": str(config), "AMEM_DSN": "postgresql://env/db", "AMEM_PORT": "9002", "USER": "ann"}
+
+    explicit = settings.load(env, dsn="postgresql://arg/db")
+    assert (explicit.dsn, explicit.port, explicit.host) == ("postgresql://arg/db", 9002, "127.0.0.2")
+    assert explicit.config == config
+
+    from_env = settings.load(env)
+    assert (from_env.dsn, from_env.port) == ("postgresql://env/db", 9002)
+
+    del env["AMEM_DSN"], env["AMEM_PORT"]
+    from_toml = settings.load(env)
+    assert (from_toml.dsn, from_toml.port) == ("postgresql://toml/db", 9001)
+
+
+def test_settings_toml_from_home_config_and_defaults(tmp_path):
+    home = tmp_path / "home"
+    (home / ".config" / "amem").mkdir(parents=True)
+    (home / ".config" / "amem" / "amem.toml").write_text(
+        'dsn = "postgresql://home/db"\ndocs = "~/Документы"\ndata = "objects"\n', encoding="utf-8")
+    s = settings.load({"HOME": str(home), "USER": "ann"})
+    assert s.dsn == "postgresql://home/db"
+    assert s.config == home / ".config" / "amem" / "amem.toml"
+    assert s.docs == home / "Документы"                              # ~ раскрывается
+    assert s.data == home / ".config" / "amem" / "objects"            # относительный путь — от файла настроек
+    assert s.state == home / ".local" / "state" / "amem"
+    assert s.backups == s.state / "backups"
+    assert s.query_log == s.state / "queries.jsonl"
+    assert (s.host, s.port) == ("127.0.0.1", 8767)
+    assert (s.agent, s.model_agent) == ("person:ann", "model:local")
+    assert s.ui_origins == ()
+    assert s.tokens is None
+
+
+def test_settings_defaults_without_toml(tmp_path):
+    home = tmp_path / "home"
+    s = settings.load({"HOME": str(home), "USER": "ann", "AMEM_DSN": "postgresql://x/db"})
+    assert s.config is None
+    assert s.data == home / ".local" / "share" / "amem" / "objects"
+    assert s.docs is None
+    state = tmp_path / "state"
+    s = settings.load({"HOME": str(home), "USER": "ann", "AMEM_STATE": str(state)})
+    assert s.dsn is None                     # обязательность DSN проверяет тот, кому нужна база (create_app)
+    assert (s.backups, s.query_log) == (state / "backups", state / "queries.jsonl")
+
+
+@pytest.mark.parametrize("user, agent", [
+    ("ann", "person:ann"),
+    ("Ann.Smith", "person:ann.smith"),
+    ("José Núñez", "person:jose-nunez"),
+    ("DOMAIN\\ann_b", "person:domain-ann_b"),
+    ("Анна", "person:local"),            # от имени ничего не осталось — общее имя, а не пустой агент
+])
+def test_settings_default_agent_from_os_user_name(tmp_path, user, agent):
+    assert settings.load({"HOME": str(tmp_path), "USER": user}).agent == agent
+
+
+def test_settings_agents_ui_origins_tokens_and_query_log_from_environment(tmp_path):
+    s = settings.load({"HOME": str(tmp_path), "USER": "ann", "AMEM_AGENT": "person:anna",
+                       "AMEM_MODEL_AGENT": "model:bot", "AMEM_UI_ORIGINS": f"{DEV_UI}/, HTTP://LOCALHOST:5173",
+                       "AMEM_TOKENS": str(tmp_path / "amem-tokens.toml"), "AMEM_QUERY_LOG": "off"})
+    assert (s.agent, s.model_agent) == ("person:anna", "model:bot")
+    assert s.ui_origins == (DEV_UI, "http://localhost:5173")
+    assert s.tokens == tmp_path / "amem-tokens.toml"
+    assert s.query_log is None
+
+
+@pytest.mark.parametrize("env, where", [
+    ({"AMEM_PORT": "восемь"}, "AMEM_PORT"),
+    ({"AMEM_PORT": "70000"}, "AMEM_PORT"),
+    ({"AMEM_AGENT": "model:x"}, "AMEM_AGENT"),          # человек локальной службы — только person:
+    ({"AMEM_AGENT": "person:Анна"}, "AMEM_AGENT"),
+    ({"AMEM_MODEL_AGENT": "person:x"}, "AMEM_MODEL_AGENT"),
+    ({"AMEM_UI_ORIGINS": "127.0.0.1:5173"}, "AMEM_UI_ORIGINS"),
+    ({"AMEM_UI_ORIGINS": "http://127.0.0.1:5173/ui"}, "AMEM_UI_ORIGINS"),
+    ({"AMEM_CONFIG": "нет-такого.toml"}, "нет-такого.toml"),
+])
+def test_settings_errors_name_the_source(tmp_path, env, where):
+    with pytest.raises(settings.SettingsError, match=where):
+        settings.load({"HOME": str(tmp_path), "USER": "ann", **env})
+
+
+@pytest.mark.parametrize("text, where", [
+    ("dsn = ", "amem.toml"),                        # не TOML
+    ('dns = "postgresql://x/db"', "dns"),           # опечатка в ключе — ошибка, а не тихий пропуск
+    ("port = true", "port"),
+    ("ui_origins = 5", "ui_origins"),
+])
+def test_settings_bad_toml(tmp_path, text, where):
+    config = tmp_path / "amem.toml"
+    config.write_text(text, encoding="utf-8")
+    with pytest.raises(settings.SettingsError, match=where):
+        settings.load({"HOME": str(tmp_path), "USER": "ann", "AMEM_CONFIG": str(config)})
+
+
+def test_settings_ui_origins_list_in_toml(tmp_path):
+    config = tmp_path / "amem.toml"
+    config.write_text(f'ui_origins = ["{DEV_UI}"]\nquery_log = "журнал.jsonl"\n', encoding="utf-8")
+    s = settings.load({"HOME": str(tmp_path), "USER": "ann", "AMEM_CONFIG": str(config)})
+    assert s.ui_origins == (DEV_UI,)
+    assert s.query_log == tmp_path / "журнал.jsonl"
+
+
+# --- токены общей службы ---
+
+def tokens_file(tmp_path, *entries) -> str:
+    path = tmp_path / "amem-tokens.toml"
+    path.write_text("".join(f'[[token]]\nhash = "{settings.token_hash(token)}"\nagent = "{agent}"\n'
+                            f'write = {str(write).lower()}\n\n' for token, agent, write in entries), encoding="utf-8")
+    path.chmod(0o600)
+    return str(path)
+
+
+def test_token_hash_and_tokens_file(tmp_path):
+    assert settings.token_hash("abc") == "sha256:" + hashlib.sha256(b"abc").hexdigest()
+    path = tokens_file(tmp_path, ("t-write", "person:anna", True), ("t-read", "model:bot", False))
+    tokens = settings.load_tokens(path)
+    assert settings.match_token(tokens, "t-write") == \
+        settings.Token(settings.token_hash("t-write"), "person:anna", True)
+    assert settings.match_token(tokens, "t-read").write is False
+    assert settings.match_token(tokens, "чужой") is None
+
+
+@pytest.mark.parametrize("text, where", [
+    ('[[token]]\nagent = "person:anna"\n', "hash"),
+    ('[[token]]\nhash = "md5:00"\nagent = "person:anna"\n', "hash"),
+    (f'[[token]]\nhash = "{settings.token_hash("x")}"\nagent = "anna"\n', "agent"),
+    (f'[[token]]\nhash = "{settings.token_hash("x")}"\nagent = "person:anna"\nwrite = "yes"\n', "write"),
+    ("token = 1", "token"),
+])
+def test_bad_tokens_file(tmp_path, text, where):
+    path = tmp_path / "amem-tokens.toml"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(settings.SettingsError, match=where):
+        settings.load_tokens(path)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="права файла — POSIX")
+def test_tokens_file_permissions(tmp_path, caplog):
+    path = tokens_file(tmp_path, ("t", "person:anna", True))
+    Path(path).chmod(0o620)                  # другой может вписать свой токен — служба не стартует
+    with pytest.raises(settings.SettingsError, match="chmod 600"):
+        settings.load_tokens(path)
+    Path(path).chmod(0o644)                  # только чтение другими — предупреждение
+    with caplog.at_level(logging.WARNING, logger="amem.settings"):
+        assert len(settings.load_tokens(path)) == 1
+    assert "chmod 600" in caplog.text
+
+
+def test_missing_tokens_file(tmp_path):
+    with pytest.raises(settings.SettingsError, match="amem-tokens.toml"):
+        settings.load_tokens(tmp_path / "нет" / "amem-tokens.toml")
+
+
+# --- <private> ---
+
+@pytest.mark.parametrize("text, expected", [
+    ("до <private>секрет</private> после", "до  после"),
+    ("текст <private>секрет до конца\nи дальше", "текст "),            # незакрытая метка — до конца текста
+    ("a<private>1</private>b<private>2</private>c", "abc"),
+    ("a<PRIVATE>1</Private>b", "ab"),
+    ("a<private>1<private>2</private>3</private>b", "ab"),             # вложенная метка не открывает остаток
+    ("a<private>\nстроки\n</private>b", "ab"),
+    ("без меток", "без меток"),
+    ("a</private>b", "a</private>b"),                                    # закрывающая без открывающей — просто текст
+    ("", ""),
+])
+def test_private_strip(text, expected):
+    assert private.strip(text) == expected
+
+
+# --- служба: фикстуры ---
+
+@pytest.fixture
+def dsn(pg) -> str:
+    """DSN своей схемы для пула службы: search_path лежит в options, как у соединения pg."""
+    params = conninfo_to_dict(pg.info.dsn)
+    params["password"] = pg.info.password
+    return make_conninfo(**params)
+
+
+@pytest.fixture
+def serve(dsn, tmp_path):
+    """Запустить службу (lifespan: пул и db.prepare) на своей схеме; клиенты закрываются после теста."""
+    clients = []
+
+    def start(env=None, *, provider=None, routes=(), raise_server_exceptions=True, **explicit) -> TestClient:
+        environ = {"AMEM_DSN": dsn, "HOME": str(tmp_path / "home"), "USER": "ann", **(env or {})}
+        app = service.create_app(settings.load(environ, **explicit), provider=provider)
+        app.router.routes.extend(routes)
+        client = TestClient(app, base_url=BASE_URL, raise_server_exceptions=raise_server_exceptions)
+        client.__enter__()
+        clients.append(client)
+        return client
+
+    yield start
+    for client in reversed(clients):
+        client.__exit__(None, None, None)
+
+
+def is_problem(response, status: int, code: str) -> dict:
+    assert response.status_code == status, response.text
+    assert response.headers["content-type"].startswith("application/problem+json")
+    body = response.json()
+    assert (body["status"], body["code"]) == (status, code)
+    assert body["type"] and body["title"]
+    return body
+
+
+def base_id(pg) -> str:
+    return pg.execute("SELECT value FROM meta WHERE key = 'base_id'").fetchone()[0]
+
+
+# --- служба: запуск, /health, защита ---
+
+def test_create_app_needs_dsn(tmp_path):
+    with pytest.raises(settings.SettingsError, match="AMEM_DSN"):
+        service.create_app(settings.load({"HOME": str(tmp_path), "USER": "ann"}))
+
+
+def test_health_and_lifespan_prepares_the_base(serve, pg):
+    client = serve()
+    response = client.get("/health")
+    assert (response.status_code, response.text) == (200, "ok")
+    assert base_id(pg)                       # служба при старте подготовила базу (db.prepare)
+    pool = client.app.state.pool
+    client.__exit__(None, None, None)
+    assert pool.closed                       # lifespan закрыл пул
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1:8767", "localhost:8767", "[::1]:8767", "LOCALHOST", "127.0.0.1"])
+def test_local_hosts_are_allowed(serve, host):
+    assert serve().get("/health", headers={"Host": host}).status_code == 200
+
+
+def test_foreign_host_is_421(serve):
+    client = serve()
+    body = is_problem(client.get("/health", headers={"Host": "evil.example"}), 421, "bad_host")
+    assert "evil.example" in body["detail"]
+    is_problem(client.get("/api/v1/session", headers={"Host": "evil.example:8767"}), 421, "bad_host")
+    is_problem(client.get("/health", headers={"Host": "127.0.0.1.evil.example"}), 421, "bad_host")
+
+
+def test_host_from_settings_is_allowed(serve):
+    client = serve(host="192.0.2.10")
+    assert client.get("/health", headers={"Host": "192.0.2.10:8767"}).status_code == 200
+    is_problem(client.get("/health", headers={"Host": "192.0.2.11:8767"}), 421, "bad_host")
+    # адрес «на всех интерфейсах» не делает любой Host своим
+    wildcard = serve(host="0.0.0.0")
+    is_problem(wildcard.get("/health", headers={"Host": "evil.example"}), 421, "bad_host")
+    assert wildcard.get("/health", headers={"Host": "localhost:8767"}).status_code == 200
+
+
+def test_foreign_origin_is_403(serve):
+    client = serve()
+    is_problem(client.post("/api/v1/submit", json={}, headers={"Origin": "http://evil.example"}), 403, "bad_origin")
+    is_problem(client.get("/api/v1/session", headers={"Origin": "http://evil.example"}), 403, "bad_origin")
+    is_problem(client.post("/api/v1/submit", json={}, headers={"Origin": "null"}), 403, "bad_origin")
+    # свой источник и dev-сервер из AMEM_UI_ORIGINS проходят защиту: дальше маршрута нет — 404, а не 403
+    is_problem(client.post("/api/v1/submit", json={}, headers={"Origin": ORIGIN}), 404, "not_found")
+    is_problem(client.post("/api/v1/submit", json={}, headers={"Origin": DEV_UI}), 403, "bad_origin")
+    dev = serve({"AMEM_UI_ORIGINS": DEV_UI})
+    is_problem(dev.post("/api/v1/submit", json={}, headers={"Origin": DEV_UI}), 404, "not_found")
+
+
+def test_write_accepts_only_json(serve):
+    client = serve()
+    for method in ("POST", "PATCH", "DELETE", "PUT"):
+        response = client.request(method, "/api/v1/submit", content=b"{}", headers={"Content-Type": "text/plain"})
+        is_problem(response, 415, "unsupported_media_type")
+    form = {"Content-Type": "application/x-www-form-urlencoded"}
+    is_problem(client.post("/api/v1/submit", content=b"x=1", headers=form), 415, "unsupported_media_type")
+    is_problem(client.post("/api/v1/submit", content=b"{}"), 415, "unsupported_media_type")   # тело без типа
+    # JSON (с charset) проходит защиту — дальше 404 от маршрутизатора
+    is_problem(client.post("/api/v1/submit", content=b"{}",
+                           headers={"Content-Type": "application/json; charset=utf-8"}), 404, "not_found")
+    # запись без тела (DELETE папки) — проверять нечего
+    is_problem(client.delete("/api/v1/folders/a"), 404, "not_found")
+    # чтение тип тела не проверяет
+    assert client.get("/health", headers={"Content-Type": "text/plain"}).status_code == 200
+
+
+def test_bundle_inspect_takes_multipart_and_requires_origin(serve):
+    client = serve()
+    files = {"file": ("подборка.zip", b"PK", "application/zip")}
+    body = is_problem(client.post("/api/v1/bundles/inspect", files=files), 403, "bad_origin")
+    assert "Origin" in body["detail"]
+    is_problem(client.post("/api/v1/bundles/inspect", files=files, headers={"Origin": ORIGIN}), 404, "not_found")
+    is_problem(client.post("/api/v1/bundles/inspect", json={}, headers={"Origin": ORIGIN}), 415,
+               "unsupported_media_type")
+
+
+# --- локальная служба: сессия и cookie человека ---
+
+def test_session_without_cookie_is_the_model(serve, pg):
+    client = serve()
+    response = client.get("/api/v1/session")
+    assert response.status_code == 200
+    assert "set-cookie" not in response.headers
+    assert response.json() == {"agent": "model:local", "base": base_id(pg), "amem_version": __version__,
+                               "semantic": "unavailable", "can_write": True}
+
+
+def test_session_cookie_from_own_page_makes_the_person(serve):
+    client = serve()
+    response = client.get("/api/v1/session", headers={"Sec-Fetch-Site": "same-origin"})
+    assert response.status_code == 200
+    assert response.json()["agent"] == "person:ann"           # выдача cookie — уже запрос человека
+    cookie = response.headers["set-cookie"]
+    attributes = {part.strip().lower() for part in cookie.split(";")[1:]}
+    assert {"httponly", "samesite=strict", "path=/"} <= attributes
+    name, value = cookie.split(";")[0].split("=", 1)
+    assert name == "amem_session" and len(value) >= 32
+
+    # клиент хранит cookie: следующий запрос без заголовков браузера — тоже человек
+    again = client.get("/api/v1/session")
+    assert (again.json()["agent"], again.json()["can_write"]) == ("person:ann", True)
+    assert client.app.state.settings.agent == "person:ann"
+
+    # без cookie — снова модель; поддельная cookie — модель
+    client.cookies.clear()
+    assert client.get("/api/v1/session").json()["agent"] == "model:local"
+    client.cookies.set("amem_session", "x" * len(value))
+    assert client.get("/api/v1/session").json()["agent"] == "model:local"
+
+
+def test_session_cookie_for_ui_origin_but_not_for_others(serve):
+    client = serve({"AMEM_UI_ORIGINS": DEV_UI, "AMEM_AGENT": "person:anna"})
+    response = client.get("/api/v1/session", headers={"Origin": DEV_UI})
+    assert response.json()["agent"] == "person:anna"
+    assert response.headers["set-cookie"].startswith("amem_session=")
+    client.cookies.clear()
+
+    for headers in ({"Sec-Fetch-Site": "cross-site"}, {"Sec-Fetch-Site": "same-site"}, {"Sec-Fetch-Site": "none"}, {}):
+        response = client.get("/api/v1/session", headers=headers)
+        assert response.json()["agent"] == "model:local", headers
+        assert "set-cookie" not in response.headers
+    foreign = client.get("/api/v1/session", headers={"Origin": "http://evil.example", "Sec-Fetch-Site": "same-origin"})
+    is_problem(foreign, 403, "bad_origin")
+    assert "set-cookie" not in foreign.headers
+
+
+def test_session_cookie_is_new_on_every_start(serve):
+    first, second = serve(), serve()
+    a = first.get("/api/v1/session", headers={"Sec-Fetch-Site": "same-origin"}).cookies["amem_session"]
+    b = second.get("/api/v1/session", headers={"Sec-Fetch-Site": "same-origin"}).cookies["amem_session"]
+    assert a != b
+    second.cookies.clear()
+    second.cookies.set("amem_session", a)
+    assert second.get("/api/v1/session").json()["agent"] == "model:local"
+
+
+def test_session_base_name_and_semantic(serve, pg):
+    db.prepare(pg)
+    db.set_base_name(pg, "Тестовая база")
+    provider = FakeProvider()
+    model = embed.register_model(pg, provider)
+    embed.activate_model(pg, model["id"])
+    view = serve(provider=provider).get("/api/v1/session").json()
+    assert (view["base_name"], view["semantic"]) == ("Тестовая база", "used")
+    assert serve({"AMEM_MODEL_AGENT": "model:bot"}).get("/api/v1/session").json()["agent"] == "model:bot"
+
+
+def test_session_semantic_off_with_backend_none(serve, pg, monkeypatch):
+    """AMEM_BACKEND=none выключает смысловой канал и при активной модели."""
+    db.prepare(pg)
+    provider = FakeProvider()
+    embed.activate_model(pg, embed.register_model(pg, provider)["id"])
+    monkeypatch.setenv("AMEM_BACKEND", "none")
+    assert serve(provider=provider).get("/api/v1/session").json()["semantic"] == "unavailable"
+
+
+# --- общая служба: токены ---
+
+def test_shared_service_requires_token(serve, tmp_path):
+    path = tokens_file(tmp_path, ("t-write", "person:anna", True), ("t-read", "model:bot", False))
+    client = serve({"AMEM_TOKENS": path})
+
+    response = client.get("/api/v1/session")
+    is_problem(response, 401, "auth_required")
+    assert response.headers["www-authenticate"].lower().startswith("bearer")
+    is_problem(client.get("/api/v1/session", headers={"Authorization": "Bearer wrong"}), 401, "auth_required")
+    is_problem(client.get("/api/v1/session", headers={"Authorization": "Basic dC13cml0ZQ=="}), 401, "auth_required")
+    assert client.get("/health").status_code == 200           # проверка живости — без входа
+
+    read = {"Authorization": "Bearer t-read"}
+    view = client.get("/api/v1/session", headers=read).json()
+    assert (view["agent"], view["can_write"]) == ("model:bot", False)
+    is_problem(client.post("/api/v1/submit", json={}, headers=read), 403, "read_only")
+
+    write = {"Authorization": "bearer t-write"}
+    response = client.get("/api/v1/session", headers={**write, "Sec-Fetch-Site": "same-origin"})
+    assert response.status_code == 200
+    assert (response.json()["agent"], response.json()["can_write"]) == ("person:anna", True)
+    assert "set-cookie" not in response.headers               # в общей службе cookie не выдаётся
+    is_problem(client.post("/api/v1/submit", json={}, headers=write), 404, "not_found")    # защиту прошёл
+
+
+def test_shared_service_with_missing_tokens_file_does_not_start(dsn, tmp_path):
+    s = settings.load({"AMEM_DSN": dsn, "HOME": str(tmp_path), "USER": "ann",
+                       "AMEM_TOKENS": str(tmp_path / "amem-tokens.toml")})
+    with pytest.raises(settings.SettingsError, match="amem-tokens.toml"):
+        service.create_app(s)
+
+
+# --- problem+json ---
+
+CLOSED_AT = datetime(2026, 11, 7, 12, 30, tzinfo=timezone.utc)
+
+PROBLEMS = [
+    (records.RecordNotFound("atm:x: записи нет"), 404, "not_found"),
+    (records.RecordError("ссылка: нужен atm:"), 400, "bad_request"),
+    (CheckError("пустая пачка"), 400, "bad_request"),
+    (objects.ObjectError("объект: неверный путь"), 400, "bad_request"),
+    (objects.ObjectError("неверный диапазон", code="invalid"), 400, "bad_request"),
+    (objects.ObjectError("объекта нет", code="not_found"), 404, "not_found"),
+    (objects.ObjectError("лист больше 10 000 ячеек", code="too_large"), 413, "too_large"),
+    (review.ReviewError("пункт закрыт", code="closed", by="person:anna", at=CLOSED_AT), 409, "review_closed"),
+    (review.ReviewError("нет права", code="forbidden"), 403, "review_forbidden"),
+    (review.ReviewError("захвачен", code="claimed"), 403, "review_forbidden"),
+    (review.ReviewError("устарел", code="stale"), 400, "review_bad"),
+    (review.ReviewError("исход недоступен", code="bad_outcome"), 400, "review_bad"),
+    (review.ReviewError("неверный аргумент", code="invalid"), 400, "review_bad"),
+    (review.ReviewError("пункта нет", code="not_found"), 404, "not_found"),
+    (FolderError("папка есть", code="exists"), 409, "folder_exists"),
+    (FolderError("папка не пуста", code="not_empty"), 409, "folder_not_empty"),
+    (FolderError("папки нет", code="not_found"), 404, "folder_not_found"),
+    (FolderError("неверный путь", code="invalid"), 422, "folder_invalid"),
+    (bundle.BundleError("не загружены пакеты", code="bundle_pack_missing", missing=["example 1.0.0"]), 422,
+     "bundle_pack_missing"),
+    (bundle.BundleError("подборка повреждена"), 422, "bundle_invalid"),
+    (db.BaseNameError("имя базы: пустое"), 400, "bad_request"),
+    (vocab.VocabError("нет такого кода"), 400, "bad_request"),
+    (problems.Problem(501, "not_implemented", "антологии ещё нет"), 501, "not_implemented"),
+]
+
+
+def raising(exc):
+    def boom(request):
+        raise exc
+    return Route("/api/v1/boom", boom)
+
+
+@pytest.mark.parametrize("exc, status, code", PROBLEMS, ids=lambda v: v if isinstance(v, str) else None)
+def test_library_errors_become_problems(serve, exc, status, code):
+    body = is_problem(serve(routes=[raising(exc)]).get("/api/v1/boom"), status, code)
+    assert str(exc) in body["detail"]
+
+
+def test_problem_details(serve):
+    closed = review.ReviewError("пункт закрыт", code="closed", by="person:anna", at=CLOSED_AT)
+    body = is_problem(serve(routes=[raising(closed)]).get("/api/v1/boom"), 409, "review_closed")
+    assert "person:anna" in body["detail"] and "2026-11-07" in body["detail"]          # кто и когда решил
+    assert (body["by"], body["at"]) == ("person:anna", CLOSED_AT.isoformat())
+
+    missing = bundle.BundleError("не загружены пакеты", code="bundle_pack_missing", missing=["example 1.0.0"])
+    assert is_problem(serve(routes=[raising(missing)]).get("/api/v1/boom"), 422,
+                      "bundle_pack_missing")["missing"] == ["example 1.0.0"]
+
+    issue = {"code": "x", "severity": "violation", "message": "m", "ref": "@a", "path": "label"}
+    check = problems.Problem(422, "check_rejected", "пакет отклонён", issues=[issue])
+    assert is_problem(serve(routes=[raising(check)]).get("/api/v1/boom"), 422, "check_rejected")["issues"] == [issue]
+
+
+def test_database_unavailable_is_503_without_connection_details(serve):
+    error = psycopg.OperationalError('connection to server at "127.0.0.1", port 5446 failed: Connection refused')
+    body = is_problem(serve(routes=[raising(error)]).get("/api/v1/boom"), 503, "db_unavailable")
+    assert "5446" not in str(body)
+    # настоящий отказ пула: закрытый пул — тоже 503
+    client = serve()
+    client.app.state.pool.close()
+    is_problem(client.get("/api/v1/session"), 503, "db_unavailable")
+
+
+def test_unexpected_error_is_500_without_details(serve, caplog):
+    client = serve(routes=[raising(RuntimeError("секрет: путь /srv/amem/x"))], raise_server_exceptions=False)
+    with caplog.at_level(logging.ERROR, logger="amem.service"):
+        response = client.get("/api/v1/boom")
+    body = is_problem(response, 500, "internal")
+    assert "секрет" not in response.text and "/srv" not in response.text
+    assert "секрет" in caplog.text                    # подробности — в журнал службы
+    assert body["title"]
+
+
+def test_unknown_path_and_method_are_problems(serve):
+    client = serve()
+    is_problem(client.get("/api/v1/нет-такого"), 404, "not_found")
+    response = client.post("/api/v1/session", json={})
+    is_problem(response, 405, "method_not_allowed")
+    assert "GET" in response.headers["allow"]
