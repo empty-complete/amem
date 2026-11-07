@@ -8,6 +8,7 @@ const paths = {
     </>
   ),
   plus: <path d="M8 3.2v9.6M3.2 8h9.6" />,
+  menu: <path d="M2.6 4.4h10.8M2.6 8h10.8M2.6 11.6h10.8" />,
   theme: (
     <>
       <circle cx="8" cy="8" r="5.6" />

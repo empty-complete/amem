@@ -214,7 +214,22 @@ folders and backups.
 
 ### Try the web UI on sample data
 
-The web UI is built against the HTTP contract and runs on mock data until the service ships.
+The web UI is built against the HTTP contract and runs on mock data until the service ships. What is
+there:
+
+- **Sky.** The home page is a constellation of records, colored by family (source, work, object); a new
+  record flashes as it lands. A 3D view loads on request.
+- **Reading.** A record shows its properties and body next to the source: the quote highlighted on the real
+  PDF page, a spreadsheet range or a text fragment, with the file version. Entity cards, objects and a
+  feed of changes.
+- **Writing.** Quick write in one line (`N`), a full editor with Markdown, formulas and sources, folders
+  with drag and drop, and a kind constructor. Every action has a 6-second undo.
+- **Review.** The queue in two panes with `J` `K` `Y` `N` `S`: the claim, its source, the reviewer's notes,
+  a word diff for edits and both versions when a source changed. **Base** shows the queue, statuses and
+  backups; **Bundles** exports and imports `amem.bundle/1` and anthologies.
+
+Light and dark themes, Russian and English, phone layouts. The design system is described in
+[`web/DESIGN.md`](web/DESIGN.md).
 
 ```bash
 cd web
@@ -326,7 +341,7 @@ ranking. They never change a status or skip a check.
 - [ ] **HTTP service:** `amem serve` with the [v1 contract](docs/api/http-v1.openapi.yaml) *(in progress)*
 - [ ] **CLI and MCP server:** three-step retrieval, usefulness marks, `<private>` stripping
 - [ ] **Agent memory:** Claude Code hooks, Codex CLI, `amem install`, core skills
-- [ ] **Web UI:** the foundation, reading and the sky are built on mock data; writing comes next
+- [ ] **Web UI:** all screens are built on mock data; connecting to the service comes next
 - [ ] **asearch:** file search as an amem plugin
 
 ## Documentation
