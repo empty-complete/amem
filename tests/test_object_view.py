@@ -55,7 +55,7 @@ def test_view_cited_by_current_revisions(kb, docs, store):
     view = lookup.object_view(kb, v.ref)
     assert view["id"] == str(v.object_id) and view["kind"] == "file"
     # первая ревизия уже не текущая: цитата только из второй
-    assert view["cited_by"] == [{"record": f"atm:{rid}", "version": 1, "quote": "Таблица 1"}]
+    assert view["cited_by"] == [{"record": f"atm:{rid}", "version": 1, "selectors": [], "quote": "Таблица 1"}]
     assert objects.mark(kb, v.object_id, "parsed", agent=AGENT) is None
     assert lookup.object_view(kb, v.object_id)["status"] == "parsed"
 
@@ -67,6 +67,13 @@ def test_view_citation_fields(kb, docs, store):
     kb.execute("UPDATE source SET verdict = 'ok', checked_at = now()")
     [c] = lookup.object_view(kb, v.object_id)["cited_by"]
     assert c == {"record": f"atm:{rid}", "version": 1, "selectors": sel, "quote": "Таблица 1", "verdict": "ok"}
+
+
+def test_view_citation_selectors_always_list(kb, docs, store):
+    v = objects.ingest(kb, store, docs, PDF, agent=AGENT)
+    fact(docs, kb, store, PDF, quote="Таблица 1")
+    [c] = lookup.object_view(kb, v.object_id)["cited_by"]
+    assert c["selectors"] == []
 
 
 def test_view_without_status_and_citations(kb, docs, store):
@@ -108,9 +115,49 @@ def test_sheet_values_match_extracted_text(kb, store, book):
     assert "\t".join(rows[0]) == line
 
 
-def test_sheet_name_and_whole_sheet(kb, store, book):
-    got = objects.sheet(kb, store, book.object_id, 1, "нагрузки")
-    assert got["name"] == "Нагрузки" and got["range"] == "A1:C3" and got["rows"][0] == ["Район", "w0, кПа", "Дата"]
+def test_sheet_name_and_default_window(kb, store, book):
+    for empty in (None, "", "  "):
+        got = objects.sheet(kb, store, book.object_id, 1, "нагрузки", empty)
+        assert got["name"] == "Нагрузки" and got["range"] == "A1:C3" and got["rows"][0] == ["Район", "w0, кПа", "Дата"]
+        assert len(got["rows"]) == 3
+
+
+def test_sheet_default_window_is_a1_l40(kb, docs, store):
+    big = [[f"{r}:{c}" for c in range(1, 16)] for r in range(1, 51)]
+    make_xlsx(docs / "большая.xlsx", {"Лист": big})
+    v = objects.ingest(kb, store, docs, "большая.xlsx", agent=AGENT)
+    got = objects.sheet(kb, store, v.object_id, 1, "Лист")
+    assert got["range"] == "A1:L40" and len(got["rows"]) == 40 and {len(r) for r in got["rows"]} == {12}
+    assert got["rows"][39][11] == "40:12"
+
+
+def test_sheet_empty_sheet(kb, docs, store):
+    make_xlsx(docs / "пустая.xlsx", {"Лист": [], "Другой": [["x"]]})
+    v = objects.ingest(kb, store, docs, "пустая.xlsx", agent=AGENT)
+    assert objects.sheet(kb, store, v.object_id, 1, "Лист") == {"name": "Лист", "range": "A1:L40", "rows": []}
+    got = objects.sheet(kb, store, v.object_id, 1, "Лист", "A1:B2")           # явный диапазон — целиком
+    assert got["rows"] == [["", ""], ["", ""]]
+    assert got["rows"][0] is not got["rows"][1]
+
+
+def test_sheet_sparse_rectangle_is_too_large(kb, docs, store):
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Лист"
+    ws["A1"] = "верх"
+    ws["A60000"] = "низ"                       # две ячейки на 60 000 строк
+    for r in range(2, 3002):
+        ws.cell(row=r, column=1, value=r)
+    ws.cell(row=3002, column=3000, value="край")      # строки по одной ячейке и одна строка шириной 3000
+    wb.save(docs / "разреженная.xlsx")
+    v = objects.ingest(kb, store, docs, "разреженная.xlsx", agent=AGENT)
+    for window in ("A1:A60000", "A1:DLH3002", "A1:XFD1048576"):
+        with pytest.raises(ObjectError) as e:
+            objects.sheet(kb, store, v.object_id, 1, "Лист", window)
+        assert e.value.code == "too_large"
+    assert objects.sheet(kb, store, v.object_id, 1, "Лист", "A59999:A60000")["rows"] == [[""], ["низ"]]
 
 
 def test_sheet_window_beyond_data_is_padded(kb, store, book):
@@ -135,10 +182,10 @@ def test_sheet_too_large(kb, store, book):
     assert len(ok["rows"]) == 100 and len(ok["rows"][0]) == 100
 
 
-@pytest.mark.parametrize("bad", ["", "B2:", "2B", "D4:B2", "A0:B2", "A1:XFE2", "B2:C", "A1;B2"])
+@pytest.mark.parametrize("bad", ["B2:", "2B", "D4:B2", "A0:B2", "A1:XFE2", "B2:C", "A1;B2"])
 def test_sheet_invalid_range(kb, store, book, bad):
     with pytest.raises(ObjectError) as e:
-        objects.sheet(kb, store, book.object_id, 1, "Нагрузки", bad or "  ")
+        objects.sheet(kb, store, book.object_id, 1, "Нагрузки", bad)
     assert e.value.code == "invalid"
 
 

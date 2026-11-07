@@ -5,6 +5,11 @@
 Запись можно назвать UUID или ссылкой atm:/ent: с UUID или ключом (records.resolve).
 «На момент» (at) — время транзакции: что база знала тогда, включая решения проверки, принятые до этого момента.
 at — только время с часовым поясом: время без пояса база прочла бы в поясе сеанса и ошиблась бы на часы.
+
+Для экранов: list_records — страница сводок записей (папка, вид, статус, тег, about — сущность или объект),
+labels — подписи ссылок одним запросом; get отдаёт и папку записи (folder). Объекты: get_object — объект
+с версиями, object_status — последняя отметка, object_view — карточка (status, cited_by, pages, sheets),
+object_by_path — объект по пути; revision_sources и revisions_sources — источники ревизий.
 """
 from __future__ import annotations
 
@@ -38,6 +43,7 @@ def _record(row: dict, target: Target) -> dict:
         "content_hash": row["content_hash"],
         "status": row["status"],
         "review_state": row["review_state"],
+        "folder": row["folder"],
         "created_at": row["created_at"].isoformat(),
         "recorded_at": row["recorded_at"].isoformat(),
         "changeset": str(row["changeset_id"]),
@@ -97,7 +103,7 @@ def get(conn: psycopg.Connection, target: Target, record_id: uuid.UUID | str, *,
         status = (f"(SELECT s.status FROM status_log s WHERE s.target = '{t}' AND s.record_id = r.{t}_id "
                   "AND s.changed_at <= %(at)s ORDER BY s.changed_at DESC, s.id DESC LIMIT 1)")
     sql = (f"SELECT r.{t}_id AS record_id, r.schema_version, r.n, r.content_hash, r.payload, "
-           f"{review} AS review_state, r.recorded_at, r.changeset_id, {status} AS status, rec.created_at, "
+           f"{review} AS review_state, r.recorded_at, r.changeset_id, {status} AS status, rec.folder, rec.created_at, "
            f"cs.agent, cs.activity FROM {source} r JOIN {t} rec ON rec.id = r.{t}_id "
            f"JOIN changeset cs ON cs.id = r.changeset_id WHERE r.{t}_id = %(id)s {where} {order} LIMIT 1")
     with conn.cursor(row_factory=dict_row) as cur:
@@ -194,13 +200,15 @@ def _record_filters(t: Target, path: str | None, kinds, statuses) -> list[str]:
     return where
 
 
-def _revision_filters(tag, about_id) -> list[str]:
-    """Условия фильтра на показанную ревизию атома r: тег и about."""
+def _revision_filters(t: Target, tag, about_id, source_id) -> list[str]:
+    """Условия фильтра на показанную ревизию r вида t: тег и about (только у атомов) и источник на объект."""
     where = []
     if tag:
         where.append("r.payload->'tags' @> %(tag)s")
     if about_id:
         where.append("EXISTS (SELECT 1 FROM atom_about ab WHERE ab.revision_id = r.id AND ab.entity_id = %(about)s)")
+    if source_id:
+        where.append(f"EXISTS (SELECT 1 FROM source so WHERE so.{t}_revision_id = r.id AND so.object_id = %(object)s)")
     return where
 
 
@@ -218,19 +226,34 @@ def _list_page(t: Target, where: list[str], after) -> str:
             f"ORDER BY r.recorded_at DESC, r.{t}_id DESC LIMIT %(take)s)")
 
 
-def _list_total(targets: list[Target], path, kinds, statuses, revision_where: list[str]) -> str:
+def _list_total(targets: list[Target], path, kinds, statuses, revision_where: dict[str, list[str]]) -> str:
     """Сколько записей под фильтром. Без фильтров по ревизии — по строкам записей (у каждой записи ровно одна
-    показанная ревизия, и искать её не нужно), иначе — по показанным ревизиям атомов."""
-    if revision_where:
-        record_where = _record_filters("atom", path, kinds, statuses)
-        join = "JOIN atom rec ON rec.id = r.atom_id " if record_where else ""     # без фильтров записи — не нужна
-        return (f"SELECT count(*) FROM atom_revision r {join}"
-                f"WHERE {' AND '.join([_shown('atom'), *record_where, *revision_where])}")
+    показанная ревизия, и искать её не нужно), иначе — по показанным ревизиям."""
     counts = []
     for t in targets:
         where = _record_filters(t, path, kinds, statuses)
-        counts.append(f"(SELECT count(*) FROM {t} rec WHERE {' AND '.join(where) or 'TRUE'})")
+        if revision_where[t]:
+            join = f"JOIN {t} rec ON rec.id = r.{t}_id " if where else ""      # без фильтров записи — не нужна
+            counts.append(f"(SELECT count(*) FROM {t}_revision r {join}"
+                          f"WHERE {' AND '.join([_shown(t), *where, *revision_where[t]])})")
+        else:
+            counts.append(f"(SELECT count(*) FROM {t} rec WHERE {' AND '.join(where) or 'TRUE'})")
     return f"SELECT {' + '.join(counts)}"
+
+
+_EMPTY = {"items": [], "next_cursor": None, "total": 0}
+
+
+def _object_ref(about: str) -> uuid.UUID | None:
+    """obj:<UUID> или голый UUID → UUID объекта; иначе None (это ссылка на сущность или неверная строка)."""
+    if not isinstance(about, str):
+        raise RecordError(f"about {about!r}: нужна строка")
+    try:
+        return uuid.UUID(about[4:] if about.startswith("obj:") else about)
+    except ValueError:
+        if about.startswith("obj:"):
+            raise RecordError(f"about {about!r}: после obj: нужен UUID объекта") from None
+        return None
 
 
 def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: Iterable[str] | None = None,
@@ -242,8 +265,10 @@ def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: 
     - folder — папка вместе с вложенными; «-» — записи без папки; None или «» — все;
     - kinds — коды вида атома или класса сущности (kind_or_class);
     - statuses — статусы; по умолчанию все, как в дереве папок: иначе счётчики папок и список разошлись бы;
-    - tag — тег атома; about — сущность (ent: с UUID или ключом), о которой текущая ревизия атома. У сущностей
-      нет ни тегов, ни about: с этими фильтрами их в списке нет.
+    - tag — тег атома; about — сущность (ent: с UUID или ключом), о которой текущая ревизия атома, либо объект
+      (obj:<UUID> или голый UUID объекта): записи — атомы и сущности, у чьей текущей ревизии есть источник на него.
+      У сущностей нет ни тегов, ни about-сущности: с этими фильтрами их в списке нет. Неизвестные сущность или
+      объект — пустой список, не RecordNotFound.
     Пустой набор kinds или statuses — без фильтра, как None.
 
     Порядок — recorded_at показанной ревизии по убыванию, затем id; cursor — next_cursor прошлой страницы
@@ -275,16 +300,22 @@ def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: 
     with conn.transaction():
         if own:
             conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
-        about_id = None
+        about_id = source_id = None
         if about is not None and about != "":
-            if parse_ref(about)[0] != "entity":
-                raise RecordError(f"about {about!r}: нужна ссылка на сущность ent:<UUID или ключ>")
-            about_id = resolve(conn, about)[1]
-        params["about"] = about_id
-        revision_where = _revision_filters(tag, about_id)
-        # у сущностей нет ни тегов, ни about: с этими фильтрами — только атомы
-        targets = ["atom"] if revision_where else list(TARGET.values())
-        pages = [_list_page(t, [*_record_filters(t, path, kinds, statuses), *revision_where], after) for t in targets]
+            source_id = _object_ref(about)
+            if source_id is None:
+                if parse_ref(about)[0] != "entity":
+                    raise RecordError(f"about {about!r}: нужна ссылка ent:<UUID или ключ> или obj:<UUID> объекта")
+                try:
+                    about_id = resolve(conn, about)[1]
+                except RecordNotFound:
+                    return dict(_EMPTY)
+        params |= {"about": about_id, "object": source_id}
+        revision_where = {t: _revision_filters(t, tag, about_id, source_id) for t in TARGET.values()}
+        # у сущностей нет ни тегов, ни about-сущности: с этими фильтрами — только атомы
+        targets = ["atom"] if tag or about_id else list(TARGET.values())
+        pages = [_list_page(t, [*_record_filters(t, path, kinds, statuses), *revision_where[t]], after)
+                 for t in targets]
         # prepare=False: план — под значения фильтров. Подготовленный запрос PostgreSQL со временем исполняет общим
         # планом, а редкому тегу или маленькой папке нужен другой путь (индекс фильтра), чем частому (обход по времени)
         with conn.cursor(row_factory=dict_row) as cur:
@@ -449,17 +480,22 @@ _SHEET_SUFFIXES = (".xlsx", ".xlsm")
 
 
 def _citations(conn: psycopg.Connection, object_id: str) -> list[dict]:
-    """Источники текущих ревизий, ссылающиеся на объект: запись, версия объекта, селекторы, цитата, итог сверки."""
+    """Источники текущих ревизий, ссылающиеся на объект: запись, версия объекта, селекторы, цитата, итог сверки.
+
+    Идём от источников объекта (индекс source_object) и проверяем только их ревизии условием _shown, как список
+    записей: соединение с {t}_current сортировало бы все ревизии базы. Отклонённая ревизия текущей не бывает."""
     out = []
     with conn.cursor(row_factory=dict_row) as cur:
         for target in ("atom", "entity"):
             rows = cur.execute(
                 f"SELECT r.{target}_id AS record_id, s.object_version, s.selectors, s.quote, s.verdict "
-                f"FROM source s JOIN {target}_current r ON r.id = s.{target}_revision_id "
-                f"WHERE s.object_id = %s ORDER BY r.{target}_id, s.object_version, s.position", (object_id,))
+                f"FROM source s JOIN {target}_revision r ON r.id = s.{target}_revision_id "
+                f"WHERE s.object_id = %s AND r.review_state <> 'declined' AND {_shown(target)} "
+                f"ORDER BY r.{target}_id, s.object_version, s.position", (object_id,), prepare=False)
             for r in rows:
-                item = {"record": f"{PREFIX[target]}:{r['record_id']}", "version": r["object_version"]}
-                item |= {k: r[k] for k in ("selectors", "quote", "verdict") if r[k] is not None}
+                item = {"record": f"{PREFIX[target]}:{r['record_id']}", "version": r["object_version"],
+                        "selectors": r["selectors"] or []}
+                item |= {k: r[k] for k in ("quote", "verdict") if r[k] is not None}
                 out.append(item)
     return out
 
