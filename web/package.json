@@ -20,7 +20,8 @@
     "e2e": "playwright test",
     "api:types": "openapi-typescript ../docs/api/http-v1.openapi.yaml -o src/api/schema.d.ts",
     "api:check": "openapi-typescript ../docs/api/http-v1.openapi.yaml -o src/api/schema.d.ts --check",
-    "size": "size-limit"
+    "size": "size-limit",
+    "chunks": "node tools/check-chunks.mjs"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.2",

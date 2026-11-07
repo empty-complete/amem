@@ -27,6 +27,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run chunks
       - run: npm run size
       - uses: actions/setup-python@v5
         with:

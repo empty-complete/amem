@@ -38,7 +38,8 @@
   color: var(--sky-ink);
   pointer-events: none;
 }
-.home__head > * {
+.home__filters,
+.home__head .navlink {
   pointer-events: auto;
 }
 .home__head h1 {
@@ -110,7 +111,7 @@
   font-size: var(--t-meta);
   pointer-events: none;
 }
-.home__foot > * {
+.home__foot .navlink {
   pointer-events: auto;
 }
 .home__foot .navlink {
@@ -129,6 +130,17 @@
   display: inline-flex;
   align-items: center;
   gap: var(--s-2xs);
+}
+@media (max-width: 60rem) {
+  .main:has(.home) {
+    overflow: visible;
+  }
+  .main__in:has(> .home) {
+    height: auto;
+  }
+  .home {
+    height: calc(100dvh - var(--bar-h));
+  }
 }
 @media (max-width: 40rem) {
   .home__keys {

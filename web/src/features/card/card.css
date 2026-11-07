@@ -77,7 +77,7 @@
   display: flex;
   gap: 2px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: 4px;
   overflow: hidden;
   background: var(--surface-secondary);
 }
