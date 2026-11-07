@@ -811,6 +811,7 @@ class Atom(AtomPayload):
     content_hash: Optional[str] = Field(default=None, description="""Хэш канонического тела ревизии; метка cN — версия правил канонизации (сейчас c1, amem/canon.py).""", json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity']} })
     status: Optional[Status] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Concept', 'CardField']} })
     review_state: Optional[ReviewState] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity']} })
+    folder: Optional[str] = Field(default=None, description="""Папка записи — метаданные, не часть ревизии (amem/folders.py); null — без папки.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity']} })
     created_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom',
                        'Entity',
                        'Link',
@@ -1112,6 +1113,7 @@ class Entity(EntityPayload):
     content_hash: Optional[str] = Field(default=None, description="""Хэш канонического тела ревизии; метка cN — версия правил канонизации (сейчас c1, amem/canon.py).""", json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity']} })
     status: Optional[Status] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity', 'Concept', 'CardField']} })
     review_state: Optional[ReviewState] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity']} })
+    folder: Optional[str] = Field(default=None, description="""Папка записи — метаданные, не часть ревизии (amem/folders.py); null — без папки.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Atom', 'Entity']} })
     created_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Atom',
                        'Entity',
                        'Link',

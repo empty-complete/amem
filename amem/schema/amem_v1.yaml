@@ -668,6 +668,8 @@ classes:
         range: Status
       review_state:
         range: ReviewState
+      folder:
+        description: Папка записи — метаданные, не часть ревизии (amem/folders.py); null — без папки.
       created_at:
         range: datetime
       recorded_at:
@@ -738,6 +740,8 @@ classes:
         range: Status
       review_state:
         range: ReviewState
+      folder:
+        description: Папка записи — метаданные, не часть ревизии (amem/folders.py); null — без папки.
       created_at:
         range: datetime
       recorded_at:
