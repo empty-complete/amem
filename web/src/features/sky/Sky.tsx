@@ -211,7 +211,6 @@ export function Sky(props: SkyProps) {
 
   return (
     <div className="skywin" data-full={full || undefined}>
-      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: холст неба управляется с клавиатуры (стрелки, Enter, Esc) */}
       <div
         ref={host}
         className="sky"
@@ -221,6 +220,7 @@ export function Sky(props: SkyProps) {
         aria-label={
           props.label ?? t("sky.label", { stars: sky?.nodes.length ?? 0, links: sky?.links.length ?? 0 })
         }
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: небо — приложение внутри страницы, управляется с клавиатуры
         tabIndex={0}
         onKeyDown={onKey}
       >

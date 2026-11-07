@@ -162,7 +162,8 @@ const SkyCanvas = forwardRef<SkyCanvasApi, SkyCanvasProps>(function SkyCanvas(pr
     }
   }, [props.sky, props.reducedMotion]);
 
-  // выбор, приглушение, цвета — только перерисовка
+  // выбор, приглушение, цвета — только перерисовка (холст читает их из live.current)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: зависимости — триггер перерисовки, внутри они не читаются
   useEffect(() => {
     fg.current?.autoPauseRedraw(false);
     const t = setTimeout(() => fg.current?.autoPauseRedraw(true), 50);
