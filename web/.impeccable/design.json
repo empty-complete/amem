@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-08T01:53:50",
+  "title": "Design System: amem web UI",
+  "extensions": {
+    "colorMeta": {
+      "foreground": {
+        "role": "primary",
+        "displayName": "Чернильный",
+        "canonical": "oklch(22% 0.012 265)",
+        "tonalRamp": [
+          "oklch(15% 0.012 265)",
+          "oklch(22% 0.012 265)",
+          "oklch(30% 0.012 265)",
+          "oklch(38% 0.012 265)",
+          "oklch(52% 0.012 265)",
+          "oklch(70% 0.012 265)",
+          "oklch(84% 0.012 265)",
+          "oklch(95% 0.012 265)"
+        ]
+      },
+      "fam-source": {
+        "role": "secondary",
+        "displayName": "Синий источника",
+        "canonical": "#2a78d6"
+      },
+      "fam-work": {
+        "role": "secondary",
+        "displayName": "Оранжевый работы",
+        "canonical": "#eb6834"
+      },
+      "fam-object": {
+        "role": "secondary",
+        "displayName": "Зелёный объекта",
+        "canonical": "#1baf7a"
+      },
+      "mark": {
+        "role": "tertiary",
+        "displayName": "Маркер",
+        "canonical": "oklch(92% 0.09 95)"
+      },
+      "select": {
+        "role": "tertiary",
+        "displayName": "Выбор",
+        "canonical": "oklch(94% 0.035 255)"
+      },
+      "background": {
+        "role": "neutral",
+        "displayName": "Холодная бумага",
+        "canonical": "oklch(97.2% 0.004 265)"
+      },
+      "sky": {
+        "role": "neutral",
+        "displayName": "Ночное небо",
+        "canonical": "oklch(17% 0.022 266)"
+      }
+    },
+    "shadows": [
+      {
+        "name": "surface",
+        "value": "0 1px 2px oklch(22% 0.012 265 / 0.06), 0 0 0 1px oklch(22% 0.012 265 / 0.05)",
+        "purpose": "Карточки, kbd, листы источника."
+      },
+      {
+        "name": "overlay",
+        "value": "0 12px 32px oklch(22% 0.012 265 / 0.14), 0 0 0 1px oklch(22% 0.012 265 / 0.06)",
+        "purpose": "Меню, быстрая запись, конструктор видов, тосты."
+      }
+    ],
+    "motion": [
+      {
+        "name": "micro",
+        "value": "120ms cubic-bezier(0.2, 0, 0, 1)",
+        "purpose": "Наведение и смена фона."
+      },
+      {
+        "name": "short",
+        "value": "220ms cubic-bezier(0.2, 0, 0, 1)",
+        "purpose": "Появление панелей и тостов."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "60rem"
+      },
+      {
+        "name": "review-two-panes",
+        "value": "1100px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Главная кнопка",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Одно главное действие на экран.",
+      "html": "<button class=\"ds-btn-primary\">Подтвердить</button>",
+      "css": ".ds-btn-primary{height:32px;padding:0 12px;border:0;border-radius:999px;background:oklch(22% 0.012 265);color:oklch(98.5% 0.003 265);font:500 0.875rem system-ui,sans-serif;cursor:pointer}.ds-btn-primary:hover{background:oklch(30% 0.012 265)}.ds-btn-primary:focus-visible{outline:2px solid oklch(56% 0.19 255);outline-offset:2px}"
+    },
+    {
+      "name": "Пункт навигации",
+      "kind": "nav",
+      "refersTo": "button-nav",
+      "description": "Разделы в верхней строке.",
+      "html": "<a class=\"ds-nav\" href=\"#\">Проверка <span class=\"ds-badge\">8</span></a>",
+      "css": ".ds-nav{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border-radius:999px;color:oklch(22% 0.012 265);text-decoration:none;font:500 0.875rem system-ui,sans-serif;transition:background-color 120ms}.ds-nav:hover{background:oklch(95.6% 0.005 265)}.ds-nav:focus-visible{outline:2px solid oklch(56% 0.19 255);outline-offset:2px}.ds-badge{min-width:20px;height:20px;padding:0 4px;border-radius:999px;background:oklch(22% 0.012 265);color:#fff;font-size:.75rem;font-weight:600;display:inline-flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums}"
+    },
+    {
+      "name": "Поиск",
+      "kind": "input",
+      "refersTo": "search-field",
+      "description": "Капсула поиска с подсказкой ⌘K.",
+      "html": "<label class=\"ds-search\"><input placeholder=\"Поиск по базе\"></label>",
+      "css": ".ds-search{display:flex;align-items:center;height:36px;width:320px;padding:0 12px;border-radius:999px;background:oklch(95.6% 0.005 265)}.ds-search:focus-within{outline:2px solid oklch(56% 0.19 255);background:#fff}.ds-search input{all:unset;flex:1;font:0.875rem system-ui,sans-serif;color:oklch(22% 0.012 265)}"
+    },
+    {
+      "name": "Пилюля вида",
+      "kind": "chip",
+      "refersTo": "pill",
+      "description": "Вид записи с точкой семьи.",
+      "html": "<span class=\"ds-pill\">Параметр</span>",
+      "css": ".ds-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;background:oklch(95% 0.03 255);font:500 0.875rem system-ui,sans-serif}.ds-pill::before{content:'';width:7px;height:7px;border-radius:50%;background:#2a78d6}"
+    },
+    {
+      "name": "Строка папки",
+      "kind": "nav",
+      "refersTo": "folder-row-current",
+      "description": "Текущая папка.",
+      "html": "<a class=\"ds-folder\" href=\"#\">Метеоплощадка <span>14</span></a>",
+      "css": ".ds-folder{display:flex;justify-content:space-between;width:220px;padding:8px 12px;border-radius:8px;background:oklch(94% 0.035 255);color:oklch(22% 0.012 265);text-decoration:none;font:500 0.875rem system-ui,sans-serif}.ds-folder span{color:oklch(52% 0.012 265);font-size:.8125rem;font-variant-numeric:tabular-nums}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Тихий список под ночным небом",
+    "keyCharacteristics": [
+      "Холодная нейтраль на оттенке 265°, светлая и тёмная темы равноправны.",
+      "Одно действие на экране — тёмная «нажимная» кнопка (press); остальное — текстовые и контурные.",
+      "Небо — единственная тёмная выразительная поверхность; в нём живут цвета семей.",
+      "Маркер цитаты и подсветка выбора — тёплый жёлтый и холодный голубой, больше акцентов нет.",
+      "Системный шрифт, без загрузки веб-шрифтов; моноширинный только для кода и идентификаторов."
+    ],
+    "rules": [
+      {
+        "name": "Правило одного голоса",
+        "section": "colors",
+        "body": "На экране одна заполненная тёмная кнопка — главное действие. Вторая заполненная кнопка — ошибка."
+      },
+      {
+        "name": "Правило семьи в точке",
+        "section": "colors",
+        "body": "Цвет семьи живёт в точке, звезде и подложке пилюли. Заголовки, фон страниц и кнопки семьями не красятся."
+      },
+      {
+        "name": "Правило табличных цифр",
+        "section": "typography",
+        "body": "Любое число, которое сравнивают со стоящими рядом, набирается tabular-nums."
+      },
+      {
+        "name": "Правило плоского покоя",
+        "section": "elevation",
+        "body": "В покое поверхности плоские; тень получает только то, что лежит поверх страницы."
+      }
+    ]
+  }
+}
