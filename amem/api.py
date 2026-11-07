@@ -711,8 +711,14 @@ def folder_rename(conn: psycopg.Connection, path, new_path, *, agent: str) -> di
 
 def record_folder(conn: psycopg.Connection, ref, folder, *, agent: str) -> dict:
     """RecordSummary записи после переноса в папку folder (None — без папки); ревизии перенос не создаёт.
-    Переносить вправе и модель: это порядок одной базы (спецификация 4, разд. 1.1)."""
-    moved = folders.move(conn, _ref(ref), _str(folder, "folder"), agent=agent)
+    Переносить вправе и модель: это порядок одной базы (спецификация 4, разд. 1.1), — но только в уже
+    существующую папку: новые папки (move добавляет путь и родителей в реестр) создаёт человек."""
+    ref, folder = _ref(ref), _str(folder, "folder")
+    if folder is not None and not (isinstance(agent, str) and agent.startswith("person:")) \
+            and not folders.exists(conn, folder):
+        raise folders.FolderError(f"папки {folders.check(folder)!r} нет: модель переносит записи только в "
+                                  f"существующие папки, новую создаёт человек", code="not_found")
+    moved = folders.move(conn, ref, folder, agent=agent)
     return _summaries(conn, [lookup.summary(conn, moved["ref"])])[0]
 
 
@@ -794,6 +800,13 @@ def _number(value, name: str, *, low: float, high: float) -> float | None:
     return float(value)
 
 
+def _note(note) -> str | None:
+    """Пояснение решения или пункта: скрытое в <private> вырезается (в ответе предупреждений нет — так и в
+    контракте); пустое — None."""
+    note = _str(note, "note")
+    return (private.strip(note) or None) if note is not None else None
+
+
 def review_resolve(conn: psycopg.Connection, item_id, *, agent: str, outcome, note=None, confidence=None) -> dict:
     """Решить пункт: verification_id, статус записи после решения и id новых пунктов (queued). Права — библиотека:
     человек решает всё (confirmed, refuted), модель — только semantic, не свой пакет и с уверенностью confidence."""
@@ -802,7 +815,7 @@ def review_resolve(conn: psycopg.Connection, item_id, *, agent: str, outcome, no
         raise BadRequest(f"outcome: нужен исход — {', '.join(OUTCOMES)}")
     result = review.resolve(conn, iid, _enum(outcome, "outcome", OUTCOMES), agent=agent,
                             confidence=_number(confidence, "confidence", low=0, high=1),
-                            note=_str(note, "note") or None)
+                            note=_note(note))
     return {"verification_id": str(result["verification_id"]), "status": result["status"],
             "queued": [str(q["id"]) for q in result["queued"]]}
 
@@ -812,7 +825,7 @@ def review_enqueue(conn: psycopg.Connection, *, agent: str, ref, reason, note=No
     if reason in (None, ""):
         raise BadRequest(f"reason: нужна причина — {', '.join(review.MANUAL_REASONS)}")
     item_id = review.enqueue(conn, _ref(ref), _enum(reason, "reason", review.MANUAL_REASONS), agent=agent,
-                             note=_str(note, "note") or None)
+                             note=_note(note))
     return {"item_id": str(item_id)}
 
 
@@ -832,7 +845,7 @@ PRIVATE_REMOVED = "private_removed"
 
 def _scrub(value, where: str, removed: list[str], *, strip: bool, path: str = "", depth: int = 0):
     """Копия значения JSON: строки — после private.strip (strip), путь изменённой — в removed; NUL в строке или
-    ключе и вложенность глубже BODY_DEPTH — BadRequest (до проверки и базы)."""
+    ключе, метка <private> в ключе и вложенность глубже BODY_DEPTH — BadRequest (до проверки и базы)."""
     if depth > BODY_DEPTH:
         raise BadRequest(f"{where}: вложенность глубже {BODY_DEPTH} уровней")
     place = f"{where}.{path}" if path else where
@@ -848,6 +861,9 @@ def _scrub(value, where: str, removed: list[str], *, strip: bool, path: str = ""
         for key, item in value.items():
             if "\x00" in key:
                 raise BadRequest(f"{place}: знак NUL (\\x00) в имени поля не допускается")
+            if private.marked(key):              # сам ключ в ответ не попадает: в нём и есть скрытое
+                raise BadRequest(f"{place}: имя поля с меткой <private> не допускается — скрытое в имени поля "
+                                 f"не вырезать; уберите метку из имени")
             out[key] = _scrub(item, where, removed, strip=strip, path=f"{path}.{key}" if path else key,
                               depth=depth + 1)
         return out
@@ -938,4 +954,17 @@ def submit(conn: psycopg.Connection, store: ObjectStore, docs: Path | None, *, a
                "ref": f"{records.PREFIX[targets[q['record_id']]]}:{q['record_id']}",
                "record_id": str(q["record_id"])} for q in result.queued]
     return {"changeset_id": str(result.changeset_id), "complete": result.complete, "records": written,
-            "queued": queued, "report": result.report, "warnings": warnings}
+            "queued": queued, "report": _report(result.report), "warnings": warnings}
+
+
+def _report(report: dict) -> dict:
+    """Отчёт amem.check/1 для ответа: метки items[i] в where замечаний и в label записей — proposals[i], как в
+    records, queued и 422 (в changeset.check_report отчёт остаётся как записан)."""
+    def where(text: str) -> str:
+        head, sep, rest = text.partition(": ")
+        return _proposal_label(head) + sep + rest
+    out = dict(report)
+    out["issues"] = [{**issue, "where": where(issue["where"])} for issue in report.get("issues", [])]
+    if "records" in report:
+        out["records"] = [{**rec, "label": _proposal_label(rec["label"])} for rec in report["records"]]
+    return out

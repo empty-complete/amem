@@ -144,6 +144,11 @@ def _registered(conn: psycopg.Connection, path: str) -> bool:
     return conn.execute("SELECT EXISTS (SELECT 1 FROM folder WHERE path = %s)", (path,)).fetchone()[0]
 
 
+def exists(conn: psycopg.Connection, path: str) -> bool:
+    """Видна ли папка в дереве (реестр или записи в ней); path — через check (неверный — FolderError invalid)."""
+    return _known(conn, check(path))
+
+
 def _known(conn: psycopg.Connection, path: str) -> bool:
     """Папка видна в дереве: она в реестре, или в ней (во вложенных) лежат записи."""
     return _registered(conn, path) or _has_content(conn, path)
