@@ -35,12 +35,19 @@ export const handlersE = [
     return HttpResponse.json({ ...v, item, record });
   }),
   http.post("/api/v1/review/items/:id/resolve", async ({ params, request }) => {
-    const { outcome, note } = (await request.json()) as { outcome: "confirmed" | "refuted" | "uncertain"; note?: string };
+    const { outcome, note } = (await request.json()) as {
+      outcome: "confirmed" | "refuted" | "uncertain";
+      note?: string;
+    };
     const it = db.reviewItems.find((i) => i.id === params.id);
     if (!it) return problem(404, "Пункта нет");
     if (it.state === "done" || it.state === "obsolete") {
       const d = db.decisions.find((x) => x.id === it.id);
-      return problem(409, "Уже решено", `${(d?.by ?? it.author ?? "кто-то").replace(/^person:/, "")}, ${ago(d?.at ?? it.closed_at ?? it.created_at)}`);
+      return problem(
+        409,
+        "Уже решено",
+        `${(d?.by ?? it.author ?? "кто-то").replace(/^person:/, "")}, ${ago(d?.at ?? it.closed_at ?? it.created_at)}`,
+      );
     }
     const now = new Date().toISOString();
     it.state = "done";
@@ -51,11 +58,22 @@ export const handlersE = [
     const v = db.views[it.ref];
     if (v) {
       v.status = status as never;
-      v.review_state = (outcome === "confirmed" ? "accepted" : outcome === "refuted" ? "declined" : "pending") as never;
+      v.review_state = (
+        outcome === "confirmed" ? "accepted" : outcome === "refuted" ? "declined" : "pending"
+      ) as never;
       v.open_items = v.open_items.filter((o) => o.id !== it.id);
     }
     db.decisions.push({ id: it.id, outcome, by: session.agent, at: now });
-    db.events.push({ type: "review", id: `rv-${it.id}`, at: now, ref: it.ref, label: it.label, agent: session.agent, review_state: v?.review_state ?? "accepted", ...(note ? { note } : {}) } as never);
+    db.events.push({
+      type: "review",
+      id: `rv-${it.id}`,
+      at: now,
+      ref: it.ref,
+      label: it.label,
+      agent: session.agent,
+      review_state: v?.review_state ?? "accepted",
+      ...(note ? { note } : {}),
+    } as never);
     db.save();
     return HttpResponse.json({ verification_id: crypto.randomUUID(), status, queued: [] });
   }),
@@ -67,16 +85,22 @@ export const handlersE = [
       b[i.state === "claimed" ? "claimed" : "open"] += 1;
     }
     const done = db.reviewItems.filter((i) => i.state === "done" && i.closed_at);
-    const mins = done.map((i) => (Date.parse(i.closed_at as string) - Date.parse(i.created_at)) / 60000).sort((a, b) => a - b);
+    const mins = done
+      .map((i) => (Date.parse(i.closed_at as string) - Date.parse(i.created_at)) / 60000)
+      .sort((a, b) => a - b);
     const records: Record<string, number> = {};
     for (const r of db.records) records[r.status] = (records[r.status] ?? 0) + 1;
     const verdicts: Record<string, number> = {};
-    for (const o of Object.values(objectsFx)) for (const c of o.cited_by) verdicts[c.verdict ?? "none"] = (verdicts[c.verdict ?? "none"] ?? 0) + 1;
+    for (const o of Object.values(objectsFx))
+      for (const c of o.cited_by) verdicts[c.verdict ?? "none"] = (verdicts[c.verdict ?? "none"] ?? 0) + 1;
     return HttpResponse.json({
       now: new Date().toISOString(),
       days,
       queue: { open: open().length, by_reason: byReason },
-      done: { count: done.length, median_minutes: mins.length ? Math.round(mins[Math.floor(mins.length / 2)] as number) : null },
+      done: {
+        count: done.length,
+        median_minutes: mins.length ? Math.round(mins[Math.floor(mins.length / 2)] as number) : null,
+      },
       records,
       verdicts,
       changesets: db.events.length,
@@ -86,7 +110,12 @@ export const handlersE = [
   http.get("/api/v1/base", () =>
     HttpResponse.json({
       ...baseFx,
-      packs: [...baseFx.packs, ...(db.templates.some((t) => t.pack === "mine") ? [{ name: "mine", version: "1", digest: "sha256-c1:mine" }] : [])],
+      packs: [
+        ...baseFx.packs,
+        ...(db.templates.some((t) => t.pack === "mine")
+          ? [{ name: "mine", version: "1", digest: "sha256-c1:mine" }]
+          : []),
+      ],
       review_open: open().length,
     }),
   ),

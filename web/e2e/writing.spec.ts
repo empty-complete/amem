@@ -136,7 +136,7 @@ test("перенос в папку из меню записи — с окном 
   await page.getByRole("menuitem", { name: "Переместить в папку" }).click();
   await page.getByRole("radio", { name: "Архив" }).check({ force: true });
   await page.getByRole("dialog").getByRole("button", { name: "Переместить в папку" }).click();
-  await expect(page.getByText("Записано: перенесено в «Архив»")).toBeVisible();
+  await expect(page.getByText("Перенесено в «Архив»")).toBeVisible();
   await page.waitForTimeout(WINDOW);
   await page.goto(`./records?folder=${encodeURIComponent("Архив")}`);
   await expect(page.getByRole("link", { name: /Проверить крепление мачты/ })).toBeVisible();

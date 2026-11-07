@@ -10,7 +10,7 @@ export function UndoToasts() {
     <div className="undo-stack" role="status" aria-live="polite">
       {pending.map((p) => (
         <div key={p.id} className="undo">
-          <span>{t("write.saved", { what: p.what })}</span>
+          <span>{p.toast ?? t("write.saved", { what: p.what })}</span>
           <button type="button" onClick={() => undo(p.id)}>
             {t("write.undo")}
           </button>
