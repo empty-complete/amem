@@ -1,0 +1,325 @@
+{
+ "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+ "nodes": [
+  {
+   "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+   "label": "Датчик влажности В-2",
+   "kind_or_class": "artifact",
+   "family": "object",
+   "status": "verified",
+   "pending": false,
+   "degree": 7,
+   "depth": 0
+  },
+  {
+   "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000014",
+   "label": "Точка росы",
+   "kind_or_class": "term",
+   "family": "source",
+   "status": "verified",
+   "pending": false,
+   "degree": 2,
+   "depth": 1
+  },
+  {
+   "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001f",
+   "label": "Иней на корпусе искажает показания",
+   "kind_or_class": "lesson",
+   "family": "work",
+   "status": "needs_review",
+   "pending": true,
+   "degree": 1,
+   "depth": 1
+  },
+  {
+   "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000016",
+   "label": "В-2 завышает влажность при обмерзании",
+   "kind_or_class": "lesson",
+   "family": "work",
+   "status": "verified",
+   "pending": false,
+   "degree": 2,
+   "depth": 1
+  },
+  {
+   "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000018",
+   "label": "Нужен ли обогрев В-2 зимой?",
+   "kind_or_class": "question",
+   "family": "work",
+   "status": "draft",
+   "pending": false,
+   "degree": 2,
+   "depth": 1
+  },
+  {
+   "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+   "label": "Метеостанция МС-1",
+   "kind_or_class": "artifact",
+   "family": "object",
+   "status": "verified",
+   "pending": false,
+   "degree": 12,
+   "depth": 1
+  },
+  {
+   "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001d",
+   "label": "Диапазон влажности В-2: 0…100 %",
+   "kind_or_class": "parameter",
+   "family": "source",
+   "status": "verified",
+   "pending": false,
+   "degree": 1,
+   "depth": 1
+  },
+  {
+   "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+   "label": "Погрешность влажности В-2: ±2 %",
+   "kind_or_class": "parameter",
+   "family": "source",
+   "status": "needs_review",
+   "pending": true,
+   "degree": 4,
+   "depth": 1
+  },
+  {
+   "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000006",
+   "label": "Руководство МС-1",
+   "kind_or_class": "document",
+   "family": "object",
+   "status": "verified",
+   "pending": false,
+   "degree": 1,
+   "depth": 2
+  },
+  {
+   "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000002",
+   "label": "Датчик температуры Т-1",
+   "kind_or_class": "artifact",
+   "family": "object",
+   "status": "verified",
+   "pending": false,
+   "degree": 7,
+   "depth": 2
+  },
+  {
+   "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000010",
+   "label": "Степень защиты МС-1: IP65",
+   "kind_or_class": "parameter",
+   "family": "source",
+   "status": "verified",
+   "pending": false,
+   "degree": 1,
+   "depth": 2
+  },
+  {
+   "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001c",
+   "label": "Корпус МС-1 из алюминия",
+   "kind_or_class": "fact",
+   "family": "source",
+   "status": "verified",
+   "pending": false,
+   "degree": 1,
+   "depth": 2
+  },
+  {
+   "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000008",
+   "label": "Метеоплощадка",
+   "kind_or_class": "project",
+   "family": "object",
+   "status": "verified",
+   "pending": false,
+   "degree": 3,
+   "depth": 2
+  },
+  {
+   "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001a",
+   "label": "Ток потребления МС-1: 0,4 А",
+   "kind_or_class": "parameter",
+   "family": "source",
+   "status": "needs_review",
+   "pending": true,
+   "degree": 1,
+   "depth": 2
+  },
+  {
+   "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000005",
+   "label": "Мачта М-2",
+   "kind_or_class": "artifact",
+   "family": "object",
+   "status": "verified",
+   "pending": false,
+   "degree": 4,
+   "depth": 2
+  },
+  {
+   "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000f",
+   "label": "Напряжение питания МС-1: 12 В",
+   "kind_or_class": "parameter",
+   "family": "source",
+   "status": "auto_verified",
+   "pending": false,
+   "degree": 1,
+   "depth": 2
+  },
+  {
+   "ref": "atm:0193b7c2-5e1a-7d40-9f2e-000000000019",
+   "label": "Данные МС-1 передаются по RS-485",
+   "kind_or_class": "fact",
+   "family": "source",
+   "status": "auto_verified",
+   "pending": false,
+   "degree": 1,
+   "depth": 2
+  },
+  {
+   "ref": "ent:0193b7c2-5e1a-7d40-9f2e-000000000004",
+   "label": "Датчик давления Д-3",
+   "kind_or_class": "artifact",
+   "family": "object",
+   "status": "verified",
+   "pending": false,
+   "degree": 2,
+   "depth": 2
+  },
+  {
+   "ref": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000e",
+   "label": "Интервал опроса: 60 с",
+   "kind_or_class": "parameter",
+   "family": "source",
+   "status": "verified",
+   "pending": false,
+   "degree": 1,
+   "depth": 2
+  }
+ ],
+ "edges": [
+  {
+   "src": "ent:0193b7c2-5e1a-7d40-9f2e-000000000002",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+   "rel": "part_of",
+   "confidence": null
+  },
+  {
+   "src": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+   "rel": "part_of",
+   "confidence": null
+  },
+  {
+   "src": "ent:0193b7c2-5e1a-7d40-9f2e-000000000004",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+   "rel": "part_of",
+   "confidence": null
+  },
+  {
+   "src": "ent:0193b7c2-5e1a-7d40-9f2e-000000000005",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+   "rel": "part_of",
+   "confidence": null
+  },
+  {
+   "src": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000008",
+   "rel": "part_of",
+   "confidence": null
+  },
+  {
+   "src": "ent:0193b7c2-5e1a-7d40-9f2e-000000000006",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+   "rel": "about",
+   "confidence": null
+  },
+  {
+   "src": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+   "rel": "about",
+   "confidence": null
+  },
+  {
+   "src": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000e",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+   "rel": "about",
+   "confidence": null
+  },
+  {
+   "src": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000f",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+   "rel": "about",
+   "confidence": null
+  },
+  {
+   "src": "atm:0193b7c2-5e1a-7d40-9f2e-000000000010",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+   "rel": "about",
+   "confidence": null
+  },
+  {
+   "src": "atm:0193b7c2-5e1a-7d40-9f2e-000000000014",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+   "rel": "about",
+   "confidence": null
+  },
+  {
+   "src": "atm:0193b7c2-5e1a-7d40-9f2e-000000000016",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+   "rel": "about",
+   "confidence": null
+  },
+  {
+   "src": "atm:0193b7c2-5e1a-7d40-9f2e-000000000018",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+   "rel": "about",
+   "confidence": null
+  },
+  {
+   "src": "atm:0193b7c2-5e1a-7d40-9f2e-000000000019",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+   "rel": "about",
+   "confidence": null
+  },
+  {
+   "src": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001a",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+   "rel": "about",
+   "confidence": null
+  },
+  {
+   "src": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001c",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000001",
+   "rel": "about",
+   "confidence": null
+  },
+  {
+   "src": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001d",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+   "rel": "about",
+   "confidence": null
+  },
+  {
+   "src": "atm:0193b7c2-5e1a-7d40-9f2e-00000000001f",
+   "dst": "ent:0193b7c2-5e1a-7d40-9f2e-000000000003",
+   "rel": "about",
+   "confidence": null
+  },
+  {
+   "src": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+   "dst": "atm:0193b7c2-5e1a-7d40-9f2e-000000000018",
+   "rel": "see_also",
+   "confidence": null
+  },
+  {
+   "src": "atm:0193b7c2-5e1a-7d40-9f2e-000000000016",
+   "dst": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+   "rel": "see_also",
+   "confidence": null
+  },
+  {
+   "src": "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b",
+   "dst": "atm:0193b7c2-5e1a-7d40-9f2e-000000000014",
+   "rel": "related",
+   "confidence": null
+  }
+ ],
+ "truncated": false,
+ "total": 19
+}
