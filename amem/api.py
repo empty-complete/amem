@@ -25,8 +25,9 @@ from pathlib import Path
 import psycopg
 from psycopg.rows import dict_row
 
-from . import __version__, backup, db, folders, lookup, objects, private, profile, recipes, records, review, \
-    usefulness, vocab
+from . import __version__, backup, check, db, folders, lookup, objects, private, profile, recipes, records, \
+    review, usefulness, vocab
+from .check import level1
 from .model_v1 import Status
 from .ocfl_store import ObjectStore, StoreError
 
@@ -46,6 +47,21 @@ _INT = re.compile(r"[+-]?[0-9]+")
 
 class BadRequest(ValueError):
     """Параметр операции вне контракта: предел, перечисление, формат. У службы — 400 bad_request."""
+
+
+class Forbidden(Exception):
+    """Действие не по праву агента: структуру папок (создать, удалить, переименовать) меняет только человек.
+    У службы — 403 forbidden."""
+
+
+class CheckRejected(ValueError):
+    """Пакет submit отклонён автопроверкой (Submitted.state == "rejected"): записей нет, отказ записан в changeset.
+    issues — замечания в форме CheckIssue (ref и path), warnings — предупреждения службы (private_removed).
+    У службы — 422 check_rejected; CLI — код 5."""
+
+    def __init__(self, message: str, *, changeset_id: str, issues: list[dict], warnings: list[dict]):
+        super().__init__(message)
+        self.changeset_id, self.issues, self.warnings = changeset_id, issues, warnings
 
 
 class StoreUnavailable(RuntimeError):
@@ -302,10 +318,14 @@ def record_list(conn: psycopg.Connection, *, folder=None, kind=None, status=None
                                tag=tag or None, about=about or None,
                                limit=_int(limit, "limit", low=1, high=lookup.LIST_LIMIT, default=50),
                                cursor=cursor or None)
-    labels = _labels(conn, [ref for item in page["items"] for ref in item["about"]])
-    items = [{**item, "about": [labels[ref] for ref in item["about"] if isinstance(ref, str)]}
-             for item in page["items"]]
-    return {"items": items, "next_cursor": page["next_cursor"], "total": page["total"]}
+    return {"items": _summaries(conn, page["items"]), "next_cursor": page["next_cursor"], "total": page["total"]}
+
+
+def _summaries(conn: psycopg.Connection, items: list[dict]) -> list[dict]:
+    """RecordSummary из сводок lookup: about — RefLabel одним запросом; запись без русской подписи — своей ссылкой."""
+    labels = _labels(conn, [ref for item in items for ref in item["about"]])
+    return [{**item, "label": item["label"] or item["ref"],
+             "about": [labels[ref] for ref in item["about"] if isinstance(ref, str)]} for item in items]
 
 
 # --- запись ---
@@ -631,3 +651,273 @@ def backup_list(backup_dir: Path) -> list[dict]:
     """Backup[]: готовые копии по времени — имя, время, размер; пути на диске наружу не отдаются."""
     return [{"name": b["name"], "created_at": b["created_at"], "size": b["size"]}
             for b in backup.backups(Path(backup_dir))]
+
+
+# --- запись: кто вправе ---
+
+def _person_only(agent: str, what: str) -> None:
+    """Структуру папок меняет человек; модель раскладывает записи (перенос записи — порядок, а не утверждение)."""
+    if not isinstance(agent, str) or not agent.startswith("person:"):
+        raise Forbidden(f"{what} только человек (person:), а не {agent}: модель переносит записи по папкам "
+                        f"(PATCH /records/{{ref}}/folder, amem_move)")
+
+
+# --- папки ---
+
+def _folder_path(value, name: str) -> str:
+    """Путь папки из тела или пути запроса: строка без NUL; правила пути проверяет folders.check (422)."""
+    if value is None:
+        raise BadRequest(f"{name}: нужен путь папки")
+    return _str(value, name)
+
+
+def folder_create(conn: psycopg.Connection, path, *, agent: str) -> dict:
+    """Folder: новая пустая папка в реестре (с родителями); уже есть — FolderError exists (409)."""
+    _person_only(agent, "папки создаёт")
+    made = folders.create(conn, _folder_path(path, "path"), agent=agent)
+    return {"path": made["path"], "name": made["name"], "count": 0, "children": []}
+
+
+def folder_delete(conn: psycopg.Connection, path, *, agent: str) -> None:
+    """Удалить пустую папку; с записями или вложенными — FolderError not_empty (409), нет такой — not_found (404)."""
+    _person_only(agent, "папки удаляет")
+    folders.delete(conn, _folder_path(path, "path"))
+
+
+def folder_rename(conn: psycopg.Connection, path, new_path, *, agent: str) -> dict:
+    """FolderRenamed: папка с вложенными и записями — на новый путь; занятый путь — FolderError exists (409)."""
+    _person_only(agent, "папки переименовывает")
+    return folders.rename(conn, _folder_path(path, "path"), _folder_path(new_path, "path (новый путь)"),
+                          agent=agent)
+
+
+def record_folder(conn: psycopg.Connection, ref, folder, *, agent: str) -> dict:
+    """RecordSummary записи после переноса в папку folder (None — без папки); ревизии перенос не создаёт.
+    Переносить вправе и модель: это порядок одной базы (спецификация 4, разд. 1.1)."""
+    moved = folders.move(conn, _ref(ref), _str(folder, "folder"), agent=agent)
+    return _summaries(conn, [lookup.summary(conn, moved["ref"])])[0]
+
+
+# --- очередь проверки ---
+
+REVIEW_LIMIT = 500                  # пунктов в ответе списка, не больше
+STATS_DAYS = 36500                  # окно метрик, дней: дальше начало окна уходит за пределы дат
+OUTCOMES = tuple(sorted(review.HUMAN_OUTCOMES | review.MODEL_OUTCOMES))
+COMPARED = ("edit", "imported")     # у пункта этих причин — текущая и предложенная ревизии
+
+
+def _item_id(value) -> uuid.UUID:
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(_str(value, "id") or "")
+    except ValueError:
+        raise BadRequest(f"id {value!r}: нужен UUID пункта очереди") from None
+
+
+def review_items(conn: psycopg.Connection, *, state=None, reason=None, record=None, limit=None) -> list[dict]:
+    """ReviewItem[] по времени постановки: фильтры state, reason и record (atm:/ent: с UUID или ключом, UUID)."""
+    record = _str(record, "record") or None
+    if record is not None and not _REF.fullmatch(record):
+        try:
+            uuid.UUID(record)
+        except ValueError:
+            raise BadRequest(f"record {record!r}: нужна ссылка atm:/ent: (UUID или ключ) или UUID записи") from None
+    rows = review.items(conn, state=_enum(state, "state", review.STATES),
+                        reason=_enum(reason, "reason", review.REASONS), record=record,
+                        limit=_int(limit, "limit", low=1, high=REVIEW_LIMIT, default=100))
+    labels = _labels(conn, [row["ref"] for row in rows])
+    return [_review_item(row, labels) for row in rows]
+
+
+def _revision(conn: psycopg.Connection, target: str, revision_id) -> dict:
+    with conn.cursor(row_factory=dict_row) as cur:
+        row = cur.execute(f"SELECT r.n, r.payload, r.review_state, r.recorded_at, cs.agent FROM {target}_revision r "
+                          f"JOIN changeset cs ON cs.id = r.changeset_id WHERE r.id = %s", (revision_id,)).fetchone()
+    return {"revision": row["n"], "payload": row["payload"], "review_state": row["review_state"],
+            "recorded_at": row["recorded_at"].isoformat(), "agent": row["agent"]}
+
+
+def review_item(conn: psycopg.Connection, item_id) -> dict:
+    """ReviewItemView: пункт, его запись (RecordView) и что сравнивать. У edit и imported — current (текущая ревизия
+    записи, null — текущей нет) и proposed (ревизия пункта, с changes — отличиями от текущей, пути RFC 6901);
+    у source_changed — versions: объекты с прежними версиями (from) и новой (to)."""
+    row = review.item(conn, _item_id(item_id))
+    t = row["target"]
+    view = {"item": _review_item(row, _labels(conn, [row["ref"]])), "record": record(conn, row["ref"]),
+            "current": None, "proposed": None, "versions": None}
+    if row["reason"] in COMPARED:
+        current = conn.execute(f"SELECT id FROM {t}_current WHERE {t}_id = %s", (row["record_id"],)).fetchone()
+        view["current"] = _revision(conn, t, current[0]) if current else None
+        view["proposed"] = _revision(conn, t, row["revision_id"])
+        if view["current"] is not None:
+            view["proposed"]["changes"] = recipes.diff(view["current"]["payload"], view["proposed"]["payload"])
+    elif row["reason"] == "source_changed":
+        changed = [o for o in (row["details"] or {}).get("objects", []) if isinstance(o, dict)]
+        ids = [str(o["object"]).removeprefix("obj:") for o in changed if o.get("object")]
+        names = dict(conn.execute("SELECT id::text, coalesce(original_name, url) FROM object "
+                                  "WHERE id = ANY(%s::uuid[])", (ids,)).fetchall()) if ids else {}
+        objects_ = []
+        for o in changed:
+            object_id = str(o.get("object", "")).removeprefix("obj:")
+            entry = {"object": object_id}
+            if names.get(object_id):
+                entry["object_name"] = names[object_id]
+            objects_.append({**entry, "from": o.get("from", []), "to": o.get("to")})
+        view["versions"] = {"objects": objects_}
+    return view
+
+
+def _number(value, name: str, *, low: float, high: float) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= value <= high:
+        raise BadRequest(f"{name} {value!r}: нужно число от {low:g} до {high:g}")
+    return float(value)
+
+
+def review_resolve(conn: psycopg.Connection, item_id, *, agent: str, outcome, note=None, confidence=None) -> dict:
+    """Решить пункт: verification_id, статус записи после решения и id новых пунктов (queued). Права — библиотека:
+    человек решает всё (confirmed, refuted), модель — только semantic, не свой пакет и с уверенностью confidence."""
+    iid = _item_id(item_id)
+    if outcome in (None, ""):
+        raise BadRequest(f"outcome: нужен исход — {', '.join(OUTCOMES)}")
+    result = review.resolve(conn, iid, _enum(outcome, "outcome", OUTCOMES), agent=agent,
+                            confidence=_number(confidence, "confidence", low=0, high=1),
+                            note=_str(note, "note") or None)
+    return {"verification_id": str(result["verification_id"]), "status": result["status"],
+            "queued": [str(q["id"]) for q in result["queued"]]}
+
+
+def review_enqueue(conn: psycopg.Connection, *, agent: str, ref, reason, note=None) -> dict:
+    """Поставить пункт audit или calibration на текущую ревизию записи (только человек); {item_id}."""
+    if reason in (None, ""):
+        raise BadRequest(f"reason: нужна причина — {', '.join(review.MANUAL_REASONS)}")
+    item_id = review.enqueue(conn, _ref(ref), _enum(reason, "reason", review.MANUAL_REASONS), agent=agent,
+                             note=_str(note, "note") or None)
+    return {"item_id": str(item_id)}
+
+
+def review_stats(conn: psycopg.Connection, *, days=None) -> dict:
+    """ReviewStats: review.stats за days дней; итоги сверки источников — verdicts (sources библиотеки)."""
+    stats = review.stats(conn, days=_int(days, "days", low=1, high=STATS_DAYS, default=7))
+    return {"now": stats["now"], "days": stats["days"], "queue": stats["queue"], "done": stats["done"],
+            "changesets": stats["changesets"], "records": stats["records"], "verdicts": stats["sources"],
+            "audit": stats["audit"]}
+
+
+# --- submit ---
+
+BODY_DEPTH = 64                     # вложенность тела записи, не больше: тело атома — единицы уровней
+PRIVATE_REMOVED = "private_removed"
+
+
+def _scrub(value, where: str, removed: list[str], *, strip: bool, path: str = "", depth: int = 0):
+    """Копия значения JSON: строки — после private.strip (strip), путь изменённой — в removed; NUL в строке или
+    ключе и вложенность глубже BODY_DEPTH — BadRequest (до проверки и базы)."""
+    if depth > BODY_DEPTH:
+        raise BadRequest(f"{where}: вложенность глубже {BODY_DEPTH} уровней")
+    place = f"{where}.{path}" if path else where
+    if isinstance(value, str):
+        out = private.strip(value) if strip else value
+        if out != value:
+            removed.append(path)
+        if "\x00" in out:
+            raise BadRequest(f"{place}: знак NUL (\\x00) в строке не допускается")
+        return out
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            if "\x00" in key:
+                raise BadRequest(f"{place}: знак NUL (\\x00) в имени поля не допускается")
+            out[key] = _scrub(item, where, removed, strip=strip, path=f"{path}.{key}" if path else key,
+                              depth=depth + 1)
+        return out
+    if isinstance(value, list):
+        return [_scrub(item, where, removed, strip=strip, path=f"{path}[{i}]", depth=depth + 1)
+                for i, item in enumerate(value)]
+    return value
+
+
+def _private_removed(ref: str, paths: list[str]) -> list[dict]:
+    return [{"code": PRIVATE_REMOVED, "severity": "warning", "ref": ref, "path": path,
+             "message": "Скрытое в <private>…</private> вырезано: в ревизию оно не попало"} for path in paths]
+
+
+def _proposal_label(label: str) -> str:
+    """Метка предложения для ответа службы: @имя как есть; items[i] проверки — proposals[i], как в теле /submit."""
+    return "proposals" + label.removeprefix("items") if re.fullmatch(r"items\[[0-9]+\]", label) else label
+
+
+def _issue(issue: dict) -> dict:
+    """CheckIssue из замечания отчёта amem.check/1: where «@a: sources[0].quote» → ref «@a» и path
+    «sources[0].quote»; у замечания о записи целиком path — пустая строка; items[i] — proposals[i]."""
+    ref, _, path = issue["where"].partition(": ")
+    return {"code": issue["code"], "severity": issue["severity"], "message": issue["message"],
+            "ref": _proposal_label(ref), "path": path}
+
+
+def submit(conn: psycopg.Connection, store: ObjectStore, docs: Path | None, *, agent: str, proposals, links=None,
+           reason=None, activity: uuid.UUID | None = None, provider=None) -> dict:
+    """Submitted: check.submit пакета от агента сессии (агент в теле не принимается — его здесь и нет).
+
+    proposals — [{target, payload, record_id?}], links — тела связей, reason — причина пакета. Строки тел и reason
+    проходят private.strip до проверки: вырезанное не попадает в ревизию, о каждом поле — предупреждение
+    private_removed в warnings (ref — @имя записи или proposals[i], links[i]; path — путь поля). Отказ проверки —
+    CheckRejected (422) с issues; ошибка провайдера эмбеддингов только ослабляет уровень 4 (degraded отчёта)."""
+    if not isinstance(proposals, list) or not proposals:
+        raise BadRequest("proposals: нужен непустой список предложений [{target, payload, record_id?}]")
+    links = [] if links is None else links
+    if not isinstance(links, list):
+        raise BadRequest("links: нужен список тел связей")
+    warnings: list[dict] = []
+    names: set[str] = set()
+    items = []
+    for i, proposal in enumerate(proposals):
+        where = f"proposals[{i}]"
+        if not isinstance(proposal, dict):
+            raise BadRequest(f"{where}: нужен объект {{target, payload, record_id?}}")
+        payload, target = proposal.get("payload"), _str(proposal.get("target"), f"{where}.target")
+        ref = payload.get("ref") if isinstance(payload, dict) else None
+        named = isinstance(ref, str) and level1.NAME.fullmatch(ref) is not None
+        label = ref if named and ref not in names else f"proposals[{i}]"   # @имя — по правилу уровня 1 проверки
+        if named and target in TARGETS:
+            names.add(ref)
+        removed: list[str] = []
+        payload = _scrub(payload, f"{where}.payload", removed, strip=True)
+        warnings += _private_removed(label, removed)
+        record_id = _scrub(proposal.get("record_id"), f"{where}.record_id", [], strip=False)
+        items.append(check.Proposal(target=target, payload=payload, record_id=record_id))
+    bodies = []
+    for i, link in enumerate(links):
+        removed = []
+        bodies.append(_scrub(link, f"links[{i}]", removed, strip=True))
+        warnings += _private_removed(f"links[{i}]", removed)
+    if _str(reason, "reason") is not None:
+        cleaned = private.strip(reason)
+        if cleaned != reason:
+            warnings += _private_removed("", ["reason"])
+        reason = cleaned or None
+    result = check.submit(conn, store, docs, items, bodies, agent=agent, activity=activity, reason=reason,
+                          provider=provider, on_semantic_error="skip")
+    if result.state == "rejected":
+        issues = [_issue(issue) for issue in result.report["issues"]]
+        errors = [issue for issue in issues if issue["severity"] == "violation"]
+        first = errors[0] if errors else None
+        message = f"пакет отклонён автопроверкой: ошибок {len(errors)}"
+        if first is not None:
+            message += f"; первая — {first['ref']}{': ' + first['path'] if first['path'] else ''}: {first['message']}"
+        raise CheckRejected(message, changeset_id=str(result.changeset_id), issues=issues, warnings=warnings)
+    written = []
+    targets = {}
+    for rec in result.records:
+        ref = f"{records.PREFIX[rec['target']]}:{rec['record_id']}"
+        targets[rec["record_id"]] = rec["target"]
+        written.append({"label": _proposal_label(rec["label"]), "ref": ref, "target": rec["target"],
+                        "record_id": str(rec["record_id"]), "revision_id": str(rec["revision_id"]),
+                        "created": rec["created"], "status": rec["status"], "review_state": rec["review_state"]})
+    queued = [{"id": str(q["id"]), "reason": q["reason"], "label": _proposal_label(q["label"]),
+               "ref": f"{records.PREFIX[targets[q['record_id']]]}:{q['record_id']}",
+               "record_id": str(q["record_id"])} for q in result.queued]
+    return {"changeset_id": str(result.changeset_id), "complete": result.complete, "records": written,
+            "queued": queued, "report": result.report, "warnings": warnings}

@@ -10,16 +10,25 @@
 всегда X-Content-Type-Options: nosniff и Content-Security-Policy: sandbox — файл из базы не исполняется как страница
 службы.
 
+Пути записи (очередь, submit, папки) читают тело в цикле событий — потоком, с отсечкой на BODY_LIMIT (413 too_large:
+Content-Length — только быстрый отказ, ему не верят, chunked ограничен так же; <private> и проверки идут по всему
+тексту, и без предела большое тело — отказ в обслуживании), разбирают JSON (не объект, NaN, слишком глубокая
+вложенность — 400) и зовут операцию api в пуле потоков. Агент записи — только из сессии (request.state.agent): поле
+агента в теле не читается. Маршруты папок — {path:path}: Starlette сопоставляет уже раскодированный путь, и папка
+«a/b», пришедшая как a%2Fb, иначе в {path} не попала бы.
+
 Контракт служба отдаёт по /api/v1/openapi.json — копию из пакета (amem/service/http-v1.openapi.yaml).
 """
 from __future__ import annotations
 
 import functools
 import importlib.resources
+import json
 
 import yaml
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse, MalformedRangeHeader, RangeNotSatisfiable
+from starlette.responses import FileResponse, JSONResponse, MalformedRangeHeader, RangeNotSatisfiable, Response
 from starlette.routing import Route
 
 from .. import api
@@ -28,6 +37,7 @@ from .app import API, connection, provider
 
 CONTRACT = "http-v1.openapi.yaml"
 FILE_HEADERS = {"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox"}
+BODY_LIMIT = 1 << 20          # байт JSON-тела записи: пакет submit — сотни атомов; больше — 413 too_large
 
 
 class FileCopy(FileResponse):
@@ -162,6 +172,118 @@ def get_backups(request: Request) -> JSONResponse:
     return JSONResponse(api.backup_list(request.app.state.settings.backups))
 
 
+# --- запись: тело и вызов операции ---
+
+def _too_large() -> problems.Problem:
+    return problems.Problem(413, "too_large", f"тело запроса больше {BODY_LIMIT // 1024} КиБ: разбейте пакет на части")
+
+
+def _constant(name: str):
+    raise ValueError(f"{name} — не число JSON")
+
+
+async def _body(request: Request) -> dict:
+    """JSON-объект тела записи; читается потоком до BODY_LIMIT байт, дальше — 413 (не дочитывая)."""
+    length = request.headers.get("content-length", "").strip()
+    if length.isascii() and length.isdigit() and (len(length) > 18 or int(length) > BODY_LIMIT):
+        raise _too_large()                        # быстрый отказ; сам счёт — ниже, по пришедшим байтам
+    chunks, size = [], 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > BODY_LIMIT:
+            raise _too_large()
+        chunks.append(chunk)
+    raw = b"".join(chunks)
+    if not raw.strip():
+        raise problems.Problem(400, "bad_request", "нужно тело запроса — JSON-объект")
+    try:
+        body = json.loads(raw, parse_constant=_constant)
+    except RecursionError:
+        raise problems.Problem(400, "bad_request", "тело JSON: слишком глубокая вложенность") from None
+    except ValueError as e:                       # и UnicodeDecodeError
+        raise problems.Problem(400, "bad_request", f"тело — не JSON: {e}") from None
+    if not isinstance(body, dict):
+        raise problems.Problem(400, "bad_request", f"тело — не JSON-объект, а {type(body).__name__}")
+    return body
+
+
+async def _call(request: Request, operation):
+    """operation(conn) в пуле потоков с соединением из пула службы: библиотека синхронная."""
+    def run():
+        with connection(request) as conn:
+            return operation(conn)
+    return await run_in_threadpool(run)
+
+
+# --- очередь проверки ---
+
+def list_review_items(request: Request) -> JSONResponse:
+    with connection(request) as conn:
+        return JSONResponse(api.review_items(conn, state=_q(request, "state"), reason=_q(request, "reason"),
+                                             record=_q(request, "record"), limit=_q(request, "limit")))
+
+
+def get_review_item(request: Request) -> JSONResponse:
+    with connection(request) as conn:
+        return JSONResponse(api.review_item(conn, request.path_params["id"]))
+
+
+async def resolve_review_item(request: Request) -> JSONResponse:
+    body = await _body(request)
+    return JSONResponse(await _call(request, lambda conn: api.review_resolve(
+        conn, request.path_params["id"], agent=request.state.agent, outcome=body.get("outcome"),
+        note=body.get("note"), confidence=body.get("confidence"))))
+
+
+async def enqueue_review(request: Request) -> JSONResponse:
+    body = await _body(request)
+    return JSONResponse(await _call(request, lambda conn: api.review_enqueue(
+        conn, agent=request.state.agent, ref=body.get("ref"), reason=body.get("reason"), note=body.get("note"))))
+
+
+def get_review_stats(request: Request) -> JSONResponse:
+    with connection(request) as conn:
+        return JSONResponse(api.review_stats(conn, days=_q(request, "days")))
+
+
+# --- submit ---
+
+async def submit(request: Request) -> JSONResponse:
+    body = await _body(request)
+    state = request.app.state
+    return JSONResponse(await _call(request, lambda conn: api.submit(
+        conn, state.store, state.settings.docs, agent=request.state.agent, proposals=body.get("proposals"),
+        links=body.get("links"), reason=body.get("reason"), provider=provider(request))))
+
+
+# --- папки ---
+
+async def create_folder(request: Request) -> JSONResponse:
+    body = await _body(request)
+    made = await _call(request, lambda conn: api.folder_create(conn, body.get("path"), agent=request.state.agent))
+    return JSONResponse(made, status_code=201)
+
+
+def delete_folder(request: Request) -> Response:
+    with connection(request) as conn:
+        api.folder_delete(conn, request.path_params["path"], agent=request.state.agent)
+    return Response(status_code=204)
+
+
+async def rename_folder(request: Request) -> JSONResponse:
+    body = await _body(request)
+    return JSONResponse(await _call(request, lambda conn: api.folder_rename(
+        conn, request.path_params["path"], body.get("path"), agent=request.state.agent)))
+
+
+async def move_record(request: Request) -> JSONResponse:
+    body = await _body(request)
+    if "folder" not in body:
+        raise problems.Problem(400, "bad_request", "тело: нужно поле folder — путь папки или null (без папки)")
+    return JSONResponse(await _call(request, lambda conn: api.record_folder(
+        conn, request.path_params["ref"], body["folder"], agent=request.state.agent)))
+
+
 @functools.cache
 def contract() -> dict:
     """Контракт из пакета как JSON-объект (YAML читается один раз)."""
@@ -177,10 +299,14 @@ ROUTES = [
     Route(f"{API}/search", search, methods=["GET"]),
     Route(f"{API}/similar", similar, methods=["GET"]),
     Route(f"{API}/folders", get_folders, methods=["GET"]),
+    Route(f"{API}/folders", create_folder, methods=["POST"]),
+    Route(f"{API}/folders/{{path:path}}", delete_folder, methods=["DELETE"]),
+    Route(f"{API}/folders/{{path:path}}", rename_folder, methods=["PATCH"]),
     Route(f"{API}/records", list_records, methods=["GET"]),
     Route(f"{API}/records/{{ref}}", get_record, methods=["GET"]),
     Route(f"{API}/records/{{ref}}/history", get_history, methods=["GET"]),
     Route(f"{API}/records/{{ref}}/links", get_links, methods=["GET"]),
+    Route(f"{API}/records/{{ref}}/folder", move_record, methods=["PATCH"]),
     Route(f"{API}/entities/{{ref}}/card", get_card, methods=["GET"]),
     Route(f"{API}/graph", get_graph, methods=["GET"]),
     Route(f"{API}/changes", get_changes, methods=["GET"]),
@@ -188,6 +314,12 @@ ROUTES = [
     Route(f"{API}/objects/{{id}}/versions/{{n}}/content", get_object_content, methods=["GET"]),
     Route(f"{API}/objects/{{id}}/versions/{{n}}/text", get_object_text, methods=["GET"]),
     Route(f"{API}/objects/{{id}}/versions/{{n}}/sheet", get_object_sheet, methods=["GET"]),
+    Route(f"{API}/review/items", list_review_items, methods=["GET"]),
+    Route(f"{API}/review/items/{{id}}", get_review_item, methods=["GET"]),
+    Route(f"{API}/review/items/{{id}}/resolve", resolve_review_item, methods=["POST"]),
+    Route(f"{API}/review/enqueue", enqueue_review, methods=["POST"]),
+    Route(f"{API}/review/stats", get_review_stats, methods=["GET"]),
+    Route(f"{API}/submit", submit, methods=["POST"]),
     Route(f"{API}/vocab/{{scheme}}", get_vocab, methods=["GET"]),
     Route(f"{API}/base", get_base, methods=["GET"]),
     Route(f"{API}/backups", get_backups, methods=["GET"]),

@@ -7,9 +7,9 @@
 at — только время с часовым поясом: время без пояса база прочла бы в поясе сеанса и ошиблась бы на часы.
 
 Для экранов: list_records — страница сводок записей (папка, вид, статус, тег, about — сущность или объект),
-labels — подписи ссылок одним запросом; get отдаёт и папку записи (folder). Объекты: get_object — объект
-с версиями, object_status — последняя отметка, object_view — карточка (status, cited_by, pages, sheets),
-object_by_path — объект по пути; revision_sources и revisions_sources — источники ревизий.
+summary — сводка одной записи, labels — подписи ссылок одним запросом; get отдаёт и папку записи (folder).
+Объекты: get_object — объект с версиями, object_status — последняя отметка, object_view — карточка (status,
+cited_by, pages, sheets), object_by_path — объект по пути; revision_sources и revisions_sources — источники ревизий.
 """
 from __future__ import annotations
 
@@ -326,12 +326,26 @@ def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: 
                              prepare=False).fetchone()[0]
     more = len(rows) > limit
     page = rows[:limit]
-    items = [{"ref": f"{PREFIX[r['target']]}:{r['id']}", "target": r["target"], "label": r["label"],
-              "kind_or_class": r["kind_or_class"], "status": r["status"], "folder": r["folder"],
-              "about": r["about"], "tags": r["tags"], "recorded_at": r["recorded_at"].isoformat(),
-              "agent": r["agent"]} for r in page]
-    return {"items": items, "next_cursor": _cursor(page[-1]["recorded_at"], page[-1]["id"]) if more else None,
-            "total": total}
+    return {"items": [_summary(r) for r in page],
+            "next_cursor": _cursor(page[-1]["recorded_at"], page[-1]["id"]) if more else None, "total": total}
+
+
+def _summary(r: dict) -> dict:
+    return {"ref": f"{PREFIX[r['target']]}:{r['id']}", "target": r["target"], "label": r["label"],
+            "kind_or_class": r["kind_or_class"], "status": r["status"], "folder": r["folder"], "about": r["about"],
+            "tags": r["tags"], "recorded_at": r["recorded_at"].isoformat(), "agent": r["agent"]}
+
+
+def summary(conn: psycopg.Connection, ref: str) -> dict:
+    """Сводка одной записи — как строка list_records (по показанной ревизии): ответ службы после переноса записи
+    в папку и других действий над одной записью. ref — atm:/ent: с UUID или ключом; нет записи — RecordNotFound."""
+    target, record_id = resolve(conn, ref)
+    with conn.cursor(row_factory=dict_row) as cur:
+        row = cur.execute(_list_page(target, [f"r.{target}_id = %(id)s"], None),
+                          {"id": record_id, "take": 1}).fetchone()
+    if row is None:                      # запись без ревизий не бывает (records.commit) — разве что удалена сейчас
+        raise RecordNotFound(f"{ref}: такой записи нет")
+    return _summary(row)
 
 
 def labels(conn: psycopg.Connection, refs: Iterable[str]) -> dict[str, dict]:
