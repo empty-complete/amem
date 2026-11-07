@@ -160,7 +160,8 @@ function FieldRow({
         onChange={(e) => onChange({ ...f, hint: e.target.value ? { ru: e.target.value } : null })}
       />
       {f.type === "object" && (
-        <div className="chips" role="group" aria-label={t("kinds.accepts_classes")}>
+        <fieldset className="chips">
+          <legend className="sr-only">{t("kinds.accepts_classes")}</legend>
           {classes.data?.map((c) => (
             <label key={c.code} className="chk">
               <input
@@ -179,10 +180,11 @@ function FieldRow({
               {lab(c.label)}
             </label>
           ))}
-        </div>
+        </fieldset>
       )}
       {f.type === "record" && (
-        <div className="chips" role="group" aria-label={t("kinds.accepts_kinds")}>
+        <fieldset className="chips">
+          <legend className="sr-only">{t("kinds.accepts_kinds")}</legend>
           {kinds.data?.map((c) => (
             <label key={c.code} className="chk">
               <input
@@ -198,7 +200,7 @@ function FieldRow({
               {lab(c.label)}
             </label>
           ))}
-        </div>
+        </fieldset>
       )}
       {f.type === "quantity" && (
         <select
@@ -278,12 +280,13 @@ export function KindDrawer() {
     setIssues({});
     setMsg(null);
   };
+  // открываем по коду один раз за открытие
+  // biome-ignore lint/correctness/useExhaustiveDependencies: список и startEdit не должны переоткрывать форму
   useEffect(() => {
     if (!open) return;
     const x = editCode ? mine.find((m) => m.code === editCode) : null;
     if (x) startEdit(x);
     else if (!editCode) setD(null);
-    // biome-ignore lint/correctness/useExhaustiveDependencies: открываем по коду один раз за открытие
   }, [open, editCode]);
 
   const preview: Template | undefined = useMemo(
