@@ -127,6 +127,8 @@ export function Sky(props: SkyProps) {
     [sky, select],
   );
 
+  useEffect(() => skyBus.onRetract((id) => setExtra((x) => x.filter((e) => e.star.id !== id))), []);
+
   // ручка для e2e — только в сборке с моками
   useEffect(() => {
     if (!import.meta.env.VITE_MOCK || !sky) return;

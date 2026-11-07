@@ -316,5 +316,9 @@
     "empty": "The base is empty. Agents write to it over MCP or the CLI, and you can write the first note.",
     "write": "Write a note",
     "all": "All records"
+  },
+  "write": {
+    "saved": "Saved: {{what}}",
+    "undo": "Undo"
   }
 }
