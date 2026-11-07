@@ -119,7 +119,7 @@ const hits = (a: { x: number; y: number; w: number; h: number }, b: typeof a) =>
   a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 /**
- * Жадная раскладка подписей в порядке важности (порядок входа): справа → слева → под → над.
+ * Жадная раскладка подписей в порядке важности (порядок входа): справа → слева → под → над → по диагоналям.
  * Подпись не пересекает поставленные подписи и чужие звёзды; места нет — null (подсказка при наведении остаётся).
  */
 export function placeLabels(
@@ -137,11 +137,16 @@ export function placeLabels(
     h: 2 * s.r + 2,
   }));
   for (const it of items) {
+    const d = (it.r + gap) * 0.7;
     const tries: Placed[] = [
       { side: "right", x: it.x + it.r + gap, y: it.y - it.h / 2, w: it.w, h: it.h },
       { side: "left", x: it.x - it.r - gap - it.w, y: it.y - it.h / 2, w: it.w, h: it.h },
       { side: "below", x: it.x - it.w / 2, y: it.y + it.r + gap, w: it.w, h: it.h },
       { side: "above", x: it.x - it.w / 2, y: it.y - it.r - gap - it.h, w: it.w, h: it.h },
+      { side: "right", x: it.x + d, y: it.y + d, w: it.w, h: it.h },
+      { side: "right", x: it.x + d, y: it.y - d - it.h, w: it.w, h: it.h },
+      { side: "left", x: it.x - d - it.w, y: it.y + d, w: it.w, h: it.h },
+      { side: "left", x: it.x - d - it.w, y: it.y - d - it.h, w: it.w, h: it.h },
     ];
     const ok = tries.find(
       (b) => !boxes.some((p) => hits(b, p)) && !discs.some((d) => d.id !== it.id && hits(b, d)),

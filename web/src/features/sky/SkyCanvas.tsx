@@ -34,6 +34,7 @@ const SkyCanvas = forwardRef<SkyCanvasApi, SkyCanvasProps>(function SkyCanvas(pr
   live.current = props;
   const nodes = useRef(new Map<string, N>());
   const flashes = useRef(new Map<string, number>());
+  const needFit = useRef(true);
 
   // один экземпляр force-graph на окно
   useEffect(() => {
@@ -45,7 +46,8 @@ const SkyCanvas = forwardRef<SkyCanvasApi, SkyCanvasProps>(function SkyCanvas(pr
     let lastBg = 0;
     g.backgroundColor("rgba(0,0,0,0)")
       .nodeId("id")
-      .nodeLabel((n) => `${n.label}`)
+      // подсказка при наведении — только там, где подписи на небе нет
+      .nodeLabel((n) => (visibleLabels(live.current.sky, live.current.selected).has(n.id) ? "" : n.label))
       .nodeRelSize(1)
       .nodeVal((n) => n.r * n.r)
       .linkSource("source")
@@ -85,7 +87,7 @@ const SkyCanvas = forwardRef<SkyCanvasApi, SkyCanvasProps>(function SkyCanvas(pr
       })
       .onBackgroundClick(() => {
         const now = performance.now();
-        if (now - lastBg < 320) g.zoomToFit(live.current.reducedMotion ? 0 : 400, 40);
+        if (now - lastBg < 320) fitCapped(g, live.current.reducedMotion);
         else live.current.onSelect(null);
         lastBg = now;
       })
@@ -93,7 +95,14 @@ const SkyCanvas = forwardRef<SkyCanvasApi, SkyCanvasProps>(function SkyCanvas(pr
         n.fx = undefined;
         n.fy = undefined;
       })
-      .onRenderFramePost((ctx, scale) => drawLabels(ctx, scale, live.current, nodes.current));
+      .onRenderFramePost((ctx, scale) => drawLabels(ctx, scale, live.current, nodes.current))
+      .onEngineStop(() => {
+        // вписываем, когда укладка остыла, — один раз на новые данные
+        if (needFit.current) {
+          needFit.current = false;
+          fitCapped(g, live.current.reducedMotion);
+        }
+      });
     const charge = g.d3Force("charge") as unknown as { strength?: (v: number) => void } | undefined;
     charge?.strength?.(-38);
     const ro = new ResizeObserver(() => {
@@ -172,7 +181,7 @@ const SkyCanvas = forwardRef<SkyCanvasApi, SkyCanvasProps>(function SkyCanvas(pr
 
   useImperativeHandle(ref, () => ({
     fit() {
-      fg.current?.zoomToFit(live.current.reducedMotion ? 0 : 400, 40);
+      if (fg.current) fitCapped(fg.current, live.current.reducedMotion);
     },
     focus(id) {
       const n = nodes.current.get(id);
@@ -195,6 +204,15 @@ const SkyCanvas = forwardRef<SkyCanvasApi, SkyCanvasProps>(function SkyCanvas(pr
 });
 
 export default SkyCanvas;
+
+/** Вписать небо с полями под заголовок и легенду; маленькую базу не раздувать сильнее 1.6×. */
+function fitCapped(g: ForceGraph<N, L>, reduced: boolean) {
+  const ms = reduced ? 0 : 400;
+  g.zoomToFit(ms, 96);
+  setTimeout(() => {
+    if (g.zoom() > 1.6) g.zoom(1.6, ms);
+  }, ms + 20);
+}
 
 function withAlpha(color: string, a: number) {
   return `color-mix(in oklab, ${color} ${Math.round(a * 100)}%, transparent)`;
@@ -271,8 +289,9 @@ function drawLabels(ctx: CanvasRenderingContext2D, scale: number, p: SkyCanvasPr
       { id: s.id, text, x: n.x, y: n.y, r: n.r + 2 / scale, w: ctx.measureText(text).width + 2 * pad, h },
     ];
   });
+  // мешают подписям только объекты: точки-атомы мелкие, подпись может лечь поверх
   const stars = [...nodes.values()]
-    .filter((n) => n.x != null && n.y != null)
+    .filter((n) => n.object && n.x != null && n.y != null)
     .map((n) => ({ id: n.id, x: n.x ?? 0, y: n.y ?? 0, r: n.r, w: 0, h: 0 }));
   const placed = placeLabels(items, 3 / scale, stars);
   for (const it of items) {

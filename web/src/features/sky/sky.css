@@ -51,8 +51,10 @@
   border-radius: 999px;
   background: color-mix(in oklab, var(--sky) 70%, transparent);
 }
-.sky__bar button {
+.sky__bar button,
+.sky__depth {
   color: var(--sky-ink);
+  background: transparent;
 }
 .sky__bar [aria-pressed="true"],
 .sky__bar [data-selected] {

@@ -60,7 +60,7 @@ test("изменения: дни и фильтр «Люди»", async ({ page })
 
 test("⌘K: командная строка открывает команду", async ({ page, isMobile }) => {
   test.skip(isMobile, "клавиатура — на компьютере");
-  await page.goto("./");
+  await page.goto("./records");
   await expect(page.getByRole("link", { name: /Диапазон температуры Т-1/ })).toBeVisible();
   await page.keyboard.press("Control+k");
   await page.keyboard.type("изменен");
