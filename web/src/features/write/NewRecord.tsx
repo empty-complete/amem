@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
 import { RegionState } from "../../ui/RegionState";
 import { draftKey, loadDraft } from "./drafts";
-import { emptyDraft } from "./proposal";
+import { emptyDraft, NEW_REF } from "./proposal";
 import { RecordEditor } from "./RecordEditor";
 import "../record/record.css";
 
@@ -41,7 +41,7 @@ export function NewRecord({
         initial={initial}
         labels={about && aboutLabel ? { [about]: aboutLabel } : {}}
         draftKey={key}
-        extraLinks={related ? [{ src: "@0", dst: related, rel: "see_also" }] : []}
+        extraLinks={related ? [{ src: NEW_REF, dst: related, rel: "see_also" }] : []}
         issues={issue ? { fields: {}, sources: {}, other: [issue] } : null}
         onQueued={back}
         onCancel={back}
