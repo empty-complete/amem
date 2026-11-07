@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { q } from "../api/queries";
 import { changeLocale, type Locale } from "../app/i18n";
 import { applyTheme, readTheme, type Theme } from "../app/theme";
-import { kindsStore, kindsStore } from "../features/kinds/store";
+import { kindsStore } from "../features/kinds/store";
 import "../features/records/records.css";
 
 export const Route = createFileRoute("/settings")({ component: Settings });
