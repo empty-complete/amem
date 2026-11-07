@@ -156,7 +156,9 @@ export function toProposal(
     .map((m) => opts.resolve?.(m[1] as string))
     .filter((x): x is string => !!x)
     .map((dst) => ({ src, dst, rel: dst.startsWith("ent:") ? "about" : "see_also" }));
-  return { proposal: { target: d.target, payload, record_id: opts.recordId ?? null }, links };
+  // record_id в /submit — UUID записи без приставки atm:/ent: (контракт 4a)
+  const recordId = opts.recordId ? opts.recordId.replace(/^(atm|ent):/, "") : null;
+  return { proposal: { target: d.target, payload, record_id: recordId }, links };
 }
 
 export interface FieldIssues {

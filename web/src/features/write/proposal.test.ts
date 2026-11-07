@@ -44,7 +44,7 @@ test("ревизия: record_id, своё свойство в qualifiers, неи
     base,
     resolve: (l) => (l === "Точка росы" ? "atm:14" : undefined),
   });
-  expect(proposal.record_id).toBe(A3);
+  expect(proposal.record_id).toBe(A3.slice(4));
   expect(proposal.payload.confidence).toBe(0.82);
   expect(proposal.payload.qualifiers).toContainEqual({
     property: "maturity",
