@@ -4,7 +4,10 @@ import { resolve } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { parse } from "yaml";
+import backups from "../src/mocks/fixtures/backups.json";
 import base from "../src/mocks/fixtures/base.json";
+import reviewItems from "../src/mocks/fixtures/review-items.json";
+import reviewViews from "../src/mocks/fixtures/review-views.json";
 import card from "../src/mocks/fixtures/card-e3.json";
 import changes from "../src/mocks/fixtures/changes.json";
 import folders from "../src/mocks/fixtures/folders.json";
@@ -70,4 +73,10 @@ test("graph-*.json — GraphResult", () => {
 test("templates.json — TemplateView[], vocab-property.json — VocabEntry[]", () => {
   for (const t of templates) check("TemplateView", t);
   for (const v of vocabProperty) check("VocabEntry", v);
+});
+
+test("review-*.json — ReviewItem, ReviewItemView; backups.json — Backup", () => {
+  for (const i of reviewItems) check("ReviewItem", i);
+  for (const v of Object.values(reviewViews)) check("ReviewItemView", v);
+  for (const b of backups) check("Backup", b);
 });
