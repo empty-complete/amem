@@ -203,6 +203,13 @@
             "null"
           ]
         },
+        "folder": {
+          "description": "Папка записи — метаданные, не часть ревизии (amem/folders.py); null — без папки.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "id": {
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
           "type": "string"
@@ -1436,6 +1443,13 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "folder": {
+          "description": "Папка записи — метаданные, не часть ревизии (amem/folders.py); null — без папки.",
+          "type": [
+            "string",
+            "null"
           ]
         },
         "id": {
