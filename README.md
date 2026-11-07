@@ -1,248 +1,353 @@
-# amem
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/banner-dark.svg">
+    <img alt="amem — another memory" src="docs/assets/readme/banner-light.svg" width="100%">
+  </picture>
+</p>
 
-[README на русском](README.ru.md)
+<h3 align="center">Shared memory for people and AI agents, where every claim comes with its proof.</h3>
 
-**amem** («another memory») is an open knowledge base built from atoms — small,
-verifiable statements with sources, revisions and links. It is meant to be a shared
-hybrid memory for people and AI agents: every claim has a source, every change has
-a revision, and the human stays the one who decides.
+<p align="center">
+  An open knowledge base of small, sourced statements. Agents propose, automatic checks find
+  the quote in the actual file, and a human has the final word.
+</p>
 
-**Status: in development.** This repository contains the core and the storage layer
-(schema, revisions, objects, domain packs), the search engine (full text, codes,
-vectors, ranking, usefulness), backups and the automatic check of submitted records —
-as a Python library with a test suite.
-There is no server, CLI or web UI yet — they come in the next subprojects.
+<p align="center">
+  <a href="https://github.com/empty-complete/amem/actions/workflows/ci.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amem/ci.yml?branch=main&label=tests&style=flat-square"></a>
+  <a href="https://github.com/empty-complete/amem/actions/workflows/web.yml"><img alt="Web UI" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amem/web.yml?branch=main&label=web%20ui&style=flat-square"></a>
+  <a href="LICENSE.txt"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2a78d6?style=flat-square"></a>
+  <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&logo=python&logoColor=white">
+  <img alt="PostgreSQL 16+ with pgvector" src="https://img.shields.io/badge/PostgreSQL-16%2B%20%C2%B7%20pgvector-4169e1?style=flat-square&logo=postgresql&logoColor=white">
+  <img alt="Status: early development" src="https://img.shields.io/badge/status-early%20development-eb6834?style=flat-square">
+</p>
+
+<p align="center">
+  <a href="#quickstart"><b>Quickstart</b></a> ·
+  <a href="#features"><b>Features</b></a> ·
+  <a href="#how-it-works"><b>How it works</b></a> ·
+  <a href="#roadmap"><b>Roadmap</b></a> ·
+  <a href="docs/library.md"><b>Docs</b></a> ·
+  <a href="docs/MANIFESTO.md"><b>Manifesto</b></a> ·
+  <a href="README.ru.md"><b>Русский</b></a>
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/sky-dark.svg">
+    <img alt="The sky: the whole memory as a constellation of atoms and objects (placeholder)" src="docs/assets/readme/en/sky-light.svg" width="100%">
+  </picture>
+</p>
+
+> [!IMPORTANT]
+> **amem is in early development.** The core library works today: storage with revisions, hybrid search,
+> automatic checks, the review queue, entity cards, bundles and backups, tested in CI on PostgreSQL 18
+> and 16. The service, CLI, MCP server and web UI are being built now. Until they ship, the pictures
+> on this page are placeholders.
+
+## Why amem
+
+Agents forget everything between sessions, and what they do remember is text without proof. Notes and
+wikis keep what people wrote, but not where it came from or who decided it was right.
+
+amem keeps something smaller and sturdier: an **atom**. An atom is one statement, the exact place in the
+file it came from, the full history of its changes, and the decision of a person.
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <b>Every claim has a source</b><br>
+      A quote is checked against the real text of the file: a page in a PDF, a heading in Markdown,
+      a cell range in a spreadsheet.
+    </td>
+    <td width="50%" valign="top">
+      <b>Nothing is overwritten</b><br>
+      Every change is a new revision with a reason, an author and a content hash. Mistakes are
+      superseded, not erased.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <b>Checks run on every write</b><br>
+      Schema, units, the quote, common sense and duplicates are checked before anything lands.
+      A failed batch writes nothing.
+    </td>
+    <td width="50%" valign="top">
+      <b>The human decides</b><br>
+      Agents propose and pre-verify. Accepting a claim into the canon is a person's call, and the
+      system shows who made it.
+    </td>
+  </tr>
+</table>
+
+## Features
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/record-dark.svg">
+        <img alt="A record page with the quote highlighted on the source page (placeholder)" src="docs/assets/readme/en/record-light.svg">
+      </picture>
+      <h3>A claim next to its proof</h3>
+      A record reads like a note: properties, a Markdown body and the quote highlighted on the real page
+      of the source file. Cited files are stored once by content hash and kept forever.
+    </td>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/review-dark.svg">
+        <img alt="The review queue with the claim, the quote and the decision buttons (placeholder)" src="docs/assets/readme/en/review-light.svg">
+      </picture>
+      <h3>Review in one keystroke</h3>
+      Anything doubtful, risky or changed lands in a queue. Each item shows the claim, the quote and
+      its neighbours. <kbd>Y</kbd> confirms, <kbd>N</kbd> rejects, <kbd>J</kbd>/<kbd>K</kbd> move on, and
+      parallel reviewers never get the same item.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/card-dark.svg">
+        <img alt="An entity card with completeness and grouped parameters (placeholder)" src="docs/assets/readme/en/card-light.svg">
+      </picture>
+      <h3>Entity cards</h3>
+      A profile says which parameters an object needs. The card shows what is known, missing or in
+      conflict, and it is built live from atoms, so nothing goes stale.
+    </td>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/agent-dark.svg">
+        <img alt="An agent session that searches amem, fetches records and marks what helped (placeholder)" src="docs/assets/readme/en/agent-light.svg">
+      </picture>
+      <h3>Memory for agents</h3>
+      Claude Code and Codex ask amem first. They read short cards, fetch only the records they need, and
+      mark what helped, which costs fewer tokens than reading raw files. <i>Arrives with the MCP server.</i>
+    </td>
+  </tr>
+</table>
+
+**Under the hood**
+
+- **Hybrid search.** Exact codes, full text and local vectors are merged with RRF. An exact code always
+  comes first, and an ambiguous query returns every candidate instead of a guess.
+- **History you can query.** Bodies are stored as canonical JSON (JCS) with a `sha256-c1:` hash, and
+  `what_changed` answers "what changed since Monday" for one record or the whole base.
+- **Files that stay put.** Sources live in an OCFL object store by content digest. When a new version
+  of a file arrives, every record that cites an older version gets a review item.
+- **Domain packs.** Vocabularies, templates and entity profiles are plug-in packages with versions
+  and dependencies. The core itself is a pack.
+- **Bundles.** You can share a branch of knowledge between bases as a folder or a zip, with or without
+  the files. Ids survive the trip, and anything that differs from the local copy goes to review.
+- **Backups with proof.** A backup is a `pg_dump` plus a snapshot of the object store. It is verified
+  by a real trial restore into a temporary database.
+- **Boring storage.** Data lives in plain PostgreSQL 16+ with pgvector. The schema is written in
+  LinkML, with Pydantic models and JSON Schema generated from it.
+
+## Quickstart
+
+amem needs Python 3.11+, Docker (for PostgreSQL) and Linux or macOS. On Windows, use WSL2.
+
+**1. Start PostgreSQL and install the library**
+
+```bash
+git clone https://github.com/empty-complete/amem.git
+cd amem
+docker compose up -d --wait db      # PostgreSQL 18 + pgvector on 127.0.0.1:5435
+python3 -m venv .venv
+.venv/bin/pip install -e .          # or -e ".[embed]" for local multilingual vectors
+```
+
+**2. Write a fact with its source**
+
+```python
+from pathlib import Path
+
+from amem import check, db, recipes
+from amem.check import Proposal
+from amem.ocfl_store import ObjectStore
+
+conn = db.connect("postgresql://amem:amem@127.0.0.1:5435/amem")
+db.prepare(conn)                                  # migrations and the core vocabulary
+
+docs = Path("my-docs")                            # the folder with your source files
+store = ObjectStore(Path("amem-objects"))         # cited files, kept by content hash
+(docs / "pgvector").mkdir(parents=True, exist_ok=True)
+(docs / "pgvector" / "README.md").write_text(
+    "## HNSW\n\nvector - up to 2,000 dimensions, halfvec - up to 4,000 dimensions\n")
+
+fact = {
+    "kind": "fact",
+    "label": {"en": "pgvector indexes vector with HNSW up to 2,000 dimensions",
+              "ru": "pgvector: индекс HNSW по vector — до 2000 измерений"},
+    "summary_plain": {"en": "Longer embeddings need halfvec, up to 4,000.",
+                      "ru": "Длинные векторы индексируются через halfvec, до 4000."},
+    "sources": [{"path": "pgvector/README.md",
+                 "selectors": [{"type": "heading", "value": "HNSW"}],
+                 "quote": "vector - up to 2,000 dimensions"}],
+}
+result = check.submit(conn, store, docs, [Proposal("atom", fact)], agent="model:my-agent")
+print(result.state, result.records[0]["status"])  # approved draft
+```
+
+Levels 1–4 passed and the file was copied into the store. The atom stays a `draft` until the semantic
+review (level 5) or a person confirms it.
+
+**3. Try to cite something the file doesn't say**
+
+```python
+wrong = {**fact, "sources": [{**fact["sources"][0], "quote": "vector - up to 16,000 dimensions"}]}
+result = check.submit(conn, store, docs, [Proposal("atom", wrong)], agent="model:my-agent")
+print(result.state, result.report["issues"][0]["code"])  # rejected quote_fuzzy
+```
+
+The whole batch is rejected and nothing is written. The report shows the closest real text in the file:
+`vector - up to 2,000 dimensions`.
+
+**4. Search**
+
+```python
+hits = recipes.exact_fact(conn, "halfvec", agent="model:my-agent")
+print(hits["items"][0]["label"]["en"])  # pgvector indexes vector with HNSW up to 2,000 dimensions
+```
+
+The [library reference](docs/library.md) covers the rest: the review queue, entity cards, bundles,
+folders and backups.
+
+### Try the web UI on sample data
+
+The web UI is built against the HTTP contract and runs on mock data until the service ships.
+
+```bash
+cd web
+npm ci
+npm run dev:mock      # Node 24+; then open http://127.0.0.1:5173/ui/
+```
+
+### Coming next: one-command install
+
+> [!NOTE]
+> **Not available yet.** This is the planned interface of the service, CLI and agent memory
+> ([subproject 4](docs/superpowers/specs/2026-11-07-amem-subproject-4-service-design.md)).
+
+```bash
+pipx install amem
+amem init                     # database and object store
+amem install claude-code      # MCP server, hooks and skills; `amem install codex` for Codex CLI
+amem serve                    # HTTP API, /mcp and the web UI at http://127.0.0.1:8767/ui
+```
 
 ## How it works
 
-- **Atoms** — typed statements (fact, term, method, decision, question, lesson,
-  requirement, parameter). **Entities** — things atoms talk about (project, document,
-  edition, organization, person, place, software, topic).
-- **Objects** — source files and references, stored by content digest (OCFL):
-  a copy linked from a source is kept forever.
-- **Links** — typed relations between atoms and entities, with end-pair rules,
-  symmetry and retirement instead of deletion.
-- **Revisions** — nothing is overwritten: every change is a new revision with
-  a canonical body and a content hash (JSON Canonicalization Scheme, `sha256-c1:`).
-- **Checks** — sources are resolved to object versions and digests, the quote
-  matcher finds a quote in the actual file text, and every submitted record goes
-  through the automatic check pipeline (see [Automatic checks](#automatic-checks)).
-- **Domain packs** — vocabularies and templates are pluggable packages
-  (`amem/packs/core` is the kernel itself; more packs via the `AMEM_PACKS`
-  environment variable). Codes used by records are enforced by foreign keys.
-  A pack may depend on others (`requires`: pack name → version range); packs load
-  in dependency order, the core (version 1.3.0) first, cycles and unmet ranges are errors,
-  and a concept's `broader` must lead to a code of the same scheme in a loaded pack. An atom kind
-  has a `family`: `source` (knowledge from a document) or `work` (from the work itself); a kind
-  without one counts as `work`.
-- **Basis and confidence** — an atom whose value does not come from a document about
-  the object carries a `basis`: `default` (the domain's rule, "on the safe side"), `assumed`
-  (accepted to go on, needs confirmation) or `author` (the person's own word; only a
-  `person:` agent may set it). `default` and `assumed` without `derived_from` get a warning,
-  as the rule behind them is not visible. A model's own estimate goes in `confidence`
-  (0 to 1); a person's record has none.
-- **Hub groundwork** — every database has a stable `base_id`; atoms imported
-  from another base carry `provenance.origin_base`.
-
-## Search
-
-Four named recipes in `amem.recipes`, each returning plain JSON-compatible data:
-
-- `exact_fact(conn, query, agent=…)` — codes and marks (exact and prefix), Russian full text
-  and vectors merged with RRF; an exact code always comes first, ambiguity returns all candidates;
-- `similar(conn, query, agent=…)` — semantic neighbours of a text or of a record (`atm:` / `ent:` ref), with a text fallback;
-- `what_changed(conn, ref=…, since=…, until=…)` — revisions, review decisions, statuses, folder moves and links over time;
-- `around_entity(conn, ref, depth=1, rels=…, statuses=…)` — shortest paths over links and the
-  `about` / `derived_from` fields; a path's confidence is its weakest scored link, and its
-  `evidence_role` is the weakest source role.
-
-Agents mark atoms that helped (`amem.usefulness.mark_helpful`); marks decay over time and give
-a small capped boost in ranking — they never change status or checks.
-
-Vectors are local and optional: `pip install -e ".[embed]"` adds fastembed (a model is downloaded
-only with explicit permission). `AMEM_BACKEND=none` turns the semantic channel off — lexical search
-keeps working and results say `semantic: unavailable`.
-
-## Automatic checks
-
-`amem.check.submit(conn, store, docs, proposals, links, agent=…)` is the single entry point for
-writing knowledge: it checks the whole batch, then writes it in one transaction.
-
-1. schema and templates — fields, types, link rules, UCUM units;
-2. binding to the source — the quote is found in the file, the page matches, numbers of the claim
-   are present in the fragment; works for PDF, Markdown, xlsx and docx;
-3. common sense — value ranges, units, contradictions with existing atoms;
-4. duplicates — by text and by vector.
-
-An error at level 1 or 2 rejects the whole batch with a report; nothing is written. Otherwise each
-record gets a status: `draft`, `needs_review` or `auto_verified` (an edit of a verified record waits
-for a human decision). The answer (`Submitted`) separates what is done from what is only queued:
-`complete` is false when review items were created, `queued` lists them, and level 5 (semantic
-review by another model or a human) is reported as `queued`. Numbers recomputed by an agent must carry
-`role: "derived"` in the source. High risk (`high_risk` in pack templates, `decision` in the core)
-always goes to a human.
-
-The review queue lives in `amem.review`. `claim(conn, agent=…)` hands out the oldest items the agent
-may decide, with a lease (15 minutes by default) so that parallel reviewers never take the same
-item; `release` gives an item back, `items` lists items for interfaces. `resolve(conn, item_id,
-outcome, agent=…)` records a verdict and applies it, also without a prior claim. A model (`model:…`)
-decides only `semantic`, never for its own batch, and gives a `confidence`: `confirmed` at 0.8 or
-more makes an atom `auto_verified`, anything else sends it to a human as `semantic_doubt`; the
-status changes only while the atom is still `draft`, otherwise just the verdict is recorded. A human
-(`person:…`) decides everything with `confirmed` or `refuted`: the record becomes `verified` or
-`rejected` and its other open items (except `source_changed`) are closed; for `edit` the edit is
-accepted or declined and the record stays `verified`. `enqueue` lets a human put a record into the
-queue by hand (`calibration`, `audit`), `stats` reports queue sizes, decision times, rejected
-batches and audit results. When a file gets a new version (`objects.ingest`), the current and
-pending revisions citing an older version get a `source_changed` item; `rejected`, `deprecated` and
-`superseded` records are skipped.
-
-A record written by a person (`person:…`) is `verified` at once, with no risk and no queue
-(only `source_changed` can still queue it); levels 1 to 4 run as usual and their remarks stay in
-the report. An edit of such a record by a model waits for a human decision. A low `confidence`
-(below 0.8) means high risk when the template enables the `low_confidence` rule.
-
-## Profiles and cards
-
-A template for entities (`target: entity`) may have a `parameters` section — the profile of
-an entity class: which quantities (codes of the `property` vocabulary) describe such a thing.
-A rule sets the quantity, `required` (a blocker if missing), `group`, `origin` (where the value
-usually comes from, vocabulary `parameter_origin`), `default` (shown, but never counted as a
-value), and `ask` / `hint` / `when` (whom to ask, where to look, when it applies). Profiles
-inherit through `extends`: a descendant's rule replaces its ancestor's rule for the same quantity.
-
-`amem.profile.card(conn, ref, ancestors=True)` builds the card of an entity (format `amem.card/1`)
-from the live `parameter` atoms about it; nothing is stored. Each field in `fields` has a `state`:
-
-- `known` — one value (or several equal ones); the field also tells the `status` of the atom,
-  who wrote it (`by`), `basis`, `confidence`, `rank`, source role and `sources`; other values go to `candidates`;
-- `conflict` — different values with no single `preferred`, or "not applicable" against a value;
-- `na` — the document says the quantity does not apply;
-- `asked` — there is no value, but a question atom about it is open;
-- `missing` — nothing is known yet.
-
-`extra` lists atoms about quantities outside the profile (an entity without a profile has only `extra`),
-`summary` counts fields by state, open blockers (`blockers_open`) and fields with a basis, and
-`ancestors` holds the cards of the entities above along `part_of`. `amem.profile.rules_for_entity(conn,
-entity_class)` returns the rules a class gets from its templates.
-
-`amem.records.rebuild_projections(conn)` rebuilds the projections of atoms from all revisions
-(idempotent, revision bodies stay as they are): `atom_property` is erased and built again, while
-`atom_about` and `atom_derived` are protected from deletion and only get missing rows.
-
-## Bundles
-
-A bundle (`amem.bundle/1`) is a selection of records carried from one database to another: a folder
-or a zip with the same layout. `manifest.json` is written last and holds the sha256 of every part;
-the parts are `atoms.jsonl`, `entities.jsonl`, `links.jsonl`, `sources.jsonl`, `objects.jsonl` and
-`concepts.jsonl`, and optionally the files of the source documents (`objects/sha256/…`), the
-revision history and copies of the packs.
-
-```python
-from amem import bundle
-
-bundle.export(conn, store=store, folder=Path("out/shared"), agent="person:anna",
-              selection=bundle.Selection(tags=("shared",), kinds=("parameter",)),
-              with_files=True, with_history=False, with_packs=False)
-bundle.inspect(Path("out/shared"))        # integrity check, no database needed
-bundle.import_(conn, store, Path("out/shared"), agent="person:boris", trust="keep", dry_run=True)
+```mermaid
+flowchart LR
+    agents["Agents<br/>MCP · CLI · hooks"] -- propose --> check
+    people["People<br/>web UI · CLI"] -- write --> check
+    check["check.submit<br/>1 schema and templates<br/>2 quote found in the file<br/>3 common sense<br/>4 duplicates"]
+    check -- one transaction --> base[("PostgreSQL + pgvector<br/>atoms · entities · links · revisions")]
+    check -. cited files by digest .-> files[("OCFL object store")]
+    base --> queue{{"review queue"}}
+    queue -- confirm or reject --> people
+    base --> search["search recipes<br/>exact_fact · similar<br/>what_changed · around_entity"]
+    search -- short cards, then full records --> agents
 ```
 
-**Export.** `Selection` narrows by `tags`, `kinds`, `entity_classes`, explicit `refs`, `project`,
-`statuses` and `since`; a record must match every condition that is set. By default all statuses
-except `rejected` are taken, and private records (`visibility: private`) stay out unless
-`include_private=True`. The selection is then closed over references: entities the atoms are about,
-editions of sources, links with both ends in the bundle, object records of every source, and the
-packs that own the codes used. `with_files` adds the files from the object store, `with_history`
-all revisions instead of the current one, `with_packs` copies of the pack folders. The result is
-built aside and appears under its name only whole.
+Every write goes through `check.submit`. It checks the whole batch, then writes it in one transaction:
 
-**Inspect.** `bundle.inspect(path)` returns the manifest plus `ok`, `damaged` (parts that are
-missing or whose sha256 differs) and `unexpected` (files outside the manifest). A zip is checked
-before it is unpacked: names, symbolic links, total size, number of entries and compression ratio.
+1. **Schema and templates:** fields, types, link rules and UCUM units.
+2. **Binding to the source:** the quote is found in the file, the page matches, and the numbers of the
+   claim appear in the fragment. Works for PDF, Markdown, xlsx and docx.
+3. **Common sense:** value ranges, units, and contradictions with atoms already in the base.
+4. **Duplicates:** by text and by vector.
 
-**Import.** `bundle.import_(conn, store, folder, agent=…, trust="keep" | "review", dry_run=…)` never
-overwrites, and runs in one transaction:
+An error at level 1 or 2 rejects the batch with a report. Otherwise each record gets a status:
 
-- a record the database does not have is created with the same id; its `provenance` tells the
-  origin base, the hash of the original revision and the original agent;
-- a record the database has already seen (any local revision with the same body) is left alone,
-  so importing the same bundle twice does nothing;
-- a record that differs gets a new `pending` revision and a review item with reason `imported`;
-  the current revision does not change;
-- a record with another `key`, or a `key` taken by another record, is a collision: the import is
-  refused before anything is written (`dry_run` lists collisions instead); deprecated and superseded
-  local records are skipped with a warning.
+| Status | Meaning |
+|---|---|
+| `draft` | Passed levels 1–4 without remarks; waits for the semantic review (level 5) |
+| `needs_review` | Has a warning or a high risk; waits for a person |
+| `auto_verified` | Passed all five levels with low risk |
+| `verified` | Confirmed by a person against the source. A person's own record is verified at once |
+| `rejected` | Rejected by a person |
+| `deprecated`, `superseded` | Retired; kept for history |
 
-The packs of the manifest must be loaded with the same name, version and digest; otherwise
-`BundleError` with `code="bundle_pack_missing"` says what is required and what is present (and the
-path to add to `AMEM_PACKS` if the bundle carries the packs). Other errors have their codes too:
-`bundle_key_collision` (also a link id taken by a link with another `rel` or other ends),
-`bundle_object_conflict`, `bundle_damaged`, `bundle_level1` (with the `amem.check/1` report). A file already in both databases is matched by
-digest (a web page or a message — by address or name), and its copy is not stored twice. With
-`trust="keep"` the status from the bundle is kept, except when the importer is a model (not `person:…`):
-then a record that was checked or decided there (`verified`, `auto_verified`, `rejected`, `deprecated`,
-`superseded`), a record with `basis: author`, or one written by a person waits for review
-(`needs_review`, item `imported`) instead. With
-`trust="review"` everything created is `needs_review`. The source check results are not taken on
-trust: they are computed again against the local copies of the files, `no_file` where there is none; an
-atom whose place is not confirmed that way (`fuzzy`, `not_found`, `no_file`) waits for review. A link is
-retired by the import only if it is the same link (same id, `rel` and ends); agent concepts are taken only
-for quantities (`property`), valid by schema and with a UCUM unit. Objects with new versions, paths or
-files are taken in before the write, each in its own transaction (`objects.adopt`): the exclusive object
-lock is held only while one object and its copies are stored, as with `objects.ingest`; the source check
-runs without it, and the write transaction holds the shared lock, like `submit`, so `submit` does not wait
-for an import. If the import is refused after that, what was taken in stays, as after `objects.ingest`:
-the objects and their copies, the `source_changed` items set for a new version of a known object, the
-text cache and the agent; importing again accepts the objects as they are. Re-importing the same bundle
-does not take the exclusive lock, except for an object whose copy was skipped (no copy of the previous
-version in the store): it is taken in again on every import until the copies arrive.
-`dry_run=True` writes nothing and returns the plan: counts per action, warnings, collisions and the
-level 1 report. The returned `Imported` also carries `changeset_id`, `queued` and `complete`.
+**What an atom looks like** (`amem.atom/1`):
 
-## Folders, lists and object cards
+```yaml
+kind: fact
+key: pgvector.hnsw_max_dimensions
+label:
+  en: pgvector indexes vector with HNSW up to 2,000 dimensions
+  ru: "pgvector: индекс HNSW по vector — до 2000 измерений"
+summary_plain:
+  en: Longer embeddings need halfvec, up to 4,000.
+  ru: Длинные векторы индексируются через halfvec, до 4000.
+content:
+  values:
+    - {property: max_indexed_dimensions, amount: 2000, unit: "1"}
+sources:
+  - path: pgvector/README.md
+    selectors: [{type: heading, value: HNSW}]
+    quote: vector - up to 2,000 dimensions
+    role: primary
+```
 
-- **Folders** (`amem.folders`) sort records for people; a folder is a path like `Projects/Alpha`
-  and is not part of a revision. The registry holds the folders (`create`, `delete`, `rename`;
-  a new base gets four: Projects, Areas, Resources, Archive); `move(conn, ref, folder, agent=...)`
-  moves an atom or an entity without a new revision and logs the move; `tree(conn)` returns the tree
-  with counts (a record in `a/b` counts in `a` too) and the number of records with no folder.
-  `lookup.get` shows the record's `folder`.
-- **References** — `atm:` and `ent:` take a UUID or a `key` (`ent:sp20_13330`); an old key does not
-  resolve (`records.resolve`, `RecordNotFound`). The database has a name: `db.set_base_name` / `db.base_name`.
-- **Lists** — `lookup.list_records(conn, folder=, kinds=, statuses=, tag=, about=, limit=, cursor=)`
-  returns summaries, newest first, by cursor, with `total` of the filter. `about` is an entity
-  (`ent:...`) or an object (`obj:<UUID>` or a bare UUID): records whose current revision cites it.
-  `lookup.labels(conn, refs)` gives labels for many references in one query.
-- **Object card** — `lookup.object_view(conn, id)`: the object with versions, `status` (last mark),
-  `cited_by` (sources of current revisions: record, object version, selectors, quote, verdict),
-  `pages` (from the text cache, `None` if the text was never extracted; reading never extracts)
-  and `sheets` (sheet names of xlsx/xlsm, else `None`).
-- **Sheet window** — `objects.sheet(conn, store, id, n, name, "B2:D10")` returns `{name, range, rows}`
-  with cell values as in the text used by checks. At most 10 000 cells per call (counted as a rectangle,
-  empty cells too); without a range the window is `A1:L40`, cut at the data. `ObjectError.code` is
-  `not_found`, `invalid` or `too_large`.
+The agent never sets the status; the checks and people do.
 
-## Backup
+**Core concepts**
 
-`amem.backup` needs the PostgreSQL 18 client (`pg_dump`, `pg_restore`, `psql`) — in `PATH`
-or in the folder given by `AMEM_PG_BIN`.
+| Concept | What it is |
+|---|---|
+| **Atom** | A small typed claim: fact, term, method, decision, question, lesson, requirement or parameter |
+| **Entity** | What atoms are about: project, document, edition, organization, person, place, software, topic |
+| **Object** | A source file, web page or message. Files are stored once by content digest |
+| **Link** | A typed relation between records, with rules for its ends. Links are retired, never deleted |
+| **Revision** | One change of a record: a canonical body, a content hash, an author and a reason |
+| **Pack** | A domain vocabulary with templates and entity profiles. The core is a pack too |
+| **Bundle** | A portable selection of records (`amem.bundle/1`), with or without files |
 
-- `create(dsn, folder)` — a `pg_dump -Fc` dump plus a JSON manifest (SHA-256, `base_id`,
-  migrations, record counts — taken from the same snapshot as the dump); the last 14 copies are kept;
-- `snapshot(dsn, objects_root, folder)` — a full snapshot: the dump and a copy of the OCFL object store,
-  tied together by `base_id` and SHA-256;
-- `restore(source, dsn, objects_root=…)` — into an empty database (and an empty folder) only,
-  everything is checked before anything is written;
-- `verify(source, dsn)` — a real trial restore into a temporary database and a search, then cleanup.
+**Search recipes.** Four named recipes return plain JSON, so agents can work with them directly:
 
-Storage is PostgreSQL 16+ with pgvector; the schema of record is LinkML
-(`amem/schema/amem_v1.yaml`), from which the Pydantic models and JSON Schema
-are generated.
+| Recipe | Answers |
+|---|---|
+| `exact_fact` | *What exactly is X?* Codes, marks, full text and vectors merged with RRF |
+| `similar` | *What else is like this?* Semantic neighbours of a text or a record |
+| `what_changed` | *What changed since Monday?* Revisions, decisions, statuses, moves and links |
+| `around_entity` | *What do we know around X?* Shortest paths over links, rated by the weakest link |
+
+Agents mark the atoms that helped them. These marks decay over time and give a small, capped boost in
+ranking. They never change a status or skip a check.
+
+## Roadmap
+
+- [x] **Core and storage:** LinkML schema, revisions, objects by digest, domain packs
+- [x] **Search engine:** four recipes, RRF ranking, usefulness marks, backups
+- [x] **Automatic checks** (levels 1–4) and a **review queue** with leases, audit and metrics
+- [x] **Ontology:** entity profiles, live cards, portable bundles
+- [x] **Library for the service:** folders, record lists, references by key, object view
+- [ ] **HTTP service:** `amem serve` with the [v1 contract](docs/api/http-v1.openapi.yaml) *(in progress)*
+- [ ] **CLI and MCP server:** three-step retrieval, usefulness marks, `<private>` stripping
+- [ ] **Agent memory:** Claude Code hooks, Codex CLI, `amem install`, core skills
+- [ ] **Web UI:** the foundation, reading and the sky are built on mock data; writing comes next
+- [ ] **asearch:** file search as an amem plugin
+
+## Documentation
+
+| | |
+|---|---|
+| [Library reference](docs/library.md) | Data model, search, checks, review queue, cards, bundles, folders, backups |
+| [HTTP API v1](docs/api/) | The OpenAPI contract between the service and the web UI |
+| [Manifesto](docs/MANIFESTO.md) | Why amem exists and what it stands for |
+| [Design specs and plans](docs/superpowers/) | How each subproject was decided and built |
+
+**Good to know**
+
+- Schema v1 requires a Russian label (`ru`); other languages are optional. Full-text search is tuned
+  for Russian, and the optional local vector model is multilingual.
+- Vectors are local and optional: `pip install -e ".[embed]"` adds fastembed, and a model is downloaded
+  only with explicit permission. `AMEM_BACKEND=none` turns the semantic channel off, and lexical search
+  keeps working.
+- Backups need the PostgreSQL 18 client (`pg_dump`, `pg_restore`, `psql`) in `PATH` or in `AMEM_PG_BIN`.
 
 ## Development
-
-Requires Python 3.11+ and Docker (for test databases).
 
 ```bash
 python3 -m venv .venv
@@ -251,27 +356,44 @@ python3 -m venv .venv
 # test databases: PostgreSQL 18 (port 5433) and 16 (port 5434)
 docker compose --profile test up -d --wait db-test db-test-pg16
 
-# run the tests (backup tests need the PostgreSQL 18 client, see above)
+# run the tests (backup tests need the PostgreSQL 18 client)
 .venv/bin/pytest -q
 ```
 
-Other ports or servers: `AMEM_TEST_DSNS="postgresql://…/test,postgresql://…/test"`. A missing test
-database or client is a test failure, not a skip.
+To use other ports or servers, set `AMEM_TEST_DSNS="postgresql://…/test,postgresql://…/test"`. A missing
+test database or client counts as a failure, not a skip. If your environment exports a `PYTHONPATH` from
+other tooling (ROS, for example), it breaks pytest plugin autoloading, so run `env -u PYTHONPATH .venv/bin/pytest -q`.
 
-If your environment exports a `PYTHONPATH` from other tooling (e.g. ROS), it
-breaks pytest plugin autoloading — run tests with a clean one:
-
-```bash
-env -u PYTHONPATH .venv/bin/pytest -q
-```
-
-After editing `amem/schema/amem_v1.yaml`, regenerate and check the models:
+After editing `amem/schema/amem_v1.yaml`, regenerate the models:
 
 ```bash
 .venv/bin/python tools/gen_schema.py          # writes amem/model_v1.py and the JSON Schema
 .venv/bin/python tools/gen_schema.py --check  # CI check: generated files are up to date
 ```
 
-## License and author
+The web UI lives in [`web/`](web/) (React 19, HeroUI v3, TanStack). Run `npm run lint`, `npm test` and
+`npm run e2e` there.
+
+## Contributing
+
+amem is built in the open. Issues and discussions are welcome. For a larger change, please open an issue
+first so we can agree on the approach. Every pull request runs the `ci` workflow (tests on PostgreSQL 18 and 16),
+and changes to `web/` also run the `web` workflow.
+
+## Built with
+
+[PostgreSQL](https://www.postgresql.org/) ·
+[pgvector](https://github.com/pgvector/pgvector) ·
+[LinkML](https://linkml.io/) ·
+[OCFL](https://ocfl.io/) ·
+[PyMuPDF](https://pymupdf.readthedocs.io/) ·
+[fastembed](https://github.com/qdrant/fastembed) ·
+[React](https://react.dev/) ·
+[HeroUI](https://www.heroui.com/) ·
+[force-graph](https://github.com/vasturiano/force-graph)
+
+## License
 
 MIT, see [LICENSE.txt](LICENSE.txt). © 2026 Philipp Beloborodov (Филипп Белобородов).
+
+<p align="center"><sub>amem is a tool for remembering well.</sub></p>
