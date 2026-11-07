@@ -208,6 +208,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/objects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Поиск объектов хранилища по имени и пути — для «+ Источник» */
+        get: operations["listObjects"];
+        put?: never;
+        /** Загрузить файл: служба кладёт его в папку документов (по path, иначе «Загрузки/<имя>») и разбирает */
+        post: operations["uploadObject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Шаблоны видов с формой для UI (из FieldRule, parameters и блока ui шаблона) */
+        get: operations["listTemplates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/packs/mine/templates/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Свой вид в пакете «Мои виды»: новая версия шаблона, те же проверки, что у пакета из файла */
+        put: operations["putMyTemplate"];
+        post?: never;
+        /** Удалить свой вид; 409, если есть записи этого вида */
+        delete: operations["deleteMyTemplate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Задачи агентам (например, разобрать файл) */
+        get: operations["listTasks"];
+        put?: never;
+        /** Поставить задачу агентам; они берут её через MCP */
+        post: operations["createTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/objects/{id}": {
         parameters: {
             query?: never;
@@ -837,6 +910,90 @@ export interface components {
             counts?: Record<string, never>;
             review_open?: number;
         };
+        FormField: {
+            key: string;
+            /** @description Путь в теле записи: about, content.values[property=X], valid_from, tags, qualifiers[property=K] */
+            path: string;
+            label: {
+                ru?: string;
+                en?: string;
+            };
+            /** @enum {string} */
+            type: "object" | "record" | "quantity" | "date" | "period" | "choice" | "tags" | "text";
+            required?: boolean;
+            hint?: {
+                ru?: string;
+                en?: string;
+            } | null;
+            /** @description Словарь для choice */
+            scheme?: string | null;
+            /** @description Величина для quantity */
+            property?: string | null;
+            /** @description Единица UCUM по умолчанию */
+            unit?: string | null;
+            accepts?: {
+                entity_classes?: string[];
+                kinds?: string[];
+                rel?: string;
+            } | null;
+        };
+        TemplateView: {
+            code: string;
+            pack: string;
+            label: {
+                ru?: string;
+                en?: string;
+            };
+            /** @enum {string} */
+            target: "atom" | "entity";
+            applies_to?: string | null;
+            description?: {
+                ru?: string;
+                en?: string;
+            } | null;
+            /** @enum {string} */
+            family: "source" | "work" | "object";
+            form: components["schemas"]["FormField"][];
+            /** @enum {string} */
+            body: "wanted" | "required" | "none";
+            widgets: ("sources" | "links" | "around" | "values_table" | "similar" | "children")[];
+            editable: boolean;
+            /** @description Сколько записей этого вида */
+            records?: number;
+        };
+        TemplateDraft: {
+            label: {
+                ru: string;
+                en?: string;
+            };
+            /** @enum {string} */
+            target: "atom" | "entity";
+            /** @enum {string} */
+            family: "source" | "work" | "object";
+            description?: {
+                ru?: string;
+                en?: string;
+            };
+            form: components["schemas"]["FormField"][];
+            /** @enum {string} */
+            body: "wanted" | "required" | "none";
+            widgets: ("sources" | "links" | "around" | "values_table" | "similar" | "children")[];
+        };
+        TaskView: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "parse";
+            object: string;
+            version?: number;
+            note?: string | null;
+            /** @enum {string} */
+            state: "open" | "claimed" | "done" | "cancelled";
+            created_by: string;
+            claimed_by?: string | null;
+            /** Format: date-time */
+            claimed_until?: string | null;
+        };
         Backup: {
             name: string;
             /** Format: date-time */
@@ -1192,6 +1349,208 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChangesResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listObjects: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ObjectView"][];
+                        next_cursor?: string | null;
+                    };
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    uploadObject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                    /** @description Путь в папке документов */
+                    path?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Такой файл уже есть (тот же digest) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObjectView"];
+                };
+            };
+            /** @description Новый объект или новая версия */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObjectView"];
+                };
+            };
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listTemplates: {
+        parameters: {
+            query?: {
+                target?: "atom" | "entity";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateView"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    putMyTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateDraft"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateView"];
+                };
+            };
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteMyTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Удалено */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listTasks: {
+        parameters: {
+            query?: {
+                state?: "open" | "claimed" | "done" | "cancelled";
+                object?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    kind: "parse";
+                    object: string;
+                    version: number;
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Принято */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        task_id: string;
+                    };
                 };
             };
             default: components["responses"]["Problem"];
