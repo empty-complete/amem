@@ -68,13 +68,14 @@ def test_commit_resolves_refs_and_returns_valid_records(kb):
     result = base(kb)
     assert set(result.refs) == {"@sp20", "@sp20_2016", "@w0"}
     record = lookup.get(kb, "atom", atom_id(result))
-    model_v1.Atom.model_validate_json(json.dumps(record), strict=True)        # выдача — в формате схемы
+    # выдача — в формате схемы; folder — поле представления (папка не входит в ревизию и в схему v1)
+    model_v1.Atom.model_validate_json(json.dumps({k: v for k, v in record.items() if k != "folder"}), strict=True)
     assert record["about"] == [result.refs["@sp20"]]
     assert record["sources"][0]["edition"] == result.refs["@sp20_2016"]
     assert record["revision"] == 1 and record["status"] == "draft" and record["agent"] == AGENT
     assert record["content_hash"].startswith("sha256-c1:") and "ref" not in record
     entity = lookup.get(kb, "entity", result.refs["@sp20"].split(":", 1)[1])
-    model_v1.Entity.model_validate_json(json.dumps(entity), strict=True)
+    model_v1.Entity.model_validate_json(json.dumps({k: v for k, v in entity.items() if k != "folder"}), strict=True)
     assert lookup.by_key(kb, "entity", "sp20_13330") == result.refs["@sp20"]
     about = kb.execute("SELECT entity_id FROM atom_about").fetchall()
     assert [str(r[0]) for r in about] == [result.refs["@sp20"].split(":", 1)[1]]

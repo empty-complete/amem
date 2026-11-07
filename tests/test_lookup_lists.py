@@ -21,7 +21,7 @@ def kb(pg):
 
 
 def atom(label, *, key=None, kind="fact", tags=None, about=None, ref=None, **item) -> Item:
-    payload = {"kind": kind, "label": {"ru": label}, "sources": []}
+    payload = {"kind": kind, "label": {"ru": label}, "sources": item.pop("sources", [])}
     payload |= {name: value for name, value in (("key", key), ("tags", tags), ("about", about), ("ref", ref))
                 if value is not None}
     return Item("atom", payload, **item)
@@ -243,12 +243,56 @@ def test_list_records_filters(kb):
     assert lookup.list_records(kb, folder="Нет такой") == {"items": [], "next_cursor": None, "total": 0}
 
 
+def test_list_records_about_unknown_is_empty(kb):
+    commit(kb, atom("Ветер", key="wind"))
+    empty = {"items": [], "next_cursor": None, "total": 0}
+    assert lookup.list_records(kb, about="ent:nope") == empty
+    assert lookup.list_records(kb, about=f"ent:{ids.uuid7()}") == empty
+    assert lookup.list_records(kb, about=f"obj:{ids.uuid7()}") == empty
+    assert lookup.list_records(kb, about=str(ids.uuid7())) == empty
+    with pytest.raises(RecordError):
+        lookup.list_records(kb, about="obj:не-uuid")
+
+
+def test_list_records_about_object(kb, tmp_path):
+    """about=obj:<UUID> или голый UUID — записи (атомы и сущности), у текущей ревизии которых источник на объект."""
+    from amem import objects
+    from amem.ocfl_store import ObjectStore
+    from samples import make_docs
+
+    docs, store = make_docs(tmp_path / "docs"), ObjectStore(tmp_path / "objects")
+    pdf, note = (objects.ingest(kb, store, docs, p, agent=MODEL) for p in ("НД/СП 99.pdf", "Заметки/узел.md"))
+
+    def src(version):
+        return [{"object": version.ref, "object_version": 1, "digest": version.digest, "quote": "Таблица 1"}]
+
+    wind, other, spec, old = commit(
+        kb, atom("Ветер", key="wind", sources=src(pdf)), atom("Про заметку", sources=src(note)),
+        Item("entity", {"entity_class": "document", "label": {"ru": "СП 99"}, "sources": src(pdf)}),
+        atom("Было из СП", sources=src(pdf))).revisions
+    commit(kb, atom("Стало без источника", record_id=old.record_id))      # текущая ревизия — без источника
+    assert listed(kb, about=pdf.ref) == {ref_of(wind), ref_of(spec)}
+    assert listed(kb, about=str(pdf.object_id)) == {ref_of(wind), ref_of(spec)}
+    assert listed(kb, about=note.ref) == {ref_of(other)}
+    assert lookup.list_records(kb, about=pdf.ref)["total"] == 2
+    assert listed(kb, about=pdf.ref, kinds=["document"]) == {ref_of(spec)}
+    assert listed(kb, about=pdf.ref, tag="нет") == set()
+    folders.move(kb, ref_of(wind), "Проекты", agent=HUMAN)
+    assert listed(kb, about=pdf.ref, folder="Проекты") == {ref_of(wind)}
+    assert lookup.list_records(kb, about=pdf.ref, folder="Проекты")["total"] == 1
+
+
+def test_get_has_folder(kb):
+    [a] = commit(kb, atom("Ветер", key="wind")).revisions
+    assert lookup.get(kb, "atom", a.record_id)["folder"] is None
+    folders.move(kb, ref_of(a), "Проекты/Альфа", agent=HUMAN)
+    assert lookup.get(kb, "atom", a.record_id)["folder"] == "Проекты/Альфа"
+
+
 def test_list_records_rejects_bad_filters(kb):
     commit(kb, atom("Ветер", key="wind"))
     with pytest.raises(FolderError):
         lookup.list_records(kb, folder="a//b")
-    with pytest.raises(RecordNotFound):
-        lookup.list_records(kb, about="ent:nope")
     bad = [{"about": "atm:wind"}, {"about": "мусор"}, {"statuses": ["nope"]}, {"statuses": "draft"},
            {"kinds": "fact"}, {"kinds": [1]}, {"tag": 5}, {"limit": 0}, {"limit": 201}, {"limit": True},
            {"limit": "10"}, {"cursor": "мусор"}, {"cursor": "bm90IGEgY3Vyc29y"}]

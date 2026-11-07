@@ -369,8 +369,9 @@ def test_text_is_nfc_and_missing_text_is_cached(kb, docs, store, monkeypatch):
     nul = objects.ingest(kb, store, docs, "Заметки/nul.md", agent=AGENT)
     assert objects.text(kb, store, nul.object_id, 1) == ["\u00e9 и ab"]
     assert objects.text(kb, store, objects.web(kb, "https://example.org/").object_id, 1) is None
-    with pytest.raises(ObjectError, match="нет версии 2"):
+    with pytest.raises(ObjectError, match="нет версии 2") as e:
         objects.text(kb, store, note.object_id, 2)
+    assert e.value.code == "not_found"
 
 
 def test_mark_keeps_history_and_latest_wins(kb, docs, store, monkeypatch):
@@ -430,8 +431,9 @@ def test_object_functions_take_obj_ref(kb, docs, store):
 ], ids=["статус", "нет объекта", "не UUID"])
 def test_mark_errors(kb, docs, store, call, message):
     version = objects.ingest(kb, store, docs, PDF, agent=AGENT)
-    with pytest.raises((ObjectError, ValueError), match=message):
+    with pytest.raises((ObjectError, ValueError), match=message) as e:
         call(kb, version.object_id)
+    assert getattr(e.value, "code", None) == ("not_found" if message == "такого объекта нет" else None)
 
 
 @pytest.mark.parametrize("agent", ["claude", "Model:Claude", "person:", "model:клод", "model:a b", None])
