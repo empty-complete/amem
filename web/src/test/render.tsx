@@ -14,9 +14,18 @@ import type { ReactNode } from "react";
 export async function renderWithApp(ui: ReactNode, path = "/") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const root = createRootRoute({ component: () => <Outlet /> });
-  const routes = ["/", "/search", "/atom/$ref", "/entity/$ref", "/object/$id", "/changes", "/review"].map(
-    (p) => createRoute({ getParentRoute: () => root, path: p, component: () => <>{ui}</> }),
-  );
+  const routes = [
+    "/",
+    "/search",
+    "/atom/$ref",
+    "/entity/$ref",
+    "/object/$id",
+    "/changes",
+    "/review",
+    "/review/$itemId",
+    "/base",
+    "/new",
+  ].map((p) => createRoute({ getParentRoute: () => root, path: p, component: () => <>{ui}</> }));
   const router = createRouter({
     routeTree: root.addChildren(routes),
     history: createMemoryHistory({ initialEntries: [path] }),

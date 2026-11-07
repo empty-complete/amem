@@ -18,6 +18,8 @@ export interface Pending {
   about: string[];
   kind: string;
   body: { proposals: Proposal[]; links: LinkProposal[] };
+  /** Текст тоста целиком («Подтверждено», «Перенесено в «Архив»»); без него — «Записано: <what>». */
+  toast?: string;
   /** Не запись, а действие (перенос в папку): выполняется после окна отмены вместо /submit. */
   run?: (keepalive: boolean) => Promise<void>;
   timer: ReturnType<typeof setTimeout> | null;

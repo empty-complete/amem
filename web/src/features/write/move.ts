@@ -13,6 +13,7 @@ export function useMoveRecord() {
       enqueue({
         label: ref,
         what,
+        toast: what,
         kind: "move",
         about: [],
         body: { proposals: [], links: [] },

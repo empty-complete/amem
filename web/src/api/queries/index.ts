@@ -124,6 +124,34 @@ export const q = {
       queryKey: ["tasks", object],
       queryFn: async () => data(await api.GET("/tasks", { params: { query: { object } } })),
     }),
+  reviewItems: (p: { state: "open" | "done"; reason?: string }) =>
+    queryOptions({
+      queryKey: ["review-items", p],
+      queryFn: async () =>
+        data(
+          await api.GET("/review/items", {
+            params: {
+              query: {
+                state: p.state === "done" ? "done" : undefined,
+                reason: (p.reason || undefined) as never,
+              },
+            },
+          }),
+        ),
+      refetchOnWindowFocus: true,
+    }),
+  reviewItem: (id: string) =>
+    queryOptions({
+      queryKey: ["review-item", id],
+      queryFn: async () => data(await api.GET("/review/items/{id}", { params: { path: { id } } })),
+    }),
+  reviewStats: (days = 7) =>
+    queryOptions({
+      queryKey: ["review-stats", days],
+      queryFn: async () => data(await api.GET("/review/stats", { params: { query: { days } } })),
+    }),
+  backups: () =>
+    queryOptions({ queryKey: ["backups"], queryFn: async () => data(await api.GET("/backups")) }),
   graph: (p: { ref?: string; depth: number; project?: string; limit?: number }) =>
     queryOptions({
       queryKey: ["graph", p],
