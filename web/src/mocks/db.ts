@@ -7,6 +7,8 @@ import type graphFx from "./fixtures/graph-base.json";
 import objectsFx from "./fixtures/objects-b.json";
 import recordsFx from "./fixtures/records.json";
 import viewsFx from "./fixtures/records-b.json";
+import reviewItemsFx from "./fixtures/review-items.json";
+import reviewViewsFx from "./fixtures/review-views.json";
 import templatesFx from "./fixtures/templates.json";
 
 const clone = <T>(x: T): T => structuredClone(x);
@@ -54,6 +56,9 @@ function fresh() {
     events: [] as Event[],
     graph: { nodes: [] as GNode[], edges: [] as GEdge[] },
     tasks: [] as Task[],
+    reviewItems: clone(reviewItemsFx) as (typeof reviewItemsFx)[number][],
+    reviewViews: clone(reviewViewsFx) as Record<string, (typeof reviewViewsFx)[keyof typeof reviewViewsFx]>,
+    decisions: [] as { id: string; outcome: string; by: string; at: string }[],
     submits: 0,
   };
 }
