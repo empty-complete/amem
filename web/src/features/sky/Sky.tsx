@@ -20,12 +20,20 @@ const Sky3D = lazy(() => import("./Sky3D"));
 
 const NO_FILTER: Filter = { families: new Set(), pendingOnly: false };
 
+let gl: boolean | undefined;
+/** Есть ли WebGL 2 — проверяется один раз: каждый контекст держит ресурсы видеокарты. */
 const webgl = () => {
-  try {
-    return !!document.createElement("canvas").getContext("webgl2");
-  } catch {
-    return false;
+  if (gl === undefined) {
+    try {
+      const c = document.createElement("canvas");
+      const ctx = c.getContext("webgl2");
+      gl = !!ctx;
+      ctx?.getExtension("WEBGL_lose_context")?.loseContext();
+    } catch {
+      gl = false;
+    }
   }
+  return gl;
 };
 
 export interface SkyProps {
@@ -41,6 +49,7 @@ export interface SkyProps {
   onAround?: (id: string) => void;
   onSummary?: (s: { records: number; objects: number; pending: number }) => void;
   label?: string;
+  showDepth?: boolean;
 }
 
 /** Окно неба (разд. 4.4): одно на главной, объекте, записи и в проверке — отличается только центром. */
@@ -226,22 +235,24 @@ export function Sky(props: SkyProps) {
       >
         {body}
         <div className="sky__bar">
-          <ToggleButtonGroup
-            size="sm"
-            selectionMode="single"
-            disallowEmptySelection
-            selectedKeys={new Set([String(depth)])}
-            onSelectionChange={(k) => setDepth(Number([...k][0] ?? 2))}
-            aria-label={t("sky.depth")}
-            className="sky__depth"
-          >
-            {["1", "2", "3"].map((d, i) => (
-              <ToggleButton key={d} id={d} aria-label={`${t("sky.depth")} ${d}`}>
-                {i > 0 && <ToggleButtonGroup.Separator />}
-                {d}
-              </ToggleButton>
-            ))}
-          </ToggleButtonGroup>
+          {(props.centerRef || props.showDepth) && (
+            <ToggleButtonGroup
+              size="sm"
+              selectionMode="single"
+              disallowEmptySelection
+              selectedKeys={new Set([String(depth)])}
+              onSelectionChange={(k) => setDepth(Number([...k][0] ?? 2))}
+              aria-label={t("sky.depth")}
+              className="sky__depth"
+            >
+              {["1", "2", "3"].map((d, i) => (
+                <ToggleButton key={d} id={d} aria-label={`${t("sky.depth")} ${d}`}>
+                  {i > 0 && <ToggleButtonGroup.Separator />}
+                  {d}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          )}
           <Button
             size="sm"
             variant="ghost"

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("папки и «Все записи»", async ({ page }) => {
-  await page.goto("./");
+  await page.goto("./records");
   await expect(page.getByRole("heading", { level: 1, name: "Все записи" })).toBeVisible();
   await expect(page.getByRole("link", { name: /Диапазон температуры Т-1/ })).toBeVisible();
   await page
@@ -16,7 +16,7 @@ test("папки и «Все записи»", async ({ page }) => {
 
 test("страница не прокручивается, прокручивается панель", async ({ page, isMobile }) => {
   test.skip(isMobile, "на телефоне страница прокручивается целиком");
-  await page.goto("./");
+  await page.goto("./records");
   await expect(page.getByRole("link", { name: /Диапазон температуры Т-1/ })).toBeVisible();
   const page_scroll = await page.evaluate(
     () => document.documentElement.scrollHeight <= document.documentElement.clientHeight,

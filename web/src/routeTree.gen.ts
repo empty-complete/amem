@@ -14,6 +14,7 @@ import { Route as BaseRouteImport } from './routes/base'
 import { Route as BundlesRouteImport } from './routes/bundles'
 import { Route as ChangesRouteImport } from './routes/changes'
 import { Route as NewRouteImport } from './routes/new'
+import { Route as RecordsRouteImport } from './routes/records'
 import { Route as ReviewRouteImport } from './routes/review'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -44,6 +45,11 @@ const ChangesRoute = ChangesRouteImport.update({
 const NewRoute = NewRouteImport.update({
   id: '/new',
   path: '/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecordsRoute = RecordsRouteImport.update({
+  id: '/records',
+  path: '/records',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReviewRoute = ReviewRouteImport.update({
@@ -83,6 +89,7 @@ export interface FileRoutesByFullPath {
   '/bundles': typeof BundlesRoute
   '/changes': typeof ChangesRoute
   '/new': typeof NewRoute
+  '/records': typeof RecordsRoute
   '/review': typeof ReviewRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
@@ -96,6 +103,7 @@ export interface FileRoutesByTo {
   '/bundles': typeof BundlesRoute
   '/changes': typeof ChangesRoute
   '/new': typeof NewRoute
+  '/records': typeof RecordsRoute
   '/review': typeof ReviewRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
@@ -110,6 +118,7 @@ export interface FileRoutesById {
   '/bundles': typeof BundlesRoute
   '/changes': typeof ChangesRoute
   '/new': typeof NewRoute
+  '/records': typeof RecordsRoute
   '/review': typeof ReviewRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
@@ -125,6 +134,7 @@ export interface FileRouteTypes {
     | '/bundles'
     | '/changes'
     | '/new'
+    | '/records'
     | '/review'
     | '/search'
     | '/settings'
@@ -138,6 +148,7 @@ export interface FileRouteTypes {
     | '/bundles'
     | '/changes'
     | '/new'
+    | '/records'
     | '/review'
     | '/search'
     | '/settings'
@@ -151,6 +162,7 @@ export interface FileRouteTypes {
     | '/bundles'
     | '/changes'
     | '/new'
+    | '/records'
     | '/review'
     | '/search'
     | '/settings'
@@ -165,6 +177,7 @@ export interface RootRouteChildren {
   BundlesRoute: typeof BundlesRoute
   ChangesRoute: typeof ChangesRoute
   NewRoute: typeof NewRoute
+  RecordsRoute: typeof RecordsRoute
   ReviewRoute: typeof ReviewRoute
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRoute
@@ -208,6 +221,13 @@ declare module '@tanstack/react-router' {
       path: '/new'
       fullPath: '/new'
       preLoaderRoute: typeof NewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/records': {
+      id: '/records'
+      path: '/records'
+      fullPath: '/records'
+      preLoaderRoute: typeof RecordsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/review': {
@@ -261,6 +281,7 @@ const rootRouteChildren: RootRouteChildren = {
   BundlesRoute: BundlesRoute,
   ChangesRoute: ChangesRoute,
   NewRoute: NewRoute,
+  RecordsRoute: RecordsRoute,
   ReviewRoute: ReviewRoute,
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRoute,
