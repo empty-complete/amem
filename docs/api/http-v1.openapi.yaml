@@ -75,7 +75,7 @@ paths:
     post:
       tags: [write]
       operationId: createFolder
-      summary: "folders.create: пустая папка в реестре вместе с родителями; уже есть — 409 folder_exists, неверный путь — 422 folder_invalid"
+      summary: "folders.create: пустая папка в реестре вместе с родителями; уже есть — 409 folder_exists, неверный путь — 422 folder_invalid; структуру папок меняет только человек (person:), модель — 403 forbidden"
       requestBody:
         required: true
         content:
@@ -92,7 +92,7 @@ paths:
     delete:
       tags: [write]
       operationId: deleteFolder
-      summary: "folders.delete: только пустая папка — без вложенных и без записей (иначе 409 folder_not_empty); нет такой — 404 folder_not_found"
+      summary: "folders.delete: только пустая папка — без вложенных и без записей (иначе 409 folder_not_empty); нет такой — 404 folder_not_found; только человек (person:), модель — 403 forbidden"
       responses:
         "204": { description: Удалена }
         "404": { $ref: "#/components/responses/Problem" }
@@ -101,7 +101,7 @@ paths:
     patch:
       tags: [write]
       operationId: renameFolder
-      summary: "folders.rename: перенести папку с вложенными и записями (по строке журнала на запись); новый путь занят — 409 folder_exists"
+      summary: "folders.rename: перенести папку с вложенными и записями (по строке журнала на запись); новый путь занят — 409 folder_exists; только человек (person:), модель — 403 forbidden"
       requestBody:
         required: true
         content:
@@ -168,7 +168,7 @@ paths:
     patch:
       tags: [write]
       operationId: setRecordFolder
-      summary: Переложить запись в папку (scope.folder)
+      summary: "folders.move: переложить запись в папку без новой ревизии (null — без папки); переносить вправе и модель"
       parameters: [{ $ref: "#/components/parameters/Ref" }]
       requestBody:
         required: true
@@ -435,7 +435,7 @@ paths:
     post:
       tags: [review]
       operationId: resolveReviewItem
-      summary: review.resolve; закрытый пункт — 409 с тем, кто и когда решил
+      summary: "review.resolve; закрытый пункт — 409 с тем, кто и когда решил; нет права или пункт держит другой — 403 review_forbidden"
       parameters: [{ $ref: "#/components/parameters/ItemId" }]
       requestBody:
         required: true
@@ -445,8 +445,9 @@ paths:
               type: object
               required: [outcome]
               properties:
-                outcome: { type: string, enum: [confirmed, refuted] }
+                outcome: { type: string, enum: [confirmed, partial, refuted, uncertain], description: "Человек — confirmed или refuted; модель (только пункты semantic) — любой из четырёх с confidence" }
                 note: { type: string }
+                confidence: { type: number, minimum: 0, maximum: 1, description: "Уверенность модели; у решения модели обязательна" }
       responses:
         "200":
           description: OK
@@ -466,7 +467,7 @@ paths:
     post:
       tags: [review]
       operationId: enqueueReview
-      summary: "review.enqueue: аудит или калибровка"
+      summary: "review.enqueue: аудит или калибровка; ставит только человек (person:), модель — 403 review_forbidden"
       requestBody:
         required: true
         content:
@@ -491,7 +492,7 @@ paths:
       tags: [review]
       operationId: getReviewStats
       summary: review.stats
-      parameters: [{ name: days, in: query, schema: { type: integer, minimum: 1, default: 7 } }]
+      parameters: [{ name: days, in: query, schema: { type: integer, minimum: 1, maximum: 36500, default: 7 } }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ReviewStats" } } } }
         default: { $ref: "#/components/responses/Problem" }
@@ -500,7 +501,7 @@ paths:
     post:
       tags: [write]
       operationId: submit
-      summary: check.submit от агента сессии; отказ уровней 1–2 — 422 с issues
+      summary: "check.submit от агента сессии (поле агента в теле не читается); отказ проверки — 422 check_rejected с issues; <private> вырезается до проверки (предупреждение private_removed в warnings); тело больше 1 МиБ — 413 too_large"
       requestBody:
         required: true
         content:
@@ -509,11 +510,40 @@ paths:
               type: object
               required: [proposals]
               properties:
-                proposals: { type: array, minItems: 1, items: { type: object } }
-                links: { type: array, items: { type: object } }
-                reason: { type: string }
+                proposals: { type: array, minItems: 1, items: { $ref: "#/components/schemas/Proposal" } }
+                links: { type: array, items: { $ref: "#/components/schemas/LinkProposal" } }
+                reason: { type: string, description: "Причина пакета (changeset.reason)" }
+            example:
+              proposals:
+                - target: entity
+                  payload: { ref: "@node", entity_class: artifact, label: { ru: "Узел крепления" } }
+                - target: atom
+                  payload:
+                    ref: "@bracket"
+                    kind: fact
+                    label: { ru: "Кронштейн крепится к закладной анкером" }
+                    summary_plain: { ru: "Кронштейн держится на одном анкере." }
+                    about: ["@node"]
+                    sources:
+                      - path: "Заметки/узел.md"
+                        selectors: [{ type: heading, value: "Кронштейн" }]
+                        quote: "Кронштейн КБ-14 крепится к закладной анкером М10."
+                - target: atom
+                  payload:
+                    ref: "@anchor"
+                    kind: fact
+                    label: { ru: "Анкер М10 держит кронштейн КБ-14" }
+                    summary_plain: { ru: "Кронштейн держится на анкере М10." }
+                    sources:
+                      - path: "Заметки/узел.md"
+                        selectors: [{ type: heading, value: "Кронштейн" }]
+                        quote: "Кронштейн КБ-14 крепится к закладной анкером М10."
+              links:
+                - { rel: depends_on, src: "@bracket", dst: "@anchor", note: { ru: "по заметке об узле" }, confidence: 0.9 }
+              reason: "разбор заметки об узле крепления"
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Submitted" } } } }
+        "413": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         default: { $ref: "#/components/responses/Problem" }
 
@@ -672,7 +702,9 @@ components:
         status: { type: integer }
         detail: { type: string }
         code: { type: string }
-        issues: { type: array, items: { $ref: "#/components/schemas/CheckIssue" } }
+        issues: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "у check_rejected — все замечания отчёта" }
+        changeset_id: { type: string, description: "у check_rejected — отклонённый пакет (записан с отчётом)" }
+        warnings: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "у check_rejected — предупреждения службы (private_removed)" }
 
     CheckIssue:
       type: object
@@ -681,8 +713,43 @@ components:
         code: { type: string }
         severity: { type: string, enum: [violation, warning, info] }
         message: { type: string }
-        path: { type: string }
-        ref: { type: string }
+        path: { type: string, description: "Путь поля внутри предложения или связи (label.ru, sources[0].quote); пустая строка — предложение целиком" }
+        ref: { type: string, description: "Какое предложение: @имя (поле ref его тела), иначе proposals[i] или links[i] — номер в теле /submit; пустая строка — пакет целиком (поле reason)" }
+
+    Proposal:
+      type: object
+      required: [target, payload]
+      description: "Предложение пакета /submit (check.Proposal). Связи — не предложения, а links (LinkProposal)"
+      properties:
+        target: { type: string, enum: [atom, entity] }
+        payload: { type: object, description: "Тело атома или сущности (AtomPayload, EntityPayload схемы v1) как есть; @имя записи для ссылок внутри пакета — в его поле ref. Статус тело не задаёт: его ставит автопроверка" }
+        record_id: { type: [string, "null"], format: uuid, description: "Новая запись — без record_id или null; правка существующей — её UUID" }
+
+    LinkProposal:
+      type: object
+      required: [rel, src, dst]
+      description: "Связь пакета /submit — LinkPayload схемы v1; лишних полей схема не принимает (отказ — 422)"
+      properties:
+        rel: { type: string, pattern: "^[a-z][a-z0-9_]*$", description: "Вид связи из словаря rel" }
+        src: { type: string, pattern: "^((atm|ent):([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$", description: "Начало: запись базы (atm:/ent: с UUID или ключом) или @имя записи этого пакета" }
+        dst: { type: string, pattern: "^((atm|ent):([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$", description: "Конец — как src" }
+        note: { type: object, required: [ru], properties: { ru: { type: string }, en: { type: string } }, description: "Пояснение (LangString)" }
+        qualifiers:
+          type: array
+          description: "Уточнения (Qualifier схемы v1)"
+          items:
+            type: object
+            required: [property]
+            properties:
+              property: { type: string, pattern: "^[a-z][a-z0-9_]*$" }
+              label: { type: object, required: [ru], properties: { ru: { type: string }, en: { type: string } } }
+              value_text: { type: string }
+              amount: { type: number }
+              lower_bound: { type: number }
+              upper_bound: { type: number }
+              unit: { type: string }
+              value_state: { type: string, enum: [known, unknown, none] }
+        confidence: { type: number, minimum: 0, maximum: 1 }
 
     Session:
       type: object
@@ -1027,18 +1094,22 @@ components:
       properties:
         item: { $ref: "#/components/schemas/ReviewItem" }
         record: { $ref: "#/components/schemas/RecordView" }
-        current: { type: [object, "null"], description: "для edit — текущая ревизия" }
-        proposed: { type: [object, "null"], description: "для edit — предложенная ревизия" }
-        versions: { type: [object, "null"], description: "для source_changed — старая и новая версии фрагмента" }
+        current: { type: [object, "null"], description: "для edit и imported — текущая ревизия записи (revision, payload, review_state, recorded_at, agent); null — текущей нет" }
+        proposed: { type: [object, "null"], description: "для edit и imported — ревизия пункта (те же поля и changes — отличия от текущей, пути RFC 6901)" }
+        versions: { type: [object, "null"], description: "для source_changed — objects: объект (UUID), его имя, прежние версии (from) и новая (to)" }
 
     ReviewStats:
       type: object
       required: [queue]
       properties:
-        queue: { type: object }
-        done: { type: object }
-        records: { type: object }
-        verdicts: { type: object }
+        now: { type: string, format: date-time, description: "На какой момент посчитано" }
+        days: { type: integer, description: "Окно done и changesets, дней назад от now" }
+        queue: { type: object, description: "По причинам: queued, claimed, expired, oldest_queued_age_s" }
+        done: { type: object, description: "by_reason (count, median_s) и obsolete за окно" }
+        changesets: { type: object, description: "approved, rejected и error_codes отклонённых пакетов за окно" }
+        records: { type: object, description: "atoms и entities по статусам" }
+        verdicts: { type: object, description: "Итоги сверки источников текущих ревизий; unchecked — не сверялся" }
+        audit: { type: object, description: "Аудит по автору пакета: decided, refuted" }
 
     Submitted:
       type: object
@@ -1046,9 +1117,10 @@ components:
       properties:
         changeset_id: { type: string }
         complete: { type: boolean }
-        records: { type: array, items: { type: object } }
-        queued: { type: array, items: { type: object } }
-        report: { type: object }
+        records: { type: array, items: { type: object }, description: "По предложению: label (как CheckIssue.ref), ref, target, record_id, revision_id, created, status, review_state" }
+        queued: { type: array, items: { type: object }, description: "Пункты очереди: id, reason, label (как CheckIssue.ref), ref, record_id" }
+        report: { type: object, description: "Отчёт amem.check/1" }
+        warnings: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "Предупреждения службы: private_removed — скрытое в <private> вырезано из поля" }
 
     VocabEntry:
       type: object

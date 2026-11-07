@@ -165,7 +165,7 @@ amem становится программой, которой пользуют�
 
 **Остаточный риск.** Процесс под учётной записью пользователя (в том числе агент с доступом к shell) видит DSN базы и может писать в неё напрямую или нарочно получить cookie человека, подделав заголовки браузера. Cookie отличает человека от случайной записи модели, а не от злонамеренного локального процесса. Служба этого не меняет. CLI помечает такие записи моделью, если узнаёт окружение агента (разд. 5).
 
-Права решения в очереди проверяет библиотека: человек решает всё, модель — только `semantic`.
+Права решения в очереди проверяет библиотека: человек решает всё, модель — только `semantic`. Пункт вручную (`enqueue`) ставит только человек. Структуру папок (создать, удалить, переименовать) меняет только человек — у модели 403 `forbidden`; переносить запись в папку вправе и модель (разд. 1.1). Тело записи (JSON) — до 1 МиБ: служба читает его потоком и обрывает на пределе (413 `too_large`), не доверяя `Content-Length`, — `<private>` и проверки идут по всему тексту.
 
 ### 3.2. Ошибки
 
@@ -193,6 +193,8 @@ amem становится программой, которой пользуют�
 | `CanonError`, `PackError` | 400 | `bad_request` |
 | Прочий `ValueError` — последняя ступень перед 500 (так библиотека отвечает на неверный ввод: `limit`, неизвестный вид) | 400 | `bad_request`; в `detail` — сообщение библиотеки |
 | Нет входа / только чтение | 401 / 403 | `auth_required` / `read_only` |
+| Модель там, где пишет только человек (папки: создать, удалить, переименовать) | 403 | `forbidden` |
+| Тело записи больше 1 МиБ | 413 | `too_large` |
 | Чужой `Host` / `Origin` | 421 / 403 | `bad_host` / `bad_origin` |
 | Запись не в `application/json` | 415 | `unsupported_media_type` |
 | База недоступна (`psycopg.OperationalError`) | 503 | `db_unavailable` |
@@ -218,10 +220,10 @@ amem становится программой, которой пользуют�
 | `Card`, `CardField` | `profile.card`; `ancestors` — служба сворачивает карточки предков в `RefLabel` (от корня); `entity.label`, `ask`, `hint`, `when` — строкой (ru) из `LangString`; `label` поля — подпись величины из словаря `property` | — |
 | `GraphResult`, `GraphNode` | `around_entity(limit=500)` + `lookup.labels` + `family` вида: обход останавливается на 500 узлах (ближние раньше дальних), `truncated` — от рецепта | — |
 | `ObjectView`, `ObjectVersionView` | `lookup.object_view` (поля `cited_by`, `pages`, `sheets`, `status` — по договорённости с вебом, его PR) | `original_name` может отсутствовать (страница сайта); `digest` и `size` — `null` у сайта и переписки |
-| `ReviewItem`, `ReviewItemView` | `review.items` + `lookup.labels`; у `edit` и `imported` — текущая и предложенная ревизии (`lookup.history`), у `source_changed` — версии из `details` | — |
-| `ReviewStats` | `review.stats` | — |
-| `Submitted` | `check.submit`. Тело запроса: `proposals: [{target, payload, record_id?}]`; поле агента в теле не принимается | — |
-| `CheckIssue` | служба превращает `where` («`@a: sources[0].quote`») в `ref` (`@a`) и `path` (`sources[0].quote`) | — |
+| `ReviewItem`, `ReviewItemView` | `review.items`, `review.item` + `lookup.labels`; у `edit` и `imported` — текущая ревизия записи и ревизия пункта с отличиями (`recipes.diff`), у `source_changed` — версии из `details` | `current`, `proposed`, `versions` описаны; у `resolve` — исходы модели (`partial`, `uncertain`) и `confidence` |
+| `ReviewStats` | `review.stats`; итоги сверки источников (`sources` библиотеки) — `verdicts` | `now`, `days`, `changesets`, `audit` описаны; `days` — до 36500 |
+| `Submitted` | `check.submit` с `on_semantic_error="skip"` (отказ модели эмбеддингов ослабляет уровень 4, а не валит запись). Тело запроса: `proposals: [{target, payload, record_id?}]`; поле агента в теле не читается; строки тел и `reason` — после `private.strip` | тело — схемы `Proposal` (`target` — `atom` или `entity`, `record_id` — UUID или `null`) и `LinkProposal` (поля `LinkPayload`), с примером; `warnings` — `CheckIssue` (`private_removed`); у 422 — ещё `changeset_id` и `warnings` |
+| `CheckIssue` | служба превращает `where` («`@a: sources[0].quote`») в `ref` (`@a`) и `path` (`sources[0].quote`); у замечания о записи целиком `path` — пустая строка; метка `items[i]` проверки — `proposals[i]`, номер в теле `/submit` (так же — `label` в `records` и `queued` и `ref` предупреждений) | `ref` и `path` описаны |
 | `VocabEntry` | `concept` по схеме: код, подписи `ru`/`en`, определение, `family` | `definition` (`LangString` или `null`) и `family` (у видов) описаны в схеме |
 | `Base` | `meta` (`base_id`, `base_name`), `pack` (последняя загруженная версия каждого), счётчики `atoms`, `entities`, `objects`, `links` и открытых пунктов | `name` может быть `null` |
 | `Backup` | `backup.backups`: имя, время, размер; пути наружу не отдаются | `created_at` может быть `null` (время не прочесть ни из манифеста, ни из имени) |

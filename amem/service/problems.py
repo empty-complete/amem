@@ -1,8 +1,9 @@
 """Ошибки службы в application/problem+json (RFC 9457) по таблице разд. 3.2 спецификации подпроекта 4.
 
-Тело: type, title, status, detail, code и, где есть, расширения (issues, by, at, missing…); расширение не заменяет
-пять основных полей. Исключения библиотеки — наследники ValueError, поэтому перевод идёт от частного к общему одной
-цепочкой (to_problem): RecordNotFound раньше RecordError, коды ReviewError, FolderError и ObjectError раньше
+Тело: type, title, status, detail, code и, где есть, расширения (issues, changeset_id и warnings у check_rejected;
+by и at у review_closed; missing…); расширение не заменяет пять основных полей. Исключения библиотеки — наследники
+ValueError, поэтому перевод идёт от частного к общему одной цепочкой (to_problem): отказ проверки (api.CheckRejected)
+и RecordNotFound раньше RecordError, коды ReviewError, FolderError и ObjectError раньше
 «прочего», EmbeddingError (503) раньше прочего ValueError — последней ступени перед 500: так библиотека отвечает на
 неверный ввод, и ответ — 400 с её сообщением. Необработанная ошибка — 500 internal: подробности уходят в журнал службы
 (logger amem.service), в ответе их нет. Недоступная база — 503 без строки соединения: в тексте ошибки psycopg бывают
@@ -39,6 +40,7 @@ TITLES = {
     503: "Служба недоступна",
 }
 CODE_TITLES = {"read_only": "Только чтение", "review_closed": "Уже решено", "bad_origin": "Чужой источник запроса",
+               "forbidden": "Только для человека", "check_rejected": "Отклонено проверкой",
                "folder_exists": "Папка уже есть", "folder_not_empty": "Папка не пуста",
                "semantic_unavailable": "Смысловой поиск недоступен", "db_unavailable": "База недоступна",
                "store_unavailable": "Хранилище копий недоступно"}
@@ -78,6 +80,11 @@ def to_problem(exc: BaseException) -> Problem:
     message = str(exc)
     if isinstance(exc, Problem):
         return exc
+    if isinstance(exc, api.CheckRejected):
+        return Problem(422, "check_rejected", message, issues=exc.issues, changeset_id=exc.changeset_id,
+                       warnings=exc.warnings)
+    if isinstance(exc, api.Forbidden):
+        return Problem(403, "forbidden", message)
     if isinstance(exc, records.RecordNotFound):
         return Problem(404, "not_found", message)
     if isinstance(exc, review.ReviewError):
@@ -129,8 +136,8 @@ async def handle(request: Request, exc: Exception) -> JSONResponse:
 
 # классы, которые ловит ExceptionMiddleware (поиск по MRO исключения); Exception — последний рубеж
 # (ServerErrorMiddleware): он отвечает 500 и передаёт исключение серверу дальше
-HANDLED = (Problem, api.BadRequest, records.RecordError, review.ReviewError, FolderError, bundle.BundleError,
-           objects.ObjectError, CheckError, db.BaseNameError, vocab.VocabError, CanonError, PackError,
-           embed.EmbeddingError, api.StoreUnavailable, psycopg.OperationalError, psycopg.DataError, HTTPException,
-           ValueError, Exception)
+HANDLED = (Problem, api.CheckRejected, api.Forbidden, api.BadRequest, records.RecordError, review.ReviewError,
+           FolderError, bundle.BundleError, objects.ObjectError, CheckError, db.BaseNameError, vocab.VocabError,
+           CanonError, PackError, embed.EmbeddingError, api.StoreUnavailable, psycopg.OperationalError,
+           psycopg.DataError, HTTPException, ValueError, Exception)
 HANDLERS = {cls: handle for cls in HANDLED}

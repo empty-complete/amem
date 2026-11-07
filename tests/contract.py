@@ -1,4 +1,5 @@
-"""Контракт HTTP v1 для тестов службы: схемы ответов из docs/api/http-v1.openapi.yaml и проверка ответа по ним.
+"""Контракт HTTP v1 для тестов службы: схемы ответов и тел запросов из docs/api/http-v1.openapi.yaml и проверка
+по ним.
 
 OpenAPI 3.1 — это JSON Schema 2020-12, поэтому ответ проверяет jsonschema: документ контракта целиком — один ресурс
 реестра (referencing), схема ответа берётся ссылкой на своё место в документе (JSON Pointer), и ссылки
@@ -96,6 +97,25 @@ def response_ref(path: str, method: str, status: int, media: str) -> str | None:
     if media not in (_at(where).get("content") or {}):
         return None
     return where + "/" + pointer("content", media, "schema")[2:]
+
+
+def request_ref(path: str, method: str, media: str = "application/json") -> str:
+    """Место схемы тела запроса операции."""
+    body = operation(path, method).get("requestBody")
+    assert body is not None and media in body["content"], f"{method.upper()} {path}: тела {media} в контракте нет"
+    return pointer("paths", path, method, "requestBody", "content", media, "schema")
+
+
+def example(path: str, method: str, media: str = "application/json"):
+    """Пример тела запроса из контракта."""
+    content = operation(path, method)["requestBody"]["content"][media]
+    assert "example" in content, f"{method.upper()} {path}: у тела нет примера"
+    return content["example"]
+
+
+def check_request(body, path: str, method: str) -> None:
+    """Тело запроса — по схеме контракта, так же строго, как ответы."""
+    validate(body, request_ref(path, method))
 
 
 def check(response, path: str, method: str = "get"):

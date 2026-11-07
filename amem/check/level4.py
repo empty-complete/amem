@@ -53,10 +53,14 @@ SELECT d.record_id, c.payload
 """
 
 
-def check(conn, batch: Batch, report: Report, *, provider=None) -> list[dict]:
+def check(conn, batch: Batch, report: Report, *, provider=None,
+          on_semantic_error: str = "raise") -> list[dict]:
     """Уровень 4 над пачкой: замечания — в report; результат — degraded (пусто, если вектор работал).
 
-    EmbeddingError явного провайдера уходит наружу: его выбрал вызывающий, и молча ослаблять проверку нельзя."""
+    EmbeddingError явного провайдера уходит наружу (on_semantic_error="raise"): его выбрал вызывающий, и молча
+    ослаблять проверку нельзя. При "skip" (служба: provider один на запуск, а модель базы могли сменить) векторный
+    канал пропускается с причиной provider_error в degraded, как у неявного провайдера, — текст работает."""
+    check_semantic_error(on_semantic_error)
     items = [it for it in batch.items if it.ok and it.target in CODE_FIELD]
     edited = {(it.target, it.record_id) for it in items if it.record_id is not None}
     found: dict[str, dict[str, dict]] = {it.label: {} for it in items}      # метка → ref → кандидат
@@ -64,7 +68,8 @@ def check(conn, batch: Batch, report: Report, *, provider=None) -> list[dict]:
         for record_id, payload in _text_rows(conn, item):
             if (item.target, record_id) not in edited:
                 _offer(found[item.label], f"{PREFIX[item.target]}:{record_id}", "text", _text_score(item, payload))
-    degraded = _vector_channel(conn, items, edited, found, provider)
+    degraded = _vector_channel(conn, items, edited, found, provider,
+                               raise_errors=on_semantic_error == "raise")
     for j, item in enumerate(items):
         for other in items[:j]:
             if other.target == item.target and other.code == item.code:
@@ -106,6 +111,11 @@ def _text_rows(conn, item: Prepared) -> list[tuple]:
 
 # --- вектор ---
 
+def check_semantic_error(value: str) -> None:
+    if value not in recipes.SEMANTIC_ERRORS:
+        raise ValueError(f"on_semantic_error {value!r}: допустимы {', '.join(recipes.SEMANTIC_ERRORS)}")
+
+
 @functools.cache
 def _implicit():
     """Неявный провайдер — один на процесс: модель не загружается заново на каждый пакет."""
@@ -120,7 +130,8 @@ def _provider(explicit):
     return _implicit()
 
 
-def _vector_channel(conn, items: list[Prepared], edited: set, found: dict, explicit) -> list[dict]:
+def _vector_channel(conn, items: list[Prepared], edited: set, found: dict, explicit, *,
+                    raise_errors: bool = True) -> list[dict]:
     model = search._active_model(conn)
     if model is None:
         return _degraded("no_active_model")
@@ -133,7 +144,7 @@ def _vector_channel(conn, items: list[Prepared], edited: set, found: dict, expli
         wanted = [d for d in documents if d]
         vectors = iter(selected.embed(wanted))
     except embed.EmbeddingError:
-        if explicit is not None:
+        if explicit is not None and raise_errors:
             raise
         return _degraded("provider_error")
     for item, document in zip(items, documents):

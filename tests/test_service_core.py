@@ -327,11 +327,11 @@ def test_foreign_origin_is_403(serve):
     is_problem(client.post("/api/v1/submit", json={}, headers={"Origin": "http://evil.example"}), 403, "bad_origin")
     is_problem(client.get("/api/v1/session", headers={"Origin": "http://evil.example"}), 403, "bad_origin")
     is_problem(client.post("/api/v1/submit", json={}, headers={"Origin": "null"}), 403, "bad_origin")
-    # свой источник и dev-сервер из AMEM_UI_ORIGINS проходят защиту: дальше маршрута нет — 404, а не 403
-    is_problem(client.post("/api/v1/submit", json={}, headers={"Origin": ORIGIN}), 404, "not_found")
+    # свой источник и dev-сервер из AMEM_UI_ORIGINS проходят защиту: дальше — разбор тела (нет proposals) — 400
+    is_problem(client.post("/api/v1/submit", json={}, headers={"Origin": ORIGIN}), 400, "bad_request")
     is_problem(client.post("/api/v1/submit", json={}, headers={"Origin": DEV_UI}), 403, "bad_origin")
     dev = serve({"AMEM_UI_ORIGINS": DEV_UI})
-    is_problem(dev.post("/api/v1/submit", json={}, headers={"Origin": DEV_UI}), 404, "not_found")
+    is_problem(dev.post("/api/v1/submit", json={}, headers={"Origin": DEV_UI}), 400, "bad_request")
 
 
 def test_request_from_foreign_site_without_origin_is_403(serve, pg):
@@ -348,9 +348,9 @@ def test_request_from_foreign_site_without_origin_is_403(serve, pg):
                    403, "bad_origin")
         assert client.get("/health", headers={"Sec-Fetch-Site": site}).status_code == 200
     assert pg.execute("SELECT count(*) FROM retrieval").fetchone()[0] == 0
-    # своя страница, ввод адреса и клиенты без заголовка проходят защиту — дальше маршрута нет
+    # своя страница, ввод адреса и клиенты без заголовка проходят защиту — дальше разбор тела (нет proposals)
     for headers in ({"Sec-Fetch-Site": "same-origin"}, {"Sec-Fetch-Site": "none"}, {}):
-        is_problem(client.post("/api/v1/submit", json={}, headers=headers), 404, "not_found")
+        is_problem(client.post("/api/v1/submit", json={}, headers=headers), 400, "bad_request")
         assert client.get("/api/v1/session", headers=headers).status_code == 200
 
 
@@ -362,11 +362,11 @@ def test_write_accepts_only_json(serve):
     form = {"Content-Type": "application/x-www-form-urlencoded"}
     is_problem(client.post("/api/v1/submit", content=b"x=1", headers=form), 415, "unsupported_media_type")
     is_problem(client.post("/api/v1/submit", content=b"{}"), 415, "unsupported_media_type")   # тело без типа
-    # JSON (с charset) проходит защиту — дальше 404 от маршрутизатора
+    # JSON (с charset) проходит защиту — дальше разбор тела: нет proposals — 400
     is_problem(client.post("/api/v1/submit", content=b"{}",
-                           headers={"Content-Type": "application/json; charset=utf-8"}), 404, "not_found")
-    # запись без тела (DELETE папки) — проверять нечего
-    is_problem(client.delete("/api/v1/folders/a"), 404, "not_found")
+                           headers={"Content-Type": "application/json; charset=utf-8"}), 400, "bad_request")
+    # запись без тела (DELETE папки) — проверять нечего: дальше право агента (папки удаляет только человек)
+    is_problem(client.delete("/api/v1/folders/a"), 403, "forbidden")
     # чтение тип тела не проверяет
     assert client.get("/health", headers={"Content-Type": "text/plain"}).status_code == 200
 
@@ -488,7 +488,7 @@ def test_shared_service_requires_token(serve, tmp_path):
     assert response.status_code == 200
     assert (response.json()["agent"], response.json()["can_write"]) == ("person:anna", True)
     assert "set-cookie" not in response.headers               # в общей службе cookie не выдаётся
-    is_problem(client.post("/api/v1/submit", json={}, headers=write), 404, "not_found")    # защиту прошёл
+    is_problem(client.post("/api/v1/submit", json={}, headers=write), 400, "bad_request")  # защиту прошёл
 
 
 def test_shared_service_with_missing_tokens_file_does_not_start(dsn, tmp_path):

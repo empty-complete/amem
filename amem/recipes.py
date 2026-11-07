@@ -169,8 +169,9 @@ def _json_equal(before, after) -> bool:
     return before == after
 
 
-def _diff(before, after) -> list[dict]:
-    """Рекурсивный diff JSON: RFC 6901-пути; массив — одно значение, отсутствующая сторона опущена."""
+def diff(before, after) -> list[dict]:
+    """Рекурсивный diff JSON: RFC 6901-пути; массив — одно значение, отсутствующая сторона опущена.
+    Им же служба сравнивает текущую и предложенную ревизии у пункта очереди (edit, imported)."""
     changes = []
 
     def walk(old, new, path):
@@ -256,7 +257,7 @@ def what_changed(conn: psycopg.Connection, *, ref: str | None = None,
                     previous_content_hash=row["previous_content_hash"], content_hash=row["content_hash"],
                     valid_from=row["valid_from"].isoformat() if row["valid_from"] else None,
                     valid_to=row["valid_to"].isoformat() if row["valid_to"] else None,
-                    changes=_diff(previous if previous is not None else {}, row["payload"]))
+                    changes=diff(previous if previous is not None else {}, row["payload"]))
             rows = cur.execute(
                 f"SELECT r.id, r.{t}_id AS record_id, r.n, r.review_state, r.reviewed_by, r.reviewed_at "
                 f"FROM {t}_revision r WHERE r.reviewed_at IS NOT NULL "
