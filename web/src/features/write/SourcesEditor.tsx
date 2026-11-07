@@ -69,7 +69,7 @@ export function SourcesEditor({
         ))}
       </ul>
       {onAdd && (
-        <button type="button" className="addprop" onClick={onAdd}>
+        <button type="button" className="addprop" onClick={onAdd} aria-label={t("edit.add_source_full")}>
           <Icon name="plus" size={14} />
           {t("edit.add_source")}
         </button>

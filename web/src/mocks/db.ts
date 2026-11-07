@@ -58,8 +58,28 @@ function fresh() {
   };
 }
 
-export const db = { ...fresh(), reset() {} };
+const KEY = "amem.mock.db";
+const stored = () => {
+  try {
+    const v = typeof sessionStorage === "undefined" ? null : sessionStorage.getItem(KEY);
+    return v ? (JSON.parse(v) as ReturnType<typeof fresh>) : null;
+  } catch {
+    return null;
+  }
+};
+
+/** В браузере состояние моков живёт в sessionStorage вкладки: переход по адресу его не теряет. */
+export const db = { ...(stored() ?? fresh()), reset() {}, save() {} };
 db.reset = () => Object.assign(db, fresh());
+db.save = () => {
+  try {
+    if (typeof sessionStorage === "undefined") return;
+    const { reset: _r, save: _s, ...data } = db;
+    sessionStorage.setItem(KEY, JSON.stringify(data));
+  } catch {
+    // хранилище недоступно — состояние до перезагрузки
+  }
+};
 
 let n = 0;
 /** Короткий уникальный ref в стиле UUIDv7 образца. */

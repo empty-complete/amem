@@ -365,7 +365,7 @@
     "t_bold": "Bold, ⌘B",
     "t_italic": "Italic, ⌘I",
     "t_code": "Code",
-    "t_h2": "Section heading",
+    "t_h2": "Section heading, H2",
     "t_quote": "Quote",
     "t_list": "List",
     "t_link": "Link to a record, ⌘K",
@@ -388,7 +388,8 @@
     "enqueue": "Put up for review",
     "beside": "Write your own beside it",
     "enqueued": "Put up for review",
-    "new_title": "New record"
+    "new_title": "New record",
+    "add_source_full": "Add a source"
   },
   "quick": {
     "title": "New record",

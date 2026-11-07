@@ -295,6 +295,7 @@ export const handlersD = [
         { status: 422, headers: { "content-type": "application/problem+json" } },
       );
     const records = write(body.proposals, body.links ?? []);
+    db.save();
     return HttpResponse.json({
       changeset_id: newId("task"),
       complete: true,
@@ -359,12 +360,14 @@ export const handlersD = [
       ...d,
     };
     db.templates = [...db.templates.filter((t) => t.code !== code), view as never];
+    db.save();
     return HttpResponse.json(view);
   }),
   http.delete("/api/v1/packs/mine/templates/:code", ({ params }) => {
     const n = db.records.filter((r) => r.kind_or_class === params.code).length;
     if (n) return problem(409, `Есть записи этого вида: ${n}`, "Сначала смените им вид");
     db.templates = db.templates.filter((t) => t.code !== params.code);
+    db.save();
     return new HttpResponse(null, { status: 204 });
   }),
   http.get("/api/v1/vocab/kind", () =>
@@ -427,6 +430,7 @@ export const handlersD = [
       cited_by: [],
     };
     db.objects[id] = o as never;
+    db.save();
     return HttpResponse.json(o, { status: 201 });
   }),
 
@@ -452,6 +456,7 @@ export const handlersD = [
       claimed_until: null,
     };
     db.tasks.push(t);
+    db.save();
     return HttpResponse.json({ task_id: t.id }, { status: 202 });
   }),
 
@@ -465,6 +470,7 @@ export const handlersD = [
       return problem(422, "Имя папки — от 1 до 80 знаков, без пустых частей пути");
     if (db.folders.includes(clean)) return problem(409, "Такая папка уже есть");
     db.folders.push(clean);
+    db.save();
     return HttpResponse.json(
       { path: clean, name: clean.split("/").pop(), count: 0, children: [] },
       { status: 201 },
@@ -478,6 +484,7 @@ export const handlersD = [
     const move = (p: string) => (p === from ? to : p.startsWith(`${from}/`) ? to + p.slice(from.length) : p);
     db.folders = db.folders.map(move);
     for (const r of db.records) if (r.folder) r.folder = move(r.folder);
+    db.save();
     return HttpResponse.json({ path: to, name: to.split("/").pop(), count: 0, children: [] });
   }),
   http.delete("/api/v1/folders/*", ({ params }) => {
@@ -487,6 +494,7 @@ export const handlersD = [
       db.folders.some((f) => f.startsWith(`${p}/`));
     if (busy) return problem(409, "В папке есть записи или вложенные папки");
     db.folders = db.folders.filter((f) => f !== p);
+    db.save();
     return new HttpResponse(null, { status: 204 });
   }),
   http.patch("/api/v1/records/:ref/folder", async ({ params, request }) => {
@@ -505,6 +513,7 @@ export const handlersD = [
       label: r.label,
       agent: session.agent,
     } as never);
+    db.save();
     return HttpResponse.json(r);
   }),
   http.post("/api/v1/review/enqueue", async () =>
