@@ -6,7 +6,7 @@
     "gzip": true
   },
   {
-    "name": "JS: приложение без ленивых кусков (pdf.js, KaTeX, CodeMirror, небо, 3D)",
+    "name": "JS: приложение без ленивых кусков (pdf.js, KaTeX, CodeMirror, небо, 3D, конструктор видов)",
     "path": [
       "python/amem_web/dist/assets/*.js",
       "!python/amem_web/dist/assets/PdfPage-*.js",
@@ -14,9 +14,12 @@
       "!python/amem_web/dist/assets/katex-*.js",
       "!python/amem_web/dist/assets/SkyCanvas-*.js",
       "!python/amem_web/dist/assets/Sky3D-*.js",
-      "!python/amem_web/dist/assets/float-tooltip-*.js"
+      "!python/amem_web/dist/assets/float-tooltip-*.js",
+      "!python/amem_web/dist/assets/codemirror-*.js",
+      "!python/amem_web/dist/assets/BodyEditor-*.js",
+      "!python/amem_web/dist/assets/KindDrawer-*.js"
     ],
-    "limit": "380 kB",
+    "limit": "440 kB",
     "gzip": true
   },
   {
@@ -38,9 +41,13 @@
     "gzip": true
   },
   {
-    "name": "Лениво: CodeMirror (исходник записи)",
-    "path": "python/amem_web/dist/assets/SourceView-*.js",
-    "limit": "170 kB",
+    "name": "Лениво: CodeMirror (исходник и редактор тела)",
+    "path": [
+      "python/amem_web/dist/assets/codemirror-*.js",
+      "python/amem_web/dist/assets/SourceView-*.js",
+      "python/amem_web/dist/assets/BodyEditor-*.js"
+    ],
+    "limit": "190 kB",
     "gzip": true
   },
   {
@@ -58,7 +65,7 @@
   {
     "name": "CSS приложения (все стили HeroUI; урезать в части G)",
     "path": ["python/amem_web/dist/assets/*.css", "!python/amem_web/dist/assets/katex-*.css"],
-    "limit": "54 kB",
+    "limit": "56 kB",
     "gzip": true
   }
 ]

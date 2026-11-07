@@ -22,7 +22,17 @@ export default defineConfig({
     strictPort: true,
     proxy: { "/api": { target: process.env.AMEM_URL ?? "http://127.0.0.1:8765", changeOrigin: true } },
   },
-  build: { outDir: "python/amem_web/dist", emptyOutDir: true, manifest: true },
+  build: {
+    outDir: "python/amem_web/dist",
+    emptyOutDir: true,
+    manifest: true,
+    rollupOptions: {
+      output: {
+        // CodeMirror делят исходник и редактор тела — один ленивый кусок с понятным именем для бюджета
+        manualChunks: (id) => (/node_modules\/(@codemirror|@lezer|crelt|style-mod|w3c-keyname)\//.test(id) ? "codemirror" : undefined),
+      },
+    },
+  },
   test: {
     environment: "jsdom",
     globals: true,

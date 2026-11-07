@@ -6,6 +6,8 @@ import { q } from "../../api/queries";
 import { unitLabel } from "../../ui/format";
 import { Icon, type IconName } from "../../ui/icons";
 import type { Draft, FieldValue, FormField, Quantity, Template } from "./proposal";
+import "../record/record.css";
+import "./write.css";
 
 const ICON: Record<FormField["type"], IconName> = {
   object: "link",

@@ -17,7 +17,7 @@
   gap: var(--s-md);
   height: 44px;
   padding: 0 var(--s-2xs) 0 var(--s-md);
-  border-radius: 999px;
+  border-radius: var(--r-panel);
   background: var(--press);
   color: var(--press-ink);
   font-size: var(--t-label);
@@ -315,8 +315,10 @@ textarea.fld {
   position: fixed;
   z-index: 450;
   top: calc(var(--bar-h) + var(--s-xs));
+  left: var(--s-md);
   right: var(--s-md);
-  width: min(520px, calc(100vw - 2 * var(--s-md)));
+  max-width: 520px;
+  margin-left: auto;
   border-radius: var(--r-panel);
   background: var(--overlay);
   color: var(--overlay-foreground);
@@ -476,4 +478,8 @@ textarea.fld {
 }
 .moveopt[data-focus-visible] {
   outline: 2px solid var(--focus);
+}
+
+.cm.cm--edit .cm-placeholder {
+  color: var(--muted);
 }

@@ -18,6 +18,7 @@ const pages = [
   "./object/0193b7c2-5e1a-7d40-9f2e-0000000000a1",
   "./object/0193b7c2-5e1a-7d40-9f2e-0000000000a2",
   "./changes?since=ever",
+  `./new?about=${E3}`,
 ];
 
 for (const theme of ["light", "dark"] as const) {
@@ -27,6 +28,44 @@ for (const theme of ["light", "dark"] as const) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       await expect(page.locator("main")).not.toContainText("Загрузка");
+      const r = await new AxeBuilder({ page }).analyze();
+      const bad = r.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
+      expect(
+        bad.map(
+          (v) =>
+            `${v.id}: ${v.nodes
+              .map((n) => n.target.join(" "))
+              .slice(0, 3)
+              .join(", ")}`,
+        ),
+      ).toEqual([]);
+    });
+  }
+}
+
+const opened: [string, string, (p: import("@playwright/test").Page) => Promise<void>][] = [
+  ["правка записи", `./atom/${N1}`, async (p) => p.getByRole("button", { name: "Править, ⌘E" }).click()],
+  [
+    "окно N",
+    `./records`,
+    async (p) => p.getByRole("banner").getByRole("button", { name: "Записать" }).click(),
+  ],
+  ["конструктор видов", "./settings", async (p) => p.getByRole("button", { name: "Настроить виды" }).click()],
+  [
+    "«+ Источник»",
+    `./new?about=${E3}`,
+    async (p) => p.getByRole("button", { name: "Добавить источник" }).click(),
+  ],
+];
+
+for (const theme of ["light", "dark"] as const) {
+  for (const [name, path, open] of opened) {
+    test(`axe: ${name} открыто, тема ${theme}`, async ({ page }) => {
+      await page.addInitScript((t) => window.localStorage.setItem("amem.theme", t), theme);
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+      await open(page);
+      await page.waitForTimeout(600);
       const r = await new AxeBuilder({ page }).analyze();
       const bad = r.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
       expect(
