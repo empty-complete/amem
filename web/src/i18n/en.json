@@ -20,7 +20,16 @@
     "all": "All records",
     "tags": "Tags",
     "unfiled": "No folder",
-    "new": "Folder"
+    "new": "Folder",
+    "moved": "moved to “{{to}}”",
+    "rename": "Rename",
+    "delete": "Delete",
+    "new_inside": "Folder inside",
+    "new_name": "New folder name",
+    "menu": "Folder “{{name}}”: actions",
+    "move_to": "Move to folder",
+    "move_title": "Move to",
+    "drag": "Drag onto a folder on the left"
   },
   "records": {
     "empty": "Nothing here yet. Agents write to the base over MCP, and you can write the first note.",

@@ -452,3 +452,28 @@ textarea.fld {
   border: 2px solid var(--focus);
   background: color-mix(in oklab, var(--focus) 16%, transparent);
 }
+.movelist {
+  display: grid;
+  gap: var(--s-3xs);
+  max-height: 50dvh;
+  overflow: auto;
+}
+.moveopt {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 var(--s-xs);
+  border-radius: 6px;
+  font-size: var(--t-label);
+  cursor: pointer;
+}
+.moveopt[data-hovered] {
+  background: var(--surface-secondary);
+}
+.moveopt[data-selected] {
+  background: var(--surface-tertiary);
+  font-weight: 500;
+}
+.moveopt[data-focus-visible] {
+  outline: 2px solid var(--focus);
+}

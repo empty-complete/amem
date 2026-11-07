@@ -275,7 +275,9 @@ export const handlersD = [
     writeLog.push("submit");
     db.submits += 1;
     // record_id — UUID без приставки: находим запись по atm:/ent:
-    for (const p of body.proposals) if (p.record_id && !p.record_id.includes(":")) p.record_id = `${p.target === "entity" ? "ent" : "atm"}:${p.record_id}`;
+    for (const p of body.proposals)
+      if (p.record_id && !p.record_id.includes(":"))
+        p.record_id = `${p.target === "entity" ? "ent" : "atm"}:${p.record_id}`;
     for (const p of body.proposals) {
       if (p.record_id && db.views[p.record_id]?.agent !== session.agent)
         return problem(403, "Чужие записи не правятся", "Поставьте её на проверку или запишите своё рядом");

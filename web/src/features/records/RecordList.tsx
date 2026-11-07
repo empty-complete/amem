@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { useDrag } from "react-aria";
 import { useTranslation } from "react-i18next";
 import { errorText } from "../../api/errors";
 import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
+import { RECORD_MIME } from "../../app/shell/Folders";
 import { KindChip } from "../../ui/KindChip";
 import { RegionState } from "../../ui/RegionState";
 import { RelativeTime } from "../../ui/RelativeTime";
@@ -26,8 +28,12 @@ export function kindLabel(vocab: Vocab | undefined, code: string, lang: string) 
 
 export function RecordRow({ r, vocab, classes }: { r: Summary; vocab?: Vocab; classes?: Vocab }) {
   const { i18n } = useTranslation();
+  // строку можно перетащить на папку слева (React Aria: мышь, касание, клавиатура и чтецы)
+  const { dragProps, isDragging } = useDrag({
+    getItems: () => [{ [RECORD_MIME]: r.ref, "text/plain": r.label }],
+  });
   return (
-    <li>
+    <li {...dragProps} data-dragging={isDragging || undefined}>
       <Link className="row" {...recordPath(r.ref)}>
         <span className="main">
           <span className="line1">
