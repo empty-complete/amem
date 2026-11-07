@@ -240,13 +240,15 @@ amem становится программой, которой пользуют�
 - **Файл версии** (`/objects/{id}/versions/{n}/content`) — копия из хранилища с поддержкой `Range` (206).
   - Типы из белого списка (`application/pdf`, `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `text/plain`) отдаются как есть, остальные — `application/octet-stream` с `Content-Disposition: attachment`.
   - Всегда `X-Content-Type-Options: nosniff` и `Content-Security-Policy: sandbox`.
-- **Отчёт антологии** (`/bundles/{id}/report`) — HTML с `Content-Security-Policy: sandbox` и `default-src 'none'`.
+- **Отчёт антологии** (`/bundles/{id}/report`) — HTML с `Content-Disposition: inline` (открывается в новой вкладке), `Content-Security-Policy: sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:` (без `allow-scripts` — документ без своего источника) и `nosniff`. Zip подборки (`/download`) — `attachment` с безопасным именем (заголовок антологии без опасных знаков, иначе `amem-<id>.zip`; не ASCII — `filename*`).
 - **Подборки и загрузки.**
-  - Id — UUIDv7, по ним ищутся только файлы в своих папках `AMEM_STATE/bundles/` и `AMEM_STATE/uploads/`.
-  - Срок хранения — 24 часа. Старше — удаляется при запуске службы и раз в час.
+  - Id — UUIDv7, по ним ищутся только файлы в своих папках `AMEM_STATE/bundles/<id>/` и `AMEM_STATE/uploads/<id>/`; `meta.json` (владелец, время, имя файла) пишется последним — недописанная папка не видна.
+  - Подборка и загрузка принадлежат тому, кто их сделал: токену в общей службе, агенту запроса в локальной. Чужая — 404, как несуществующая.
+  - Срок хранения — 24 часа. Старше — удаляется при запуске службы и раз в час (фоновая задача lifespan); обращение к просроченной удаляет её сразу и отвечает 404.
   - Размер загрузки (`/bundles/inspect`) считается потоково при записи на диск. Предел — 4 ГиБ (`bundle.MAX_UNPACKED`), иначе 413.
 - **Экспорт и импорт подборок** идут синхронно в запросе. Долгая подборка держит запрос, а интерфейс показывает ожидание. Фоновые задачи — когда понадобятся.
-- **Антология.** `anthology: true` зовёт `amem.anthology` (часть F веба). Пока модуля нет — 501 `not_implemented`.
+- **Антология.** `anthology: true` зовёт `amem.anthology.export` (часть F веба); `title` — заголовок отчёта; `with_packs` у антологии — 400. Отказ (`BundleError`, например пустая антология) — 422.
+- **Импорт** — `dry_run` по умолчанию `true`; настоящий импорт (`dry_run: false`) — только человек, у модели 403 `forbidden`.
 - **`/ui`.** Если установлен пакет `amem_web`, служба монтирует `amem_web.static_dir()` через `StaticFiles` (без перехода по симлинкам, только внутри папки):
   - файлы с хэшем в имени — `Cache-Control: immutable`;
   - `index.html` — `no-cache` и выдача cookie сессии;

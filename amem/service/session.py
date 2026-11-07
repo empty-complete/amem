@@ -71,6 +71,13 @@ def grant(request: Request) -> bool:
     return True
 
 
+def owner(request: Request) -> str:
+    """Чьи подборки и загрузки (AMEM_STATE): в общей службе — токена (у двух токенов одного агента — свои), в
+    локальной — агента запроса (человек с cookie и модель без неё не видят чужого)."""
+    token = getattr(request.state, "token", None)
+    return f"token:{token}" if token else f"agent:{request.state.agent}"
+
+
 class Guard:
     """Промежуточный слой: защита Host/Origin/тела записи, затем агент запроса в scope["state"]."""
 
@@ -136,7 +143,7 @@ class Guard:
         state = scope.setdefault("state", {})
         if self.tokens is not None:
             if path in PUBLIC:
-                state.update(agent=self.settings.model_agent, can_write=False, grant_agent=None)
+                state.update(agent=self.settings.model_agent, can_write=False, grant_agent=None, token=None)
                 return None
             scheme, _, token = headers.get("authorization", "").partition(" ")
             entry = settings_.match_token(self.tokens, token.strip()) if scheme.lower() == "bearer" and token else None
@@ -145,13 +152,13 @@ class Guard:
                 return problems.response(401, "auth_required", detail, headers={"WWW-Authenticate": "Bearer"})
             if method in WRITE_METHODS and not entry.write:
                 return problems.response(403, "read_only", f"токен {entry.agent} — только для чтения")
-            state.update(agent=entry.agent, can_write=entry.write, grant_agent=None)
+            state.update(agent=entry.agent, can_write=entry.write, grant_agent=None, token=entry.hash)
             return None
         cookie = HTTPConnection(scope).cookies.get(COOKIE)
         person = cookie is not None and hmac.compare_digest(cookie.encode(), self.secret.encode())
         own_page = site == "same-origin" or _origin(origin) in self.origins
         state.update(agent=self.settings.agent if person else self.settings.model_agent, can_write=True,
-                     grant_agent=self.settings.agent if own_page else None)
+                     grant_agent=self.settings.agent if own_page else None, token=None)
         return None
 
     def _own_origin(self, origin: str, scope: Scope, host: str) -> bool:

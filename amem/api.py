@@ -16,18 +16,25 @@ entity_class, rels) — «без фильтра», как параметр, ко
 """
 from __future__ import annotations
 
+import hmac
+import json
 import re
+import shutil
+import time
+import unicodedata
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg
 from psycopg.rows import dict_row
 
-from . import __version__, backup, check, db, folders, lookup, objects, private, profile, recipes, records, \
-    review, usefulness, vocab
+from . import __version__, backup, bundle, check, db, folders, lookup, objects, private, profile, \
+    recipes, records, review, usefulness, vocab
+from .anthology import export as anthology_export
 from .check import level1
+from .ids import uuid7
 from .model_v1 import Status
 from .ocfl_store import ObjectStore, StoreError
 
@@ -62,6 +69,11 @@ class CheckRejected(ValueError):
     def __init__(self, message: str, *, changeset_id: str, issues: list[dict], warnings: list[dict]):
         super().__init__(message)
         self.changeset_id, self.issues, self.warnings = changeset_id, issues, warnings
+
+
+class Missing(LookupError):
+    """Подборки или загрузки нет: не было, срок хранения истёк или она чужая (чужая неотличима от несуществующей).
+    У службы — 404 not_found."""
 
 
 class StoreUnavailable(RuntimeError):
@@ -968,3 +980,255 @@ def _report(report: dict) -> dict:
     if "records" in report:
         out["records"] = [{**rec, "label": _proposal_label(rec["label"])} for rec in report["records"]]
     return out
+
+
+# --- подборки (AMEM_STATE/bundles, AMEM_STATE/uploads) ---
+#
+# Экспорт и загрузка лежат в папке состояния службы: <state>/bundles/<id>/ (bundle.zip, у антологии report.html)
+# и <state>/uploads/<id>/bundle.zip; id — UUIDv7, по нему ищется только своя папка. meta.json пишется последним:
+# папка без него — недописанная и не видна. В meta.json — владелец (кто сделал или загрузил: агент локальной
+# службы или токен общей), время создания и имя файла для скачивания. Чужая подборка отвечает так же, как
+# несуществующая (Missing, 404), — о чужом не сообщается даже то, что оно есть.
+#
+# Срок хранения — BUNDLE_TTL (24 часа) от создания. Старое удаляет sweep: служба зовёт его при запуске и раз в час,
+# а обращение к просроченной подборке удаляет её сразу (Missing) — срок не зависит от того, успел ли пройти sweep.
+# Часы — _now(): время создания пишется по ним же, и тесты подменяют их. Отрицательный возраст (часы ушли назад)
+# не считается просрочкой.
+
+BUNDLE_TTL = 24 * 3600              # с; подборка и загрузка живут сутки
+BUNDLES, UPLOADS = "bundles", "uploads"
+BUNDLE_FILE, REPORT_FILE, META_FILE = "bundle.zip", "report.html", "meta.json"
+TITLE_MAX = 200                     # знаков в заголовке антологии
+FILENAME_MAX = 100                  # знаков в имени файла для скачивания (без .zip)
+SELECTION_FIELDS = ("tags", "project", "kinds", "entity_classes", "refs", "statuses", "since", "include_private")
+_PART = re.compile(r"\.[0-9a-f-]{36}\.part")       # недокачанная загрузка: .<id>.part
+
+
+def _now() -> float:
+    return time.time()
+
+
+def _jsonable(value):
+    """Выдача библиотеки (UUID, datetime в глубине) — в типы JSON."""
+    return json.loads(json.dumps(value, ensure_ascii=False, default=str))
+
+
+def _state_id(value) -> str | None:
+    """Канонический id подборки или загрузки; не UUID — None (ответ «нет такой», а не разбор чужого пути)."""
+    if not isinstance(value, str) or "\x00" in value:
+        return None
+    try:
+        return str(uuid.UUID(value))
+    except ValueError:
+        return None
+
+
+def _read_meta(folder: Path) -> dict | None:
+    try:
+        meta = json.loads((folder / META_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return meta if isinstance(meta, dict) else None
+
+
+def _write_meta(folder: Path, meta: dict) -> None:
+    """meta.json — последним и целиком (через временный файл): папка без него не видна."""
+    part = folder / f".{META_FILE}.part"
+    part.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    part.replace(folder / META_FILE)
+
+
+def _expired(created, now: float) -> bool:
+    return isinstance(created, (int, float)) and now - created > BUNDLE_TTL
+
+
+def _remove(path: Path) -> None:
+    if path.is_symlink() or not path.is_dir():
+        path.unlink(missing_ok=True)
+    else:
+        shutil.rmtree(path, ignore_errors=True)
+
+
+def _stored(state: Path, kind: str, value, owner: str) -> tuple[Path, dict]:
+    """Папка своей подборки (kind=BUNDLES) или загрузки (UPLOADS) и её meta; нет, чужая, просрочена — Missing."""
+    what = "подборки" if kind == BUNDLES else "загрузки"
+    missing = Missing(f"{what} {str(value)[:80]!r} нет: срок хранения — сутки, после него сделайте заново")
+    bid = _state_id(value)
+    if bid is None:
+        raise missing
+    folder = Path(state) / kind / bid
+    if folder.is_symlink() or not folder.is_dir():
+        raise missing
+    meta = _read_meta(folder)
+    if meta is None or not isinstance(meta.get("owner"), str) \
+            or not hmac.compare_digest(meta["owner"].encode(), owner.encode()):
+        raise missing
+    if _expired(meta.get("created_at"), _now()):
+        _remove(folder)
+        raise missing
+    return folder, meta
+
+
+def bundle_sweep(state: Path) -> int:
+    """Удалить подборки и загрузки старше BUNDLE_TTL (и недописанные — по времени изменения); сколько удалено.
+    Удаляются только свои имена (UUID, .<UUID>.part): чужие файлы в папке состояния не трогаются."""
+    now, removed = _now(), 0
+    for kind in (BUNDLES, UPLOADS):
+        root = Path(state) / kind
+        try:
+            entries = list(root.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            if _state_id(entry.name) != entry.name and not _PART.fullmatch(entry.name):
+                continue
+            meta = None if entry.is_symlink() or not entry.is_dir() else _read_meta(entry)
+            created = (meta or {}).get("created_at")
+            if not isinstance(created, (int, float)):
+                try:
+                    created = entry.lstat().st_mtime
+                except OSError:
+                    continue
+            if _expired(created, now):
+                _remove(entry)
+                removed += 1
+    return removed
+
+
+def _selection(value) -> bundle.Selection:
+    """bundle.Selection из тела запроса (схема Selection): {} — вся база; неизвестное поле — BadRequest (опечатка
+    в условии иначе тихо выгрузила бы всё)."""
+    if value is None:
+        raise BadRequest("selection: нужен объект отбора ({} — вся база)")
+    if not isinstance(value, dict):
+        raise BadRequest(f"selection: нужен объект, а не {type(value).__name__}")
+    unknown = sorted(set(value) - set(SELECTION_FIELDS))
+    if unknown:
+        raise BadRequest(f"selection: неизвестные поля {', '.join(map(str, unknown))}; допустимы "
+                         f"{', '.join(SELECTION_FIELDS)}")
+    project = _str(value.get("project"), "selection.project")
+    if project is not None and not _ref(project, "selection.project").startswith("ent:"):
+        raise BadRequest(f"selection.project {project!r}: нужна сущность ent:<UUID или ключ>")
+    lists = {name: tuple(_codes(value.get(name), f"selection.{name}") or ())
+             for name in ("tags", "kinds", "entity_classes", "refs")}
+    for ref in lists["refs"]:
+        _ref(ref, "selection.refs")
+    statuses = _codes(value.get("statuses"), "selection.statuses")
+    unknown = sorted(set(statuses or ()) - set(STATUSES))
+    if unknown:
+        raise BadRequest(f"selection.statuses: неизвестные статусы {', '.join(unknown)}")
+    return bundle.Selection(**lists, project=project, statuses=tuple(statuses or bundle.DEFAULT_STATUSES),
+                            since=_moment(value.get("since"), "selection.since"),
+                            include_private=_bool(value.get("include_private"), "selection.include_private",
+                                                  default=False))
+
+
+def _filename(title: str | None, bid: str) -> str:
+    """Имя zip для скачивания: заголовок антологии без знаков, опасных в имени файла, иначе amem-<id>."""
+    name = unicodedata.normalize("NFC", title or "")
+    name = "".join(ch if ch.isalnum() or ch in " -_.()" else "_" for ch in name)
+    name = re.sub(r"_+", "_", re.sub(r"\s+", " ", name)).strip(" ._")[:FILENAME_MAX].strip(" ._")
+    return f"{name or 'amem-' + bid}.zip"
+
+
+def bundle_export(conn: psycopg.Connection, store: ObjectStore, state: Path, *, agent: str, owner: str,
+                  selection, with_files=None, with_packs=None, anthology=None, title=None) -> dict:
+    """Подборка в <state>/bundles/<id>: bundle.export по selection или, с anthology, антология (anthology.export,
+    title — заголовок отчёта). Ответ — id, summary (counts, packs по именам, with_files, with_packs, selection,
+    created_at) и has_report; ссылки на скачивание и отчёт добавляет служба. Отказ библиотеки — BundleError."""
+    sel = _selection(selection)
+    files = _bool(with_files, "with_files", default=False)
+    packs_ = _bool(with_packs, "with_packs", default=False)
+    is_anthology = _bool(anthology, "anthology", default=False)
+    title = _str(title, "title")
+    if title is not None and len(title) > TITLE_MAX:
+        raise BadRequest(f"title: длиннее {TITLE_MAX} знаков")
+    if is_anthology and packs_:
+        raise BadRequest("with_packs: антология пакеты не копирует — у получателя нужны те же пакеты")
+    bid = str(uuid7())
+    folder = Path(state) / BUNDLES / bid
+    folder.mkdir(parents=True)
+    try:
+        if is_anthology:
+            made = anthology_export(conn, store=store, folder=folder / BUNDLE_FILE, agent=agent, selection=sel,
+                                    with_files=files, title=title or "Антология")
+            manifest = made["manifest"]
+            (folder / REPORT_FILE).write_text(made["report"], encoding="utf-8")
+        else:
+            manifest = bundle.export(conn, store=store, folder=folder / BUNDLE_FILE, selection=sel, agent=agent,
+                                     with_files=files, with_packs=packs_)
+        summary = _jsonable({"format": manifest["format"], "created_at": manifest["created_at"],
+                             "counts": manifest["counts"], "packs": [p["name"] for p in manifest["packs"]],
+                             "with_files": manifest["with_files"], "with_packs": manifest["with_packs"],
+                             "selection": manifest["selection"], "anthology": is_anthology})
+        _write_meta(folder, {"owner": owner, "created_at": _now(), "anthology": is_anthology,
+                             "filename": _filename(title or ("Антология" if is_anthology else None), bid)})
+    except BaseException:
+        _remove(folder)
+        raise
+    return {"id": bid, "summary": summary, "has_report": is_anthology}
+
+
+@dataclass(frozen=True)
+class BundleFile:
+    """Файл своей подборки для раздачи: путь и имя для скачивания."""
+    path: Path
+    filename: str
+
+
+def bundle_download(state: Path, bundle_id, *, owner: str) -> BundleFile:
+    """zip своей подборки; нет, чужая, просрочена — Missing (404)."""
+    folder, meta = _stored(state, BUNDLES, bundle_id, owner)
+    return BundleFile(folder / BUNDLE_FILE, meta.get("filename") or f"amem-{folder.name}.zip")
+
+
+def bundle_report(state: Path, bundle_id, *, owner: str) -> Path:
+    """HTML-отчёт своей антологии; у обычной подборки отчёта нет — Missing (404)."""
+    folder, _ = _stored(state, BUNDLES, bundle_id, owner)
+    report = folder / REPORT_FILE
+    if report.is_symlink() or not report.is_file():
+        raise Missing(f"у подборки {folder.name} нет отчёта: он есть только у антологии (anthology: true)")
+    return report
+
+
+def upload_begin(state: Path) -> tuple[str, Path]:
+    """id новой загрузки и временный файл для неё в <state>/uploads (.<id>.part): служба пишет туда тело потоком."""
+    bid = str(uuid7())
+    root = Path(state) / UPLOADS
+    root.mkdir(parents=True, exist_ok=True)
+    return bid, root / f".{bid}.part"
+
+
+def upload_finish(state: Path, upload_id: str, part: Path, *, owner: str) -> dict:
+    """Принять докачанный файл загрузки: bundle.inspect (манифест и сверка частей без базы) и владелец.
+    Не подборка (не zip, нет манифеста, вредный архив) — BundleError (422), и загрузка удаляется."""
+    folder = Path(state) / UPLOADS / upload_id
+    try:
+        folder.mkdir()
+        Path(part).replace(folder / BUNDLE_FILE)
+        report = bundle.inspect(folder / BUNDLE_FILE)
+        _write_meta(folder, {"owner": owner, "created_at": _now()})
+    except BaseException:
+        _remove(folder)
+        Path(part).unlink(missing_ok=True)
+        raise
+    return {"upload_id": upload_id, "report": _jsonable(report)}
+
+
+def bundle_import(conn: psycopg.Connection, store: ObjectStore, state: Path, upload_id, *, agent: str, owner: str,
+                  trust=None, dry_run=None) -> dict:
+    """Imported: bundle.import_ своей загрузки. dry_run по умолчанию — да (план без записи). Настоящий импорт
+    вливает только человек: он решает, чему из чужой базы верить; модель смотрит план (dry_run) — Forbidden (403)."""
+    dry = _bool(dry_run, "dry_run", default=True)
+    trust = _enum(trust, "trust", bundle.TRUST, default="keep")
+    if not dry and not (isinstance(agent, str) and agent.startswith("person:")):
+        raise Forbidden(f"подборку в базу вливает только человек (person:), а не {agent}: модели доступен "
+                        f"пробный импорт (dry_run: true)")
+    folder, _ = _stored(state, UPLOADS, upload_id, owner)
+    result = bundle.import_(conn, store, folder / BUNDLE_FILE, agent=agent, trust=trust, dry_run=dry)
+    out = {"changeset_id": str(result.changeset_id) if result.changeset_id is not None else None,
+           "counts": result.counts, "queued": result.queued, "warnings": result.warnings,
+           "collisions": result.collisions, "complete": result.complete}
+    if result.report is not None:                 # отчёта уровня 1 нет — поля нет (в контракте он объект)
+        out["report"] = result.report
+    return _jsonable(out)

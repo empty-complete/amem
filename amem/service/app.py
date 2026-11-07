@@ -3,11 +3,13 @@
 Библиотека синхронная, поэтому обработчики — обычные функции: Starlette зовёт их в пуле потоков, соединение берётся из
 psycopg_pool на запрос (autocommit — как db.connect: каждый conn.transaction() — настоящая транзакция). lifespan
 открывает пул и готовит базу (db.prepare — миграции, словари, base_id), при остановке закрывает пул. Секрет cookie
-человека — новый на каждый запуск службы.
+человека — новый на каждый запуск службы. Подборки и загрузки старше суток (AMEM_STATE) lifespan удаляет при запуске
+и затем раз в час фоновой задачей.
 """
 from __future__ import annotations
 
 import contextlib
+import logging
 import secrets
 import threading
 
@@ -19,7 +21,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
-from .. import db, embed
+from .. import api, db, embed
 from ..ocfl_store import ObjectStore
 from ..settings import Settings, SettingsError, load_tokens
 from . import problems, session
@@ -28,6 +30,8 @@ API = "/api/v1"
 POOL_MIN, POOL_MAX = 1, 8
 POOL_TIMEOUT = 5.0        # с; дольше ждать соединения нет смысла — ответ 503
 OPEN_TIMEOUT = 10.0       # с; база не ответила при запуске — служба не стартует
+SWEEP_EVERY = 3600.0      # с; подборки и загрузки старше суток удаляются при запуске и раз в час
+log = logging.getLogger("amem.service")
 
 
 def create_app(settings: Settings, *, provider: embed.EmbeddingProvider | None = None) -> Starlette:
@@ -41,17 +45,23 @@ def create_app(settings: Settings, *, provider: embed.EmbeddingProvider | None =
         pool = ConnectionPool(settings.dsn, kwargs={"autocommit": True}, min_size=POOL_MIN, max_size=POOL_MAX,
                               open=False, timeout=POOL_TIMEOUT, check=ConnectionPool.check_connection,
                               name="amem")
-        await anyio.to_thread.run_sync(_open, pool)
+        app.state.base_id = await anyio.to_thread.run_sync(_open, pool)
         app.state.pool = pool
         try:
-            yield
+            await anyio.to_thread.run_sync(_sweep, settings)
+            async with anyio.create_task_group() as tasks:
+                tasks.start_soon(_sweeper, settings)
+                try:
+                    yield
+                finally:
+                    tasks.cancel_scope.cancel()
         finally:
             await anyio.to_thread.run_sync(pool.close)
 
-    from . import http_v1           # маршруты зовут connection() отсюда: импорт — после того, как модуль готов
+    from . import http_v1, ui       # маршруты зовут connection() отсюда: импорт — после того, как модуль готов
 
     app = Starlette(
-        routes=[Route("/health", health, methods=["GET"]), *http_v1.ROUTES],
+        routes=[Route("/health", health, methods=["GET"]), *http_v1.ROUTES, *ui.ROUTES],
         middleware=[Middleware(session.Guard, settings=settings, secret=secrets.token_urlsafe(32), tokens=tokens)],
         exception_handlers=problems.HANDLERS,
         lifespan=lifespan,
@@ -61,17 +71,38 @@ def create_app(settings: Settings, *, provider: embed.EmbeddingProvider | None =
     app.state.provider_lock = threading.Lock()
     app.state.provider_chosen = provider is not None
     app.state.store = ObjectStore(settings.data)      # только чтение копий: корень создаёт первая запись файла
+    app.state.base_id = None
     return app
 
 
-def _open(pool: ConnectionPool) -> None:
+def _open(pool: ConnectionPool) -> str | None:
+    """Открыть пул и подготовить базу; base_id — для журнала запросов (база не меняет его, пока служба жива)."""
     pool.open(wait=True, timeout=OPEN_TIMEOUT)
     try:
         with pool.connection() as conn:
             db.prepare(conn)
+            row = conn.execute("SELECT value FROM meta WHERE key = 'base_id'").fetchone()
     except BaseException:
         pool.close()
         raise
+    return row[0] if row else None
+
+
+def _sweep(settings: Settings) -> None:
+    """Подборки и загрузки старше суток — долой (api.bundle_sweep); сбой диска не роняет службу."""
+    try:
+        removed = api.bundle_sweep(settings.state)
+    except OSError as e:
+        log.warning("подборки в %s не вычищены: %s", settings.state, e)
+        return
+    if removed:
+        log.info("удалено подборок и загрузок старше суток: %d", removed)
+
+
+async def _sweeper(settings: Settings) -> None:
+    while True:
+        await anyio.sleep(SWEEP_EVERY)
+        await anyio.to_thread.run_sync(_sweep, settings)
 
 
 def connection(request: Request):

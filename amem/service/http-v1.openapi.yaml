@@ -607,7 +607,7 @@ paths:
                 required: [id, summary, download]
                 properties:
                   id: { type: string }
-                  summary: { type: object }
+                  summary: { type: object, description: "format, created_at, counts, packs (имена), with_files, with_packs, selection, anthology" }
                   download: { type: string }
                   report: { type: [string, "null"] }
         default: { $ref: "#/components/responses/Problem" }
@@ -629,7 +629,7 @@ paths:
       summary: "HTML-отчёт антологии"
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses:
-        "200": { description: HTML-отчёт антологии, content: { text/html: { schema: { type: string } } } }
+        "200": { description: "HTML-отчёт антологии: Content-Disposition inline; CSP sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data: (без скриптов); nosniff", content: { text/html: { schema: { type: string } } } }
         default: { $ref: "#/components/responses/Problem" }
 
   /bundles/inspect:
@@ -648,6 +648,7 @@ paths:
           content:
             application/json:
               schema: { type: object, required: [upload_id, report], properties: { upload_id: { type: string }, report: { type: object } } }
+        "413": { $ref: "#/components/responses/Problem" }
         default: { $ref: "#/components/responses/Problem" }
 
   /bundles/import:
