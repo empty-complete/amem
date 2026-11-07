@@ -432,6 +432,7 @@ def test_move_record_to_a_folder(start, kb, store, docs):
     """Переносить вправе и модель; ответ — RecordSummary, ревизии нет; null — без папки."""
     result = written(kb, store, docs, fact(key="bracket"), agent=PERSON)
     ref, record_id = ref_of(result), result.records[0]["record_id"]
+    folders.create(kb, "Проекты/Кронштейны", agent=PERSON)            # модель переносит только в существующую
     model = start()
     body = contract.check(model.patch(f"{V1}/records/{ref}/folder", json={"folder": "Проекты/Кронштейны"}),
                           "/records/{ref}/folder", "patch")
@@ -794,3 +795,84 @@ def test_submit_without_documents_folder(kb, store):
     assert result.state == "rejected"
     [issue] = [i for i in result.report["issues"] if i["code"] == "source_unresolved"]
     assert issue["where"] == "@a: sources[0]" and "AMEM_DOCS" in issue["message"]
+
+
+# --- по ревью задачи 7 ---
+
+@pytest.mark.parametrize("key", ["<private>X</private>", "a < PRIVATE >b", "</private>", "<\nprivate\n>"])
+def test_private_tag_in_a_key_is_400_without_the_key(start, kb, key):
+    """Скрытое в имени поля не вырезать, не сломав тело: ключ с меткой <private> — 400 до проверки; в ответе
+    только путь до родителя, самого ключа нет."""
+    table = fact()
+    table["content"] = {"table": {"rows": [[{key: 1}]]}}
+    extra = {**fact("@b", label="Анкер М10 держит кронштейн КБ-14"), key: SECRET}
+    client = start()
+    for payload, place in ((table, "proposals[0].payload.content.table.rows[0][0]"), (extra, "proposals[0].payload")):
+        body = problem(client.post(f"{V1}/submit", json=batch(payload)), 400, "bad_request", "/submit", "post")
+        assert place in body["detail"] and "X" not in body["detail"] and SECRET not in body["detail"]
+        assert "private" not in body["detail"].replace("<private>", "")
+    link = batch(fact()) | {"links": [{"rel": "depends_on", "src": "@a", "dst": "@a", key: 1}]}
+    problem(client.post(f"{V1}/submit", json=link), 400, "bad_request", "/submit", "post")
+    assert kb.execute("SELECT count(*) FROM changeset").fetchone()[0] == 0
+    assert kb.execute("SELECT count(*) FROM atom_revision").fetchone()[0] == 0
+
+
+def test_model_moves_records_only_into_existing_folders(start, kb, store, docs):
+    """Перенос записи моделью не создаёт папок: нет такой — 404 folder_not_found, реестр прежний; человек — создаёт."""
+    result = written(kb, store, docs, fact(), agent=PERSON)
+    ref = ref_of(result)
+    before = kb.execute("SELECT count(*) FROM folder").fetchone()[0]
+    model = start()
+    body = problem(model.patch(f"{V1}/records/{ref}/folder", json={"folder": "model/made/this"}), 404,
+                   "folder_not_found", "/records/{ref}/folder", "patch")
+    assert "человек" in body["detail"]
+    assert kb.execute("SELECT count(*) FROM folder").fetchone()[0] == before
+    assert kb.execute("SELECT folder FROM atom WHERE id = %s", (result.records[0]["record_id"],)).fetchone()[0] is None
+    problem(model.patch(f"{V1}/records/{ref}/folder", json={"folder": "a/../b"}), 422, "folder_invalid",
+            "/records/{ref}/folder", "patch")
+    # папка, которая видна только по записям в ней (не в реестре), — тоже существующая
+    other = written(kb, store, docs, fact("@b", label="Анкер М10 держит кронштейн КБ-14"), agent=PERSON)
+    kb.execute("UPDATE atom SET folder = 'Склад' WHERE id = %s", (other.records[0]["record_id"],))
+    assert contract.check(model.patch(f"{V1}/records/{ref}/folder", json={"folder": "Склад"}),
+                          "/records/{ref}/folder", "patch")["folder"] == "Склад"
+    assert contract.check(model.patch(f"{V1}/records/{ref}/folder", json={"folder": "Проекты"}),
+                          "/records/{ref}/folder", "patch")["folder"] == "Проекты"
+    assert contract.check(model.patch(f"{V1}/records/{ref}/folder", json={"folder": None}),
+                          "/records/{ref}/folder", "patch")["folder"] is None
+    person = start(person=True)
+    assert contract.check(person.patch(f"{V1}/records/{ref}/folder", json={"folder": "Новая/Вложенная"}),
+                          "/records/{ref}/folder", "patch")["folder"] == "Новая/Вложенная"
+    with pytest.raises(folders.FolderError) as e:          # операция напрямую — тот же отказ (MCP, CLI)
+        api.record_folder(kb, ref, "model/made/this", agent=BOT)
+    assert e.value.code == "not_found"
+
+
+def test_report_of_the_answer_names_proposals_like_records(start):
+    """report ответа 200: where замечаний и label записей — proposals[i]/links[i], как в records и 422."""
+    unnamed = fact(None)
+    del unnamed["ref"]
+    twin = dict(unnamed)
+    body = contract.check(start().post(f"{V1}/submit", json=batch(unnamed, twin)), "/submit", "post")
+    assert [r["label"] for r in body["report"]["records"]] == ["proposals[0]", "proposals[1]"]
+    assert body["report"]["issues"], "у двойника пачки — замечание дубля"
+    assert all(not i["where"].startswith("items[") for i in body["report"]["issues"])
+    assert any(i["where"].startswith("proposals[1]") for i in body["report"]["issues"])
+
+
+def test_private_is_cut_from_review_notes(start, queue, kb):
+    client = start(person=True)
+    item = contract.check(client.post(f"{V1}/review/enqueue", json={
+        "ref": queue["edited"], "reason": "calibration", "note": f"эталон<private>{SECRET}</private>"}),
+        "/review/enqueue", "post")["item_id"]
+    assert kb.execute("SELECT details FROM review_item WHERE id = %s", (item,)).fetchone()[0] == {"note": "эталон"}
+    done = contract.check(resolve(client, queue["semantic"], outcome="confirmed", note=f"<private>{SECRET}"),
+                          "/review/items/{id}/resolve", "post")
+    assert kb.execute("SELECT note FROM verification WHERE id = %s", (done["verification_id"],)).fetchone()[0] is None
+    stored = json.dumps(kb.execute("SELECT details FROM review_item").fetchall(), ensure_ascii=False)
+    assert SECRET not in stored
+
+
+def test_private_marked():
+    from amem import private
+    assert private.marked("a <Private> b") and private.marked("</ private >") and not private.marked("privat")
+    assert not private.marked(1)

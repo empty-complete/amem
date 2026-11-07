@@ -15,6 +15,12 @@ import re
 _TAG = re.compile(r"<\s*+(/?)\s*+private\s*+>", re.IGNORECASE)
 
 
+def marked(text: str) -> bool:
+    """Есть ли в тексте метка <private> или </private> (в любом регистре, с пробелами) — для имён полей: скрытое
+    в имени поля не вырезать, не сломав тело, поэтому такое имя отвергается целиком."""
+    return isinstance(text, str) and _TAG.search(text) is not None
+
+
 def strip(text: str) -> str:
     """Текст без частей в <private>…</private>; остальное — как было, пробелы вокруг не сжимаются."""
     if not isinstance(text, str):
