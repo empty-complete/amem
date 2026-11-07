@@ -145,12 +145,10 @@ test("перенос в папку из меню записи — с окном 
 test("загрузка файла в «+ Источник»", async ({ page }) => {
   await page.goto(`./new?about=${encodeURIComponent(E3)}`);
   await page.getByRole("button", { name: "Добавить источник" }).click();
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: "Обход_ноябрь.md",
-      mimeType: "text/markdown",
-      buffer: Buffer.from("# Обход\nвсё в порядке"),
-    });
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "Обход_ноябрь.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from("# Обход\nвсё в порядке"),
+  });
   await expect(page.getByRole("heading", { name: "Обход_ноябрь.md" })).toBeVisible();
 });

@@ -29,7 +29,10 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // CodeMirror делят исходник и редактор тела — один ленивый кусок с понятным именем для бюджета
-        manualChunks: (id) => (/node_modules\/(@codemirror|@lezer|crelt|style-mod|w3c-keyname)\//.test(id) ? "codemirror" : undefined),
+        manualChunks: (id) =>
+          /node_modules\/(@codemirror|@lezer|crelt|style-mod|w3c-keyname)\//.test(id)
+            ? "codemirror"
+            : undefined,
       },
     },
   },
