@@ -169,7 +169,7 @@ amem становится программой, которой пользуют�
 
 ### 3.2. Ошибки
 
-Исключение переводится в `application/problem+json`. Обработчики идут от частного к общему: все исключения библиотеки — наследники `ValueError`.
+Исключение переводится в `application/problem+json`. Обработчики идут от частного к общему: все исключения библиотеки — наследники `ValueError`. Служба сама проверяет параметры запроса по контракту (пределы, перечисления) до вызова библиотеки, поэтому голый `ValueError` библиотеки — редкость; он всё равно отвечает 400, а не 500.
 
 | Исключение | Статус | `code` |
 |---|---|---|
@@ -189,6 +189,9 @@ amem становится программой, которой пользуют�
 | `ObjectError(code=invalid)` | 400 | `bad_request` |
 | `RecordNotFound`, `BaseNameError`, `VocabError` — по классу (у них нет `code`) | 404 / 400 / 400 | `not_found` / `bad_request` |
 | `CheckError`, `RecordError`, `ObjectError`, `db.BaseNameError`, `vocab.VocabError`, ошибка разбора запроса | 400 | `bad_request` |
+| `EmbeddingError` (нет модели, провайдер запроса не совпал с базой) | 503 | `semantic_unavailable` |
+| `CanonError`, `PackError` | 400 | `bad_request` |
+| Прочий `ValueError` — последняя ступень перед 500 (так библиотека отвечает на неверный ввод: `limit`, неизвестный вид) | 400 | `bad_request`; в `detail` — сообщение библиотеки |
 | Нет входа / только чтение | 401 / 403 | `auth_required` / `read_only` |
 | Чужой `Host` / `Origin` | 421 / 403 | `bad_host` / `bad_origin` |
 | Запись не в `application/json` | 415 | `unsupported_media_type` |
