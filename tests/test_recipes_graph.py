@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from amem import db, ids, recipes, records, usefulness
-from amem.records import Item, RecordError
+from amem import db, ids, recipes, records, review, usefulness
+from amem.records import Item, RecordError, RecordNotFound
 
 AGENT = "model:test"
 
@@ -380,6 +380,155 @@ def test_limit_stops_the_walk_and_reports_truncated(kb):
     assert [n["ref"] for n in cut["nodes"]] == [n["ref"] for n in full["nodes"]][:3]
     assert max(n["depth"] for n in cut["nodes"]) == 1 and len(cut["edges"]) == 2
     assert around(kb, refs["@root"], depth=2, limit=1)["nodes"] == full["nodes"][:1]
+    assert (full["total"], cut["total"], around(kb, refs["@root"], depth=2, limit=1)["total"]) == (4, 4, 4)
     for bad in (0, -1, True, "3"):
         with pytest.raises(RecordError, match="limit"):
             around(kb, refs["@root"], limit=bad)
+
+
+def test_limit_defaults_to_300_and_total_counts_nodes_past_the_limit(kb):
+    """По умолчанию — 300 узлов; total за пределом — столько, сколько нашёл бы обход без предела, с теми же
+    глубиной, видами связей и статусами."""
+    hub = entity("hub")
+    leaves = [atom(f"leaf{i}", about=["@hub"]) for i in range(305)]
+    refs = records.commit(kb, [hub, *leaves, atom("far", derived_from=["@leaf0"]),
+                               atom("old", derived_from=["@leaf1"], status="deprecated")], agent=AGENT).refs
+    found = around(kb, refs["@hub"])
+    assert (len(found["nodes"]), found["truncated"], found["total"]) == (300, True, 306)
+    for kwargs in ({"depth": 2}, {"depth": 2, "rels": {"about"}}, {"depth": 3, "statuses": ["draft", "deprecated"]},
+                   {"depth": 2, "rels": {"derived_from"}}):
+        unlimited = around(kb, refs["@hub"], limit=None, **kwargs)
+        for limit in (1, 5, 400):
+            cut = around(kb, refs["@hub"], limit=limit, **kwargs)
+            assert cut["total"] == len(unlimited["nodes"]), (kwargs, limit)
+            assert cut["truncated"] is (len(unlimited["nodes"]) > limit)
+
+
+def test_degree_counts_current_links_of_the_whole_base_and_pending_open_items(kb):
+    """degree — текущие связи узла в базе, а не в выдаче: действующие link и поля текущих ревизий, в обе стороны;
+    выведенная связь и поле старой ревизии не считаются. pending — открытый пункт очереди (queued, claimed)."""
+    old = atom("old", about=["@root"])
+    written = records.commit(kb, [
+        entity("root"), entity("side"), atom("a", about=["@root", "@side"], derived_from=["@b"]), atom("b"), old,
+        atom("lone"),
+    ], [
+        {"rel": "depends_on", "src": "@b", "dst": "@root"},
+        {"rel": "see_also", "src": "@side", "dst": "@root"},
+        {"rel": "depends_on", "src": "@lone", "dst": "@b"},
+    ], agent=AGENT)
+    refs = written.refs
+    revise(kb, old, refs["@old"], about=[])
+    records.retire_link(kb, written.links[2], agent=AGENT, reason="не действует")
+    review.enqueue(kb, refs["@a"], "audit", agent="person:ann")
+    review.enqueue(kb, refs["@root"], "audit", agent="person:ann")
+    review.claim(kb, agent="person:ann", reasons=["audit"])                  # один пункт — claimed, второй — queued
+
+    nodes = {n["ref"]: n for n in around(kb, refs["@root"], depth=1, rels={"about"})["nodes"]}
+    assert nodes[refs["@root"]]["degree"] == 3                     # about от a, depends_on от b, see_also от side
+    assert nodes[refs["@a"]]["degree"] == 3                        # два about и derived_from — хоть в выдаче одно
+    assert (nodes[refs["@root"]]["pending"], nodes[refs["@a"]]["pending"]) == (True, True)
+    whole = {n["ref"]: n for n in recipes.overview(kb)["nodes"]}
+    assert {ref: n["degree"] for ref, n in whole.items()} == {
+        refs["@root"]: 3, refs["@side"]: 2, refs["@a"]: 3, refs["@b"]: 2, refs["@old"]: 0, refs["@lone"]: 0}
+    assert {ref for ref, n in whole.items() if n["pending"]} == {refs["@a"], refs["@root"]}
+    for ref, node in whole.items():                                 # обзор и окрестность считают одинаково
+        assert {n["ref"]: n["degree"] for n in around(kb, ref)["nodes"]}[ref] == node["degree"]
+    item = kb.execute("SELECT id FROM review_item WHERE record_id = %s",
+                      (records.resolve(kb, refs["@a"])[1],)).fetchone()[0]
+    kb.execute("UPDATE review_item SET state = 'obsolete', closed_at = now(), claimed_by = NULL, "
+               "claimed_until = NULL WHERE id = %s", (item,))
+    assert {n["ref"] for n in recipes.overview(kb)["nodes"] if n["pending"]} == {refs["@root"]}
+
+
+def overview_order(kb, nodes):
+    """Ожидаемый порядок обзора: degree по убыванию, затем новые первыми (время создания, id)."""
+    created = {}
+    for target in ("atom", "entity"):
+        for record_id, at in kb.execute(f"SELECT id, created_at FROM {target}").fetchall():
+            created[f"{records.PREFIX[target]}:{record_id}"] = (at, record_id)
+    return sorted(nodes, key=lambda ref: (nodes[ref], created[ref]), reverse=True)
+
+
+def test_overview_orders_by_degree_newest_first_cuts_and_keeps_inner_edges(kb):
+    first = records.commit(kb, [entity("hub"), entity("x"), atom("a", about=["@hub"]), atom("b", about=["@hub"])],
+                           [{"rel": "depends_on", "src": "@a", "dst": "@x", "confidence": 0.5}], agent=AGENT).refs
+    second = records.commit(kb, [atom("c", about=[first["@hub"]]), entity("y"), atom("z")],
+                            [{"rel": "see_also", "src": "@y", "dst": first["@x"]}], agent=AGENT).refs
+    refs = {**first, **second}
+    full = recipes.overview(kb)
+    degrees = {n["ref"]: n["degree"] for n in full["nodes"]}
+    assert degrees == {refs["@hub"]: 3, refs["@x"]: 2, refs["@a"]: 2, refs["@b"]: 1, refs["@c"]: 1,
+                       refs["@y"]: 1, refs["@z"]: 0}
+    assert [n["ref"] for n in full["nodes"]] == overview_order(kb, degrees)
+    assert [n["ref"] for n in full["nodes"]][:1] == [refs["@hub"]]
+    assert (full["recipe"], full["project"], full["total"], full["truncated"]) == ("overview", None, 7, False)
+    assert {(e["rel"], e["src"], e["dst"]) for e in full["edges"]} == {
+        ("about", refs["@a"], refs["@hub"]), ("about", refs["@b"], refs["@hub"]), ("about", refs["@c"], refs["@hub"]),
+        ("depends_on", refs["@a"], refs["@x"]), ("see_also", refs["@y"], refs["@x"])}
+    assert "depth" not in full["nodes"][0] and {"pending", "degree", "status", "revision"} <= set(full["nodes"][0])
+
+    cut = recipes.overview(kb, limit=3)
+    assert [n["ref"] for n in cut["nodes"]] == [n["ref"] for n in full["nodes"]][:3]
+    assert (cut["total"], cut["truncated"]) == (7, True)
+    kept = {n["ref"] for n in cut["nodes"]}
+    assert cut["edges"] and all(e["src"] in kept and e["dst"] in kept for e in cut["edges"])
+    assert recipes.overview(kb, limit=7)["truncated"] is False
+    assert len(recipes.overview(kb, limit=None)["nodes"]) == 7
+    only = recipes.overview(kb, rels={"see_also"})
+    assert {e["rel"] for e in only["edges"]} == {"see_also"} and only["total"] == 7     # rels — только рёбра
+    for bad in (0, -1, True, "3"):
+        with pytest.raises(RecordError, match="limit"):
+            recipes.overview(kb, limit=bad)
+
+
+def test_overview_statuses_and_records_without_current_revision(kb):
+    refs = records.commit(kb, [entity("hub"), atom("a", about=["@hub"]), atom("gone", about=["@hub"],
+                                                                              status="deprecated")],
+                          agent=AGENT).refs
+    ghost = records.commit(kb, [Item("atom", {**atom("ghost").payload}, review_state="pending")], agent=AGENT)
+    records.decide(kb, "atom", ghost.revisions[0].revision_id, False, agent="person:reviewer")
+
+    default = recipes.overview(kb)
+    assert {n["ref"] for n in default["nodes"]} == {refs["@hub"], refs["@a"]} and default["total"] == 2
+    assert {n["ref"]: n["degree"] for n in default["nodes"]}[refs["@hub"]] == 2     # степень — со всеми соседями
+    deprecated = recipes.overview(kb, statuses=["deprecated"])
+    assert [n["ref"] for n in deprecated["nodes"]] == [refs["@gone"]] and deprecated["edges"] == []
+    assert recipes.overview(kb, statuses=["draft", "deprecated"])["total"] == 3
+    empty = recipes.overview(kb, statuses=["verified"])
+    assert (empty["nodes"], empty["edges"], empty["total"], empty["truncated"]) == ([], [], 0, False)
+
+
+def test_overview_of_a_project(kb):
+    """project — атомы, у текущей ревизии которых scope.project — этот проект, и сущности, связанные с ними."""
+    moved = atom("moved", about=["@e3"])
+    moved.payload["scope"] = {"project": "@proj"}
+    p1 = atom("p1", about=["@e1"])
+    p1.payload["scope"] = {"project": "@proj"}
+    p2 = atom("p2")
+    p2.payload["scope"] = {"project": "@proj"}
+    other = atom("other", about=["@e4"])
+    other.payload["scope"] = {"project": "@else"}
+    written = records.commit(kb, [
+        Item("entity", {"ref": "@proj", "entity_class": "project", "key": "proj", "label": {"ru": "Проект"}}),
+        Item("entity", {"ref": "@else", "entity_class": "project", "key": "else", "label": {"ru": "Другой"}}),
+        entity("e1"), entity("e2"), entity("e3"), entity("e4"), entity("lone"), p1, p2, moved, other,
+        atom("plain", about=["@e1"]),
+    ], [{"rel": "used_in", "src": "@p2", "dst": "@e2"}, {"rel": "see_also", "src": "@e1", "dst": "@e4"}],
+        agent=AGENT)
+    refs = written.refs
+    revise(kb, moved, refs["@moved"], about=[refs["@e3"]], scope={"project": refs["@else"]})      # текущая ревизия — уже другой проект
+
+    found = recipes.overview(kb, project="ent:proj")
+    assert found["project"] == refs["@proj"]
+    assert {n["ref"] for n in found["nodes"]} == {refs["@p1"], refs["@p2"], refs["@e1"], refs["@e2"]}
+    assert found["total"] == 4 and found["truncated"] is False
+    assert {n["ref"]: n["degree"] for n in found["nodes"]}[refs["@e1"]] == 3       # about p1, plain и see_also
+    assert {(e["src"], e["dst"]) for e in found["edges"]} == {(refs["@p1"], refs["@e1"]), (refs["@p2"], refs["@e2"])}
+    assert recipes.overview(kb, project=refs["@proj"], limit=1)["total"] == 4
+    assert {n["ref"] for n in recipes.overview(kb, project="ent:else")["nodes"]} == \
+        {refs["@other"], refs["@moved"], refs["@e4"], refs["@e3"]}
+    with pytest.raises(RecordError, match="сущность"):
+        recipes.overview(kb, project=refs["@p1"])
+    with pytest.raises(RecordNotFound):
+        recipes.overview(kb, project="ent:no_such")
+    assert recipes.overview(kb, project="ent:lone")["total"] == 0

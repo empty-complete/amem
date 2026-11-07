@@ -446,31 +446,79 @@ def test_graph(serve, world):
     client = serve()
     body = contract.check(client.get(f"{V1}/graph", params={"ref": world.sensor, "depth": 2}), "/graph")
     nodes = {n["ref"]: n for n in body["nodes"]}
-    assert body["ref"] == world.sensor and body["truncated"] is False
+    assert body["ref"] == world.sensor and body["truncated"] is False and body["total"] == len(nodes)
     assert {world.sensor, world.station, world.w0, world.gusts, world.area} <= set(nodes)
     assert (nodes[world.w0]["family"], nodes[world.gusts]["family"], nodes[world.station]["family"]) == \
         ("source", "work", "object")
     assert nodes[world.w0]["label"] == "Давление ветра для района II" and nodes[world.sensor]["depth"] == 0
     assert all(e["src"] in nodes and e["dst"] in nodes for e in body["edges"])
+    # степень — все текущие связи в базе: part_of к станции, about от факта и урока
+    assert (nodes[world.sensor]["degree"], nodes[world.w0]["degree"], nodes[world.area]["degree"]) == (3, 2, 1)
+    assert {ref for ref, n in nodes.items() if n["pending"]} == {world.w0}               # пункт аудита открыт
     only = contract.check(client.get(f"{V1}/graph", params={"ref": world.sensor, "rels": "part_of"}), "/graph")
     assert {n["ref"] for n in only["nodes"]} == {world.sensor, world.station}
+    assert {n["ref"]: n["degree"] for n in only["nodes"]}[world.sensor] == 3          # степень — не по выдаче
     every = contract.check(client.get(f"{V1}/graph", params={"ref": world.sensor, "rels": "", "status": ""}),
                            "/graph")
     assert {n["ref"] for n in every["nodes"]} == {n["ref"] for n in contract.check(
         client.get(f"{V1}/graph", params={"ref": world.sensor}), "/graph")["nodes"]}       # пустой — без фильтра
-    for params in ({}, {"ref": world.sensor, "depth": "4"}, {"ref": world.sensor, "rels": "no_such"}):
+    for params in ({"ref": world.sensor, "depth": "4"}, {"ref": world.sensor, "rels": "no_such"},
+                   {"limit": "0"}, {"limit": "1001"}, {"limit": "много"}, {"ref": world.sensor, "limit": "-1"},
+                   {"project": "проект"}, {"project": "ent:\x00"}, {"limit": "\x00"}, {"project": world.w0},
+                   {"depth": "0"}):
         problem(client.get(f"{V1}/graph", params=params), 400, "bad_request", "/graph")
     problem(client.get(f"{V1}/graph", params={"ref": "ent:no_such"}), 404, "not_found", "/graph")
+    problem(client.get(f"{V1}/graph", params={"project": "ent:no_such"}), 404, "not_found", "/graph")
 
 
-def test_graph_is_cut_to_the_node_limit(serve, world, monkeypatch):
-    assert api.GRAPH_NODES == 500
-    monkeypatch.setattr(api, "GRAPH_NODES", 3)
-    body = contract.check(serve().get(f"{V1}/graph", params={"ref": world.sensor, "depth": 3}), "/graph")
-    assert body["truncated"] is True and len(body["nodes"]) == 3
+def test_graph_without_ref_is_the_overview(serve, world):
+    """Без ref — обзор базы: узлы по degree по убыванию, рёбра между вернувшимися, total без предела, ref — null."""
+    client = serve()
+    body = contract.check(client.get(f"{V1}/graph"), "/graph")
+    assert body["ref"] is None and body["truncated"] is False
+    degrees = [n["degree"] for n in body["nodes"]]
+    assert degrees == sorted(degrees, reverse=True) and body["nodes"][0]["ref"] == world.sensor
+    assert {n["ref"] for n in body["nodes"]} == {world.sensor, world.station, world.area, world.w0, world.gusts}
+    assert body["total"] == 5 and all("depth" not in n for n in body["nodes"])
+    assert {n["ref"] for n in body["nodes"] if n["pending"]} == {world.w0}
+    assert len(body["edges"]) == 5 and contract.check(client.get(f"{V1}/graph", params={"ref": ""}), "/graph") == body
+    cut = contract.check(client.get(f"{V1}/graph", params={"limit": "2", "depth": "3"}), "/graph")
+    kept = {n["ref"] for n in cut["nodes"]}
+    assert (len(kept), cut["total"], cut["truncated"]) == (2, 5, True)
+    assert [n["ref"] for n in cut["nodes"]] == [n["ref"] for n in body["nodes"]][:2]
+    assert all(e["src"] in kept and e["dst"] in kept for e in cut["edges"])
+    verified = contract.check(client.get(f"{V1}/graph", params={"status": "verified"}), "/graph")
+    assert [n["ref"] for n in verified["nodes"]] == [world.w0] and verified["edges"] == []
+    assert contract.check(client.get(f"{V1}/graph", params={"rels": "part_of"}), "/graph")["total"] == 5
+
+
+def test_graph_overview_of_a_project(serve, world):
+    """project — атомы с scope.project и сущности, связанные с ними; с ref project окрестность не сужает."""
+    records.commit(world.conn, [Item("atom", {
+        "kind": "lesson", "key": "mast", "label": {"ru": "Мачта качается"}, "about": [world.station],
+        "summary_plain": {"ru": "В сильный ветер мачта станции качается."}, "scope": {"project": world.area}})],
+        agent=PERSON)
+    mast = f"atm:{records.resolve(world.conn, 'atm:mast')[1]}"
+    client = serve()
+    body = contract.check(client.get(f"{V1}/graph", params={"project": "ent:area"}), "/graph")
+    assert body["ref"] is None and body["total"] == 2
+    assert {n["ref"] for n in body["nodes"]} == {mast, world.station}
+    assert [(e["src"], e["dst"], e["rel"]) for e in body["edges"]] == [(mast, world.station, "about")]
+    assert {n["ref"]: n["degree"] for n in body["nodes"]}[world.station] == 3            # part_of ×2 и about
+    around = contract.check(client.get(f"{V1}/graph", params={"ref": world.sensor, "project": world.area}), "/graph")
+    assert around["ref"] == world.sensor and world.w0 in {n["ref"] for n in around["nodes"]}
+
+
+def test_graph_is_cut_to_the_node_limit(serve, world):
+    client = serve()
+    full = contract.check(client.get(f"{V1}/graph", params={"ref": world.sensor, "depth": 3}), "/graph")
+    assert full["truncated"] is False and full["total"] == len(full["nodes"]) == 5
+    body = contract.check(client.get(f"{V1}/graph", params={"ref": world.sensor, "depth": 3, "limit": 3}), "/graph")
+    assert body["truncated"] is True and len(body["nodes"]) == 3 and body["total"] == 5
     kept = {n["ref"] for n in body["nodes"]}
     assert world.sensor in kept and max(n["depth"] for n in body["nodes"]) <= 1      # ближние остаются
     assert all(e["src"] in kept and e["dst"] in kept for e in body["edges"])
+    assert api.graph(world.conn, world.sensor, limit="1000")["total"] == 4            # глубина 1 по умолчанию
 
 
 # --- изменения ---

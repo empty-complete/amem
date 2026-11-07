@@ -122,8 +122,9 @@ def get_card(request: Request) -> JSONResponse:
 
 def get_graph(request: Request) -> JSONResponse:
     with connection(request) as conn:
-        return JSONResponse(api.graph(conn, _q(request, "ref"), depth=_q(request, "depth"),
-                                      rels=_many(request, "rels"), status=_many(request, "status")))
+        return JSONResponse(api.graph(conn, _q(request, "ref"), depth=_q(request, "depth"), limit=_q(request, "limit"),
+                                      project=_q(request, "project"), rels=_many(request, "rels"),
+                                      status=_many(request, "status")))
 
 
 def get_changes(request: Request) -> JSONResponse:
