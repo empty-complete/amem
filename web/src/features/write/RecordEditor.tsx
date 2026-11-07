@@ -313,6 +313,12 @@ export function RecordEditor(p: RecordEditorProps) {
             sources={d.sources}
             issues={issues?.sources ?? {}}
             onChange={(s) => change({ ...d, sources: s })}
+            onAdd={() => setPicking(true)}
+          />
+          <SourcePicker
+            open={picking}
+            onClose={() => setPicking(false)}
+            onPick={(s) => change({ ...d, sources: [...d.sources, s] })}
           />
         </>
       )}

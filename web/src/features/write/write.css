@@ -403,7 +403,7 @@ textarea.fld {
   gap: var(--s-xs);
   font-size: var(--t-label);
 }
-.pick__find .fld {
+.pick__find > .fld {
   flex: 1;
 }
 .pick__list {

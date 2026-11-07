@@ -41,7 +41,6 @@ function BoxPick({ src, alt, onPick }: { src: string; alt: string; onPick: (b: s
     return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
   };
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: рамка мышью; с клавиатуры рамку задают полем рядом
     <div
       className="boxpick"
       onPointerDown={(e) => {
