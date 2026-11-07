@@ -148,7 +148,10 @@ def load_tokens(path: Path | str) -> tuple[Token, ...]:
     """Токены из amem-tokens.toml; нет файла или он неверен — SettingsError с местом."""
     path = Path(path)
     try:
-        with open(path, "rb") as f:
+        # O_NONBLOCK: канал (FIFO) на месте файла не вешает запуск — открытие возвращается сразу, а S_ISREG по fstat
+        # отвергает его до чтения
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0))
+        with os.fdopen(fd, "rb") as f:
             info = os.fstat(f.fileno())          # права и владелец — того файла, который читаем
             raw = f.read() if stat.S_ISREG(info.st_mode) else None
     except FileNotFoundError:

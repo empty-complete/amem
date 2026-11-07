@@ -106,6 +106,21 @@ def test_openapi_json_is_the_contract(serve):
     assert response.json() == yaml.safe_load(contract.PATH.read_text(encoding="utf-8"))
 
 
+def test_contract_check_is_strict_but_problem_is_open():
+    """Лишнее поле ответа — расхождение с контрактом; у Problem расширения RFC 9457 разрешены."""
+    session = {"agent": "model:local", "base": "01900000-0000-7000-8000-000000000000", "base_name": None,
+               "amem_version": "0.1.0", "semantic": "used", "can_write": True}
+    contract.component("Session", session)
+    with pytest.raises(AssertionError, match="secret"):
+        contract.component("Session", {**session, "secret": 1})
+    contract.component("Problem", {"type": "about:blank", "title": "Уже решено", "status": 409,
+                                   "code": "review_closed", "by": "person:ann"})
+    contract.component("RecordView", {"ref": "atm:x", "target": "atom", "revision": 1, "status": "draft",
+                                      "review_state": "none", "recorded_at": "2026-11-07T09:00:00+00:00",
+                                      "agent": "person:ann", "sources": [], "open_items": [],
+                                      "payload": {"любое": "тело"}})                    # тело записи — открытое
+
+
 # --- сессия ---
 
 def test_session(serve, pg):
@@ -187,19 +202,76 @@ def test_similar(serve, world, pg):
     problem(client.get(f"{V1}/similar", params={"ref": "atm:no_such"}), 404, "not_found", "/similar")
 
 
-def test_similar_by_text_without_provider_is_503(serve, world, pg):
-    """Активная модель есть, а provider службы — не её (fastembed по умолчанию): смысловой поиск недоступен."""
+def activate_fake_model(pg) -> FakeProvider:
     provider = FakeProvider()
     model = embed.register_model(pg, provider)
     embed.sync_embeddings(pg, model["id"], provider)
     embed.activate_model(pg, model["id"])
+    return provider
+
+
+def test_search_and_similar_degrade_when_the_provider_does_not_fit(serve, world, pg):
+    """Активная модель есть, а provider службы — не её (fastembed по умолчанию): поиск не падает 503, а отвечает
+    лексическими каналами с причиной; similar по ссылке берёт вектор из базы — provider ему не нужен."""
+    activate_fake_model(pg)
     client = serve()
-    body = problem(client.get(f"{V1}/similar", params={"q": "давление ветра"}), 503, "semantic_unavailable",
-                   "/similar")
-    assert "provider" in body["detail"]
+    for path, params in (("/search", {"q": "w0"}), ("/similar", {"q": "давление ветра"})):
+        body = contract.check(client.get(f"{V1}{path}", params=params), path)
+        assert body["semantic"] == "unavailable"
+        assert body["channels"]["reasons"] == {"vector": "provider_mismatch"}
+        assert world.w0 in [h["ref"] for h in body["items"]]
+    assert pg.execute("SELECT count(*) FROM retrieval").fetchone()[0] == 2     # по строке журнала на поиск
     assert contract.check(client.get(f"{V1}/session"), "/session")["semantic"] == "unavailable"
-    # по ссылке вектор уже в базе — provider не нужен
     assert contract.check(client.get(f"{V1}/similar", params={"ref": world.w0}), "/similar")["semantic"] == "used"
+
+
+def test_default_provider_is_made_once_per_service(serve, world, pg, monkeypatch):
+    """provider по AMEM_BACKEND создаётся при первом поиске один раз: модель fastembed не грузится на каждый запрос."""
+    made = []
+
+    class Fastembed(FakeProvider):
+        name, version, backend = "fake-fastembed", "1", "fastembed"
+
+        def __init__(self):
+            super().__init__()
+            made.append(self)
+
+    model = embed.register_model(pg, Fastembed())
+    embed.sync_embeddings(pg, model["id"], made[0])
+    embed.activate_model(pg, model["id"])
+    made.clear()
+    monkeypatch.setattr(embed, "FastembedProvider", Fastembed)
+    client = serve()
+    for q in ("w0", "ветер", "давление"):
+        assert contract.check(client.get(f"{V1}/search", params={"q": q}), "/search")["semantic"] == "used"
+    assert contract.check(client.get(f"{V1}/similar", params={"q": "ветер"}), "/similar")["semantic"] == "used"
+    contract.check(client.get(f"{V1}/session"), "/session")
+    assert len(made) == 1 and len(made[0].calls) == 4
+
+
+@pytest.mark.parametrize("path, params", [
+    ("/search", {"q": "w0\x00"}), ("/search", {"q": "w0", "kind": "\x00"}), ("/search", {"q": "w0", "target": "\x00"}),
+    ("/search", {"q": "w0", "limit": "1\x00"}), ("/similar", {"q": "\x00"}), ("/similar", {"ref": "atm:\x00"}),
+    ("/records", {"tag": "\x00"}), ("/records", {"folder": "\x00"}), ("/records", {"about": "\x00"}),
+    ("/records", {"cursor": "\x00"}), ("/records", {"status": "\x00"}), ("/changes", {"since": "\x00"}),
+    ("/changes", {"who": "\x00"}), ("/graph", {"ref": "ent:sensor", "rels": "\x00"}), ("/graph", {"ref": "ent:\x00"}),
+])
+def test_nul_in_a_parameter_is_400(serve, world, path, params):
+    """Знак NUL PostgreSQL не принимает: ответ — 400 о параметре, а не 500 из базы."""
+    body = problem(serve().get(f"{V1}{path}", params=params), 400, "bad_request", path)
+    assert "NUL" in body["detail"]
+
+
+def test_nul_in_a_path_is_400(serve, world):
+    client = serve()
+    for url, path in ((f"{V1}/vocab/%00", "/vocab/{scheme}"), (f"{V1}/records/atm:%00", "/records/{ref}"),
+                      (f"{V1}/entities/ent:%00/card", "/entities/{ref}/card"), (f"{V1}/objects/%00", "/objects/{id}"),
+                      (f"{V1}/objects/{oid(world.book)}/versions/1/sheet?name=%00",
+                       "/objects/{id}/versions/{n}/sheet")):
+        problem(client.get(url), 400, "bad_request", path)
+    # операция напрямую — так же: MCP и CLI получают тот же отказ
+    with pytest.raises(api.BadRequest, match="NUL"):
+        api.record_list(world.conn, tag="a\x00b")
 
 
 # --- папки и список записей ---
@@ -319,6 +391,8 @@ def test_record_history(serve, world):
     assert {"revision", "status", "folder", "link_created"} <= set(types)
     revision = next(e for e in body["events"] if e["type"] == "revision")
     assert isinstance(revision["changes"], list) and revision["label"] == "Давление ветра для района II"
+    assert "content_hash" not in revision and "previous_content_hash" not in revision   # служебные хэши — не наружу
+    assert revision["recorded_at"] and revision["valid_from"] is None
     move = next(e for e in body["events"] if e["type"] == "folder")
     assert (move["from"], move["to"], move["agent"]) == (None, "Проекты/Ветер", PERSON)
     link = next(e for e in body["events"] if e["type"] == "link_created")
@@ -464,6 +538,17 @@ def test_object_content(serve, world, docs):
     contract.check(part, "/objects/{id}/versions/{n}/content")
     assert part.status_code == 206 and part.content == whole.content[:10]
     assert part.headers["content-range"] == f"bytes 0-9/{len(whole.content)}"
+    # неверный и невыполнимый Range — problem+json с nosniff, а не text/plain
+    for bad in ("bytes=5-2", "items=0-1", "bytes=abc"):
+        refused = problem(client.get(url, headers={"Range": bad}), 400, "bad_request",
+                          "/objects/{id}/versions/{n}/content")
+        assert "Range" in refused["detail"]
+    for response in [client.get(url, headers={"Range": bad}) for bad in ("bytes=5-2", "items=0-1")]:
+        assert response.headers["x-content-type-options"] == "nosniff"
+    beyond = client.get(url, headers={"Range": f"bytes={len(whole.content) + 10}-"})
+    problem(beyond, 416, "range_not_satisfiable", "/objects/{id}/versions/{n}/content")
+    assert beyond.headers["content-range"] == f"bytes */{len(whole.content)}"
+    assert beyond.headers["x-content-type-options"] == "nosniff"
 
     md = client.get(f"{V1}/objects/{oid(world.note)}/versions/1/content")    # text/markdown — не из белого списка
     assert md.status_code == 200 and md.content == (docs / NOTE).read_bytes()
@@ -479,13 +564,42 @@ def test_object_content(serve, world, docs):
             path)
     problem(client.get(f"{V1}/objects/{oid(world.pdf)}/versions/0/content"), 400, "bad_request", path)
     problem(client.get(f"{V1}/objects/{oid(world.pdf)}/versions/первая/content"), 400, "bad_request", path)
+    problem(client.get(f"{V1}/objects/{oid(world.pdf)}/versions/2147483648/content"), 400, "bad_request", path)
 
 
-def test_object_content_without_the_copy_in_the_store_is_404(serve, world, tmp_path):
+def test_store_without_its_root_is_503(serve, world, tmp_path):
+    """AMEM_DATA без корня OCFL — том данных не подключён: это недоступность службы, а не «нет файла»."""
     client = serve({"AMEM_DATA": str(tmp_path / "другое-хранилище")})
-    body = problem(client.get(f"{V1}/objects/{oid(world.pdf)}/versions/1/content"), 404, "not_found",
-                   "/objects/{id}/versions/{n}/content")
-    assert "хранилище" in body["detail"]
+    url = f"{V1}/objects/{{}}/versions/1/{{}}"
+    for tail, object_id, params in (("content", world.pdf, None), ("text", world.pdf, None),
+                                    ("sheet", world.book, {"name": "Нагрузки"})):
+        body = problem(client.get(url.format(oid(object_id), tail), params=params), 503, "store_unavailable",
+                       f"/objects/{{id}}/versions/{{n}}/{tail}")
+        assert "AMEM_DATA" in body["detail"] and str(tmp_path) not in body["detail"]   # путь — только в журнал
+
+
+def test_copy_missing_from_the_store_is_404_and_logged(serve, world, caplog):
+    """Корень хранилища есть, а копии нет (удалили вручную) или копия — ссылка за пределы папки объекта: 404
+    с подсказкой и предупреждение в журнале службы, а не 500. Текст, уже извлечённый в кэш, отдаётся и без копии."""
+    world.store.content(world.pdf.object_id, 1).unlink()
+    world.store.content(world.book.object_id, 1).unlink()
+    objects.text(world.conn, world.store, world.note.object_id, 1)
+    note = world.store.content(world.note.object_id, 1)
+    outside = world.store.root.parent / "чужой.md"
+    note.rename(outside)
+    note.symlink_to(outside)
+    client = serve()
+    url = f"{V1}/objects/{{}}/versions/1/{{}}"
+    with caplog.at_level("WARNING", logger="amem.service"):
+        for tail, object_id, params in (("content", world.pdf, None), ("text", world.pdf, None),
+                                        ("content", world.book, None), ("sheet", world.book, {"name": "Нагрузки"}),
+                                        ("content", world.note, None)):
+            body = problem(client.get(url.format(oid(object_id), tail), params=params), 404, "not_found",
+                           f"/objects/{{id}}/versions/{{n}}/{tail}")
+            assert "восстановите" in body["detail"] and str(world.store.root) not in body["detail"]
+    assert caplog.text.count("копии версии 1 нет в хранилище") == 5
+    assert str(world.store.root) in caplog.text                          # где именно — в журнале службы
+    assert contract.check(client.get(url.format(oid(world.note), "text")), "/objects/{id}/versions/{n}/text")["pages"]
 
 
 def test_object_text(serve, world):

@@ -57,6 +57,40 @@ def availability(conn: psycopg.Connection, provider: embed.EmbeddingProvider | N
     return {"semantic": "used", "reason": None}
 
 
+SEMANTIC_ERRORS = ("raise", "skip")
+
+
+def _select(conn: psycopg.Connection, provider, on_error: str):
+    """_availability с выбором реакции на ошибку provider: raise — EmbeddingError наружу, skip — причина пропуска."""
+    if on_error not in SEMANTIC_ERRORS:
+        raise ValueError(f"on_semantic_error {on_error!r}: допустимы {', '.join(SEMANTIC_ERRORS)}")
+    try:
+        return _availability(conn, provider)
+    except embed.EmbeddingError:
+        if on_error == "raise":
+            raise
+        return search._active_model(conn), None, "backend_unknown"
+
+
+def _query_vector(model, provider: embed.EmbeddingProvider, query: str, on_error: str):
+    """Вектор запроса активной моделью → (вектор, None); при skip ошибка provider — (None, причина):
+    provider_mismatch — provider не той модели, fastembed_missing — нет пакета fastembed, embedding_failed — прочий
+    отказ модели (нет файлов в кэше, сбой счёта)."""
+    try:
+        _check_query_provider(model, provider)
+    except embed.EmbeddingError:
+        if on_error == "raise":
+            raise
+        return None, "provider_mismatch"
+    try:
+        return provider.embed([query])[0], None
+    except embed.EmbeddingError:
+        if on_error == "raise":
+            raise
+        missing = provider.backend == "fastembed" and importlib.util.find_spec("fastembed") is None
+        return None, "fastembed_missing" if missing else "embedding_failed"
+
+
 def _timed(channel, function, durations):
     started = time.perf_counter()
     rows = function()
@@ -292,11 +326,13 @@ def what_changed(conn: psycopg.Connection, *, ref: str | None = None,
 def exact_fact(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
                limit: int = 10, target=None, kind=None, entity_class=None, statuses=None,
                include_record: bool = False, provider: embed.EmbeddingProvider | None = None,
-               usefulness: bool = True, log: bool = True, now=None) -> dict:
+               usefulness: bool = True, log: bool = True, now=None, on_semantic_error: str = "raise") -> dict:
     """Найти марку или формулировку всеми четырьмя каналами, не выбирая один «лучший» ответ.
 
     kind и entity_class — код строкой или несколько кодов (search._codes); log=False — выдача не пишется
-    в retrieval, retrieval_id равен None."""
+    в retrieval, retrieval_id равен None. on_semantic_error — что делать, если provider не может посчитать вектор
+    запроса (не та модель, нет fastembed, сбой модели, неизвестный AMEM_BACKEND): raise — EmbeddingError, skip —
+    смысловой канал пропускается с причиной в channels.reasons.vector, остальные каналы отвечают как обычно."""
     filters = {"target": target, "kind": search._codes(kind, "kind"),
                "entity_class": search._codes(entity_class, "entity_class"), "statuses": statuses}
     durations = {}
@@ -306,14 +342,14 @@ def exact_fact(conn: psycopg.Connection, query: str, *, agent: str, activity=Non
         "fts": _timed("fts", lambda: search._fts(conn, query, **filters), durations),
         "vector": None,
     }
-    model, selected, reason = _availability(conn, provider)
+    model, selected, reason = _select(conn, provider, on_semantic_error)
     if selected is not None and not query.strip():
         reason = "empty_query"
     if selected is not None and reason is None:
-        _check_query_provider(model, selected)
-        vector = selected.embed([query])[0]
-        channels["vector"] = _timed(
-            "vector", lambda: search._vector(conn, vector, model[0], **filters), durations)
+        vector, reason = _query_vector(model, selected, query, on_semantic_error)
+        if vector is not None:
+            channels["vector"] = _timed(
+                "vector", lambda: search._vector(conn, vector, model[0], **filters), durations)
     reasons = {"vector": reason} if reason is not None else {}
     return _response(conn, "exact_fact", channels, query=query, agent=agent, activity=activity,
                      limit=limit, include_record=include_record,
@@ -344,10 +380,10 @@ def _source_document(conn: psycopg.Connection, ref: str):
 def similar(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
             limit: int = 10, target=None, kind=None, entity_class=None, statuses=None,
             include_record: bool = False, provider: embed.EmbeddingProvider | None = None,
-            usefulness: bool = True, log: bool = True, now=None) -> dict:
+            usefulness: bool = True, log: bool = True, now=None, on_semantic_error: str = "raise") -> dict:
     """Найти похожие записи по тексту либо по atm:/ent: ссылке (UUID или ключ) на существующую запись.
 
-    Фильтры и log — как у exact_fact."""
+    Фильтры, log и on_semantic_error — как у exact_fact: при skip похожие по тексту ищет один канал fts."""
     if not isinstance(query, str):
         raise ValueError("запрос должен быть строкой")
     kind, entity_class = search._codes(kind, "kind"), search._codes(entity_class, "entity_class")
@@ -363,13 +399,12 @@ def similar(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
                "statuses": statuses, "exclude": exclude}
     durations = {}
     channels = {"vector": None, "fts": None}
-    model, selected, reason = _availability(conn, provider)
+    model, selected, reason = _select(conn, provider, on_semantic_error)
     if selected is not None and not fts_query.strip():
         reason = "empty_query"
     if selected is not None and reason is None:
         if source is None:
-            _check_query_provider(model, selected)
-            vector = selected.embed([query])[0]
+            vector, reason = _query_vector(model, selected, query, on_semantic_error)
         else:
             stored = search._current_embedding(conn, source[0], source[1], model[0])
             if stored is None:
@@ -524,15 +559,21 @@ def _path_evidence_role(path: dict, nodes: dict, roles: dict):
     return next(role for role, rank in _GRAPH_ROLE_RANK.items() if rank == weakest)
 
 
-def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=None, statuses=None) -> dict:
+def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=None, statuses=None,
+                  limit: int | None = None) -> dict:
     """Кратчайшие пути от записи (ref — atm:/ent: с UUID или ключом) по link/about/derived_from; узел посещается
     один раз.
 
     rels — набор видов связей (about и derived_from — тоже), statuses — статусы соседей, как у других рецептов.
     При равной длине путь выбирается по последовательности id рёбер, затем по ref; рёбра вне дерева кратчайших
-    путей (параллельные связи, связи между уже найденными узлами) не возвращаются."""
+    путей (параллельные связи, связи между уже найденными узлами) не возвращаются.
+
+    limit — сколько узлов (вместе с начальным) найти, не больше: обход останавливается на нём, ближние узлы —
+    раньше дальних, в том же порядке, что без предела; truncated — были узлы сверх предела. None — без предела."""
     if isinstance(depth, bool) or not isinstance(depth, int) or not 1 <= depth <= 3:
         raise records.RecordError("depth должен быть целым числом от 1 до 3")
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+        raise records.RecordError(f"limit {limit!r}: нужно целое число от 1 или None")
     _, _, start = _history_ref(conn, ref)
     allowed_statuses = search._channel_statuses(statuses)
     rels = _graph_rels(conn, rels)
@@ -544,6 +585,7 @@ def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=No
     result_edges = []
     visited = {start}
     frontier = [start]
+    truncated = False
 
     for level in range(1, depth + 1):
         adjacent = _graph_edges(conn, frontier, rels)
@@ -566,6 +608,9 @@ def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=No
         for _, neighbor, current, edge, direction, info in candidates:
             if neighbor in visited:
                 continue
+            if limit is not None and len(nodes) >= limit:
+                truncated = True                     # узел сверх предела: обход дальше не идёт
+                break
             info["depth"] = level
             nodes[neighbor] = info
             oriented = {**edge, "from": current, "to": neighbor, "direction": direction}
@@ -575,7 +620,7 @@ def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=No
             visited.add(neighbor)
             next_frontier.append(neighbor)
         frontier = next_frontier
-        if not frontier:
+        if not frontier or truncated:
             break
 
     edge_by_id = {edge["id"]: edge for edge in result_edges}
@@ -590,5 +635,5 @@ def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=No
         "recipe": "around_entity", "start": start, "depth": depth,
         "nodes": [{key: value for key, value in node.items() if not key.startswith("_")}
                   for node in nodes.values()],
-        "edges": result_edges, "paths": public_paths, "retrieval_id": None,
+        "edges": result_edges, "paths": public_paths, "truncated": truncated, "retrieval_id": None,
     }

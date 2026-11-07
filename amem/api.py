@@ -5,9 +5,10 @@
 и флаги можно строками, как они приходят в запросе, — и отдаёт словарь, готовый к JSON, в форме схемы контракта.
 
 Параметры проверяются по контракту (пределы, перечисления, формат) до вызова библиотеки: неверный — BadRequest
-(400 у службы). Пустой список фильтра (kind, status, entity_class, rels) — «без фильтра», как параметр, которого
-в запросе нет; пустой range листа — окно по умолчанию библиотеки. Текст поиска проходит private.strip до поиска
-и журнала выдачи.
+(400 у службы). Строка со знаком NUL (\\x00) отвергается в любом параметре: PostgreSQL такие строки не хранит
+и не сравнивает, а ответ «база не приняла» хуже, чем ответ о самом параметре. Пустой список фильтра (kind, status,
+entity_class, rels) — «без фильтра», как параметр, которого в запросе нет; пустой range листа — окно по умолчанию
+библиотеки. Текст поиска проходит private.strip до поиска и журнала выдачи.
 
 Подписи записей — lookup.labels одним запросом на ответ (label — русская подпись показанной ревизии); запись,
 которой нет, подписывается своей ссылкой. Записи называются atm:/ent:<UUID>, объекты — голым UUID, как id
@@ -38,6 +39,8 @@ ANCESTORS_DEPTH = 32                # цепочка part_of длиннее — 
 # файлы версий, которые браузер показывает сам; остальное отдаётся на скачивание (application/octet-stream)
 INLINE_TYPES = frozenset({"application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "text/plain"})
 _REF = re.compile(r"(atm|ent):.+")
+VERSION_MAX = 2**31 - 1             # номер версии — integer базы
+STORE_MARK = "0=ocfl_1.1"           # отметка корня OCFL (amem/ocfl_store.py): без неё хранилище не подключено
 _INT = re.compile(r"[+-]?[0-9]+")
 
 
@@ -45,13 +48,42 @@ class BadRequest(ValueError):
     """Параметр операции вне контракта: предел, перечисление, формат. У службы — 400 bad_request."""
 
 
+class StoreUnavailable(RuntimeError):
+    """Хранилище копий не подключено: в его корне нет отметки OCFL (том данных не смонтирован, AMEM_DATA не тот).
+    У службы — 503 store_unavailable; where — место на диске, только для журнала службы."""
+
+    def __init__(self, message: str, *, where: str):
+        super().__init__(message)
+        self.where = where
+
+
+class CopyMissing(objects.ObjectError):
+    """Корень хранилища на месте, а копии версии нет (файл удалён вручную, инвентарь не сходится). У службы — 404
+    not_found и предупреждение в журнал: это порча хранилища, а не ошибка запроса; where — только для журнала."""
+
+    def __init__(self, message: str, *, where: str):
+        super().__init__(message, code="not_found")
+        self.where = where
+
+
 # --- разбор параметров ---
+
+def _str(value, name: str) -> str | None:
+    """Строковый параметр: None — нет его; не строка или строка с NUL — BadRequest."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise BadRequest(f"{name} {value!r}: нужна строка")
+    if "\x00" in value:
+        raise BadRequest(f"{name}: знак NUL (\\x00) в строке не допускается")
+    return value
+
 
 def _int(value, name: str, *, low: int, high: int | None = None, default: int | None = None) -> int | None:
     """Целое из аргумента или строки запроса; None — default. Вне [low, high] — BadRequest."""
     if value is None or value == "":
         return default
-    if isinstance(value, str) and _INT.fullmatch(value.strip()):
+    if isinstance(value, str) and _INT.fullmatch(_str(value, name).strip()):
         value = int(value)
     if isinstance(value, bool) or not isinstance(value, int):
         raise BadRequest(f"{name} {value!r}: нужно целое число")
@@ -66,7 +98,7 @@ def _bool(value, name: str, *, default: bool) -> bool:
         return default
     if isinstance(value, bool):
         return value
-    if isinstance(value, str) and value.strip().lower() in ("true", "false", "1", "0"):
+    if isinstance(value, str) and _str(value, name).strip().lower() in ("true", "false", "1", "0"):
         return value.strip().lower() in ("true", "1")
     raise BadRequest(f"{name} {value!r}: нужно true или false")
 
@@ -74,7 +106,7 @@ def _bool(value, name: str, *, default: bool) -> bool:
 def _enum(value, name: str, allowed, *, default: str | None = None) -> str | None:
     if value is None or value == "":
         return default
-    if value not in allowed:
+    if _str(value, name) not in allowed:
         raise BadRequest(f"{name} {value!r}: допустимы {', '.join(allowed)}")
     return value
 
@@ -92,6 +124,7 @@ def _codes(values, name: str) -> list[str] | None:
     for item in items:
         if not isinstance(item, str) or not item.strip():
             raise BadRequest(f"{name}: код {item!r} — нужна непустая строка")
+        _str(item, name)
     return list(dict.fromkeys(items)) or None
 
 
@@ -104,7 +137,7 @@ def _statuses(values) -> list[str] | None:
 
 
 def _ref(value, name: str = "ref") -> str:
-    if not isinstance(value, str) or not _REF.fullmatch(value):
+    if not isinstance(value, str) or not _REF.fullmatch(_str(value, name)):
         raise BadRequest(f"{name} {value!r}: нужна ссылка atm:<UUID или ключ> или ent:<UUID или ключ>")
     return value
 
@@ -115,6 +148,7 @@ def _moment(value, name: str) -> datetime | None:
         return None
     moment = value
     if isinstance(value, str):
+        _str(value, name)
         # «+03:00» в строке запроса без %2B приходит как « 03:00»: «+» там — пробел
         text = re.sub(r"([Tt ][0-9:.,]+) ([0-9]{2}(?::?[0-9]{2})?)$", r"\1+\2", value.strip())
         try:
@@ -141,7 +175,7 @@ def _object_id(value) -> uuid.UUID:
     """id объекта из пути запроса: UUID или obj:<UUID>."""
     if isinstance(value, uuid.UUID):
         return value
-    if not isinstance(value, str):
+    if not isinstance(value, str) or "\x00" in value:
         raise BadRequest(f"id {value!r}: нужен UUID объекта")
     try:
         return uuid.UUID(value[4:] if value.startswith("obj:") else value)
@@ -184,30 +218,32 @@ def session(conn: psycopg.Connection, *, agent: str, can_write: bool, provider=N
 
 def search(conn: psycopg.Connection, q, *, agent: str, kind=None, status=None, entity_class=None, target=None,
            limit=None, provider=None) -> dict:
-    """SearchResult рецепта exact_fact; выдача пишется в retrieval от имени agent."""
-    if not isinstance(q, str):
+    """SearchResult рецепта exact_fact; выдача пишется в retrieval от имени agent. Если provider не может посчитать
+    вектор запроса, смысловой канал пропускается (semantic: unavailable, причина в channels.reasons.vector), а не
+    валит поиск: марки и полнотекстовый канал отвечают и так."""
+    if _str(q, "q") is None:
         raise BadRequest("q: нужен текст запроса")
     result = recipes.exact_fact(
         conn, private.strip(q), agent=agent, limit=_int(limit, "limit", low=1, high=100, default=10),
         target=_enum(target, "target", TARGETS), kind=_codes(kind, "kind"),
-        entity_class=_codes(entity_class, "entity_class"), statuses=_statuses(status), provider=provider)
+        entity_class=_codes(entity_class, "entity_class"), statuses=_statuses(status), provider=provider,
+        on_semantic_error="skip")
     return _search_result(conn, result)
 
 
 def similar(conn: psycopg.Connection, *, agent: str, ref=None, q=None, limit=None, provider=None) -> dict:
-    """SearchResult рецепта similar — по ссылке на запись (ref) или по тексту (q), ровно одно из двух."""
+    """SearchResult рецепта similar — по ссылке на запись (ref) или по тексту (q), ровно одно из двух. Без вектора
+    запроса похожие по тексту ищет полнотекстовый канал (semantic: unavailable), как у search."""
     if (ref in (None, "")) == (q in (None, "")):
         raise BadRequest("similar: нужен ровно один из параметров ref (atm:/ent:) или q (текст)")
     if ref not in (None, ""):
         query = _ref(ref)
     else:
-        if not isinstance(q, str):
-            raise BadRequest("q: нужен текст запроса")
-        query = private.strip(q)
+        query = private.strip(_str(q, "q"))
         if query.startswith(("atm:", "ent:")):
             raise BadRequest("q: похожие на запись ищутся по параметру ref, а не по тексту atm:/ent:")
     result = recipes.similar(conn, query, agent=agent, limit=_int(limit, "limit", low=1, high=100, default=10),
-                             provider=provider)
+                             provider=provider, on_semantic_error="skip")
     return _search_result(conn, result)
 
 
@@ -261,8 +297,7 @@ def record_list(conn: psycopg.Connection, *, folder=None, kind=None, status=None
                 cursor=None) -> dict:
     """RecordList: сводки записей под фильтром, страница по курсору; about — ent:… или объект (obj:<UUID>, UUID)."""
     for name, value in (("folder", folder), ("tag", tag), ("about", about), ("cursor", cursor)):
-        if value is not None and not isinstance(value, str):
-            raise BadRequest(f"{name} {value!r}: нужна строка")
+        _str(value, name)
     page = lookup.list_records(conn, folder=folder or None, kinds=_codes(kind, "kind"), statuses=_statuses(status),
                                tag=tag or None, about=about or None,
                                limit=_int(limit, "limit", low=1, high=lookup.LIST_LIMIT, default=50),
@@ -394,12 +429,16 @@ def changes(conn: psycopg.Connection, *, since=None, until=None, who=None, limit
                                                limit=_int(limit, "limit", low=1, high=500, default=100)))
 
 
+HIDDEN_EVENT_FIELDS = ("content_hash", "previous_content_hash")      # служебные хэши тела — не для экрана
+
+
 def _changes(conn: psycopg.Connection, result: dict) -> dict:
     """События what_changed с подписью записи. У событий связи ref — запись истории (по базе — начало связи)."""
     events = []
     for event in result["events"]:
+        event = {k: v for k, v in event.items() if k not in HIDDEN_EVENT_FIELDS}
         if "ref" not in event and "src" in event:
-            event = {**event, "ref": result["ref"] or event["src"]}
+            event["ref"] = result["ref"] or event["src"]
         events.append(event)
     labels = _labels(conn, [event["ref"] for event in events if "ref" in event])
     for event in events:
@@ -448,11 +487,10 @@ def card(conn: psycopg.Connection, ref, *, ancestors=None) -> dict:
 
 def graph(conn: psycopg.Connection, ref, *, depth=None, rels=None, status=None) -> dict:
     """GraphResult: кратчайшие пути от записи до depth шагов; больше GRAPH_NODES узлов — ближние и truncated."""
+    # предел — в самом обходе: граф глубины 3 не обходится целиком ради 500 ближних узлов
     found = recipes.around_entity(conn, _ref(ref), depth=_int(depth, "depth", low=1, high=3, default=1),
-                                  rels=_codes(rels, "rels"), statuses=_statuses(status))
-    nodes = found["nodes"]            # по удалению от начала: обрезка оставляет ближние
-    truncated = len(nodes) > GRAPH_NODES
-    nodes = nodes[:GRAPH_NODES]
+                                  rels=_codes(rels, "rels"), statuses=_statuses(status), limit=GRAPH_NODES)
+    nodes, truncated = found["nodes"], found["truncated"]
     kept = {node["ref"] for node in nodes}
     labels = _labels(conn, kept)
     families = vocab.families(conn)
@@ -495,10 +533,33 @@ class Content:
     inline: bool          # тип из белого списка — как есть; иначе application/octet-stream на скачивание
 
 
+def _store_failure(store: ObjectStore, oid: uuid.UUID, n: int, error) -> Exception:
+    """Почему копии нет: корня хранилища нет — StoreUnavailable (503), корень есть — CopyMissing (404)."""
+    root = Path(store.root)
+    if not (root / STORE_MARK).is_file():
+        return StoreUnavailable("хранилище копий не подключено: в AMEM_DATA нет корня OCFL — проверьте, что том "
+                                "с данными смонтирован", where=f"{root}: нет {STORE_MARK}")
+    return CopyMissing(f"obj:{oid}: копии версии {n} нет в хранилище — восстановите хранилище из снимка "
+                       f"или добавьте файл заново", where=str(error))
+
+
+def _copy(store: ObjectStore, oid: uuid.UUID, n: int) -> Path:
+    """Путь копии версии в хранилище: обычный файл внутри папки объекта (инвентарь не уводит наружу)."""
+    try:
+        path = store.content(oid, n)
+    except StoreError as e:
+        raise _store_failure(store, oid, n, e) from e
+    resolved = path.resolve()
+    if not resolved.is_relative_to(store.object_dir(oid).resolve()) or not resolved.is_file():
+        raise _store_failure(store, oid, n, f"{path}: нет обычного файла копии внутри папки объекта")
+    return resolved
+
+
 def object_content(conn: psycopg.Connection, store: ObjectStore, object_id, n) -> Content:
-    """Копия файла версии n из хранилища. Нет объекта, версии или копии (сайт, переписка) — ObjectError not_found."""
+    """Копия файла версии n из хранилища. Нет объекта, версии или копии (сайт, переписка) — ObjectError not_found;
+    копии нет в хранилище — CopyMissing (404) или StoreUnavailable (503)."""
     oid = _object_id(object_id)
-    n = _int(n, "n", low=1)
+    n = _int(n, "n", low=1, high=VERSION_MAX)
     row = conn.execute("SELECT o.original_name, o.media_type, v.digest FROM object o "
                        "JOIN object_version v ON v.object_id = o.id WHERE o.id = %s AND v.n = %s", (oid, n)).fetchone()
     if row is None:
@@ -507,11 +568,7 @@ def object_content(conn: psycopg.Connection, store: ObjectStore, object_id, n) -
     if digest is None:
         raise objects.ObjectError(f"obj:{oid}: у версии {n} нет файла (страница сайта или переписка)",
                                   code="not_found")
-    try:
-        path = store.content(oid, n)
-    except StoreError as e:
-        # база знает копию, а хранилища нет: не подключена папка данных или копию удалили вручную
-        raise objects.ObjectError(f"obj:{oid}: копии версии {n} нет в хранилище ({e})", code="not_found") from e
+    path = _copy(store, oid, n)
     media = (media_type or "").partition(";")[0].strip().lower()
     inline = media in INLINE_TYPES
     return Content(path, media if inline else "application/octet-stream", name, inline)
@@ -519,13 +576,13 @@ def object_content(conn: psycopg.Connection, store: ObjectStore, object_id, n) -
 
 def object_text(conn: psycopg.Connection, store: ObjectStore, object_id, n, *, page=None) -> dict:
     """Текст версии по страницам ({pages}); у файла без текста и у версии без файла — пустой список.
-    page — одна страница (с 1); нет такой — ObjectError not_found."""
-    oid, n = _object_id(object_id), _int(n, "n", low=1)
+    page — одна страница (с 1); нет такой — ObjectError not_found. Текст из кэша отдаётся и без копии в хранилище."""
+    oid, n = _object_id(object_id), _int(n, "n", low=1, high=VERSION_MAX)
     page = _int(page, "page", low=1)
     try:
         pages = objects.text(conn, store, oid, n) or []
-    except StoreError as e:
-        raise objects.ObjectError(f"obj:{oid}: копии версии {n} нет в хранилище ({e})", code="not_found") from e
+    except (StoreError, OSError) as e:          # копии нет или она не читается — не кэшируем и не 500
+        raise _store_failure(store, oid, n, e) from e
     if page is not None:
         if page > len(pages):
             raise objects.ObjectError(f"obj:{oid}: у версии {n} нет страницы {page} (страниц {len(pages)})",
@@ -536,22 +593,21 @@ def object_text(conn: psycopg.Connection, store: ObjectStore, object_id, n, *, p
 
 def object_sheet(conn: psycopg.Connection, store: ObjectStore, object_id, n, *, name, cell_range=None) -> dict:
     """Ячейки листа xlsx: {name, range, rows}; пустой range — окно по умолчанию (A1:L40 по данным)."""
-    oid, n = _object_id(object_id), _int(n, "n", low=1)
-    if not isinstance(name, str) or not name:
+    oid, n = _object_id(object_id), _int(n, "n", low=1, high=VERSION_MAX)
+    if not _str(name, "name"):
         raise BadRequest("name: нужно имя листа")
-    if cell_range is not None and not isinstance(cell_range, str):
-        raise BadRequest(f"range {cell_range!r}: нужна запись A1, например B2:D10")
+    _str(cell_range, "range")
     try:
         return objects.sheet(conn, store, oid, n, name, cell_range or None)
-    except StoreError as e:
-        raise objects.ObjectError(f"obj:{oid}: копии версии {n} нет в хранилище ({e})", code="not_found") from e
+    except (StoreError, OSError) as e:
+        raise _store_failure(store, oid, n, e) from e
 
 
 # --- словарь, база, бэкапы ---
 
 def vocab_entries(conn: psycopg.Connection, scheme) -> list[dict]:
     """VocabEntry[] схемы словаря (kind, entity_class, property, rel, …); неизвестная схема — пустой список."""
-    if not isinstance(scheme, str) or not scheme:
+    if not _str(scheme, "scheme"):
         raise BadRequest("scheme: нужно имя схемы словаря")
     return vocab.entries(conn, scheme)
 

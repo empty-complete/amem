@@ -6,7 +6,9 @@
 «прочего», EmbeddingError (503) раньше прочего ValueError — последней ступени перед 500: так библиотека отвечает на
 неверный ввод, и ответ — 400 с её сообщением. Необработанная ошибка — 500 internal: подробности уходят в журнал службы
 (logger amem.service), в ответе их нет. Недоступная база — 503 без строки соединения: в тексте ошибки psycopg бывают
-адрес и порт сервера.
+адрес и порт сервера; значение, которое база не приняла (psycopg.DataError), — 400 тоже без её текста. Хранилище копий
+без корня (том не подключён) — 503 store_unavailable, копии версии нет — 404; путь на диске — только в журнале.
+У каждого ответа-ошибки — X-Content-Type-Options: nosniff.
 """
 from __future__ import annotations
 
@@ -32,12 +34,14 @@ log = logging.getLogger("amem.service")
 # заголовок — короткая фраза для экрана (веб показывает title, если нет detail)
 TITLES = {
     400: "Неверный запрос", 401: "Нужен вход", 403: "Запрещено", 404: "Не найдено", 405: "Метод не поддерживается",
-    409: "Конфликт", 413: "Слишком много данных", 415: "Неподдерживаемый тип тела", 421: "Чужой адрес службы",
-    422: "Отклонено проверкой", 500: "Внутренняя ошибка службы", 501: "Ещё не сделано", 503: "Служба недоступна",
+    409: "Конфликт", 413: "Слишком много данных", 415: "Неподдерживаемый тип тела", 416: "Диапазон вне файла",
+    421: "Чужой адрес службы", 422: "Отклонено проверкой", 500: "Внутренняя ошибка службы", 501: "Ещё не сделано",
+    503: "Служба недоступна",
 }
 CODE_TITLES = {"read_only": "Только чтение", "review_closed": "Уже решено", "bad_origin": "Чужой источник запроса",
                "folder_exists": "Папка уже есть", "folder_not_empty": "Папка не пуста",
-               "semantic_unavailable": "Смысловой поиск недоступен", "db_unavailable": "База недоступна"}
+               "semantic_unavailable": "Смысловой поиск недоступен", "db_unavailable": "База недоступна",
+               "store_unavailable": "Хранилище копий недоступно"}
 RESERVED = frozenset({"type", "title", "status", "code", "detail"})       # расширения их не заменяют
 REVIEW = {"closed": (409, "review_closed"), "forbidden": (403, "review_forbidden"),
           "claimed": (403, "review_forbidden"), "stale": (400, "review_bad"), "bad_outcome": (400, "review_bad"),
@@ -65,7 +69,8 @@ def response(status: int, code: str, detail: str | None = None, *, headers: dict
     # расширения — только то, что переводится в JSON: в деталях BundleError бывают произвольные значения
     extensions = {str(k): v for k, v in (extra or {}).items() if str(k) not in RESERVED}
     body.update(json.loads(json.dumps(extensions, ensure_ascii=False, default=str)))
-    return JSONResponse(body, status_code=status, headers=headers, media_type=MEDIA_TYPE)
+    return JSONResponse(body, status_code=status, headers={"X-Content-Type-Options": "nosniff", **(headers or {})},
+                        media_type=MEDIA_TYPE)
 
 
 def to_problem(exc: BaseException) -> Problem:
@@ -97,8 +102,12 @@ def to_problem(exc: BaseException) -> Problem:
         return Problem(400, "bad_request", message)
     if isinstance(exc, embed.EmbeddingError):
         return Problem(503, "semantic_unavailable", f"смысловой поиск недоступен: {message}")
+    if isinstance(exc, api.StoreUnavailable):
+        return Problem(503, "store_unavailable", message)
     if isinstance(exc, psycopg.OperationalError):
         return Problem(503, "db_unavailable", "база недоступна — проверьте, что PostgreSQL запущен и AMEM_DSN верен")
+    if isinstance(exc, psycopg.DataError):
+        return Problem(400, "bad_request", "значение параметра база не принимает (например, знак NUL в строке)")
     if isinstance(exc, HTTPException):
         code = HTTP.get(exc.status_code, f"http_{exc.status_code}")
         return Problem(exc.status_code, code, None, headers=exc.headers)
@@ -111,6 +120,8 @@ async def handle(request: Request, exc: Exception) -> JSONResponse:
     problem = to_problem(exc)
     if problem.code == "db_unavailable":
         log.warning("%s %s: база недоступна: %s", request.method, request.url.path, exc)
+    elif isinstance(exc, (api.StoreUnavailable, api.CopyMissing)):
+        log.warning("%s %s: %s (%s)", request.method, request.url.path, exc, exc.where)
     elif problem.status >= 500 and problem is not exc and problem.code == "internal":
         log.error("%s %s: необработанная ошибка", request.method, request.url.path, exc_info=exc)
     return response(problem.status, problem.code, problem.detail, headers=problem.headers, extra=problem.extra)
@@ -120,5 +131,6 @@ async def handle(request: Request, exc: Exception) -> JSONResponse:
 # (ServerErrorMiddleware): он отвечает 500 и передаёт исключение серверу дальше
 HANDLED = (Problem, api.BadRequest, records.RecordError, review.ReviewError, FolderError, bundle.BundleError,
            objects.ObjectError, CheckError, db.BaseNameError, vocab.VocabError, CanonError, PackError,
-           embed.EmbeddingError, psycopg.OperationalError, HTTPException, ValueError, Exception)
+           embed.EmbeddingError, api.StoreUnavailable, psycopg.OperationalError, psycopg.DataError, HTTPException,
+           ValueError, Exception)
 HANDLERS = {cls: handle for cls in HANDLED}

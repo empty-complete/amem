@@ -5,9 +5,10 @@
 не держит цикл событий. Многозначные параметры — повтором (?kind=fact&kind=term), как style: form, explode: true
 в контракте; отсутствующий параметр — пустой список, api читает его как «без фильтра».
 
-Файл версии отдаётся FileResponse (Range → 206): типы из белого списка api.INLINE_TYPES — как есть, остальные —
-application/octet-stream с Content-Disposition: attachment; всегда X-Content-Type-Options: nosniff
-и Content-Security-Policy: sandbox — файл из базы не исполняется как страница службы.
+Файл версии отдаётся FileCopy (FileResponse; Range → 206, неверный Range — problem+json 400, вне файла — 416): типы
+из белого списка api.INLINE_TYPES — как есть, остальные — application/octet-stream с Content-Disposition: attachment;
+всегда X-Content-Type-Options: nosniff и Content-Security-Policy: sandbox — файл из базы не исполняется как страница
+службы.
 
 Контракт служба отдаёт по /api/v1/openapi.json — копию из пакета (amem/service/http-v1.openapi.yaml).
 """
@@ -18,15 +19,32 @@ import importlib.resources
 
 import yaml
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse
+from starlette.responses import FileResponse, JSONResponse, MalformedRangeHeader, RangeNotSatisfiable
 from starlette.routing import Route
 
 from .. import api
-from . import session
-from .app import API, connection
+from . import problems, session
+from .app import API, connection, provider
 
 CONTRACT = "http-v1.openapi.yaml"
 FILE_HEADERS = {"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox"}
+
+
+class FileCopy(FileResponse):
+    """FileResponse, у которого неверный или невыполнимый Range — problem+json (400, 416 с Content-Range), а не
+    text/plain: разбор диапазона — Starlette, ответ-ошибка — как у всей службы."""
+
+    @classmethod
+    def _parse_range_header(cls, http_range: str, file_size: int) -> list[tuple[int, int]]:
+        try:
+            return super()._parse_range_header(http_range, file_size)
+        except MalformedRangeHeader as e:
+            raise problems.Problem(400, "bad_request", f"заголовок Range {http_range[:80]!r}: {e.content}",
+                                   headers=FILE_HEADERS) from None
+        except RangeNotSatisfiable as e:
+            raise problems.Problem(416, "range_not_satisfiable", f"диапазон {http_range[:80]!r} вне файла "
+                                   f"({e.max_size} байт)", headers={**FILE_HEADERS,
+                                                                    "Content-Range": f"bytes */{e.max_size}"}) from None
 
 
 def _q(request: Request, name: str) -> str | None:
@@ -42,7 +60,7 @@ def get_session(request: Request) -> JSONResponse:
     session.grant(request)
     with connection(request) as conn:
         return JSONResponse(api.session(conn, agent=request.state.agent, can_write=request.state.can_write,
-                                        provider=request.app.state.provider))
+                                        provider=provider(request)))
 
 
 def search(request: Request) -> JSONResponse:
@@ -50,13 +68,13 @@ def search(request: Request) -> JSONResponse:
         return JSONResponse(api.search(conn, _q(request, "q"), agent=request.state.agent, kind=_many(request, "kind"),
                                        status=_many(request, "status"), entity_class=_many(request, "entity_class"),
                                        target=_q(request, "target"), limit=_q(request, "limit"),
-                                       provider=request.app.state.provider))
+                                       provider=provider(request)))
 
 
 def similar(request: Request) -> JSONResponse:
     with connection(request) as conn:
         return JSONResponse(api.similar(conn, agent=request.state.agent, ref=_q(request, "ref"), q=_q(request, "q"),
-                                        limit=_q(request, "limit"), provider=request.app.state.provider))
+                                        limit=_q(request, "limit"), provider=provider(request)))
 
 
 def get_folders(request: Request) -> JSONResponse:
@@ -113,8 +131,8 @@ def get_object_content(request: Request) -> FileResponse:
     with connection(request) as conn:
         content = api.object_content(conn, request.app.state.store, request.path_params["id"],
                                      request.path_params["n"])
-    return FileResponse(content.path, media_type=content.media_type, headers=FILE_HEADERS, filename=content.filename,
-                        content_disposition_type="inline" if content.inline else "attachment")
+    return FileCopy(content.path, media_type=content.media_type, headers=FILE_HEADERS, filename=content.filename,
+                    content_disposition_type="inline" if content.inline else "attachment")
 
 
 def get_object_text(request: Request) -> JSONResponse:

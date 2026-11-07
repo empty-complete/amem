@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import secrets
+import threading
 
 import anyio
 from psycopg_pool import ConnectionPool
@@ -57,6 +58,8 @@ def create_app(settings: Settings, *, provider: embed.EmbeddingProvider | None =
     )
     app.state.settings = settings
     app.state.provider = provider
+    app.state.provider_lock = threading.Lock()
+    app.state.provider_chosen = provider is not None
     app.state.store = ObjectStore(settings.data)      # только чтение копий: корень создаёт первая запись файла
     return app
 
@@ -74,6 +77,22 @@ def _open(pool: ConnectionPool) -> None:
 def connection(request: Request):
     """Соединение из пула службы на время запроса: with connection(request) as conn."""
     return request.app.state.pool.connection()
+
+
+def provider(request: Request) -> embed.EmbeddingProvider | None:
+    """provider смыслового канала: явный из create_app или один на запуск службы по AMEM_BACKEND — выбирается при
+    первом поиске под замком, поэтому модель fastembed грузится один раз, а не на каждый запрос. AMEM_BACKEND=none
+    рецепты проверяют сами при каждом вызове; неизвестный AMEM_BACKEND — None, рецепт назовёт причину."""
+    state = request.app.state
+    if not state.provider_chosen:
+        with state.provider_lock:
+            if not state.provider_chosen:
+                try:
+                    state.provider = embed.get_provider(None)
+                except embed.EmbeddingError:
+                    state.provider = None
+                state.provider_chosen = True
+    return state.provider
 
 
 def health(request: Request) -> PlainTextResponse:
