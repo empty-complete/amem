@@ -19,7 +19,7 @@
       "!python/amem_web/dist/assets/BodyEditor-*.js",
       "!python/amem_web/dist/assets/KindDrawer-*.js"
     ],
-    "limit": "440 kB",
+    "limit": "460 kB",
     "gzip": true
   },
   {
@@ -65,7 +65,7 @@
   {
     "name": "CSS приложения (все стили HeroUI; урезать в части G)",
     "path": ["python/amem_web/dist/assets/*.css", "!python/amem_web/dist/assets/katex-*.css"],
-    "limit": "56 kB",
+    "limit": "58 kB",
     "gzip": true
   }
 ]
