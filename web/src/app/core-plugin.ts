@@ -17,6 +17,11 @@ export const corePlugin: Plugin = {
   ],
   commands: [
     {
+      id: "amem.records",
+      title: { ru: "Все записи", en: "All records" },
+      run: ({ navigate }) => navigate("/records"),
+    },
+    {
       id: "amem.new",
       title: { ru: "Записать", en: "Write" },
       keys: "N",

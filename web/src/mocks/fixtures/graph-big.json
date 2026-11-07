@@ -1,0 +1,4503 @@
+{
+  "ref": null,
+  "nodes": [
+    {
+      "ref": "ent:big-08",
+      "label": "Объект 9",
+      "kind_or_class": "artifact",
+      "family": "object",
+      "status": "verified",
+      "pending": false,
+      "degree": 45
+    },
+    {
+      "ref": "ent:big-03",
+      "label": "Объект 4",
+      "kind_or_class": "artifact",
+      "family": "object",
+      "status": "verified",
+      "pending": false,
+      "degree": 42
+    },
+    {
+      "ref": "ent:big-04",
+      "label": "Объект 5",
+      "kind_or_class": "artifact",
+      "family": "object",
+      "status": "verified",
+      "pending": false,
+      "degree": 41
+    },
+    {
+      "ref": "ent:big-02",
+      "label": "Объект 3",
+      "kind_or_class": "artifact",
+      "family": "object",
+      "status": "verified",
+      "pending": false,
+      "degree": 40
+    },
+    {
+      "ref": "ent:big-00",
+      "label": "Объект 1",
+      "kind_or_class": "artifact",
+      "family": "object",
+      "status": "verified",
+      "pending": false,
+      "degree": 38
+    },
+    {
+      "ref": "ent:big-01",
+      "label": "Объект 2",
+      "kind_or_class": "artifact",
+      "family": "object",
+      "status": "verified",
+      "pending": false,
+      "degree": 38
+    },
+    {
+      "ref": "ent:big-11",
+      "label": "Объект 12",
+      "kind_or_class": "artifact",
+      "family": "object",
+      "status": "verified",
+      "pending": false,
+      "degree": 35
+    },
+    {
+      "ref": "ent:big-10",
+      "label": "Объект 11",
+      "kind_or_class": "artifact",
+      "family": "object",
+      "status": "verified",
+      "pending": false,
+      "degree": 33
+    },
+    {
+      "ref": "ent:big-07",
+      "label": "Объект 8",
+      "kind_or_class": "artifact",
+      "family": "object",
+      "status": "verified",
+      "pending": false,
+      "degree": 32
+    },
+    {
+      "ref": "ent:big-05",
+      "label": "Объект 6",
+      "kind_or_class": "artifact",
+      "family": "object",
+      "status": "verified",
+      "pending": false,
+      "degree": 30
+    },
+    {
+      "ref": "ent:big-09",
+      "label": "Объект 10",
+      "kind_or_class": "artifact",
+      "family": "object",
+      "status": "verified",
+      "pending": false,
+      "degree": 30
+    },
+    {
+      "ref": "ent:big-06",
+      "label": "Объект 7",
+      "kind_or_class": "artifact",
+      "family": "object",
+      "status": "verified",
+      "pending": false,
+      "degree": 26
+    },
+    {
+      "ref": "atm:big-000",
+      "label": "Запись 1",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "needs_review",
+      "pending": true,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-001",
+      "label": "Запись 2",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-002",
+      "label": "Запись 3",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-003",
+      "label": "Запись 4",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-004",
+      "label": "Запись 5",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-005",
+      "label": "Запись 6",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-006",
+      "label": "Запись 7",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-007",
+      "label": "Запись 8",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-008",
+      "label": "Запись 9",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-009",
+      "label": "Запись 10",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-010",
+      "label": "Запись 11",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-011",
+      "label": "Запись 12",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-012",
+      "label": "Запись 13",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-013",
+      "label": "Запись 14",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-014",
+      "label": "Запись 15",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-015",
+      "label": "Запись 16",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-016",
+      "label": "Запись 17",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-017",
+      "label": "Запись 18",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-018",
+      "label": "Запись 19",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-019",
+      "label": "Запись 20",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-020",
+      "label": "Запись 21",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-021",
+      "label": "Запись 22",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-022",
+      "label": "Запись 23",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-023",
+      "label": "Запись 24",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-024",
+      "label": "Запись 25",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-025",
+      "label": "Запись 26",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-026",
+      "label": "Запись 27",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-027",
+      "label": "Запись 28",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-028",
+      "label": "Запись 29",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-029",
+      "label": "Запись 30",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-030",
+      "label": "Запись 31",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-031",
+      "label": "Запись 32",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-032",
+      "label": "Запись 33",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-033",
+      "label": "Запись 34",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-034",
+      "label": "Запись 35",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-035",
+      "label": "Запись 36",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-036",
+      "label": "Запись 37",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-037",
+      "label": "Запись 38",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "needs_review",
+      "pending": true,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-038",
+      "label": "Запись 39",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-039",
+      "label": "Запись 40",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-040",
+      "label": "Запись 41",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-041",
+      "label": "Запись 42",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-042",
+      "label": "Запись 43",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-043",
+      "label": "Запись 44",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-044",
+      "label": "Запись 45",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-045",
+      "label": "Запись 46",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-046",
+      "label": "Запись 47",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-047",
+      "label": "Запись 48",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-048",
+      "label": "Запись 49",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-049",
+      "label": "Запись 50",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-050",
+      "label": "Запись 51",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-051",
+      "label": "Запись 52",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-052",
+      "label": "Запись 53",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-053",
+      "label": "Запись 54",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-054",
+      "label": "Запись 55",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-055",
+      "label": "Запись 56",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-056",
+      "label": "Запись 57",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-057",
+      "label": "Запись 58",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-058",
+      "label": "Запись 59",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-059",
+      "label": "Запись 60",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-060",
+      "label": "Запись 61",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-061",
+      "label": "Запись 62",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-062",
+      "label": "Запись 63",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-063",
+      "label": "Запись 64",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-064",
+      "label": "Запись 65",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-065",
+      "label": "Запись 66",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-066",
+      "label": "Запись 67",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-067",
+      "label": "Запись 68",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-068",
+      "label": "Запись 69",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-069",
+      "label": "Запись 70",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-070",
+      "label": "Запись 71",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-071",
+      "label": "Запись 72",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-072",
+      "label": "Запись 73",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-073",
+      "label": "Запись 74",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-074",
+      "label": "Запись 75",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "needs_review",
+      "pending": true,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-075",
+      "label": "Запись 76",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-076",
+      "label": "Запись 77",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-077",
+      "label": "Запись 78",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-078",
+      "label": "Запись 79",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-079",
+      "label": "Запись 80",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-080",
+      "label": "Запись 81",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-081",
+      "label": "Запись 82",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-082",
+      "label": "Запись 83",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-083",
+      "label": "Запись 84",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-084",
+      "label": "Запись 85",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-085",
+      "label": "Запись 86",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-086",
+      "label": "Запись 87",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-087",
+      "label": "Запись 88",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-088",
+      "label": "Запись 89",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-089",
+      "label": "Запись 90",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-090",
+      "label": "Запись 91",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-091",
+      "label": "Запись 92",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-092",
+      "label": "Запись 93",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-093",
+      "label": "Запись 94",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-094",
+      "label": "Запись 95",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-095",
+      "label": "Запись 96",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-096",
+      "label": "Запись 97",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-097",
+      "label": "Запись 98",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-098",
+      "label": "Запись 99",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-099",
+      "label": "Запись 100",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-100",
+      "label": "Запись 101",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-101",
+      "label": "Запись 102",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-102",
+      "label": "Запись 103",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-103",
+      "label": "Запись 104",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-104",
+      "label": "Запись 105",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-105",
+      "label": "Запись 106",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-106",
+      "label": "Запись 107",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-107",
+      "label": "Запись 108",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-108",
+      "label": "Запись 109",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-109",
+      "label": "Запись 110",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-110",
+      "label": "Запись 111",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-111",
+      "label": "Запись 112",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "needs_review",
+      "pending": true,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-112",
+      "label": "Запись 113",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-113",
+      "label": "Запись 114",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-114",
+      "label": "Запись 115",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-115",
+      "label": "Запись 116",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-116",
+      "label": "Запись 117",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-117",
+      "label": "Запись 118",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-118",
+      "label": "Запись 119",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-119",
+      "label": "Запись 120",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-120",
+      "label": "Запись 121",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-121",
+      "label": "Запись 122",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-122",
+      "label": "Запись 123",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-123",
+      "label": "Запись 124",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-124",
+      "label": "Запись 125",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-125",
+      "label": "Запись 126",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-126",
+      "label": "Запись 127",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-127",
+      "label": "Запись 128",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-128",
+      "label": "Запись 129",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-129",
+      "label": "Запись 130",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-130",
+      "label": "Запись 131",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-131",
+      "label": "Запись 132",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-132",
+      "label": "Запись 133",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-133",
+      "label": "Запись 134",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-134",
+      "label": "Запись 135",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-135",
+      "label": "Запись 136",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-136",
+      "label": "Запись 137",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-137",
+      "label": "Запись 138",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-138",
+      "label": "Запись 139",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-139",
+      "label": "Запись 140",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-140",
+      "label": "Запись 141",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-141",
+      "label": "Запись 142",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-142",
+      "label": "Запись 143",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-143",
+      "label": "Запись 144",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-144",
+      "label": "Запись 145",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-145",
+      "label": "Запись 146",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-146",
+      "label": "Запись 147",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-147",
+      "label": "Запись 148",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-148",
+      "label": "Запись 149",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "needs_review",
+      "pending": true,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-149",
+      "label": "Запись 150",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-150",
+      "label": "Запись 151",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-151",
+      "label": "Запись 152",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-152",
+      "label": "Запись 153",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-153",
+      "label": "Запись 154",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-154",
+      "label": "Запись 155",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-155",
+      "label": "Запись 156",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-156",
+      "label": "Запись 157",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-157",
+      "label": "Запись 158",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-158",
+      "label": "Запись 159",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-159",
+      "label": "Запись 160",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-160",
+      "label": "Запись 161",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-161",
+      "label": "Запись 162",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-162",
+      "label": "Запись 163",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-163",
+      "label": "Запись 164",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-164",
+      "label": "Запись 165",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-165",
+      "label": "Запись 166",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-166",
+      "label": "Запись 167",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-167",
+      "label": "Запись 168",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-168",
+      "label": "Запись 169",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-169",
+      "label": "Запись 170",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-170",
+      "label": "Запись 171",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-171",
+      "label": "Запись 172",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-172",
+      "label": "Запись 173",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-173",
+      "label": "Запись 174",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-174",
+      "label": "Запись 175",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-175",
+      "label": "Запись 176",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-176",
+      "label": "Запись 177",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-177",
+      "label": "Запись 178",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-178",
+      "label": "Запись 179",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-179",
+      "label": "Запись 180",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-180",
+      "label": "Запись 181",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-181",
+      "label": "Запись 182",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-182",
+      "label": "Запись 183",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-183",
+      "label": "Запись 184",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-184",
+      "label": "Запись 185",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-185",
+      "label": "Запись 186",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "needs_review",
+      "pending": true,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-186",
+      "label": "Запись 187",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-187",
+      "label": "Запись 188",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-188",
+      "label": "Запись 189",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-189",
+      "label": "Запись 190",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-190",
+      "label": "Запись 191",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-191",
+      "label": "Запись 192",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-192",
+      "label": "Запись 193",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-193",
+      "label": "Запись 194",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-194",
+      "label": "Запись 195",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-195",
+      "label": "Запись 196",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-196",
+      "label": "Запись 197",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-197",
+      "label": "Запись 198",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-198",
+      "label": "Запись 199",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-199",
+      "label": "Запись 200",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-200",
+      "label": "Запись 201",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-201",
+      "label": "Запись 202",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-202",
+      "label": "Запись 203",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-203",
+      "label": "Запись 204",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-204",
+      "label": "Запись 205",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-205",
+      "label": "Запись 206",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-206",
+      "label": "Запись 207",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-207",
+      "label": "Запись 208",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-208",
+      "label": "Запись 209",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-209",
+      "label": "Запись 210",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-210",
+      "label": "Запись 211",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-211",
+      "label": "Запись 212",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-212",
+      "label": "Запись 213",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-213",
+      "label": "Запись 214",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-214",
+      "label": "Запись 215",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-215",
+      "label": "Запись 216",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-216",
+      "label": "Запись 217",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-217",
+      "label": "Запись 218",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-218",
+      "label": "Запись 219",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-219",
+      "label": "Запись 220",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-220",
+      "label": "Запись 221",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-221",
+      "label": "Запись 222",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-222",
+      "label": "Запись 223",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "needs_review",
+      "pending": true,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-223",
+      "label": "Запись 224",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-224",
+      "label": "Запись 225",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-225",
+      "label": "Запись 226",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-226",
+      "label": "Запись 227",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-227",
+      "label": "Запись 228",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-228",
+      "label": "Запись 229",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-229",
+      "label": "Запись 230",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-230",
+      "label": "Запись 231",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-231",
+      "label": "Запись 232",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-232",
+      "label": "Запись 233",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-233",
+      "label": "Запись 234",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-234",
+      "label": "Запись 235",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-235",
+      "label": "Запись 236",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-236",
+      "label": "Запись 237",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-237",
+      "label": "Запись 238",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-238",
+      "label": "Запись 239",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-239",
+      "label": "Запись 240",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-240",
+      "label": "Запись 241",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-241",
+      "label": "Запись 242",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-242",
+      "label": "Запись 243",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-243",
+      "label": "Запись 244",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-244",
+      "label": "Запись 245",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-245",
+      "label": "Запись 246",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-246",
+      "label": "Запись 247",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-247",
+      "label": "Запись 248",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-248",
+      "label": "Запись 249",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-249",
+      "label": "Запись 250",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-250",
+      "label": "Запись 251",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-251",
+      "label": "Запись 252",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-252",
+      "label": "Запись 253",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-253",
+      "label": "Запись 254",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-254",
+      "label": "Запись 255",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-255",
+      "label": "Запись 256",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-256",
+      "label": "Запись 257",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-257",
+      "label": "Запись 258",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-258",
+      "label": "Запись 259",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-259",
+      "label": "Запись 260",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "needs_review",
+      "pending": true,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-260",
+      "label": "Запись 261",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-261",
+      "label": "Запись 262",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-262",
+      "label": "Запись 263",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-263",
+      "label": "Запись 264",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-264",
+      "label": "Запись 265",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-265",
+      "label": "Запись 266",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-266",
+      "label": "Запись 267",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-267",
+      "label": "Запись 268",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-268",
+      "label": "Запись 269",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-269",
+      "label": "Запись 270",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-270",
+      "label": "Запись 271",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-271",
+      "label": "Запись 272",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-272",
+      "label": "Запись 273",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-273",
+      "label": "Запись 274",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-274",
+      "label": "Запись 275",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-275",
+      "label": "Запись 276",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-276",
+      "label": "Запись 277",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-277",
+      "label": "Запись 278",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-278",
+      "label": "Запись 279",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-279",
+      "label": "Запись 280",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-280",
+      "label": "Запись 281",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-281",
+      "label": "Запись 282",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-282",
+      "label": "Запись 283",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-283",
+      "label": "Запись 284",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-284",
+      "label": "Запись 285",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-285",
+      "label": "Запись 286",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-286",
+      "label": "Запись 287",
+      "kind_or_class": "fact",
+      "family": "source",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    },
+    {
+      "ref": "atm:big-287",
+      "label": "Запись 288",
+      "kind_or_class": "note",
+      "family": "work",
+      "status": "verified",
+      "pending": false,
+      "degree": 1
+    }
+  ],
+  "edges": [
+    {
+      "src": "ent:big-01",
+      "dst": "ent:big-00",
+      "rel": "part_of",
+      "confidence": null
+    },
+    {
+      "src": "ent:big-02",
+      "dst": "ent:big-00",
+      "rel": "part_of",
+      "confidence": null
+    },
+    {
+      "src": "ent:big-03",
+      "dst": "ent:big-00",
+      "rel": "part_of",
+      "confidence": null
+    },
+    {
+      "src": "ent:big-04",
+      "dst": "ent:big-00",
+      "rel": "part_of",
+      "confidence": null
+    },
+    {
+      "src": "ent:big-05",
+      "dst": "ent:big-00",
+      "rel": "part_of",
+      "confidence": null
+    },
+    {
+      "src": "ent:big-06",
+      "dst": "ent:big-00",
+      "rel": "part_of",
+      "confidence": null
+    },
+    {
+      "src": "ent:big-07",
+      "dst": "ent:big-00",
+      "rel": "part_of",
+      "confidence": null
+    },
+    {
+      "src": "ent:big-08",
+      "dst": "ent:big-00",
+      "rel": "part_of",
+      "confidence": null
+    },
+    {
+      "src": "ent:big-09",
+      "dst": "ent:big-00",
+      "rel": "part_of",
+      "confidence": null
+    },
+    {
+      "src": "ent:big-10",
+      "dst": "ent:big-00",
+      "rel": "part_of",
+      "confidence": null
+    },
+    {
+      "src": "ent:big-11",
+      "dst": "ent:big-00",
+      "rel": "part_of",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-000",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-001",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-002",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-003",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-004",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-005",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-006",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-007",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-008",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-009",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-010",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-011",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-012",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-013",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-014",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-015",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-016",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-017",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-018",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-019",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-020",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-021",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-022",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-023",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-024",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-025",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-026",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-027",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-028",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-029",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-030",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-031",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-032",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-033",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-034",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-035",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-036",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-037",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-038",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-039",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-040",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-041",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-042",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-043",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-044",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-045",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-046",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-047",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-048",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-049",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-050",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-051",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-052",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-053",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-054",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-055",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-056",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-057",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-058",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-059",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-060",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-061",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-062",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-063",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-064",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-065",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-066",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-067",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-068",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-069",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-070",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-071",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-072",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-073",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-074",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-075",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-076",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-077",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-078",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-079",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-080",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-081",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-082",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-083",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-084",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-085",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-086",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-087",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-088",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-089",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-090",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-091",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-092",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-093",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-094",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-095",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-096",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-097",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-098",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-099",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-100",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-101",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-102",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-103",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-104",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-105",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-106",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-107",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-108",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-109",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-110",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-111",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-112",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-113",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-114",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-115",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-116",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-117",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-118",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-119",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-120",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-121",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-122",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-123",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-124",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-125",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-126",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-127",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-128",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-129",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-130",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-131",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-132",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-133",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-134",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-135",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-136",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-137",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-138",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-139",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-140",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-141",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-142",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-143",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-144",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-145",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-146",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-147",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-148",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-149",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-150",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-151",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-152",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-153",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-154",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-155",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-156",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-157",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-158",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-159",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-160",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-161",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-162",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-163",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-164",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-165",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-166",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-167",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-168",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-169",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-170",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-171",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-172",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-173",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-174",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-175",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-176",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-177",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-178",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-179",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-180",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-181",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-182",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-183",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-184",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-185",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-186",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-187",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-188",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-189",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-190",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-191",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-192",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-193",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-194",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-195",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-196",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-197",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-198",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-199",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-200",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-201",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-202",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-203",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-204",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-205",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-206",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-207",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-208",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-209",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-210",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-211",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-212",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-213",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-214",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-215",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-216",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-217",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-218",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-219",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-220",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-221",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-222",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-223",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-224",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-225",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-226",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-227",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-228",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-229",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-230",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-231",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-232",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-233",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-234",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-235",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-236",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-237",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-238",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-239",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-240",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-241",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-242",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-243",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-244",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-245",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-246",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-247",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-248",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-249",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-250",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-251",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-252",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-253",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-254",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-255",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-256",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-257",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-258",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-259",
+      "dst": "ent:big-07",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-260",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-261",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-262",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-263",
+      "dst": "ent:big-06",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-264",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-265",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-266",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-267",
+      "dst": "ent:big-09",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-268",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-269",
+      "dst": "ent:big-01",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-270",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-271",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-272",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-273",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-274",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-275",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-276",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-277",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-278",
+      "dst": "ent:big-03",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-279",
+      "dst": "ent:big-10",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-280",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-281",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-282",
+      "dst": "ent:big-08",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-283",
+      "dst": "ent:big-02",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-284",
+      "dst": "ent:big-05",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-285",
+      "dst": "ent:big-04",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-286",
+      "dst": "ent:big-00",
+      "rel": "about",
+      "confidence": null
+    },
+    {
+      "src": "atm:big-287",
+      "dst": "ent:big-11",
+      "rel": "about",
+      "confidence": null
+    }
+  ],
+  "truncated": true,
+  "total": 420
+}
