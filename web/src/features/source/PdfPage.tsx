@@ -34,6 +34,7 @@ const docs = new Map<string, Promise<PDFDocumentProxy>>();
 const open = (url: string) => {
   let p = docs.get(url);
   if (!p) {
+    // pdf.js 6 не генерирует код во время выполнения — строгая CSP службы ему не мешает (e2e «csp»)
     p = getDocument({ url, rangeChunkSize: 65536 }).promise;
     p.catch(() => docs.delete(url));
     docs.set(url, p);
