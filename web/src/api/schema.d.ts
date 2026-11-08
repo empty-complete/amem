@@ -65,11 +65,33 @@ export interface paths {
         /** Дерево папок (scope.folder) со счётчиками */
         get: operations["getFolders"];
         put?: never;
-        post?: never;
+        /** folders.create: пустая папка в реестре вместе с родителями; уже есть — 409 folder_exists, неверный путь — 422 folder_invalid; структуру папок меняет только человек (person:), модель — 403 forbidden */
+        post: operations["createFolder"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/folders/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Путь папки целиком в encodeURIComponent: «/» внутри пути — %2F */
+                path: components["parameters"]["FolderPath"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** folders.delete: только пустая папка — без вложенных и без записей (иначе 409 folder_not_empty); нет такой — 404 folder_not_found; только человек (person:), модель — 403 forbidden */
+        delete: operations["deleteFolder"];
+        options?: never;
+        head?: never;
+        /** folders.rename: перенести папку с вложенными и записями (по строке журнала на запись); новый путь занят — 409 folder_exists; только человек (person:), модель — 403 forbidden */
+        patch: operations["renameFolder"];
         trace?: never;
     };
     "/records": {
@@ -153,7 +175,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Переложить запись в папку (scope.folder) */
+        /** folders.move: переложить запись в папку без новой ревизии (null — без папки); переносить вправе и модель, но только в существующую папку (иначе 404 folder_not_found: новую папку создаёт человек) */
         patch: operations["setRecordFolder"];
         trace?: never;
     };
@@ -392,7 +414,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** review.resolve; закрытый пункт — 409 с тем, кто и когда решил */
+        /** review.resolve; закрытый пункт — 409 с тем, кто и когда решил; нет права или пункт держит другой — 403 review_forbidden */
         post: operations["resolveReviewItem"];
         delete?: never;
         options?: never;
@@ -409,7 +431,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** review.enqueue: аудит или калибровка */
+        /** review.enqueue: аудит или калибровка; ставит только человек (person:), модель — 403 review_forbidden */
         post: operations["enqueueReview"];
         delete?: never;
         options?: never;
@@ -443,7 +465,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** check.submit от агента сессии; отказ уровней 1–2 — 422 с issues */
+        /** check.submit от агента сессии (поле агента в теле не читается); отказ проверки — 422 check_rejected с issues; <private> вырезается до проверки (предупреждение private_removed в warnings); тело больше 1 МиБ — 413 too_large */
         post: operations["submit"];
         delete?: never;
         options?: never;
@@ -591,27 +613,80 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description RFC 9457; кроме полей ниже — расширения по code (by и at у review_closed, missing и collisions у подборок…) */
         Problem: {
             type: string;
             title: string;
             status: number;
             detail?: string;
             code?: string;
+            /** @description у check_rejected — все замечания отчёта */
             issues?: components["schemas"]["CheckIssue"][];
+            /** @description у check_rejected — отклонённый пакет (записан с отчётом) */
+            changeset_id?: string;
+            /** @description у check_rejected — предупреждения службы (private_removed) */
+            warnings?: components["schemas"]["CheckIssue"][];
+        } & {
+            [key: string]: unknown;
         };
         CheckIssue: {
             code: string;
             /** @enum {string} */
             severity: "violation" | "warning" | "info";
             message: string;
+            /** @description Путь поля внутри предложения или связи (label.ru, sources[0].quote); пустая строка — предложение целиком */
             path?: string;
+            /** @description Какое предложение: @имя (поле ref его тела), иначе proposals[i] или links[i] — номер в теле /submit; пустая строка — пакет целиком (поле reason) */
             ref?: string;
+        };
+        /** @description Предложение пакета /submit (check.Proposal). Связи — не предложения, а links (LinkProposal) */
+        Proposal: {
+            /** @enum {string} */
+            target: "atom" | "entity";
+            /** @description Тело атома или сущности (AtomPayload, EntityPayload схемы v1) как есть; @имя записи для ссылок внутри пакета — в его поле ref. Статус тело не задаёт: его ставит автопроверка */
+            payload: Record<string, never>;
+            /**
+             * Format: uuid
+             * @description Новая запись — без record_id или null; правка существующей — её UUID
+             */
+            record_id?: string | null;
+        };
+        /** @description Связь пакета /submit — LinkPayload схемы v1; лишних полей схема не принимает (отказ — 422) */
+        LinkProposal: {
+            /** @description Вид связи из словаря rel */
+            rel: string;
+            /** @description Начало: запись базы (atm:/ent: с UUID или ключом) или @имя записи этого пакета */
+            src: string;
+            /** @description Конец — как src */
+            dst: string;
+            /** @description Пояснение (LangString) */
+            note?: {
+                ru: string;
+                en?: string;
+            };
+            /** @description Уточнения (Qualifier схемы v1) */
+            qualifiers?: {
+                property: string;
+                label?: {
+                    ru: string;
+                    en?: string;
+                };
+                value_text?: string;
+                amount?: number;
+                lower_bound?: number;
+                upper_bound?: number;
+                unit?: string;
+                /** @enum {string} */
+                value_state?: "known" | "unknown" | "none";
+            }[];
+            confidence?: number;
         };
         Session: {
             agent: string;
             /** Format: uuid */
             base: string;
-            base_name?: string;
+            /** @description null — имя базе не давали */
+            base_name?: string | null;
             amem_version: string;
             /** @enum {string} */
             semantic: "used" | "unavailable";
@@ -645,7 +720,8 @@ export interface components {
             matches: {
                 channel: string;
                 rank: number;
-                source_rank?: number;
+                /** @description null — у каналов кода (code_exact, code_prefix) своего ранга нет */
+                source_rank?: number | null;
             }[];
         };
         SearchResult: {
@@ -655,6 +731,7 @@ export interface components {
             /** @enum {string} */
             semantic: "used" | "unavailable";
             candidate_count: number;
+            /** @description Доля текущих ревизий с вектором активной модели (0–1); null — активной модели нет */
             embedding_coverage?: number | null;
             items: components["schemas"]["SearchHit"][];
             retrieval_id: string | null;
@@ -684,6 +761,14 @@ export interface components {
             count: number;
             children: components["schemas"]["Folder"][];
         };
+        FolderRenamed: {
+            from: string;
+            to: string;
+            /** @description Сколько папок реестра переименовано (с вложенными) */
+            folders: number;
+            /** @description Сколько записей перенесено */
+            records: number;
+        };
         FolderTree: {
             folders: components["schemas"]["Folder"][];
             unfiled: number;
@@ -700,8 +785,18 @@ export interface components {
             quote?: string;
             /** @enum {string} */
             role?: "primary" | "secondary" | "derived";
-            /** @enum {string} */
-            verdict: "ok" | "moved" | "fuzzy" | "by_locator" | "unresolved" | "not_found" | "no_file" | "no_text" | "external" | "error";
+            /**
+             * @description null — источник ещё не сверялся с файлом
+             * @enum {string|null}
+             */
+            verdict: "ok" | "moved" | "fuzzy" | "by_locator" | "unresolved" | "not_found" | "no_file" | "no_text" | "external" | "error" | null;
+            /** @description Где сверка нашла цитату */
+            page?: number;
+            anchor?: string;
+            /** @description ent: редакции документа */
+            edition?: string;
+            /** Format: date-time */
+            checked_at?: string;
         };
         RecordView: {
             ref: string;
@@ -732,10 +827,14 @@ export interface components {
             other: components["schemas"]["RefLabel"];
             note?: string | null;
             confidence?: number | null;
+            /** @description Кто записал связь */
+            agent?: string;
+            /** Format: date-time */
+            created_at?: string;
         };
         ChangeEvent: {
             /** @enum {string} */
-            type: "revision" | "review" | "status" | "link_created" | "link_retired";
+            type: "revision" | "review" | "status" | "folder" | "link_created" | "link_retired";
             id: string;
             /** Format: date-time */
             at: string;
@@ -748,7 +847,47 @@ export interface components {
             rel?: string;
             src?: string;
             dst?: string;
-            changes?: Record<string, never>;
+            /**
+             * Format: date-time
+             * @description у revision
+             */
+            recorded_at?: string;
+            /** @description у revision — с какого момента ревизия верна о мире */
+            valid_from?: string | null;
+            valid_to?: string | null;
+            /**
+             * Format: date-time
+             * @description у review
+             */
+            reviewed_at?: string;
+            reviewed_by?: string;
+            /**
+             * Format: date-time
+             * @description у status и folder
+             */
+            changed_at?: string;
+            /** @description у status — причина смены статуса */
+            reason?: string | null;
+            /**
+             * Format: date-time
+             * @description у link_created
+             */
+            created_at?: string;
+            /**
+             * Format: date-time
+             * @description у link_retired
+             */
+            retired_at?: string;
+            /** @description у folder — прежняя папка; null — запись была без папки */
+            from?: string | null;
+            /** @description у folder — новая папка; null — запись вынута из папки */
+            to?: string | null;
+            /** @description у revision — отличия тела от прежней ревизии: путь RFC 6901, before и/или after */
+            changes?: {
+                path: string;
+                before?: unknown;
+                after?: unknown;
+            }[];
         };
         ChangesResult: {
             ref?: string | null;
@@ -762,6 +901,10 @@ export interface components {
             required?: boolean;
             group?: string | null;
             origin?: string | null;
+            /** @description Шаблон, чьё правило дало поле (code@version, как в Card.templates) */
+            rule?: string | null;
+            /** @description Когда поле нужно (условие правила профиля) */
+            when?: string | null;
             /** @enum {string} */
             state: "known" | "missing" | "asked" | "na" | "conflict";
             value?: Record<string, never> | null;
@@ -774,6 +917,8 @@ export interface components {
             /** @enum {string|null} */
             by?: "person" | "model" | null;
             basis?: string | null;
+            /** @enum {string|null} */
+            rank?: "preferred" | "normal" | "deprecated" | null;
             confidence?: number | null;
             source_role?: string | null;
             sources?: Record<string, never>[];
@@ -800,7 +945,7 @@ export interface components {
             depth?: number;
             /** @description Есть открытый пункт проверки (queued или claimed) */
             pending: boolean;
-            /** @description Число текущих связей узла в базе, а не только в выдаче */
+            /** @description Число всех текущих связей узла в базе, в том числе к узлам вне фильтра статусов и вне выдачи; может быть больше числа видимых линий */
             degree: number;
         };
         GraphResult: {
@@ -818,8 +963,9 @@ export interface components {
         };
         ObjectVersionView: {
             n: number;
-            digest: string;
-            size: number;
+            /** @description null — у сайта и переписки (копии файла нет) */
+            digest: string | null;
+            size: number | null;
             /** Format: date-time */
             recorded_at: string;
             cited_by?: number;
@@ -828,9 +974,17 @@ export interface components {
             id: string;
             /** @enum {string} */
             kind: "file" | "web" | "message";
-            original_name: string;
+            /** @description Нет у страницы сайта (у неё url) */
+            original_name?: string;
             media_type?: string | null;
+            /** @description Формат по PRONOM (у файлов из подборок) */
+            format_puid?: string;
             url?: string | null;
+            /**
+             * Format: date
+             * @description У страницы сайта — дата обращения
+             */
+            retrieved_at?: string;
             logical_paths?: string[];
             versions: components["schemas"]["ObjectVersionView"][];
             /** @enum {string|null} */
@@ -863,30 +1017,52 @@ export interface components {
             created_by?: string;
             author?: string | null;
             claimed_by?: string | null;
+            /** @description До какого времени пункт держит claimed_by */
+            claimed_until?: string | null;
             closed_at?: string | null;
         };
         ReviewItemView: {
             item: components["schemas"]["ReviewItem"];
             record: components["schemas"]["RecordView"];
-            /** @description для edit — текущая ревизия */
+            /** @description для edit и imported — текущая ревизия записи (revision, payload, review_state, recorded_at, agent); null — текущей нет */
             current?: Record<string, never> | null;
-            /** @description для edit — предложенная ревизия */
+            /** @description для edit и imported — ревизия пункта (те же поля и changes — отличия от текущей, пути RFC 6901) */
             proposed?: Record<string, never> | null;
-            /** @description для source_changed — старая и новая версии фрагмента */
+            /** @description для source_changed — objects: объект (UUID), его имя, прежние версии (from) и новая (to) */
             versions?: Record<string, never> | null;
         };
         ReviewStats: {
+            /**
+             * Format: date-time
+             * @description На какой момент посчитано
+             */
+            now?: string;
+            /** @description Окно done и changesets, дней назад от now */
+            days?: number;
+            /** @description По причинам: queued, claimed, expired, oldest_queued_age_s */
             queue: Record<string, never>;
+            /** @description by_reason (count, median_s) и obsolete за окно */
             done?: Record<string, never>;
+            /** @description approved, rejected и error_codes отклонённых пакетов за окно */
+            changesets?: Record<string, never>;
+            /** @description atoms и entities по статусам */
             records?: Record<string, never>;
+            /** @description Итоги сверки источников текущих ревизий; unchecked — не сверялся */
             verdicts?: Record<string, never>;
+            /** @description Аудит по автору пакета: decided, refuted */
+            audit?: Record<string, never>;
         };
         Submitted: {
             changeset_id: string;
             complete: boolean;
+            /** @description По предложению: label (как CheckIssue.ref), ref, target, record_id, revision_id, created, status, review_state */
             records: Record<string, never>[];
+            /** @description Пункты очереди: id, reason, label (как CheckIssue.ref), ref, record_id */
             queued: Record<string, never>[];
+            /** @description Отчёт amem.check/1 */
             report: Record<string, never>;
+            /** @description Предупреждения службы: private_removed — скрытое в <private> вырезано из поля */
+            warnings?: components["schemas"]["CheckIssue"][];
         };
         VocabEntry: {
             code: string;
@@ -894,15 +1070,26 @@ export interface components {
                 ru?: string;
                 en?: string;
             };
+            definition?: {
+                ru?: string;
+                en?: string;
+            } | null;
+            /** @description Имя пакета; schema — служебный перечень схемы, agent — добавил агент */
             pack?: string;
             broader?: string | null;
             /** @description Только словарь property: единица UCUM по умолчанию */
             unit?: string | null;
+            /**
+             * @description Только у вида атома (scheme kind)
+             * @enum {string}
+             */
+            family?: "source" | "work";
         };
         Base: {
             /** Format: uuid */
             base_id: string;
-            name?: string;
+            /** @description null — имя базе не давали */
+            name?: string | null;
             amem_version: string;
             packs: {
                 name: string;
@@ -998,8 +1185,11 @@ export interface components {
         };
         Backup: {
             name: string;
-            /** Format: date-time */
-            created_at: string;
+            /**
+             * Format: date-time
+             * @description null — время не прочесть ни из манифеста, ни из имени
+             */
+            created_at: string | null;
             size?: number;
             kind?: string;
         };
@@ -1018,8 +1208,8 @@ export interface components {
             changeset_id?: string | null;
             counts?: Record<string, never>;
             queued?: Record<string, never>[];
-            warnings?: Record<string, never>[];
-            collisions?: Record<string, never>[];
+            warnings?: string[];
+            collisions?: string[];
             report?: Record<string, never>;
             complete: boolean;
         };
@@ -1040,6 +1230,8 @@ export interface components {
         ObjectId: string;
         VersionN: number;
         ItemId: string;
+        /** @description Путь папки целиком в encodeURIComponent: «/» внутри пути — %2F */
+        FolderPath: string;
         Kind: string[];
         StatusFilter: components["schemas"]["Status"][];
         EntityClass: string[];
@@ -1142,6 +1334,93 @@ export interface operations {
                     "application/json": components["schemas"]["FolderTree"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createFolder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    path: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Создана */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Folder"];
+                };
+            };
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteFolder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Путь папки целиком в encodeURIComponent: «/» внутри пути — %2F */
+                path: components["parameters"]["FolderPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Удалена */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    renameFolder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Путь папки целиком в encodeURIComponent: «/» внутри пути — %2F */
+                path: components["parameters"]["FolderPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Новый путь */
+                    path: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderRenamed"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -1736,9 +2015,15 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @enum {string} */
-                    outcome: "confirmed" | "refuted";
+                    /**
+                     * @description Человек — confirmed или refuted; модель (только пункты semantic) — любой из четырёх с confidence
+                     * @enum {string}
+                     */
+                    outcome: "confirmed" | "partial" | "refuted" | "uncertain";
+                    /** @description Скрытое в <private>…</private> вырезается до записи (предупреждения в ответе нет) */
                     note?: string;
+                    /** @description Уверенность модели; у решения модели обязательна */
+                    confidence?: number;
                 };
             };
         };
@@ -1774,6 +2059,7 @@ export interface operations {
                     ref: string;
                     /** @enum {string} */
                     reason: "audit" | "calibration";
+                    /** @description Скрытое в <private>…</private> вырезается до записи (предупреждения в ответе нет) */
                     note?: string;
                 };
             };
@@ -1826,9 +2112,91 @@ export interface operations {
         };
         requestBody: {
             content: {
+                /**
+                 * @example {
+                 *       "proposals": [
+                 *         {
+                 *           "target": "entity",
+                 *           "payload": {
+                 *             "ref": "@node",
+                 *             "entity_class": "artifact",
+                 *             "label": {
+                 *               "ru": "Узел крепления"
+                 *             }
+                 *           }
+                 *         },
+                 *         {
+                 *           "target": "atom",
+                 *           "payload": {
+                 *             "ref": "@bracket",
+                 *             "kind": "fact",
+                 *             "label": {
+                 *               "ru": "Кронштейн крепится к закладной анкером"
+                 *             },
+                 *             "summary_plain": {
+                 *               "ru": "Кронштейн держится на одном анкере."
+                 *             },
+                 *             "about": [
+                 *               "@node"
+                 *             ],
+                 *             "sources": [
+                 *               {
+                 *                 "path": "Заметки/узел.md",
+                 *                 "selectors": [
+                 *                   {
+                 *                     "type": "heading",
+                 *                     "value": "Кронштейн"
+                 *                   }
+                 *                 ],
+                 *                 "quote": "Кронштейн КБ-14 крепится к закладной анкером М10."
+                 *               }
+                 *             ]
+                 *           }
+                 *         },
+                 *         {
+                 *           "target": "atom",
+                 *           "payload": {
+                 *             "ref": "@anchor",
+                 *             "kind": "fact",
+                 *             "label": {
+                 *               "ru": "Анкер М10 держит кронштейн КБ-14"
+                 *             },
+                 *             "summary_plain": {
+                 *               "ru": "Кронштейн держится на анкере М10."
+                 *             },
+                 *             "sources": [
+                 *               {
+                 *                 "path": "Заметки/узел.md",
+                 *                 "selectors": [
+                 *                   {
+                 *                     "type": "heading",
+                 *                     "value": "Кронштейн"
+                 *                   }
+                 *                 ],
+                 *                 "quote": "Кронштейн КБ-14 крепится к закладной анкером М10."
+                 *               }
+                 *             ]
+                 *           }
+                 *         }
+                 *       ],
+                 *       "links": [
+                 *         {
+                 *           "rel": "depends_on",
+                 *           "src": "@bracket",
+                 *           "dst": "@anchor",
+                 *           "note": {
+                 *             "ru": "по заметке об узле"
+                 *           },
+                 *           "confidence": 0.9
+                 *         }
+                 *       ],
+                 *       "reason": "разбор заметки об узле крепления"
+                 *     }
+                 */
                 "application/json": {
-                    proposals: Record<string, never>[];
-                    links?: Record<string, never>[];
+                    proposals: components["schemas"]["Proposal"][];
+                    links?: components["schemas"]["LinkProposal"][];
+                    /** @description Причина пакета (changeset.reason) */
                     reason?: string;
                 };
             };
@@ -1843,6 +2211,7 @@ export interface operations {
                     "application/json": components["schemas"]["Submitted"];
                 };
             };
+            413: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
@@ -1946,6 +2315,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         id: string;
+                        /** @description format, created_at, counts, packs (имена), with_files, with_packs, selection, anthology */
                         summary: Record<string, never>;
                         download: string;
                         report?: string | null;
@@ -1989,7 +2359,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description HTML-отчёт антологии */
+            /** @description HTML-отчёт антологии: Content-Disposition inline; CSP sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data: (без скриптов); nosniff */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2029,6 +2399,7 @@ export interface operations {
                     };
                 };
             };
+            413: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
