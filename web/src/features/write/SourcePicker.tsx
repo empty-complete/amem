@@ -283,7 +283,7 @@ export function SourcePicker({
                   <p className="muted">{t("pick.box_hint")}</p>
                   <BoxPick
                     src={contentUrl(obj.id, last.n)}
-                    alt={obj.original_name}
+                    alt={obj.original_name ?? ""}
                     onPick={(b) => setPlace([{ type: "bbox", value: b }])}
                   />
                 </>
