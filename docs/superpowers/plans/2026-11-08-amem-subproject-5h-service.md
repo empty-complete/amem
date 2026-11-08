@@ -20,6 +20,8 @@
 - поставка `amem[web]`;
 - настоящие снимки в README.
 
+**Ход.** 09.11 — до слияния 4a сделано то, что от неё не зависит: Task 2, Task 3, Task 4 без cookie сессии (PR `subproject-5h-prep`).
+
 **Ветка:** `subproject-5h-service` от `main` после 4a. Worktree: `~/projects/amem-web-h`.
 
 ---
@@ -53,9 +55,10 @@
 **Files:** `web/src/mocks/contract.ts`, `web/src/test/setup.ts`, `web/package.json`.
 
 Сейчас моки сверяются с контрактом только типами; JSON-образцы и ответы обработчиков во время выполнения не проверяются.
-- [ ] `contract.ts`: из `../docs/api/http-v1.openapi.yaml` собрать валидаторы ответов по `operationId` и коду (Ajv 2020; `yaml` уже есть или добавить в dev).
-- [ ] В Vitest — слушатель MSW `response:mocked`: каждый ответ мока сверяется со схемой; расхождение валит тест с путём поля.
-- [ ] Если найдутся расхождения, правятся моки, а не контракт. Контракт меняется только вместе со службой.
+- [x] `contract.ts`: из `../docs/api/http-v1.openapi.yaml` собрать валидаторы ответов по `operationId` и коду (Ajv 2020; `yaml` уже есть или добавить в dev).
+- [x] В Vitest — слушатель MSW `response:mocked`: каждый ответ мока сверяется со схемой; расхождение валит тест с путём поля.
+- [x] Если найдутся расхождения, правятся моки, а не контракт. Контракт меняется только вместе со службой.
+  - Итог 09.11: расхождений нет. Вне контракта `main` только пути папок 4a — временное исключение `AWAITING_4A` в `src/mocks/contract.ts`; убрать в Task 1.
 
 ### Task 3: Строгая CSP
 **Files:** `web/index.html`, `web/public/theme-boot.js`, `web/src/features/source/PdfPage.tsx`, `web/vite.config.ts`.
@@ -67,21 +70,25 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src
 font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
 ```
 
-- [ ] Встроенный скрипт темы в `index.html` будет заблокирован, и страница мигнёт чужой темой.
-  - Вынести его в `public/theme-boot.js`: обычный `<script src>` без `async`/`defer`, до стилей.
-  - Тест сборки: в `dist/index.html` нет встроенных `<script>`.
-- [ ] pdf.js:
-  - `getDocument({ isEvalSupported: false })` — шрифты без генерации кода во время выполнения;
+- [x] Встроенный скрипт темы в `index.html` будет заблокирован, и страница мигнёт чужой темой.
+  - Вынесен в `public/boot.js`: обычный `<script src>` без `async`/`defer`, до стилей.
+  - Проверяет e2e-проект `csp`.
+  - Там же найдено и исправлено: zod 4 при первом разборе проверяет, разрешён ли `Function`, и сама проверка нарушает CSP. `boot.js` до модулей ставит `globalThis.__zod_globalConfig.jitless`; `z.config` в коде приложения не успевает — общий кусок `schemas` разбирает раньше.
+- [x] pdf.js:
+  - в pdf.js 6 генерации кода нет вовсе (и опции `isEvalSupported` тоже), исключение не нужно;
   - воркер — файл с того же источника (`script-src 'self'` его разрешает);
   - сканы с JPX требуют WebAssembly (`'wasm-unsafe-eval'`). Проверить на образце-скане; если нужно — договориться со службой о добавлении в CSP. Иначе честная строка «Страница не отрисована: формат изображения не поддержан», цитата текстом.
-- [ ] KaTeX (шрифты `font-src 'self' data:`), CodeMirror (стили — `'unsafe-inline'` разрешён), force-graph и three.js — проверить в e2e по журналу консоли: ни одного нарушения CSP.
-- [ ] `npm run dev:mock` и `vite preview` отдают те же заголовки CSP (`server.headers`, `preview.headers`), чтобы нарушения ловились раньше.
+- [x] KaTeX (шрифты `font-src 'self' data:`), CodeMirror (стили — `'unsafe-inline'` разрешён), force-graph и three.js — проверить в e2e по журналу консоли: ни одного нарушения CSP.
+- [x] `vite preview` отдаёт те же заголовки CSP, чтобы нарушения ловились раньше.
+  - В `vite dev` CSP нет: горячая замена модулей вставляет встроенные скрипты.
+  - Проект e2e `csp` собирает `build:mock` и проверяет сборку под CSP службы.
+  - `build:mock` раньше собирался без моков (их отключало условие `DEV`); исправлено.
 
 ### Task 4: Разработка против службы
 **Files:** `web/vite.config.ts`, `web/README.md`.
-- [ ] Прокси `/api` по умолчанию на `http://127.0.0.1:8767`. Сейчас стоит 8765 — порт старого контейнера v0. `AMEM_URL` по-прежнему переопределяет.
+- [x] Прокси `/api` по умолчанию на `http://127.0.0.1:8767`. Сейчас стоит 8765 — порт старого контейнера v0. `AMEM_URL` по-прежнему переопределяет.
 - [ ] Cookie сессии: служба ставит её при выдаче `index.html` (`session.grant`). Через прокси Vite её нет, поэтому `npm run dev` перед стартом берёт сессию у службы запросом `GET /ui/`. Сверить с 4a, какое имя cookie и путь; если нужно — маленький плагин Vite.
-- [ ] `web/README.md`: три режима — `dev:mock`, `dev` против `amem serve`, сборка в `amem_web`.
+- [x] `web/README.md`: три режима — `dev:mock`, `dev` против `amem serve`, сборка в `amem_web`.
 
 ### Task 5: e2e против настоящей службы
 **Files:** `docker-compose.yml` (профиль `web`), `web/e2e/service/*.spec.ts`, `web/playwright.service.config.ts`, `tools/seed_sample.py`, `.github/workflows/web.yml`.

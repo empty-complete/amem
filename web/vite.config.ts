@@ -7,6 +7,13 @@ import react from "@vitejs/plugin-react";
 import { msw } from "msw/vite";
 import { defineConfig } from "vite";
 
+/** CSP, с которой служба отдаёт /ui (amem/service/ui.py). Та же — у `vite preview`, чтобы нарушения ловились
+ * до службы. В `vite dev` её нет: горячая замена модулей вставляет встроенные скрипты. */
+export const CSP =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
+  "font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; " +
+  "form-action 'self'";
+
 export default defineConfig({
   base: "/ui/",
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
@@ -20,7 +27,13 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5173,
     strictPort: true,
-    proxy: { "/api": { target: process.env.AMEM_URL ?? "http://127.0.0.1:8765", changeOrigin: true } },
+    // служба amem serve по умолчанию — 127.0.0.1:8767; другой адрес — AMEM_URL
+    proxy: { "/api": { target: process.env.AMEM_URL ?? "http://127.0.0.1:8767", changeOrigin: true } },
+  },
+  preview: {
+    host: "127.0.0.1",
+    headers: { "Content-Security-Policy": CSP, "X-Content-Type-Options": "nosniff" },
+    proxy: { "/api": { target: process.env.AMEM_URL ?? "http://127.0.0.1:8767", changeOrigin: true } },
   },
   build: {
     outDir: "python/amem_web/dist",
