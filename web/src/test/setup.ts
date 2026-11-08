@@ -36,14 +36,23 @@ import { setupI18n } from "../app/i18n";
 
 if (typeof document !== "undefined") await setupI18n("ru");
 
+import { checkResponse } from "../mocks/contract";
 import { db } from "../mocks/db";
 import { writeLog } from "../mocks/handlers-d";
 import { server } from "../mocks/node";
 
+// каждый ответ мока сверяется с контрактом; расхождение валит тест, в котором случилось
+const offContract: Promise<string[]>[] = [];
+server.events.on("response:mocked", ({ request, response }) => {
+  offContract.push(checkResponse(request, response));
+});
+
 beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
-afterEach(() => {
+afterEach(async () => {
+  const errors = (await Promise.all(offContract.splice(0))).flat();
   server.resetHandlers();
   db.reset();
   writeLog.length = 0;
+  expect(errors, "ответы моков не по контракту").toEqual([]);
 });
 afterAll(() => server.close());
