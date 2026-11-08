@@ -6,14 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <meta name="description" content="amem: общая память человека и агентов" />
     <title>amem</title>
-    <script>
-      try {
-        var t = null;
-        try { t = localStorage.getItem("amem.theme"); } catch (e) {}
-        if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-        document.documentElement.dataset.theme = t; document.documentElement.classList.add(t);
-      } catch (e) {}
-    </script>
+    <script src="/boot.js"></script>
   </head>
   <body>
     <div id="root"></div>
