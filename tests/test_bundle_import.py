@@ -148,7 +148,8 @@ def test_pack_missing_refuses_with_hint(pg, pg2, monkeypatch, store, store2, doc
     with pytest.raises(bundle.BundleError, match="ontology 1.0.0") as e:
         bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
     assert e.value.code == "bundle_pack_missing"
-    assert "AMEM_PACKS" in str(e.value) and str(tmp_path / "b" / "packs" / "ontology") in str(e.value)
+    assert "AMEM_PACKS" in str(e.value) and "подборке b" in str(e.value) and "packs/ontology" in str(e.value)
+    assert str(tmp_path) not in str(e.value)                 # полного пути на диске в сообщении нет
     assert _count(pg2, "atom") == 0 and _count(pg2, "object") == 0
 
 

@@ -71,6 +71,10 @@ class CheckRejected(ValueError):
         self.changeset_id, self.issues, self.warnings = changeset_id, issues, warnings
 
 
+class ReadOnly(Exception):
+    """Запись по входу только для чтения (токен без write): настоящий импорт подборки. У службы — 403 read_only."""
+
+
 class Missing(LookupError):
     """Подборки или загрузки нет: не было, срок хранения истёк или она чужая (чужая неотличима от несуществующей).
     У службы — 404 not_found."""
@@ -985,8 +989,8 @@ def _report(report: dict) -> dict:
 # --- подборки (AMEM_STATE/bundles, AMEM_STATE/uploads) ---
 #
 # Экспорт и загрузка лежат в папке состояния службы: <state>/bundles/<id>/ (bundle.zip, у антологии report.html)
-# и <state>/uploads/<id>/bundle.zip; id — UUIDv7, по нему ищется только своя папка. meta.json пишется последним:
-# папка без него — недописанная и не видна. В meta.json — владелец (кто сделал или загрузил: агент локальной
+# и <state>/uploads/<id>/bundle (распакованная один раз загрузка); id — UUIDv7, по нему ищется только своя
+# папка. meta.json пишется последним: папка без него — недописанная и не видна. В meta.json — владелец (кто сделал или загрузил: агент локальной
 # службы или токен общей), время создания и имя файла для скачивания. Чужая подборка отвечает так же, как
 # несуществующая (Missing, 404), — о чужом не сообщается даже то, что оно есть.
 #
@@ -998,6 +1002,7 @@ def _report(report: dict) -> dict:
 BUNDLE_TTL = 24 * 3600              # с; подборка и загрузка живут сутки
 BUNDLES, UPLOADS = "bundles", "uploads"
 BUNDLE_FILE, REPORT_FILE, META_FILE = "bundle.zip", "report.html", "meta.json"
+UPLOAD_DIR = "bundle"               # распакованная загрузка: inspect и import_ читают её без второй распаковки
 TITLE_MAX = 200                     # знаков в заголовке антологии
 FILENAME_MAX = 100                  # знаков в имени файла для скачивания (без .zip)
 SELECTION_FIELDS = ("tags", "project", "kinds", "entity_classes", "refs", "statuses", "since", "include_private")
@@ -1200,13 +1205,15 @@ def upload_begin(state: Path) -> tuple[str, Path]:
 
 
 def upload_finish(state: Path, upload_id: str, part: Path, *, owner: str) -> dict:
-    """Принять докачанный файл загрузки: bundle.inspect (манифест и сверка частей без базы) и владелец.
+    """Принять докачанный файл загрузки: распаковать один раз в <state>/uploads/<id>/bundle (bundle.unpack — те же
+    проверки архива), zip удалить, bundle.inspect по папке и записать владельца; import_ потом идёт по той же папке.
     Не подборка (не zip, нет манифеста, вредный архив) — BundleError (422), и загрузка удаляется."""
     folder = Path(state) / UPLOADS / upload_id
     try:
         folder.mkdir()
-        Path(part).replace(folder / BUNDLE_FILE)
-        report = bundle.inspect(folder / BUNDLE_FILE)
+        root = bundle.unpack(part, folder / UPLOAD_DIR)
+        Path(part).unlink()
+        report = bundle.inspect(root)
         _write_meta(folder, {"owner": owner, "created_at": _now()})
     except BaseException:
         _remove(folder)
@@ -1216,16 +1223,19 @@ def upload_finish(state: Path, upload_id: str, part: Path, *, owner: str) -> dic
 
 
 def bundle_import(conn: psycopg.Connection, store: ObjectStore, state: Path, upload_id, *, agent: str, owner: str,
-                  trust=None, dry_run=None) -> dict:
+                  trust=None, dry_run=None, can_write: bool = True) -> dict:
     """Imported: bundle.import_ своей загрузки. dry_run по умолчанию — да (план без записи). Настоящий импорт
-    вливает только человек: он решает, чему из чужой базы верить; модель смотрит план (dry_run) — Forbidden (403)."""
+    вливает только человек: он решает, чему из чужой базы верить; модель смотрит план (dry_run) — Forbidden (403).
+    Вход только для чтения (can_write=False) смотрит план, настоящий импорт — ReadOnly (403 read_only)."""
     dry = _bool(dry_run, "dry_run", default=True)
     trust = _enum(trust, "trust", bundle.TRUST, default="keep")
+    if not dry and not can_write:
+        raise ReadOnly(f"вход {agent} — только для чтения: доступен пробный импорт (dry_run: true)")
     if not dry and not (isinstance(agent, str) and agent.startswith("person:")):
         raise Forbidden(f"подборку в базу вливает только человек (person:), а не {agent}: модели доступен "
                         f"пробный импорт (dry_run: true)")
     folder, _ = _stored(state, UPLOADS, upload_id, owner)
-    result = bundle.import_(conn, store, folder / BUNDLE_FILE, agent=agent, trust=trust, dry_run=dry)
+    result = bundle.import_(conn, store, folder / UPLOAD_DIR, agent=agent, trust=trust, dry_run=dry)
     out = {"changeset_id": str(result.changeset_id) if result.changeset_id is not None else None,
            "counts": result.counts, "queued": result.queued, "warnings": result.warnings,
            "collisions": result.collisions, "complete": result.complete}
