@@ -50,7 +50,6 @@ ENV = {
     "ui_origins": "AMEM_UI_ORIGINS", "allowed_hosts": "AMEM_ALLOWED_HOSTS", "tokens": "AMEM_TOKENS",
     "query_log": "AMEM_QUERY_LOG", "state_quota": "AMEM_STATE_QUOTA",
 }
-PATHS = frozenset({"data", "docs", "state", "backups", "tokens", "query_log"})
 
 
 class SettingsError(ValueError):

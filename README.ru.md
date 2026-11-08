@@ -269,7 +269,8 @@ export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
   `/health` и статика интерфейса открыты без входа. `--host` не loopback без токенов служба отвергает;
   `--no-auth` разрешает его для закрытой сети и печатает предупреждение.
 - **Под своим именем.** С `--host 0.0.0.0` (например, в docker compose) имена, по которым к службе обращаются,
-  перечисляет `AMEM_ALLOWED_HOSTS`: `AMEM_ALLOWED_HOSTS=amem` принимает `Host: amem:8767`.
+  перечисляет `AMEM_ALLOWED_HOSTS`: `AMEM_ALLOWED_HOSTS=amem` принимает `Host: amem:8767`. Перечисляйте только имена,
+  которыми управляете: имя, которое браузер может разрешить в чужой адрес, открывает службу для DNS rebinding.
 - **Состояние.** Подборки и загрузки лежат в `AMEM_STATE` (`~/.local/state/amem`) сутки, не больше
   `AMEM_STATE_QUOTA` на владельца (10 ГиБ). Журнал запросов — `AMEM_STATE/queries.jsonl`; `AMEM_QUERY_LOG=off`
   выключает его. Свой журнал служба пишет в stderr.
