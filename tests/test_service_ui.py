@@ -2,6 +2,7 @@
 sys.modules, с папкой сборки во временном каталоге. Кэш (immutable у файлов с хэшем, no-cache у index.html),
 cookie человека у index.html только своей странице, SPA (неизвестный путь — index.html), обходы и символические
 ссылки — 404, без пакета — 404 с подсказкой."""
+import json
 import sys
 import types
 
@@ -139,3 +140,42 @@ def test_static_is_public_in_shared_service(serve, web, tmp_path):
     problem(client.get(f"{V1}/session", headers={"Sec-Fetch-Site": "same-origin"}), 401, "auth_required")
     assert client.get(f"{V1}/session", headers={"Authorization": "Bearer t-one"}).json()["agent"] == "person:anna"
     problem(client.post("/ui/index.html", json={}), 401, "auth_required")      # запись мимо API — тоже по токену
+
+
+def test_immutable_only_for_vite_hashed_names(serve, web):
+    """Без манифеста — по имени vite: «имя-хэш.расш», хэш 8+ знаков и не слово из строчных букв."""
+    for name in ("index-template.js", "my.longfilename.js", "index.BxY3k9aP.js", "index-Bx3k9a.js",
+                 "index-BxY3k9aP.js.map"):
+        (web / "assets" / name).write_text("x", encoding="utf-8")
+    (web / "assets" / "codemirror-D1x_k2-q.js").write_text("x", encoding="utf-8")
+    (web / "assets" / "inter-latin-400-normal-C38fXH4l.woff2").write_bytes(b"x")
+    (web / "hashed-BxY3k9aP.js").write_text("x", encoding="utf-8")         # не в assets/
+    client = serve()
+    for name in ("index-template.js", "my.longfilename.js", "index.BxY3k9aP.js", "index-Bx3k9a.js",
+                 "index-BxY3k9aP.js.map"):
+        response = client.get(f"/ui/assets/{name}")
+        assert response.status_code == 200 and response.headers["cache-control"] == "no-cache", name
+    for name in ("codemirror-D1x_k2-q.js", "inter-latin-400-normal-C38fXH4l.woff2", ASSET):
+        assert client.get(f"/ui/assets/{name}").headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert client.get("/ui/hashed-BxY3k9aP.js").headers["cache-control"] == "no-cache"
+
+
+def test_manifest_decides_immutable_and_is_not_served(serve, web):
+    """С манифестом vite (.vite/manifest.json) immutable — только у файлов сборки из него; сам манифест — 404."""
+    (web / ".vite").mkdir()
+    (web / ".vite" / "manifest.json").write_text(json.dumps({
+        "index.html": {"file": f"assets/{ASSET}", "css": ["assets/index-C9kQ2xZa.css"], "isEntry": True},
+        "_codemirror-D1x_k2-q.js": {"file": "assets/codemirror-D1x_k2-q.js", "assets": ["assets/font-A1b2C3d4.woff2"]},
+    }), encoding="utf-8")
+    for name in ("index-C9kQ2xZa.css", "codemirror-D1x_k2-q.js", "font-A1b2C3d4.woff2", "stray-Q7w8E9r0.js"):
+        (web / "assets" / name).write_text("x", encoding="utf-8")
+    client = serve()
+    for name in (ASSET, "index-C9kQ2xZa.css", "codemirror-D1x_k2-q.js", "font-A1b2C3d4.woff2"):
+        assert client.get(f"/ui/assets/{name}").headers["cache-control"] == "public, max-age=31536000, immutable", \
+            name
+    stray = client.get("/ui/assets/stray-Q7w8E9r0.js")                # имя как у сборки, а в манифесте нет
+    assert stray.status_code == 200 and stray.headers["cache-control"] == "no-cache"
+    for path in ("/ui/.vite/manifest.json", "/ui/.vite/", "/ui/assets/.hidden.js"):
+        problem(client.get(path), 404, "not_found")
+    (web / ".vite" / "manifest.json").write_text("не JSON", encoding="utf-8")       # испорчен — никому immutable
+    assert serve().get(f"/ui/assets/{ASSET}").headers["cache-control"] == "no-cache"

@@ -24,6 +24,13 @@ bundle.export или, с anthology: true, anthology.export; zip отдаётся
 AMEM_STATE/uploads/.<id>.part с отсечкой на UPLOAD_LIMIT (413 too_large, недокачанное удаляется), остальное
 в форме — не больше FORM_LIMIT; затем bundle.inspect без базы. Владелец подборки — session.owner (токен или агент).
 
+Медленное тело: следующий кусок тела записи и загрузки служба ждёт не дольше BODY_IDLE, а JSON-тело целиком — не
+дольше BODY_TOTAL; дальше — 408 body_timeout (загрузку ограничивает только BODY_IDLE: большой файл по медленной
+сети законно идёт долго). Тяжёлые чтения (/graph — обзор неба и окрестность) идут в транзакции с SET LOCAL
+statement_timeout = HEAVY_TIMEOUT_MS: превышение база обрывает сама, ответ — 503 timeout, соединение возвращается
+в пул без следа настройки. Подборки и загрузки владельца ограничены AMEM_STATE_QUOTA (api.state_usage): сверх —
+507 quota_exceeded, приём загрузки обрывается, как только файл перерос остаток.
+
 Явный поиск (/search, /similar) пишет строку в журнал запросов (amem/journal.py, AMEM_QUERY_LOG): ошибка файла
 поиск не роняет.
 
@@ -58,6 +65,9 @@ FILE_HEADERS = {"X-Content-Type-Options": "nosniff", "Content-Security-Policy": 
 BODY_LIMIT = 1 << 20          # байт JSON-тела записи: пакет submit — сотни атомов; больше — 413 too_large
 UPLOAD_LIMIT = bundle.MAX_UNPACKED      # байт файла подборки в /bundles/inspect (4 ГиБ); больше — 413 too_large
 FORM_LIMIT = 64 << 10         # байт заголовков и прочих полей формы /bundles/inspect вместе — сверх файла
+BODY_IDLE = 30.0              # с без новых байт тела записи или загрузки — 408 body_timeout
+BODY_TOTAL = 120.0            # с на всё JSON-тело записи (до 1 МиБ — с запасом и для медленной сети)
+HEAVY_TIMEOUT_MS = 15_000     # statement_timeout тяжёлых чтений (/graph); дольше — 503 timeout
 # отчёт антологии открывается в новой вкладке как документ без своего источника (sandbox без allow-scripts):
 # скрипты не идут, запросы к службе и cookie ему недоступны; стили — встроенные, картинки — только data:
 REPORT_HEADERS = {"X-Content-Type-Options": "nosniff", "Content-Disposition": "inline",
@@ -158,8 +168,16 @@ def get_card(request: Request) -> JSONResponse:
         return JSONResponse(api.card(conn, request.path_params["ref"], ancestors=_q(request, "ancestors")))
 
 
+@contextlib.contextmanager
+def _heavy(request: Request):
+    """Соединение в транзакции с SET LOCAL statement_timeout: предел действует только до её конца."""
+    with connection(request) as conn, conn.transaction():
+        conn.execute(f"SET LOCAL statement_timeout = {int(HEAVY_TIMEOUT_MS)}")
+        yield conn
+
+
 def get_graph(request: Request) -> JSONResponse:
-    with connection(request) as conn:
+    with _heavy(request) as conn:
         return JSONResponse(api.graph(conn, _q(request, "ref"), depth=_q(request, "depth"), limit=_q(request, "limit"),
                                       project=_q(request, "project"), rels=_many(request, "rels"),
                                       status=_many(request, "status")))
@@ -221,13 +239,36 @@ def _constant(name: str):
     raise ValueError(f"{name} — не число JSON")
 
 
+def _body_timeout(detail: str) -> problems.Problem:
+    return problems.Problem(408, "body_timeout", detail, headers={"Connection": "close"})
+
+
+async def _stream(request: Request, *, total: float | None = None):
+    """Куски тела запроса: следующий ждём не дольше BODY_IDLE, всё тело — не дольше total (None — без общего
+    предела); иначе 408 body_timeout. Медленный клиент не держит соединение и разобранное тело сколько угодно."""
+    deadline = None if total is None else time.monotonic() + total
+    chunks = request.stream().__aiter__()
+    while True:
+        wait = BODY_IDLE if deadline is None else min(BODY_IDLE, deadline - time.monotonic())
+        with anyio.move_on_after(max(wait, 0.0)) as waiting:
+            try:
+                chunk = await chunks.__anext__()
+            except StopAsyncIteration:
+                return
+        if waiting.cancelled_caught:
+            if deadline is not None and time.monotonic() >= deadline:
+                raise _body_timeout(f"тело запроса не пришло целиком за {total:g} с")
+            raise _body_timeout(f"тело запроса не приходит: {BODY_IDLE:g} с без новых данных")
+        yield chunk
+
+
 async def _body(request: Request) -> dict:
     """JSON-объект тела записи; читается потоком до BODY_LIMIT байт, дальше — 413 (не дочитывая)."""
     length = request.headers.get("content-length", "").strip()
     if length.isascii() and length.isdigit() and (len(length) > 18 or int(length) > BODY_LIMIT):
         raise _too_large()                        # быстрый отказ; сам счёт — ниже, по пришедшим байтам
     chunks, size = [], 0
-    async for chunk in request.stream():
+    async for chunk in _stream(request, total=BODY_TOTAL):
         size += len(chunk)
         if size > BODY_LIMIT:
             raise _too_large()
@@ -337,7 +378,7 @@ async def export_bundle(request: Request) -> JSONResponse:
     made = await _call(request, lambda conn: api.bundle_export(
         conn, state.store, state.settings.state, agent=request.state.agent, owner=session.owner(request),
         selection=body.get("selection"), with_files=body.get("with_files"), with_packs=body.get("with_packs"),
-        anthology=body.get("anthology"), title=body.get("title")))
+        anthology=body.get("anthology"), title=body.get("title"), quota=state.settings.state_quota))
     return JSONResponse(_bundle_links(made))
 
 
@@ -385,8 +426,9 @@ class _Upload:
     """Приёмник multipart/form-data для /bundles/inspect: поле file — потоком в файл на диске, прочие поля
     и заголовки частей — не больше FORM_LIMIT байт вместе; файл больше UPLOAD_LIMIT — 413, не дочитывая."""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, room: int | None = None, quota: int | None = None):
         self.path, self.out = path, None
+        self.room, self.quota = room, quota        # остаток места владельца (AMEM_STATE_QUOTA) и сам предел
         self.size = self.form = 0
         self.field = self.header = b""
         self.disposition = b""
@@ -436,6 +478,8 @@ class _Upload:
         self.size += end - start
         if self.size > UPLOAD_LIMIT:
             raise _upload_too_large()
+        if self.room is not None and self.size > self.room:
+            raise api.quota_exceeded(self.quota - self.room, self.quota, "загрузка подборки")
         self.out.write(data[start:end])
 
     def part_end(self) -> None:
@@ -466,14 +510,16 @@ async def inspect_bundle(request: Request) -> JSONResponse:
     length = request.headers.get("content-length", "").strip()
     if length.isascii() and length.isdigit() and (len(length) > 18 or int(length) > UPLOAD_LIMIT + FORM_LIMIT):
         raise _upload_too_large()                 # быстрый отказ; сам счёт — по пришедшим байтам
-    state = request.app.state.settings.state
+    settings = request.app.state.settings
+    state, quota, owner = settings.state, settings.state_quota, session.owner(request)
+    room = await run_in_threadpool(api.upload_room, state, owner, quota)
     upload_id, part = await run_in_threadpool(api.upload_begin, state)
-    upload = _Upload(part)
+    upload = _Upload(part, room, quota)
     parser = python_multipart.MultipartParser(boundary, upload.callbacks())
     total = 0
     try:
         try:
-            async for chunk in request.stream():
+            async for chunk in _stream(request):
                 await run_in_threadpool(parser.write, chunk)     # запись на диск — не в цикле событий
                 if upload.ended:
                     break                         # после финального boundary тело дальше не читается
@@ -495,8 +541,8 @@ async def inspect_bundle(request: Request) -> JSONResponse:
     except BaseException:
         part.unlink(missing_ok=True)
         raise
-    return JSONResponse(await run_in_threadpool(lambda: api.upload_finish(state, upload_id, part,
-                                                                          owner=session.owner(request))))
+    return JSONResponse(await run_in_threadpool(lambda: api.upload_finish(state, upload_id, part, owner=owner,
+                                                                          quota=quota)))
 
 
 async def import_bundle(request: Request) -> JSONResponse:

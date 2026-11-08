@@ -1,7 +1,8 @@
 """Защита запросов и сессия (спецификация подпроекта 4, разд. 3.1) — промежуточный слой ASGI перед маршрутами.
 
 Для каждого запроса, в любом режиме:
-- Host — 127.0.0.1, localhost, [::1] или адрес из настроек (--host); чужой — 421 (DNS rebinding);
+- Host — 127.0.0.1, localhost, [::1], адрес из настроек (--host) или имя из AMEM_ALLOWED_HOSTS (compose: имя службы
+  при --host 0.0.0.0); порт в Host — любой; чужое имя — 421 (DNS rebinding);
 - Origin, если пришёл, — свой источник или один из AMEM_UI_ORIGINS; чужой — 403. Запасная проверка — запрос без
   Origin, но с Sec-Fetch-Site: cross-site или same-site: так браузер помечает запрос с чужой страницы, даже если
   Origin не прислал (<img>, <script>, переход по форме), — 403 у любой записи и у любого запроса к /api/v1, кроме
@@ -48,12 +49,16 @@ UI_PUBLIC = ("/", "/ui")                 # статика интерфейса �
 READ_ONLY_POSTS = frozenset({"/api/v1/bundles/export", "/api/v1/bundles/inspect", "/api/v1/bundles/import"})
 
 
-def allowed_hosts(host: str) -> frozenset[str]:
-    """Имена в заголовке Host, на которые служба отвечает: локальные и адрес из настроек (IPv6 — в скобках)."""
-    own = host.strip().lower()
-    if ":" in own and not own.startswith("["):
-        own = f"[{own}]"
-    return frozenset(LOCAL_HOSTS) | ({own} - WILDCARD_HOSTS)
+def _bracketed(host: str) -> str:
+    host = host.strip().lower()
+    return f"[{host}]" if ":" in host and not host.startswith("[") else host
+
+
+def allowed_hosts(host: str, extra: tuple[str, ...] = ()) -> frozenset[str]:
+    """Имена в заголовке Host, на которые служба отвечает: локальные, адрес из настроек и AMEM_ALLOWED_HOSTS
+    (IPv6 — в скобках, как в Host). Адрес «на всех интерфейсах» (0.0.0.0) — не имя: его заменяет AMEM_ALLOWED_HOSTS."""
+    own = {_bracketed(host)} - WILDCARD_HOSTS
+    return frozenset(LOCAL_HOSTS) | own | ({_bracketed(name) for name in extra} - WILDCARD_HOSTS)
 
 
 def hostname(host: str) -> str:
@@ -93,7 +98,7 @@ class Guard:
         self.settings = settings
         self.secret = secret
         self.tokens = tokens
-        self.hosts = allowed_hosts(settings.host)
+        self.hosts = allowed_hosts(settings.host, settings.allowed_hosts)
         self.origins = frozenset(settings.ui_origins)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:

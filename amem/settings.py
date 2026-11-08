@@ -2,7 +2,7 @@
 
 Порядок источников: явный аргумент → окружение (AMEM_…) → amem.toml ($AMEM_CONFIG, затем ~/.config/amem/amem.toml).
 Ключи amem.toml — имена полей Settings (dsn, data, docs, state, backups, host, port, agent, model_agent, ui_origins,
-tokens, query_log); неизвестный ключ — ошибка, а не тихий пропуск опечатки. Относительный путь в amem.toml считается
+allowed_hosts, tokens, query_log, state_quota); неизвестный ключ — ошибка, а не тихий пропуск опечатки. Относительный путь в amem.toml считается
 от папки файла, в окружении и аргументе — от текущей папки; «~» раскрывается везде.
 
 Токены общей службы — amem-tokens.toml с правами 0600: строки [[token]] с hash = "sha256:…", agent и write. Сам токен
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import logging
 import os
 import re
@@ -30,6 +31,11 @@ DEFAULT_PORT = 8767            # 8765 на машинах разработчик
 DEFAULT_MODEL_AGENT = "model:local"
 FALLBACK_NAME = "local"        # имя человека, если от имени пользователя ОС ничего не осталось
 QUERY_LOG_OFF = "off"
+DEFAULT_STATE_QUOTA = 10 << 30     # байт подборок и загрузок одного владельца в AMEM_STATE (10 ГиБ)
+QUOTA_UNITS = {"": 1, "k": 1 << 10, "kib": 1 << 10, "m": 1 << 20, "mib": 1 << 20, "g": 1 << 30, "gib": 1 << 30,
+               "t": 1 << 40, "tib": 1 << 40}
+# имя хоста по RFC 1123: метки из латиницы, цифр и «-» (не с краю), через точку; без порта, схемы и пути
+HOSTNAME = re.compile(r"(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*")
 # шаблоны — только целиком (fullmatch): у re.match с «$» проходит и строка с переводом строки на конце
 PERSON = re.compile(r"person:[a-z0-9_.-]+")         # шаблон агента — как CHECK таблицы agent (objects.AGENT)
 MODEL = re.compile(r"model:[a-z0-9_.-]+")
@@ -41,7 +47,8 @@ log = logging.getLogger("amem.settings")
 ENV = {
     "dsn": "AMEM_DSN", "data": "AMEM_DATA", "docs": "AMEM_DOCS", "state": "AMEM_STATE", "backups": "AMEM_BACKUPS",
     "host": "AMEM_HOST", "port": "AMEM_PORT", "agent": "AMEM_AGENT", "model_agent": "AMEM_MODEL_AGENT",
-    "ui_origins": "AMEM_UI_ORIGINS", "tokens": "AMEM_TOKENS", "query_log": "AMEM_QUERY_LOG",
+    "ui_origins": "AMEM_UI_ORIGINS", "allowed_hosts": "AMEM_ALLOWED_HOSTS", "tokens": "AMEM_TOKENS",
+    "query_log": "AMEM_QUERY_LOG", "state_quota": "AMEM_STATE_QUOTA",
 }
 PATHS = frozenset({"data", "docs", "state", "backups", "tokens", "query_log"})
 
@@ -57,13 +64,15 @@ class Settings:
     docs: Path | None               # папка документов; без неё источник с path получает source_unresolved
     state: Path                     # загрузки, подборки, журнал запросов
     backups: Path
-    host: str
+    host: str                       # адрес привязки: IPv4, IPv6 (без скобок) или имя, без порта
     port: int
     agent: str                      # человек локальной службы: person:…
     model_agent: str                # клиенты без cookie и токена: model:…
     ui_origins: tuple[str, ...]     # разрешённые источники интерфейса (dev-сервер веба), без «/» в конце
+    allowed_hosts: tuple[str, ...]  # имена в Host сверх локальных и адреса привязки (compose: имя службы)
     tokens: Path | None             # файл токенов общей службы; None — локальная служба
     query_log: Path | None          # журнал запросов; None — выключен (AMEM_QUERY_LOG=off)
+    state_quota: int                # байт подборок и загрузок одного владельца в AMEM_STATE
     config: Path | None             # прочитанный amem.toml, если был
 
 
@@ -116,13 +125,15 @@ def load(env: Mapping[str, str] | None = None, **explicit) -> Settings:
         docs=path("docs"),
         state=state,
         backups=path("backups") or state / "backups",
-        host=text("host", DEFAULT_HOST),
+        host=_host(raw.get("host")),
         port=_port(raw.get("port")),
         agent=_agent(raw.get("agent"), PERSON, "person:", default=default_agent(env)),
         model_agent=_agent(raw.get("model_agent"), MODEL, "model:", default=DEFAULT_MODEL_AGENT),
         ui_origins=_origins(raw.get("ui_origins")),
+        allowed_hosts=_allowed_hosts(raw.get("allowed_hosts")),
         tokens=path("tokens"),
         query_log=query_log,
+        state_quota=_quota(raw.get("state_quota")),
         config=config,
     )
 
@@ -272,12 +283,7 @@ def _origins(entry) -> tuple[str, ...]:
     if entry is None:
         return ()
     value, where, _ = entry
-    if isinstance(value, str):
-        items = value.split(",")
-    elif isinstance(value, (list, tuple)) and all(isinstance(item, str) for item in value):
-        items = value
-    else:
-        raise SettingsError(f"{where}: нужен список источников или строка через запятую, получено {value!r}")
+    items = _list(value, where, "источников")
     origins = []
     for item in (item.strip() for item in items):
         if not item:
@@ -288,3 +294,70 @@ def _origins(entry) -> tuple[str, ...]:
             raise SettingsError(f"{where}: источник {item!r} — нужен вид http://хост:порт, без пути")
         origins.append(origin)
     return tuple(dict.fromkeys(origins))
+
+
+def host_value(value: str) -> str | None:
+    """Адрес или имя хоста без порта, строчными; IPv6 — без скобок («[::1]» → «::1»). Не адрес и не имя — None."""
+    host = value.strip().lower()
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+        try:
+            return str(ipaddress.IPv6Address(host)) if "%" not in host else None
+        except ValueError:
+            return None
+    try:
+        return str(ipaddress.ip_address(host)) if "%" not in host else None
+    except ValueError:
+        pass
+    return host if HOSTNAME.fullmatch(host) and not host.replace(".", "").isdigit() else None
+
+
+def _host(entry) -> str:
+    if entry is None:
+        return DEFAULT_HOST
+    value, where, _ = entry
+    host = host_value(value) if isinstance(value, str) else None
+    if host is None:
+        raise SettingsError(f"{where}: адрес {value!r} — нужен IPv4, IPv6 или имя хоста, без порта и схемы "
+                            f"(порт — AMEM_PORT)")
+    return host
+
+
+def _list(value, where: str, what: str) -> list[str]:
+    if isinstance(value, str):
+        return value.split(",")
+    if isinstance(value, (list, tuple)) and all(isinstance(item, str) for item in value):
+        return list(value)
+    raise SettingsError(f"{where}: нужен список {what} или строка через запятую, получено {value!r}")
+
+
+def _allowed_hosts(entry) -> tuple[str, ...]:
+    if entry is None:
+        return ()
+    value, where, _ = entry
+    hosts = []
+    for item in (item.strip() for item in _list(value, where, "имён")):
+        if not item:
+            continue
+        host = host_value(item)
+        if host is None:
+            raise SettingsError(f"{where}: {item!r} — нужно имя хоста или адрес без порта и схемы: Host сверяется "
+                                f"по имени, порт любой (например amem)")
+        hosts.append(host)
+    return tuple(dict.fromkeys(hosts))
+
+
+def _quota(entry) -> int:
+    if entry is None:
+        return DEFAULT_STATE_QUOTA
+    value, where, _ = entry
+    if isinstance(value, int) and not isinstance(value, bool):
+        number, unit = value, ""
+    elif isinstance(value, str) and (found := re.fullmatch(r"\s*([0-9]+)\s*([a-zA-Z]*)\s*", value)):
+        number, unit = int(found[1]), found[2].lower()
+    else:
+        number, unit = None, ""
+    if number is None or unit not in QUOTA_UNITS or number <= 0:
+        raise SettingsError(f"{where}: предел {value!r} — нужно целое число байт больше нуля или с единицей "
+                            f"(500M, 10G, 1T — двоичные: МиБ, ГиБ, ТиБ)")
+    return number * QUOTA_UNITS[unit]
