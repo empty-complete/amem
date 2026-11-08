@@ -9,7 +9,9 @@ ValueError, поэтому перевод идёт от частного к об
 подробности уходят в журнал службы (logger amem.service), в ответе их нет. Недоступная база — 503 без строки
 соединения: в тексте ошибки psycopg бывают адрес и порт сервера; значение, которое база не приняла
 (psycopg.DataError), — 400 тоже без её текста. Хранилище копий без корня (том не подключён) — 503
-store_unavailable, копии версии нет — 404; путь на диске — только в журнале.
+store_unavailable, копии версии нет — 404; путь на диске — только в журнале. Тяжёлый запрос, который база оборвала
+по statement_timeout (psycopg.errors.QueryCanceled — подкласс OperationalError, поэтому раньше него), — 503 timeout;
+подборки владельца сверх предела места (api.QuotaExceeded) — 507 quota_exceeded.
 У каждого ответа-ошибки — X-Content-Type-Options: nosniff.
 """
 from __future__ import annotations
@@ -36,15 +38,16 @@ log = logging.getLogger("amem.service")
 # заголовок — короткая фраза для экрана (веб показывает title, если нет detail)
 TITLES = {
     400: "Неверный запрос", 401: "Нужен вход", 403: "Запрещено", 404: "Не найдено", 405: "Метод не поддерживается",
-    409: "Конфликт", 413: "Слишком много данных", 415: "Неподдерживаемый тип тела", 416: "Диапазон вне файла",
+    408: "Тело запроса не дошло", 409: "Конфликт", 413: "Слишком много данных", 415: "Неподдерживаемый тип тела", 416: "Диапазон вне файла",
     421: "Чужой адрес службы", 422: "Отклонено проверкой", 500: "Внутренняя ошибка службы", 501: "Ещё не сделано",
-    503: "Служба недоступна",
+    503: "Служба недоступна", 507: "Нет места",
 }
 CODE_TITLES = {"read_only": "Только чтение", "review_closed": "Уже решено", "bad_origin": "Чужой источник запроса",
                "forbidden": "Только для человека", "check_rejected": "Отклонено проверкой",
                "folder_exists": "Папка уже есть", "folder_not_empty": "Папка не пуста",
                "semantic_unavailable": "Смысловой поиск недоступен", "db_unavailable": "База недоступна",
-               "store_unavailable": "Хранилище копий недоступно"}
+               "store_unavailable": "Хранилище копий недоступно", "timeout": "Запрос слишком долгий",
+               "body_timeout": "Тело запроса не дошло", "quota_exceeded": "Нет места для подборок"}
 RESERVED = frozenset({"type", "title", "status", "code", "detail"})       # расширения их не заменяют
 REVIEW = {"closed": (409, "review_closed"), "forbidden": (403, "review_forbidden"),
           "claimed": (403, "review_forbidden"), "stale": (400, "review_bad"), "bad_outcome": (400, "review_bad"),
@@ -114,6 +117,11 @@ def to_problem(exc: BaseException) -> Problem:
         return Problem(503, "semantic_unavailable", f"смысловой поиск недоступен: {message}")
     if isinstance(exc, api.StoreUnavailable):
         return Problem(503, "store_unavailable", message)
+    if isinstance(exc, api.QuotaExceeded):
+        return Problem(507, "quota_exceeded", message)
+    if isinstance(exc, psycopg.errors.QueryCanceled):
+        return Problem(503, "timeout", "запрос к базе не уложился в отведённое время: сузьте его (меньше limit, "
+                       "depth, фильтр по project или статусам) или повторите позже")
     if isinstance(exc, psycopg.OperationalError):
         return Problem(503, "db_unavailable", "база недоступна — проверьте, что PostgreSQL запущен и AMEM_DSN верен")
     if isinstance(exc, psycopg.DataError):
@@ -130,6 +138,8 @@ async def handle(request: Request, exc: Exception) -> JSONResponse:
     problem = to_problem(exc)
     if problem.code == "db_unavailable":
         log.warning("%s %s: база недоступна: %s", request.method, request.url.path, exc)
+    elif problem.code == "timeout":
+        log.warning("%s %s: запрос к базе оборван по statement_timeout", request.method, request.url.path)
     elif isinstance(exc, (api.StoreUnavailable, api.CopyMissing)):
         log.warning("%s %s: %s (%s)", request.method, request.url.path, exc, exc.where)
     elif problem.status >= 500 and problem is not exc and problem.code == "internal":
@@ -142,5 +152,5 @@ async def handle(request: Request, exc: Exception) -> JSONResponse:
 HANDLED = (Problem, api.CheckRejected, api.Forbidden, api.ReadOnly, api.Missing, api.BadRequest, records.RecordError,
            review.ReviewError, FolderError, bundle.BundleError, objects.ObjectError, CheckError, db.BaseNameError,
            vocab.VocabError, CanonError, PackError, embed.EmbeddingError, api.StoreUnavailable,
-           psycopg.OperationalError, psycopg.DataError, HTTPException, ValueError, Exception)
+           api.QuotaExceeded, psycopg.OperationalError, psycopg.DataError, HTTPException, ValueError, Exception)
 HANDLERS = {cls: handle for cls in HANDLED}

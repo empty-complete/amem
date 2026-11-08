@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import os
 import re
 import shutil
 import time
@@ -78,6 +79,11 @@ class ReadOnly(Exception):
 class Missing(LookupError):
     """Подборки или загрузки нет: не было, срок хранения истёк или она чужая (чужая неотличима от несуществующей).
     У службы — 404 not_found."""
+
+
+class QuotaExceeded(Exception):
+    """Подборки и загрузки владельца заняли бы в папке состояния больше предела (AMEM_STATE_QUOTA). У службы —
+    507 quota_exceeded."""
 
 
 class StoreUnavailable(RuntimeError):
@@ -998,6 +1004,11 @@ def _report(report: dict) -> dict:
 # а обращение к просроченной подборке удаляет её сразу (Missing) — срок не зависит от того, успел ли пройти sweep.
 # Часы — _now(): время создания пишется по ним же, и тесты подменяют их. Отрицательный возраст (часы ушли назад)
 # не считается просрочкой.
+#
+# Предел места (quota, AMEM_STATE_QUOTA) — на владельца: его живые подборки и загрузки вместе (state_usage). Экспорт
+# и загрузка, после которых занятое превысило бы предел, удаляют сделанное и отвечают QuotaExceeded (507); служба
+# ещё и обрывает приём загрузки, как только файл перерос остаток (upload_room). Одновременные запросы одного
+# владельца могут вместе ненадолго перешагнуть предел — он защищает диск от накопления, а не от гонки.
 
 BUNDLE_TTL = 24 * 3600              # с; подборка и загрузка живут сутки
 BUNDLES, UPLOADS = "bundles", "uploads"
@@ -1074,6 +1085,66 @@ def _stored(state: Path, kind: str, value, owner: str) -> tuple[Path, dict]:
     return folder, meta
 
 
+def _size(path: Path) -> int:
+    """Байт в обычных файлах папки (без перехода по ссылкам); исчезнувшее по ходу — не считается."""
+    total = 0
+    for top, _, files in os.walk(path, followlinks=False):
+        for name in files:
+            try:
+                total += os.lstat(os.path.join(top, name)).st_size
+            except OSError:
+                pass
+    return total
+
+
+def state_usage(state: Path, owner: str) -> int:
+    """Сколько байт заняли живые подборки и загрузки владельца в <state>/bundles и <state>/uploads."""
+    now, total = _now(), 0
+    for kind in (BUNDLES, UPLOADS):
+        try:
+            entries = list((Path(state) / kind).iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            if _state_id(entry.name) != entry.name or entry.is_symlink() or not entry.is_dir():
+                continue
+            meta = _read_meta(entry)
+            if meta is None or meta.get("owner") != owner or _expired(meta.get("created_at"), now):
+                continue
+            total += _size(entry)
+    return total
+
+
+def _mib(size: int) -> str:
+    return f"{size / (1 << 30):.1f} ГиБ" if size >= 1 << 30 else f"{size / (1 << 20):.1f} МиБ"
+
+
+def quota_exceeded(used: int, quota: int, what: str) -> QuotaExceeded:
+    return QuotaExceeded(f"{what}: подборки и загрузки этого входа заняли бы больше предела {_mib(quota)} "
+                         f"(уже занято {_mib(used)}); старые удаляются через сутки — подождите, сузьте отбор "
+                         f"или увеличьте AMEM_STATE_QUOTA")
+
+
+def upload_room(state: Path, owner: str, quota: int | None) -> int | None:
+    """Сколько байт ещё можно загрузить владельцу (None — предела нет); места нет — QuotaExceeded."""
+    if quota is None:
+        return None
+    used = state_usage(state, owner)
+    if used >= quota:
+        raise quota_exceeded(used, quota, "загрузка подборки")
+    return quota - used
+
+
+def _within_quota(state: Path, owner: str, quota: int | None, folder: Path, what: str) -> None:
+    """Новая папка folder (ещё без meta, в state_usage не входит) вместе с прочими — в пределе, иначе
+    QuotaExceeded (папку удаляет вызывающий)."""
+    if quota is None:
+        return
+    used = state_usage(state, owner)
+    if used + _size(folder) > quota:
+        raise quota_exceeded(used, quota, what)
+
+
 def bundle_sweep(state: Path) -> int:
     """Удалить подборки и загрузки старше BUNDLE_TTL (и недописанные — по времени изменения); сколько удалено.
     Удаляются только свои имена (UUID, .<UUID>.part): чужие файлы в папке состояния не трогаются."""
@@ -1137,10 +1208,12 @@ def _filename(title: str | None, bid: str) -> str:
 
 
 def bundle_export(conn: psycopg.Connection, store: ObjectStore, state: Path, *, agent: str, owner: str,
-                  selection, with_files=None, with_packs=None, anthology=None, title=None) -> dict:
+                  selection, with_files=None, with_packs=None, anthology=None, title=None,
+                  quota: int | None = None) -> dict:
     """Подборка в <state>/bundles/<id>: bundle.export по selection или, с anthology, антология (anthology.export,
     title — заголовок отчёта). Ответ — id, summary (counts, packs по именам, with_files, with_packs, selection,
-    created_at) и has_report; ссылки на скачивание и отчёт добавляет служба. Отказ библиотеки — BundleError."""
+    created_at) и has_report; ссылки на скачивание и отчёт добавляет служба. Отказ библиотеки — BundleError.
+    quota — предел места владельца (байт): подборка сверх него удаляется, QuotaExceeded."""
     sel = _selection(selection)
     files = _bool(with_files, "with_files", default=False)
     packs_ = _bool(with_packs, "with_packs", default=False)
@@ -1150,6 +1223,8 @@ def bundle_export(conn: psycopg.Connection, store: ObjectStore, state: Path, *, 
         raise BadRequest(f"title: длиннее {TITLE_MAX} знаков")
     if is_anthology and packs_:
         raise BadRequest("with_packs: антология пакеты не копирует — у получателя нужны те же пакеты")
+    if quota is not None and (used := state_usage(state, owner)) >= quota:
+        raise quota_exceeded(used, quota, "экспорт подборки")
     bid = str(uuid7())
     folder = Path(state) / BUNDLES / bid
     folder.mkdir(parents=True)
@@ -1166,6 +1241,7 @@ def bundle_export(conn: psycopg.Connection, store: ObjectStore, state: Path, *, 
                              "counts": manifest["counts"], "packs": [p["name"] for p in manifest["packs"]],
                              "with_files": manifest["with_files"], "with_packs": manifest["with_packs"],
                              "selection": manifest["selection"], "anthology": is_anthology})
+        _within_quota(state, owner, quota, folder, "экспорт подборки")
         _write_meta(folder, {"owner": owner, "created_at": _now(), "anthology": is_anthology,
                              "filename": _filename(title or ("Антология" if is_anthology else None), bid)})
     except BaseException:
@@ -1204,15 +1280,17 @@ def upload_begin(state: Path) -> tuple[str, Path]:
     return bid, root / f".{bid}.part"
 
 
-def upload_finish(state: Path, upload_id: str, part: Path, *, owner: str) -> dict:
+def upload_finish(state: Path, upload_id: str, part: Path, *, owner: str, quota: int | None = None) -> dict:
     """Принять докачанный файл загрузки: распаковать один раз в <state>/uploads/<id>/bundle (bundle.unpack — те же
     проверки архива), zip удалить, bundle.inspect по папке и записать владельца; import_ потом идёт по той же папке.
-    Не подборка (не zip, нет манифеста, вредный архив) — BundleError (422), и загрузка удаляется."""
+    Не подборка (не zip, нет манифеста, вредный архив) — BundleError (422), и загрузка удаляется. Распакованная
+    загрузка сверх предела места владельца (quota) — QuotaExceeded, и она тоже удаляется."""
     folder = Path(state) / UPLOADS / upload_id
     try:
         folder.mkdir()
         root = bundle.unpack(part, folder / UPLOAD_DIR)
         Path(part).unlink()
+        _within_quota(state, owner, quota, folder, "загрузка подборки")
         report = bundle.inspect(root)
         _write_meta(folder, {"owner": owner, "created_at": _now()})
     except BaseException:

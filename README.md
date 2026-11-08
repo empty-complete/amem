@@ -250,6 +250,33 @@ amem install claude-code      # MCP server, hooks and skills; `amem install code
 amem serve                    # HTTP API, /mcp and the web UI at http://127.0.0.1:8767/ui
 ```
 
+## Service
+
+The HTTP service serves the [v1 contract](docs/api/http-v1.openapi.yaml) at `/api/v1` and the web UI at `/ui`.
+Until `amem serve` arrives with the CLI, start it as a module:
+
+```bash
+export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
+.venv/bin/python -m amem.service      # http://127.0.0.1:8767; --host and --port change the address
+```
+
+- **Local trust.** By default the service listens on `127.0.0.1` only. It answers only to its own name in `Host`
+  (`127.0.0.1`, `localhost`, `[::1]`, the bind address) and only to its own page or `AMEM_UI_ORIGINS` in `Origin`;
+  writes take JSON only. The web UI gets a person cookie, new on every start. When you type the address into the
+  browser, the page itself gets no cookie: the UI's first `fetch` to `/api/v1/session` receives it. Requests
+  without the cookie (scripts, agents) write as a model, and their writes go through the checks.
+- **Shared service.** With `AMEM_TOKENS` (a `0600` file with token hashes) every API request needs
+  `Authorization: Bearer <token>`. A token without `write = true` is read-only: writes answer `403 read_only`.
+  `/health` and the UI's static files stay public. A `--host` other than loopback without tokens is refused;
+  `--no-auth` allows it for a closed network and prints a warning.
+- **Behind a name.** With `--host 0.0.0.0` (for example, in docker compose) list the names clients use in
+  `AMEM_ALLOWED_HOSTS`: `AMEM_ALLOWED_HOSTS=amem` accepts `Host: amem:8767`.
+- **State.** Bundles and uploads live in `AMEM_STATE` (`~/.local/state/amem`) for 24 hours, up to
+  `AMEM_STATE_QUOTA` per owner (10 GiB). The query log is `AMEM_STATE/queries.jsonl`; `AMEM_QUERY_LOG=off` turns
+  it off. The service writes its own log to stderr.
+- **Web UI.** `/ui` needs the web package: `pip install 'amem[web]'`. Without it `/ui` answers 404 with a hint,
+  and the API works as usual.
+
 ## How it works
 
 ```mermaid
