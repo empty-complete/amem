@@ -270,7 +270,8 @@ export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
   `/health` and the UI's static files stay public. A `--host` other than loopback without tokens is refused;
   `--no-auth` allows it for a closed network and prints a warning.
 - **Behind a name.** With `--host 0.0.0.0` (for example, in docker compose) list the names clients use in
-  `AMEM_ALLOWED_HOSTS`: `AMEM_ALLOWED_HOSTS=amem` accepts `Host: amem:8767`.
+  `AMEM_ALLOWED_HOSTS`: `AMEM_ALLOWED_HOSTS=amem` accepts `Host: amem:8767`. List only names you control: a name a browser
+  can resolve to someone else's address opens the service to DNS rebinding.
 - **State.** Bundles and uploads live in `AMEM_STATE` (`~/.local/state/amem`) for 24 hours, up to
   `AMEM_STATE_QUOTA` per owner (10 GiB). The query log is `AMEM_STATE/queries.jsonl`; `AMEM_QUERY_LOG=off` turns
   it off. The service writes its own log to stderr.
