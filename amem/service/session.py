@@ -14,7 +14,9 @@
 - локальная служба: запрос с cookie amem_session этого запуска — человек (AMEM_AGENT), без неё — модель
   (AMEM_MODEL_AGENT); писать вправе оба, записи модели идут через проверку;
 - общая служба (AMEM_TOKENS): Authorization: Bearer <токен>; без верного токена — 401, токен без права записи — 403
-  на запись. Cookie в этом режиме не выдаётся и не читается.
+  на запись. Cookie в этом режиме не выдаётся и не читается. Без входа — /health и статика интерфейса (/, /ui,
+  /ui/…; запросы интерфейса к API — по токену, как у всех). Токен только для чтения может экспортировать подборку,
+  проверить загрузку и сделать пробный импорт (READ_ONLY_POSTS); настоящий импорт — 403 read_only в обработчике.
 
 Cookie выдаёт обработчик вызовом grant(request) — GET /api/v1/session и /ui/index.html, — если запрос пришёл со своей
 страницы (Sec-Fetch-Site: same-origin) или с источника из AMEM_UI_ORIGINS. Сама выдача — здесь, в заголовке ответа:
@@ -40,6 +42,10 @@ WILDCARD_HOSTS = frozenset({"0.0.0.0", "::", "[::]", ""})      # адрес «н
 API_PREFIX = "/api/v1/"
 INSPECT = "/api/v1/bundles/inspect"
 PUBLIC = frozenset({"/health"})          # без входа и в общей службе: проверка живости для compose и мониторинга
+UI_PUBLIC = ("/", "/ui")                 # статика интерфейса без входа и в общей службе; API за ней — по токену
+# подборки по токену только для чтения: экспорт и проверка загрузки ничего не пишут в базу, импорт — пробный
+# (dry_run: true; настоящий импорт такой токен не сделает — обработчик ответит 403 read_only)
+READ_ONLY_POSTS = frozenset({"/api/v1/bundles/export", "/api/v1/bundles/inspect", "/api/v1/bundles/import"})
 
 
 def allowed_hosts(host: str) -> frozenset[str]:
@@ -142,7 +148,7 @@ class Guard:
                                          f"запись принимает только application/json, а не {media or 'тело без типа'}")
         state = scope.setdefault("state", {})
         if self.tokens is not None:
-            if path in PUBLIC:
+            if path in PUBLIC or (method not in WRITE_METHODS and _ui_path(path)):
                 state.update(agent=self.settings.model_agent, can_write=False, grant_agent=None, token=None)
                 return None
             scheme, _, token = headers.get("authorization", "").partition(" ")
@@ -150,7 +156,7 @@ class Guard:
             if entry is None:
                 detail = "нужен вход: заголовок Authorization: Bearer <токен>" if not token else "токен не подошёл"
                 return problems.response(401, "auth_required", detail, headers={"WWW-Authenticate": "Bearer"})
-            if method in WRITE_METHODS and not entry.write:
+            if method in WRITE_METHODS and not entry.write and path not in READ_ONLY_POSTS:
                 return problems.response(403, "read_only", f"токен {entry.agent} — только для чтения")
             state.update(agent=entry.agent, can_write=entry.write, grant_agent=None, token=entry.hash)
             return None
@@ -172,6 +178,10 @@ def _origin(origin: str | None) -> str | None:
     value = origin.strip().rstrip("/").lower()
     parts = urlsplit(value)
     return value if parts.scheme and parts.netloc else None        # «null» и мусор не равны ничему
+
+
+def _ui_path(path: str) -> bool:
+    return path in UI_PUBLIC or path.startswith("/ui/")
 
 
 def _has_body(headers: Headers) -> bool:

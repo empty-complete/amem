@@ -86,6 +86,8 @@ def to_problem(exc: BaseException) -> Problem:
                        warnings=exc.warnings)
     if isinstance(exc, api.Forbidden):
         return Problem(403, "forbidden", message)
+    if isinstance(exc, api.ReadOnly):
+        return Problem(403, "read_only", message)
     if isinstance(exc, (records.RecordNotFound, api.Missing)):
         return Problem(404, "not_found", message)
     if isinstance(exc, review.ReviewError):
@@ -137,7 +139,7 @@ async def handle(request: Request, exc: Exception) -> JSONResponse:
 
 # классы, которые ловит ExceptionMiddleware (поиск по MRO исключения); Exception — последний рубеж
 # (ServerErrorMiddleware): он отвечает 500 и передаёт исключение серверу дальше
-HANDLED = (Problem, api.CheckRejected, api.Forbidden, api.Missing, api.BadRequest, records.RecordError,
+HANDLED = (Problem, api.CheckRejected, api.Forbidden, api.ReadOnly, api.Missing, api.BadRequest, records.RecordError,
            review.ReviewError, FolderError, bundle.BundleError, objects.ObjectError, CheckError, db.BaseNameError,
            vocab.VocabError, CanonError, PackError, embed.EmbeddingError, api.StoreUnavailable,
            psycopg.OperationalError, psycopg.DataError, HTTPException, ValueError, Exception)

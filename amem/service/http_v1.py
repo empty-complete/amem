@@ -31,12 +31,15 @@ AMEM_STATE/uploads/.<id>.part с отсечкой на UPLOAD_LIMIT (413 too_lar
 """
 from __future__ import annotations
 
+import contextlib
 import functools
 import importlib.resources
 import json
+import os
 import time
 from pathlib import Path
 
+import anyio
 import python_multipart
 import yaml
 from python_multipart.exceptions import MultipartParseError
@@ -338,17 +341,44 @@ async def export_bundle(request: Request) -> JSONResponse:
     return JSONResponse(_bundle_links(made))
 
 
+class HeldFile(FileCopy):
+    """Файл, открытый до ответа: очистка по сроку, удалившая его между проверкой и отдачей, ответ не обрывает
+    (открытый файл читается и после удаления), а удалённый до открытия — 404 (_hold), а не 500."""
+
+    def __init__(self, handle, **kwargs):
+        self._handle = handle
+        super().__init__(handle.name, stat_result=os.fstat(handle.fileno()), **kwargs)
+
+    async def __call__(self, scope, receive, send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self._handle.close()
+
+    @contextlib.asynccontextmanager
+    async def _open_file(self):
+        self._handle.seek(0)
+        yield anyio.wrap_file(self._handle)       # закрывает __call__: диапазоны читают тот же файл
+
+
+def _hold(path: Path, what: str):
+    try:
+        return open(path, "rb")
+    except (FileNotFoundError, NotADirectoryError, IsADirectoryError):
+        raise api.Missing(f"{what} нет: срок хранения — сутки, после него сделайте заново") from None
+
+
 def download_bundle(request: Request) -> FileResponse:
     found = api.bundle_download(request.app.state.settings.state, request.path_params["id"],
                                 owner=session.owner(request))
-    return FileCopy(found.path, media_type="application/zip", headers=FILE_HEADERS, filename=found.filename,
-                    content_disposition_type="attachment")
+    return HeldFile(_hold(found.path, "подборки"), media_type="application/zip", headers=FILE_HEADERS,
+                    filename=found.filename, content_disposition_type="attachment")
 
 
 def bundle_report(request: Request) -> FileResponse:
     path = api.bundle_report(request.app.state.settings.state, request.path_params["id"],
                              owner=session.owner(request))
-    return FileResponse(path, media_type="text/html; charset=utf-8", headers=REPORT_HEADERS)
+    return HeldFile(_hold(path, "отчёта"), media_type="text/html; charset=utf-8", headers=REPORT_HEADERS)
 
 
 class _Upload:
@@ -440,10 +470,18 @@ async def inspect_bundle(request: Request) -> JSONResponse:
     upload_id, part = await run_in_threadpool(api.upload_begin, state)
     upload = _Upload(part)
     parser = python_multipart.MultipartParser(boundary, upload.callbacks())
+    total = 0
     try:
         try:
             async for chunk in request.stream():
                 await run_in_threadpool(parser.write, chunk)     # запись на диск — не в цикле событий
+                if upload.ended:
+                    break                         # после финального boundary тело дальше не читается
+                # все байты тела до конца формы: пустые части и преамбула — тоже; проверка после разбора куска,
+                # чтобы хвост за финальным boundary в том же куске не считался (кусок — не больше буфера сервера)
+                total += len(chunk)
+                if total > UPLOAD_LIMIT + FORM_LIMIT:
+                    raise _upload_too_large()
             parser.finalize()
         except MultipartParseError as e:
             raise problems.Problem(400, "bad_request", f"загрузка подборки: тело — не multipart/form-data: "
@@ -466,7 +504,8 @@ async def import_bundle(request: Request) -> JSONResponse:
     state = request.app.state
     return JSONResponse(await _call(request, lambda conn: api.bundle_import(
         conn, state.store, state.settings.state, body.get("upload_id"), agent=request.state.agent,
-        owner=session.owner(request), trust=body.get("trust"), dry_run=body.get("dry_run"))))
+        owner=session.owner(request), trust=body.get("trust"), dry_run=body.get("dry_run"),
+        can_write=request.state.can_write)))
 
 
 @functools.cache

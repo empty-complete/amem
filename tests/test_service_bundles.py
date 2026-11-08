@@ -259,7 +259,9 @@ def test_inspect_upload(start, kb, tmp_path):
     assert report["ok"] is True and report["damaged"] == [] and report["format"] == "amem.bundle/1"
     assert report["counts"]["atoms"] == 2
     folder = state_dir(tmp_path) / "uploads" / body["upload_id"]
-    assert (folder / "bundle.zip").read_bytes() == data
+    # распакована один раз — import_ читает ту же папку; zip загрузки не хранится
+    assert (folder / "bundle" / "manifest.json").is_file() and not (folder / "bundle.zip").exists()
+    assert sorted(p.name for p in folder.iterdir()) == ["bundle", "meta.json"]
     assert [p.name for p in (state_dir(tmp_path) / "uploads").iterdir()] == [body["upload_id"]]
 
 
@@ -361,11 +363,153 @@ def test_import_errors(start, kb):
             "bad_request", path, "post")
 
 
-def test_read_only_token_cannot_export(start, kb, tmp_path):
+def test_read_only_token_exports_inspects_and_plans(start, kb, tmp_path):
+    """Токен только для чтения: экспорт, проверка загрузки и пробный импорт — да; настоящий импорт — 403 read_only."""
     path = tokens_file(tmp_path, ("t-read", "person:anna", False))
     client = start({"AMEM_TOKENS": path})
     client.headers["Authorization"] = "Bearer t-read"
-    problem(client.post(f"{V1}/bundles/export", json={"selection": {}}), 403, "read_only", "/bundles/export", "post")
+    made = export(client)
+    uploaded = contract.check(upload(client, downloaded(client, made)), "/bundles/inspect", "post")
+    plan = contract.check(client.post(f"{V1}/bundles/import", json={"upload_id": uploaded["upload_id"]}),
+                          "/bundles/import", "post")
+    assert plan["changeset_id"] is None
+    body = problem(client.post(f"{V1}/bundles/import", json={"upload_id": uploaded["upload_id"], "dry_run": False}),
+                   403, "read_only", "/bundles/import", "post")
+    assert "dry_run" in body["detail"]
+    # прочая запись по такому токену — по-прежнему 403
+    problem(client.post(f"{V1}/folders", json={"path": "Папка"}), 403, "read_only", "/folders", "post")
+
+
+def test_model_token_cannot_import_for_real(start, kb, tmp_path):
+    path = tokens_file(tmp_path, ("t-bot", "model:helper", True))
+    client = start({"AMEM_TOKENS": path})
+    client.headers["Authorization"] = "Bearer t-bot"
+    uploaded = contract.check(upload(client, downloaded(client, export(client))), "/bundles/inspect", "post")
+    problem(client.post(f"{V1}/bundles/import", json={"upload_id": uploaded["upload_id"], "dry_run": False}),
+            403, "forbidden", "/bundles/import", "post")
+
+
+# --- пути на диске, пределы потока, гонка с очисткой ---
+
+def no_paths(body: dict, tmp_path) -> None:
+    text = json.dumps(body, ensure_ascii=False)
+    for secret in (str(tmp_path), str(state_dir(tmp_path)), str(tmp_path / "home"), "/tmp", "uploads/"):
+        assert secret not in text, (secret, text)
+
+
+def test_errors_do_not_show_disk_paths(start, kb, tmp_path):
+    client = start(person=True)
+    body = problem(upload(client, b"not a zip at all"), 422, "bundle_invalid", "/bundles/inspect", "post")
+    no_paths(body, tmp_path)
+    assert body["detail"].startswith(".") and "не читается как zip" in body["detail"]    # имя файла загрузки
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as z:
+        z.writestr("readme.txt", "не подборка")
+    no_paths(problem(upload(client, buffer.getvalue()), 422, "bundle_invalid", "/bundles/inspect", "post"), tmp_path)
+    # повреждённая часть: inspect отвечает ok: false, импорт — 422 bundle_damaged; путей нет ни там, ни там
+    data = downloaded(client, export(client))
+    damaged = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(data)) as src, zipfile.ZipFile(damaged, "w") as dst:
+        for item in src.infolist():
+            raw = src.read(item.filename)
+            dst.writestr(item, raw + b"\n" if item.filename == "atoms.jsonl" else raw)
+    inspected = contract.check(upload(client, damaged.getvalue()), "/bundles/inspect", "post")
+    assert inspected["report"]["ok"] is False and inspected["report"]["damaged"] == ["atoms.jsonl"]
+    no_paths(inspected, tmp_path)
+    body = problem(client.post(f"{V1}/bundles/import", json={"upload_id": inspected["upload_id"]}), 422,
+                   "bundle_damaged", "/bundles/import", "post")
+    no_paths(body, tmp_path)
+
+
+def test_bundle_error_message_keeps_only_file_names():
+    from amem import bundle
+    error = bundle.BundleError("/srv/state/uploads/0193/bundle.zip: не читается; см. (/opt/a/b) и packs/core, 1/2")
+    assert str(error) == "bundle.zip: не читается; см. (b) и packs/core, 1/2"
+
+
+def multipart(data: bytes, boundary: str = "xyz") -> tuple[bytes, bytes]:
+    head = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="b.zip"\r\n'
+            f"Content-Type: application/zip\r\n\r\n").encode()
+    return head + data, f"\r\n--{boundary}--\r\n".encode()
+
+
+def test_whole_stream_counts_toward_the_limit(start, kb, tmp_path, monkeypatch):
+    """Пустые части без заголовков и данных — тоже байты тела: предел — UPLOAD_LIMIT + FORM_LIMIT на весь поток
+    (chunked, без Content-Length), а не только на поле file и заголовки."""
+    client = start(person=True)
+    monkeypatch.setattr(http_v1, "UPLOAD_LIMIT", 4096)
+    monkeypatch.setattr(http_v1, "FORM_LIMIT", 1024)
+    headers = {"Origin": ORIGIN, "Content-Type": "multipart/form-data; boundary=xyz"}
+
+    def empty_parts():
+        for _ in range(1000):
+            yield b"--xyz\r\n\r\n\r\n"
+
+    problem(client.post(f"{V1}/bundles/inspect", content=empty_parts(), headers=headers), 413, "too_large",
+            "/bundles/inspect", "post")
+    assert list((state_dir(tmp_path) / "uploads").iterdir()) == []
+
+
+def test_stream_after_final_boundary_is_not_read(start, kb, tmp_path, monkeypatch):
+    client = start(person=True)
+    data = downloaded(client, export(client))
+    monkeypatch.setattr(http_v1, "UPLOAD_LIMIT", len(data) + 100)
+    monkeypatch.setattr(http_v1, "FORM_LIMIT", 1024)
+    head, tail = multipart(data)
+
+    def body():
+        yield head
+        yield tail
+        for _ in range(100):
+            yield b"x" * 4096                                  # хвост после конца формы: не читается и не считается
+
+    response = client.post(f"{V1}/bundles/inspect", content=body(),
+                           headers={"Origin": ORIGIN, "Content-Type": "multipart/form-data; boundary=xyz"})
+    assert response.status_code == 200, response.text
+    assert contract.check(response, "/bundles/inspect", "post")["report"]["ok"] is True
+
+
+def test_bundle_removed_before_download_is_404(start, kb, tmp_path, monkeypatch):
+    """Очистка удалила zip между проверкой и отдачей — 404, а не 500."""
+    client = start(person=True)
+    made = export(client)
+    anthology = export(client, {"selection": {}, "anthology": True})
+    real_download, real_report = api.bundle_download, api.bundle_report
+
+    def download_then_sweep(*args, **kwargs):
+        found = real_download(*args, **kwargs)
+        found.path.unlink()
+        return found
+
+    def report_then_sweep(*args, **kwargs):
+        path = real_report(*args, **kwargs)
+        path.unlink()
+        return path
+
+    monkeypatch.setattr(api, "bundle_download", download_then_sweep)
+    monkeypatch.setattr(api, "bundle_report", report_then_sweep)
+    problem(client.get(made["download"]), 404, "not_found", "/bundles/{id}/download")
+    problem(client.get(anthology["report"]), 404, "not_found", "/bundles/{id}/report")
+
+
+def test_held_file_survives_removal_after_open(serve, kb, tmp_path):
+    """Файл открыт до ответа: удалённый после открытия, он всё равно отдаётся целиком (и по диапазону)."""
+    from starlette.routing import Route
+
+    file = tmp_path / "held.zip"
+    file.write_bytes(b"0123456789" * 10000)
+
+    def held(request):
+        handle = http_v1._hold(file, "файла")
+        file.unlink()                                          # очистка успела после открытия
+        return http_v1.HeldFile(handle, media_type="application/zip", filename="held.zip")
+
+    client = serve(routes=[Route("/held", held)])
+    response = client.get("/held")
+    assert response.status_code == 200 and response.content == b"0123456789" * 10000
+    file.write_bytes(b"0123456789" * 10000)
+    response = client.get("/held", headers={"Range": "bytes=5-14"})
+    assert response.status_code == 206 and response.content == b"5678901234"
 
 
 # --- журнал запросов ---
@@ -407,6 +551,15 @@ def test_query_log_off_and_custom_path(start, kb, tmp_path):
     client = start({"AMEM_QUERY_LOG": str(custom)})
     contract.check(client.get(f"{V1}/search", params={"q": "кронштейн"}), "/search")
     assert [x["agent"] for x in log_lines(custom)] == [MODEL]
+
+
+def test_query_log_tightens_wider_permissions(start, kb, tmp_path):
+    path = tmp_path / "q.jsonl"
+    path.write_text("", encoding="utf-8")
+    path.chmod(0o644)                                          # файл был до службы, с правами шире
+    client = start({"AMEM_QUERY_LOG": str(path)})
+    contract.check(client.get(f"{V1}/search", params={"q": "кронштейн"}), "/search")
+    assert path.stat().st_mode & 0o777 == 0o600 and len(log_lines(path)) == 1
 
 
 def test_query_log_failure_does_not_break_search(start, kb, tmp_path):

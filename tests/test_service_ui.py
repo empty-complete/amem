@@ -124,3 +124,18 @@ def test_package_without_build_404(serve, pg, monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "amem_web", module)
     body = problem(serve().get("/ui/"), 404, "not_found")
     assert "сборки" in body["detail"]
+
+
+def test_static_is_public_in_shared_service(serve, web, tmp_path):
+    """Общая служба (AMEM_TOKENS): статика интерфейса без входа, cookie не выдаётся; API — по токену."""
+    from test_service_core import tokens_file
+
+    client = serve({"AMEM_TOKENS": tokens_file(tmp_path, ("t-one", "person:anna", True))})
+    for path in ("/ui/", "/ui/index.html", f"/ui/assets/{ASSET}", "/ui/records/x"):
+        response = client.get(path, headers={"Sec-Fetch-Site": "same-origin"})
+        assert response.status_code == 200, path
+        assert "set-cookie" not in response.headers
+    assert client.get("/", follow_redirects=False).status_code == 307
+    problem(client.get(f"{V1}/session", headers={"Sec-Fetch-Site": "same-origin"}), 401, "auth_required")
+    assert client.get(f"{V1}/session", headers={"Authorization": "Bearer t-one"}).json()["agent"] == "person:anna"
+    problem(client.post("/ui/index.html", json={}), 401, "auth_required")      # запись мимо API — тоже по токену
