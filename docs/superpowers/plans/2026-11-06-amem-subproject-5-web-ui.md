@@ -1197,6 +1197,8 @@ gh pr merge --repo empty-complete/amem --merge --auto
 
 ### Часть H — связь со службой (после подпроекта 4, ветка `subproject-5h-service`)
 
+Подробный план — `2026-11-08-amem-subproject-5h-service.md`: H1 и H2 уже сделаны службой в части 4a, за веб-частью остаются контракт со стороны веба, строгая CSP, e2e против службы, поставка `amem[web]` и настоящие снимки в README.
+
 - **Task H1.** Служба отдаёт `/ui` из `amem_web.static_dir()`: хэшированные файлы `immutable`, `index.html` `no-cache`, неизвестные пути под `/ui/` → `index.html`.
 - **Task H2.** Тест службы: каждый ответ контракта v1 проходит схему `http-v1.openapi.yaml`; UI — `api:check`.
 - **Task H3.** e2e против настоящей службы в compose (профиль `web`): поиск, запись, решение, подборка.
