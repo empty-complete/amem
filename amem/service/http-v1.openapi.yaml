@@ -501,7 +501,7 @@ paths:
     post:
       tags: [write]
       operationId: submit
-      summary: "check.submit от агента сессии (поле агента в теле не читается); отказ проверки — 422 check_rejected с issues; <private> вырезается до проверки (предупреждение private_removed в warnings); тело больше 1 МиБ — 413 too_large"
+      summary: "check.submit от агента сессии (поле агента в теле не читается); отказ проверки — 422 check_rejected с issues; <private> вырезается до проверки (предупреждение private_removed в warnings); строка, похожая на секрет (ключ API, токен, PEM, пароль в строке подключения), записывается с предупреждением secret_like без значения; тело больше 1 МиБ — 413 too_large"
       requestBody:
         required: true
         content:
@@ -705,7 +705,7 @@ components:
         code: { type: string }
         issues: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "у check_rejected — все замечания отчёта" }
         changeset_id: { type: string, description: "у check_rejected — отклонённый пакет (записан с отчётом)" }
-        warnings: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "у check_rejected — предупреждения службы (private_removed)" }
+        warnings: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "у check_rejected — предупреждения службы (private_removed, secret_like)" }
 
     CheckIssue:
       type: object
@@ -1121,7 +1121,7 @@ components:
         records: { type: array, items: { type: object }, description: "По предложению: label (как CheckIssue.ref), ref, target, record_id, revision_id, created, status, review_state" }
         queued: { type: array, items: { type: object }, description: "Пункты очереди: id, reason, label (как CheckIssue.ref), ref, record_id" }
         report: { type: object, description: "Отчёт amem.check/1" }
-        warnings: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "Предупреждения службы: private_removed — скрытое в <private> вырезано из поля" }
+        warnings: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "Предупреждения службы: private_removed — скрытое в <private> вырезано из поля; secret_like — строка поля похожа на секрет (запись не отклоняется, значения в предупреждении нет)" }
 
     VocabEntry:
       type: object
