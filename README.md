@@ -250,6 +250,34 @@ amem install claude-code      # MCP server, hooks and skills; `amem install code
 amem serve                    # HTTP API, /mcp and the web UI at http://127.0.0.1:8767/ui
 ```
 
+## Service
+
+The HTTP service serves the [v1 contract](docs/api/http-v1.openapi.yaml) at `/api/v1` and the web UI at `/ui`.
+Until `amem serve` arrives with the CLI, start it as a module:
+
+```bash
+export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
+.venv/bin/python -m amem.service      # http://127.0.0.1:8767; --host and --port change the address
+```
+
+- **Local trust.** By default the service listens on `127.0.0.1` only. It answers only to its own name in `Host`
+  (`127.0.0.1`, `localhost`, `[::1]`, the bind address) and only to its own page or `AMEM_UI_ORIGINS` in `Origin`;
+  writes take JSON only. The web UI gets a person cookie, new on every start. When you type the address into the
+  browser, the page itself gets no cookie: the UI's first `fetch` to `/api/v1/session` receives it. Requests
+  without the cookie (scripts, agents) write as a model, and their writes go through the checks.
+- **Shared service.** With `AMEM_TOKENS` (a `0600` file with token hashes) every API request needs
+  `Authorization: Bearer <token>`. A token without `write = true` is read-only: writes answer `403 read_only`.
+  `/health` and the UI's static files stay public. A `--host` other than loopback without tokens is refused;
+  `--no-auth` allows it for a closed network and prints a warning.
+- **Behind a name.** With `--host 0.0.0.0` (for example, in docker compose) list the names clients use in
+  `AMEM_ALLOWED_HOSTS`: `AMEM_ALLOWED_HOSTS=amem` accepts `Host: amem:8767`. List only names you control: a name a browser
+  can resolve to someone else's address opens the service to DNS rebinding.
+- **State.** Bundles and uploads live in `AMEM_STATE` (`~/.local/state/amem`) for 24 hours, up to
+  `AMEM_STATE_QUOTA` per owner (10 GiB). The query log is `AMEM_STATE/queries.jsonl`; `AMEM_QUERY_LOG=off` turns
+  it off. The service writes its own log to stderr.
+- **Web UI.** `/ui` needs the web package: `pip install 'amem[web]'`. Without it `/ui` answers 404 with a hint,
+  and the API works as usual.
+
 ## How it works
 
 ```mermaid
@@ -319,14 +347,15 @@ The agent never sets the status; the checks and people do.
 | **Pack** | A domain vocabulary with templates and entity profiles. The core is a pack too |
 | **Bundle** | A portable selection of records (`amem.bundle/1`), with or without files |
 
-**Search recipes.** Four named recipes return plain JSON, so agents can work with them directly:
+**Search recipes.** Five named recipes return plain JSON, so agents can work with them directly:
 
 | Recipe | Answers |
 |---|---|
 | `exact_fact` | *What exactly is X?* Codes, marks, full text and vectors merged with RRF |
 | `similar` | *What else is like this?* Semantic neighbours of a text or a record |
 | `what_changed` | *What changed since Monday?* Revisions, decisions, statuses, moves and links |
-| `around_entity` | *What do we know around X?* Shortest paths over links, rated by the weakest link |
+| `around_entity` | *What do we know around X?* Shortest paths over links, rated by the weakest link; stops at `limit` (300 by default, was unlimited before), `total` counts nodes without it |
+| `overview` | *What does the whole base look like?* Hubs by number of links (`degree`), their neighbours, the edges between them; filter by `project` |
 
 Agents mark the atoms that helped them. These marks decay over time and give a small, capped boost in
 ranking. They never change a status or skip a check.

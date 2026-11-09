@@ -153,7 +153,7 @@ export function BasePage() {
                 <th scope="row" className="mono">
                   {b.name}
                 </th>
-                <td>{formatDate(b.created_at, i18n.language, true)}</td>
+                <td>{b.created_at ? formatDate(b.created_at, i18n.language, true) : "—"}</td>
                 <td className="n">{formatSize(b.size, i18n.language)}</td>
               </tr>
             ))}

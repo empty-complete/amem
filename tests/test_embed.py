@@ -287,3 +287,39 @@ def test_fastembed_model_creation_keeps_transitive_module_not_found(monkeypatch)
     with pytest.raises(ModuleNotFoundError) as caught:
         embed.FastembedProvider().embed(["one"])
     assert caught.value.name == "onnxruntime"
+
+
+def test_fastembed_concurrent_first_calls_create_model_once(monkeypatch):
+    """Служба зовёт провайдер из пула потоков: первые параллельные поиски создают модель один раз (замок)."""
+    import threading
+    import time
+
+    created = []
+    start = threading.Barrier(8)
+
+    class TextEmbedding:
+        def __init__(self, **kwargs):
+            created.append(kwargs)
+            time.sleep(0.05)                  # создание долгое: без замка другие потоки успели бы начать своё
+
+        def embed(self, texts):
+            return [[0.0] * 384 for _ in texts]
+
+    monkeypatch.setitem(sys.modules, "fastembed", types.SimpleNamespace(TextEmbedding=TextEmbedding))
+    provider = embed.FastembedProvider()
+    results, errors = [], []
+
+    def first_search():
+        start.wait()
+        try:
+            results.append(provider.embed(["one"]))
+        except Exception as e:  # pragma: no cover — сбой виден в assert ниже
+            errors.append(e)
+
+    threads = [threading.Thread(target=first_search) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == [] and len(results) == 8
+    assert len(created) == 1

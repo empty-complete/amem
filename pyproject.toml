@@ -16,10 +16,18 @@ dependencies = [
   "pint>=0.25,<0.26",
   "openpyxl>=3.1",
   "packaging>=23",
+  # служба HTTP (подпроект 4): синхронные обработчики в пуле потоков, соединения из пула psycopg
+  "starlette>=1.10,<2",
+  "anyio>=4",
+  "uvicorn>=0.30",
+  "psycopg-pool>=3.2,<4",
+  "python-multipart>=0.0.20",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "linkml==1.12.1", "linkml-runtime==1.12.1", "jsonschema>=4.20", "ocfl-py==2.1.0"]
+dev = ["pytest>=8", "linkml==1.12.1", "linkml-runtime==1.12.1", "jsonschema>=4.20", "ocfl-py==2.1.0",
+       "httpx2>=2.0",                    # клиент starlette.testclient
+       "openapi-spec-validator>=0.8.4"]  # тест: контракт HTTP v1 — верный OpenAPI 3.1 (его ставит и linkml)
 embed = ["fastembed>=0.9.1,<0.10"]
 web = ["amem-web==0.1.0.dev0"]   # статика веб-UI, web/python; служба отдаёт по /ui
 
@@ -34,4 +42,5 @@ build-backend = "setuptools.build_meta"
 include = ["amem*"]
 
 [tool.setuptools.package-data]
-amem = ["schema/*.yaml", "schema/*.json", "sql/*.sql", "packs/core/pack.yaml", "packs/core/vocab/*.yaml", "packs/core/templates/*.yaml"]
+amem = ["schema/*.yaml", "schema/*.json", "sql/*.sql", "packs/core/pack.yaml", "packs/core/vocab/*.yaml", "packs/core/templates/*.yaml",
+        "service/*.yaml"]

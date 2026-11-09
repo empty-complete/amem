@@ -1,0 +1,1248 @@
+openapi: 3.1.0
+info:
+  title: amem HTTP API for the web UI
+  version: 1.0.0
+  license: { name: MIT, identifier: MIT }
+  description: >-
+    Контракт v1 между службой amem (подпроект 4) и веб-интерфейсом (подпроект 5).
+    Ответы — то, что уже отдаёт библиотека (recipes, lookup, review, profile, bundle), плюс подписи записей,
+    нужные экрану. Агент записи служба берёт из сессии; UI его не передаёт.
+    Изменения — только правкой этого файла в PR, который проходит обе стороны.
+servers:
+  - url: /api/v1
+
+security:
+  - {}
+  - bearer: []
+
+tags:
+  - { name: session }
+  - { name: read }
+  - { name: review }
+  - { name: write }
+  - { name: objects }
+  - { name: tasks }
+  - { name: bundles }
+  - { name: base }
+
+paths:
+  /session:
+    get:
+      tags: [session]
+      operationId: getSession
+      summary: Кто вошёл и что умеет служба
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /search:
+    get:
+      tags: [read]
+      operationId: search
+      summary: recipes.exact_fact
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+        - { $ref: "#/components/parameters/Kind" }
+        - { $ref: "#/components/parameters/StatusFilter" }
+        - { $ref: "#/components/parameters/EntityClass" }
+        - { name: target, in: query, schema: { type: string, enum: [atom, entity] } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 10 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SearchResult" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /similar:
+    get:
+      tags: [read]
+      operationId: similar
+      summary: "recipes.similar — по ссылке atm:/ent: или по тексту"
+      parameters:
+        - { name: ref, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 10 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SearchResult" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /folders:
+    get:
+      tags: [read]
+      operationId: getFolders
+      summary: Дерево папок (scope.folder) со счётчиками
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FolderTree" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [write]
+      operationId: createFolder
+      summary: "folders.create: пустая папка в реестре вместе с родителями; уже есть — 409 folder_exists, неверный путь — 422 folder_invalid; структуру папок меняет только человек (person:), модель — 403 forbidden"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [path], properties: { path: { type: string } } }
+      responses:
+        "201": { description: Создана, content: { application/json: { schema: { $ref: "#/components/schemas/Folder" } } } }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /folders/{path}:
+    parameters: [{ $ref: "#/components/parameters/FolderPath" }]
+    delete:
+      tags: [write]
+      operationId: deleteFolder
+      summary: "folders.delete: только пустая папка — без вложенных и без записей (иначе 409 folder_not_empty); нет такой — 404 folder_not_found; только человек (person:), модель — 403 forbidden"
+      responses:
+        "204": { description: Удалена }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+    patch:
+      tags: [write]
+      operationId: renameFolder
+      summary: "folders.rename: перенести папку с вложенными и записями (по строке журнала на запись); новый путь занят — 409 folder_exists; только человек (person:), модель — 403 forbidden"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [path], properties: { path: { type: string, description: Новый путь } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FolderRenamed" } } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /records:
+    get:
+      tags: [read]
+      operationId: listRecords
+      summary: Список записей для панели папок и «Все записи»
+      parameters:
+        - { name: folder, in: query, schema: { type: string }, description: "scope.folder или его начало; «-» — без папки; пусто — все" }
+        - { $ref: "#/components/parameters/Kind" }
+        - { $ref: "#/components/parameters/StatusFilter" }
+        - { name: tag, in: query, schema: { type: string } }
+        - { name: about, in: query, schema: { type: string }, description: "Записи о сущности или объекте (ent:… или id объекта)" }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RecordList" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /records/{ref}:
+    get:
+      tags: [read]
+      operationId: getRecord
+      summary: Запись с текущей ревизией, источниками, открытыми пунктами и полезностью
+      parameters: [{ $ref: "#/components/parameters/Ref" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RecordView" } } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /records/{ref}/history:
+    get:
+      tags: [read]
+      operationId: getRecordHistory
+      summary: recipes.what_changed по записи
+      parameters: [{ $ref: "#/components/parameters/Ref" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ChangesResult" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /records/{ref}/links:
+    get:
+      tags: [read]
+      operationId: getRecordLinks
+      summary: lookup.links с подписями другого конца
+      parameters: [{ $ref: "#/components/parameters/Ref" }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/LinkView" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /records/{ref}/folder:
+    patch:
+      tags: [write]
+      operationId: setRecordFolder
+      summary: "folders.move: переложить запись в папку без новой ревизии (null — без папки); переносить вправе и модель, но только в существующую папку (иначе 404 folder_not_found: новую папку создаёт человек)"
+      parameters: [{ $ref: "#/components/parameters/Ref" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [folder]
+              properties: { folder: { type: [string, "null"] } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RecordSummary" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /entities/{ref}/card:
+    get:
+      tags: [read]
+      operationId: getCard
+      summary: profile.card — карточка amem.card/1
+      parameters:
+        - { $ref: "#/components/parameters/Ref" }
+        - { name: ancestors, in: query, schema: { type: boolean, default: true } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Card" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /graph:
+    get:
+      tags: [read]
+      operationId: getGraph
+      summary: "recipes.around_entity; без ref — recipes.overview (обзор базы для неба на главной)"
+      parameters:
+        - { name: ref, in: query, schema: { type: string }, description: "Центр окрестности. Без ref — обзор: узлы по degree по убыванию (при равенстве — новые первыми) до limit, рёбра только между вернувшимися" }
+        - { name: depth, in: query, schema: { type: integer, minimum: 1, maximum: 3, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 300 } }
+        - { name: project, in: query, schema: { type: string }, description: "Записи с payload.scope.project; сущность — если связана хотя бы с одной такой записью" }
+        - { name: rels, in: query, schema: { type: array, items: { type: string } }, style: form, explode: true }
+        - { $ref: "#/components/parameters/StatusFilter" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GraphResult" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /changes:
+    get:
+      tags: [read]
+      operationId: getChanges
+      summary: recipes.what_changed по базе
+      parameters:
+        - { name: since, in: query, schema: { type: string, format: date-time } }
+        - { name: until, in: query, schema: { type: string, format: date-time } }
+        - { name: who, in: query, schema: { type: string, enum: [all, person, model], default: all } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ChangesResult" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /objects:
+    get:
+      tags: [objects]
+      operationId: listObjects
+      summary: Поиск объектов хранилища по имени и пути — для «+ Источник»
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ObjectView" } }
+                  next_cursor: { type: [string, "null"] }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [objects]
+      operationId: uploadObject
+      summary: "Загрузить файл: служба кладёт его в папку документов (по path, иначе «Загрузки/<имя>») и разбирает"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                path: { type: string, description: "Путь в папке документов" }
+      responses:
+        "201": { description: Новый объект или новая версия, content: { application/json: { schema: { $ref: "#/components/schemas/ObjectView" } } } }
+        "200": { description: Такой файл уже есть (тот же digest), content: { application/json: { schema: { $ref: "#/components/schemas/ObjectView" } } } }
+        "409": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /templates:
+    get:
+      tags: [read]
+      operationId: listTemplates
+      summary: Шаблоны видов с формой для UI (из FieldRule, parameters и блока ui шаблона)
+      parameters:
+        - { name: target, in: query, schema: { type: string, enum: [atom, entity] } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/TemplateView" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /packs/mine/templates/{code}:
+    parameters:
+      - { name: code, in: path, required: true, schema: { type: string, pattern: "^[a-z][a-z0-9_]*$" } }
+    put:
+      tags: [write]
+      operationId: putMyTemplate
+      summary: "Свой вид в пакете «Мои виды»: новая версия шаблона, те же проверки, что у пакета из файла"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TemplateDraft" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TemplateView" } } } }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      tags: [write]
+      operationId: deleteMyTemplate
+      summary: Удалить свой вид; 409, если есть записи этого вида
+      responses:
+        "204": { description: Удалено }
+        "409": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /tasks:
+    get:
+      tags: [tasks]
+      operationId: listTasks
+      summary: Задачи агентам (например, разобрать файл)
+      parameters:
+        - { name: state, in: query, schema: { type: string, enum: [open, claimed, done, cancelled] } }
+        - { name: object, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/TaskView" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [tasks]
+      operationId: createTask
+      summary: Поставить задачу агентам; они берут её через MCP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, object, version]
+              properties:
+                kind: { type: string, enum: [parse] }
+                object: { type: string }
+                version: { type: integer }
+                note: { type: string }
+      responses:
+        "202":
+          description: Принято
+          content: { application/json: { schema: { type: object, required: [task_id], properties: { task_id: { type: string, format: uuid } } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /objects/{id}:
+    get:
+      tags: [objects]
+      operationId: getObject
+      summary: lookup.get_object + lookup.object_status
+      parameters: [{ $ref: "#/components/parameters/ObjectId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ObjectView" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /objects/{id}/versions/{n}/content:
+    get:
+      tags: [objects]
+      operationId: getObjectContent
+      summary: Файл версии; поддерживает Range
+      parameters: [{ $ref: "#/components/parameters/ObjectId" }, { $ref: "#/components/parameters/VersionN" }]
+      responses:
+        "200": { description: Файл, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+        "206": { description: Часть файла, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /objects/{id}/versions/{n}/text:
+    get:
+      tags: [objects]
+      operationId: getObjectText
+      summary: objects.text — текст версии по страницам
+      parameters:
+        - { $ref: "#/components/parameters/ObjectId" }
+        - { $ref: "#/components/parameters/VersionN" }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pages]
+                properties: { pages: { type: array, items: { type: string } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /objects/{id}/versions/{n}/sheet:
+    get:
+      tags: [objects]
+      operationId: getObjectSheet
+      summary: "Ячейки листа таблицы: превью и подсветка цитируемых диапазонов"
+      parameters:
+        - { $ref: "#/components/parameters/ObjectId" }
+        - { $ref: "#/components/parameters/VersionN" }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: range, in: query, schema: { type: string }, description: "A1:F40; по умолчанию — первые 40 строк и 12 столбцов" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [name, range, rows]
+                properties:
+                  name: { type: string }
+                  range: { type: string }
+                  rows: { type: array, items: { type: array, items: { type: [string, number, "null"] } } }
+        "413": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /review/items:
+    get:
+      tags: [review]
+      operationId: listReviewItems
+      summary: review.items с подписью и видом записи
+      parameters:
+        - { name: state, in: query, schema: { $ref: "#/components/schemas/ReviewItemState" } }
+        - { name: reason, in: query, schema: { $ref: "#/components/schemas/ReviewReason" } }
+        - { name: record, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ReviewItem" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /review/items/{id}:
+    get:
+      tags: [review]
+      operationId: getReviewItem
+      summary: "Пункт очереди с записью и сравнением"
+      parameters: [{ $ref: "#/components/parameters/ItemId" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ReviewItemView" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /review/items/{id}/resolve:
+    post:
+      tags: [review]
+      operationId: resolveReviewItem
+      summary: "review.resolve; закрытый пункт — 409 с тем, кто и когда решил; нет права или пункт держит другой — 403 review_forbidden"
+      parameters: [{ $ref: "#/components/parameters/ItemId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome: { type: string, enum: [confirmed, partial, refuted, uncertain], description: "Человек — confirmed или refuted; модель (только пункты semantic) — любой из четырёх с confidence" }
+                note: { type: string, description: "Скрытое в <private>…</private> вырезается до записи (предупреждения в ответе нет)" }
+                confidence: { type: number, minimum: 0, maximum: 1, description: "Уверенность модели; у решения модели обязательна" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [verification_id, status]
+                properties:
+                  verification_id: { type: string, format: uuid }
+                  status: { $ref: "#/components/schemas/Status" }
+                  queued: { type: array, items: { type: string, format: uuid } }
+        "409": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /review/enqueue:
+    post:
+      tags: [review]
+      operationId: enqueueReview
+      summary: "review.enqueue: аудит или калибровка; ставит только человек (person:), модель — 403 review_forbidden"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ref, reason]
+              properties:
+                ref: { type: string }
+                reason: { type: string, enum: [audit, calibration] }
+                note: { type: string, description: "Скрытое в <private>…</private> вырезается до записи (предупреждения в ответе нет)" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [item_id], properties: { item_id: { type: string, format: uuid } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /review/stats:
+    get:
+      tags: [review]
+      operationId: getReviewStats
+      summary: review.stats
+      parameters: [{ name: days, in: query, schema: { type: integer, minimum: 1, maximum: 36500, default: 7 } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ReviewStats" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /submit:
+    post:
+      tags: [write]
+      operationId: submit
+      summary: "check.submit от агента сессии (поле агента в теле не читается); отказ проверки — 422 check_rejected с issues; <private> вырезается до проверки (предупреждение private_removed в warnings); тело больше 1 МиБ — 413 too_large"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [proposals]
+              properties:
+                proposals: { type: array, minItems: 1, items: { $ref: "#/components/schemas/Proposal" } }
+                links: { type: array, items: { $ref: "#/components/schemas/LinkProposal" } }
+                reason: { type: string, description: "Причина пакета (changeset.reason)" }
+            example:
+              proposals:
+                - target: entity
+                  payload: { ref: "@node", entity_class: artifact, label: { ru: "Узел крепления" } }
+                - target: atom
+                  payload:
+                    ref: "@bracket"
+                    kind: fact
+                    label: { ru: "Кронштейн крепится к закладной анкером" }
+                    summary_plain: { ru: "Кронштейн держится на одном анкере." }
+                    about: ["@node"]
+                    sources:
+                      - path: "Заметки/узел.md"
+                        selectors: [{ type: heading, value: "Кронштейн" }]
+                        quote: "Кронштейн КБ-14 крепится к закладной анкером М10."
+                - target: atom
+                  payload:
+                    ref: "@anchor"
+                    kind: fact
+                    label: { ru: "Анкер М10 держит кронштейн КБ-14" }
+                    summary_plain: { ru: "Кронштейн держится на анкере М10." }
+                    sources:
+                      - path: "Заметки/узел.md"
+                        selectors: [{ type: heading, value: "Кронштейн" }]
+                        quote: "Кронштейн КБ-14 крепится к закладной анкером М10."
+              links:
+                - { rel: depends_on, src: "@bracket", dst: "@anchor", note: { ru: "по заметке об узле" }, confidence: 0.9 }
+              reason: "разбор заметки об узле крепления"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Submitted" } } } }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /vocab/{scheme}:
+    get:
+      tags: [read]
+      operationId: getVocab
+      summary: Коды словаря с подписями ru/en (kind, entity_class, property, rel, …)
+      parameters: [{ name: scheme, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/VocabEntry" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /base:
+    get:
+      tags: [base]
+      operationId: getBase
+      summary: "Сведения о базе: base_id, пакеты, счётчики"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Base" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /backups:
+    get:
+      tags: [base]
+      operationId: listBackups
+      summary: "backup.backups"
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Backup" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /bundles/export:
+    post:
+      tags: [bundles]
+      operationId: exportBundle
+      summary: "bundle.export, антология по флагу"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [selection]
+              properties:
+                selection: { $ref: "#/components/schemas/Selection" }
+                with_files: { type: boolean, default: false }
+                with_packs: { type: boolean, default: false, description: "Копии пакетов, в том числе «Мои виды»: получатель увидит те же виды и формы" }
+                anthology: { type: boolean, default: false }
+                title: { type: string, description: "Заголовок HTML-отчёта антологии" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, summary, download]
+                properties:
+                  id: { type: string }
+                  summary: { type: object, description: "format, created_at, counts, packs (имена), with_files, with_packs, selection, anthology" }
+                  download: { type: string }
+                  report: { type: [string, "null"] }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /bundles/{id}/download:
+    get:
+      tags: [bundles]
+      operationId: downloadBundle
+      summary: "Скачать подборку"
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: zip, content: { application/zip: { schema: { type: string, format: binary } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /bundles/{id}/report:
+    get:
+      tags: [bundles]
+      operationId: bundleReport
+      summary: "HTML-отчёт антологии"
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: "HTML-отчёт антологии: Content-Disposition inline; CSP sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data: (без скриптов); nosniff", content: { text/html: { schema: { type: string } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /bundles/inspect:
+    post:
+      tags: [bundles]
+      operationId: inspectBundle
+      summary: "bundle.inspect: проверить загруженный zip"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [upload_id, report], properties: { upload_id: { type: string }, report: { type: object } } }
+        "413": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /bundles/import:
+    post:
+      tags: [bundles]
+      operationId: importBundle
+      summary: "bundle.import_: пробный или настоящий импорт"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [upload_id]
+              properties:
+                upload_id: { type: string }
+                trust: { type: string, enum: [keep, review], default: keep }
+                dry_run: { type: boolean, default: true }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Imported" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, description: "Только если служба потребовала вход (общая служба); локальная служба работает без него" }
+  parameters:
+    Ref: { name: ref, in: path, required: true, schema: { type: string, pattern: "^(atm|ent):.+" } }
+    ObjectId: { name: id, in: path, required: true, schema: { type: string } }
+    VersionN: { name: n, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    ItemId: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    FolderPath: { name: path, in: path, required: true, schema: { type: string }, description: "Путь папки целиком в encodeURIComponent: «/» внутри пути — %2F" }
+    Kind: { name: kind, in: query, schema: { type: array, items: { type: string } }, style: form, explode: true }
+    StatusFilter: { name: status, in: query, schema: { type: array, items: { $ref: "#/components/schemas/Status" } }, style: form, explode: true }
+    EntityClass: { name: entity_class, in: query, schema: { type: array, items: { type: string } }, style: form, explode: true }
+
+  responses:
+    Problem:
+      description: Ошибка в формате RFC 9457
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      additionalProperties: true
+      description: "RFC 9457; кроме полей ниже — расширения по code (by и at у review_closed, missing и collisions у подборок…)"
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code: { type: string }
+        issues: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "у check_rejected — все замечания отчёта" }
+        changeset_id: { type: string, description: "у check_rejected — отклонённый пакет (записан с отчётом)" }
+        warnings: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "у check_rejected — предупреждения службы (private_removed)" }
+
+    CheckIssue:
+      type: object
+      required: [code, severity, message]
+      properties:
+        code: { type: string }
+        severity: { type: string, enum: [violation, warning, info] }
+        message: { type: string }
+        path: { type: string, description: "Путь поля внутри предложения или связи (label.ru, sources[0].quote); пустая строка — предложение целиком" }
+        ref: { type: string, description: "Какое предложение: @имя (поле ref его тела), иначе proposals[i] или links[i] — номер в теле /submit; пустая строка — пакет целиком (поле reason)" }
+
+    Proposal:
+      type: object
+      required: [target, payload]
+      description: "Предложение пакета /submit (check.Proposal). Связи — не предложения, а links (LinkProposal)"
+      properties:
+        target: { type: string, enum: [atom, entity] }
+        payload: { type: object, description: "Тело атома или сущности (AtomPayload, EntityPayload схемы v1) как есть; @имя записи для ссылок внутри пакета — в его поле ref. Статус тело не задаёт: его ставит автопроверка" }
+        record_id: { type: [string, "null"], format: uuid, description: "Новая запись — без record_id или null; правка существующей — её UUID" }
+
+    LinkProposal:
+      type: object
+      required: [rel, src, dst]
+      description: "Связь пакета /submit — LinkPayload схемы v1; лишних полей схема не принимает (отказ — 422)"
+      properties:
+        rel: { type: string, pattern: "^[a-z][a-z0-9_]*$", description: "Вид связи из словаря rel" }
+        src: { type: string, pattern: "^((atm|ent):([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$", description: "Начало: запись базы (atm:/ent: с UUID или ключом) или @имя записи этого пакета" }
+        dst: { type: string, pattern: "^((atm|ent):([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$", description: "Конец — как src" }
+        note: { type: object, required: [ru], properties: { ru: { type: string }, en: { type: string } }, description: "Пояснение (LangString)" }
+        qualifiers:
+          type: array
+          description: "Уточнения (Qualifier схемы v1)"
+          items:
+            type: object
+            required: [property]
+            properties:
+              property: { type: string, pattern: "^[a-z][a-z0-9_]*$" }
+              label: { type: object, required: [ru], properties: { ru: { type: string }, en: { type: string } } }
+              value_text: { type: string }
+              amount: { type: number }
+              lower_bound: { type: number }
+              upper_bound: { type: number }
+              unit: { type: string }
+              value_state: { type: string, enum: [known, unknown, none] }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+
+    Session:
+      type: object
+      required: [agent, base, amem_version, semantic, can_write]
+      properties:
+        agent: { type: string, pattern: "^(person|model):.+" }
+        base: { type: string, format: uuid }
+        base_name: { type: [string, "null"], description: "null — имя базе не давали" }
+        amem_version: { type: string }
+        semantic: { type: string, enum: [used, unavailable] }
+        can_write: { type: boolean }
+
+    Status:
+      type: string
+      enum: [draft, needs_review, auto_verified, verified, rejected, deprecated, superseded]
+
+    ReviewState:
+      type: string
+      enum: [none, pending, accepted, declined]
+
+    ReviewReason:
+      type: string
+      enum: [semantic, warning, high_risk, semantic_doubt, edit, source_changed, audit, calibration, imported]
+
+    ReviewItemState:
+      type: string
+      enum: [queued, claimed, done, obsolete]
+
+    RefLabel:
+      type: object
+      required: [ref, label]
+      properties:
+        ref: { type: string }
+        label: { type: string }
+        kind: { type: string }
+        entity_class: { type: string }
+
+    SearchHit:
+      type: object
+      required: [ref, revision, label, snippet, status, review_state, score, matches]
+      properties:
+        ref: { type: string }
+        revision: { type: integer }
+        label: { type: [string, "null"] }
+        snippet: { type: string }
+        status: { $ref: "#/components/schemas/Status" }
+        review_state: { $ref: "#/components/schemas/ReviewState" }
+        kind: { type: string }
+        entity_class: { type: string }
+        about: { type: array, items: { $ref: "#/components/schemas/RefLabel" } }
+        score: { type: number }
+        matches:
+          type: array
+          items:
+            type: object
+            required: [channel, rank]
+            properties: { channel: { type: string }, rank: { type: integer }, source_rank: { type: [number, "null"], description: "null — у каналов кода (code_exact, code_prefix) своего ранга нет" } }
+
+    SearchResult:
+      type: object
+      required: [recipe, semantic, candidate_count, items, retrieval_id]
+      properties:
+        recipe: { type: string }
+        ranking_version: { type: string }
+        channels: { type: object }
+        semantic: { type: string, enum: [used, unavailable] }
+        candidate_count: { type: integer }
+        embedding_coverage: { type: [number, "null"], description: "Доля текущих ревизий с вектором активной модели (0–1); null — активной модели нет" }
+        items: { type: array, items: { $ref: "#/components/schemas/SearchHit" } }
+        retrieval_id: { type: [string, "null"] }
+
+    RecordSummary:
+      type: object
+      required: [ref, target, label, kind_or_class, status, recorded_at, agent]
+      properties:
+        ref: { type: string }
+        target: { type: string, enum: [atom, entity] }
+        label: { type: string }
+        kind_or_class: { type: string }
+        status: { $ref: "#/components/schemas/Status" }
+        folder: { type: [string, "null"] }
+        about: { type: array, items: { $ref: "#/components/schemas/RefLabel" } }
+        tags: { type: array, items: { type: string } }
+        recorded_at: { type: string, format: date-time }
+        agent: { type: string }
+
+    RecordList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/RecordSummary" } }
+        next_cursor: { type: [string, "null"] }
+        total: { type: integer }
+
+    Folder:
+      type: object
+      required: [path, name, count, children]
+      properties:
+        path: { type: string }
+        name: { type: string }
+        count: { type: integer }
+        children: { type: array, items: { $ref: "#/components/schemas/Folder" } }
+
+    FolderRenamed:
+      type: object
+      required: [from, to, folders, records]
+      properties:
+        from: { type: string }
+        to: { type: string }
+        folders: { type: integer, description: "Сколько папок реестра переименовано (с вложенными)" }
+        records: { type: integer, description: "Сколько записей перенесено" }
+
+    FolderTree:
+      type: object
+      required: [folders, unfiled, total]
+      properties:
+        folders: { type: array, items: { $ref: "#/components/schemas/Folder" } }
+        unfiled: { type: integer }
+        total: { type: integer }
+
+    SourceView:
+      type: object
+      required: [object, object_version, verdict]
+      properties:
+        object: { type: string }
+        object_name: { type: string }
+        object_kind: { type: string, enum: [file, web, message] }
+        media_type: { type: string }
+        object_version: { type: integer }
+        selectors: { type: array, items: { type: object } }
+        quote: { type: string }
+        role: { type: string, enum: [primary, secondary, derived] }
+        verdict: { type: [string, "null"], enum: [ok, moved, fuzzy, by_locator, unresolved, not_found, no_file, no_text, external, error, null], description: "null — источник ещё не сверялся с файлом" }
+        page: { type: integer, description: "Где сверка нашла цитату" }
+        anchor: { type: string }
+        edition: { type: string, description: "ent: редакции документа" }
+        checked_at: { type: string, format: date-time }
+
+    RecordView:
+      type: object
+      required: [ref, target, revision, payload, status, review_state, recorded_at, agent, sources, open_items]
+      properties:
+        ref: { type: string }
+        target: { type: string, enum: [atom, entity] }
+        revision: { type: integer }
+        payload: { type: object, description: "тело amem.atom/1 или сущности как есть" }
+        status: { $ref: "#/components/schemas/Status" }
+        review_state: { $ref: "#/components/schemas/ReviewState" }
+        recorded_at: { type: string, format: date-time }
+        agent: { type: string }
+        folder: { type: [string, "null"] }
+        about: { type: array, items: { $ref: "#/components/schemas/RefLabel" }, description: "payload.about с подписями и классами — для строки пути и свойств" }
+        ancestors: { type: array, items: { $ref: "#/components/schemas/RefLabel" }, description: "Цепочка part_of первой сущности about, от корня" }
+        sources: { type: array, items: { $ref: "#/components/schemas/SourceView" } }
+        open_items: { type: array, items: { $ref: "#/components/schemas/ReviewItem" } }
+        usefulness: { type: [number, "null"] }
+
+    LinkView:
+      type: object
+      required: [id, rel, direction, other]
+      properties:
+        id: { type: string }
+        rel: { type: string }
+        direction: { type: string, enum: [out, in] }
+        other: { $ref: "#/components/schemas/RefLabel" }
+        note: { type: [string, "null"] }
+        confidence: { type: [number, "null"] }
+        agent: { type: string, description: "Кто записал связь" }
+        created_at: { type: string, format: date-time }
+
+    ChangeEvent:
+      type: object
+      required: [type, id, at]
+      properties:
+        type: { type: string, enum: [revision, review, status, folder, link_created, link_retired] }
+        id: { type: string }
+        at: { type: string, format: date-time }
+        ref: { type: string }
+        label: { type: string }
+        agent: { type: string }
+        revision: { type: integer }
+        status: { $ref: "#/components/schemas/Status" }
+        review_state: { $ref: "#/components/schemas/ReviewState" }
+        rel: { type: string }
+        src: { type: string }
+        dst: { type: string }
+        recorded_at: { type: string, format: date-time, description: "у revision" }
+        valid_from: { type: [string, "null"], description: "у revision — с какого момента ревизия верна о мире" }
+        valid_to: { type: [string, "null"] }
+        reviewed_at: { type: string, format: date-time, description: "у review" }
+        reviewed_by: { type: string }
+        changed_at: { type: string, format: date-time, description: "у status и folder" }
+        reason: { type: [string, "null"], description: "у status — причина смены статуса" }
+        created_at: { type: string, format: date-time, description: "у link_created" }
+        retired_at: { type: string, format: date-time, description: "у link_retired" }
+        from: { type: [string, "null"], description: "у folder — прежняя папка; null — запись была без папки" }
+        to: { type: [string, "null"], description: "у folder — новая папка; null — запись вынута из папки" }
+        changes:
+          type: array
+          description: "у revision — отличия тела от прежней ревизии: путь RFC 6901, before и/или after"
+          items:
+            type: object
+            required: [path]
+            properties: { path: { type: string }, before: {}, after: {} }
+
+    ChangesResult:
+      type: object
+      required: [events]
+      properties:
+        ref: { type: [string, "null"] }
+        since: { type: [string, "null"] }
+        until: { type: [string, "null"] }
+        events: { type: array, items: { $ref: "#/components/schemas/ChangeEvent" } }
+
+    CardField:
+      type: object
+      required: [property, state]
+      properties:
+        property: { type: string }
+        label: { type: string }
+        required: { type: boolean }
+        group: { type: [string, "null"] }
+        origin: { type: [string, "null"] }
+        rule: { type: [string, "null"], description: "Шаблон, чьё правило дало поле (code@version, как в Card.templates)" }
+        when: { type: [string, "null"], description: "Когда поле нужно (условие правила профиля)" }
+        state: { type: string, enum: [known, missing, asked, na, conflict] }
+        value: { type: [object, "null"] }
+        default: { type: [object, "null"] }
+        ask: { type: [string, "null"] }
+        hint: { type: [string, "null"] }
+        atoms: { type: array, items: { type: string } }
+        candidates: { type: array, items: { type: object } }
+        status: { type: [string, "null"] }
+        by: { type: [string, "null"], enum: [person, model, null] }
+        basis: { type: [string, "null"] }
+        rank: { type: [string, "null"], enum: [preferred, normal, deprecated, null] }
+        confidence: { type: [number, "null"] }
+        source_role: { type: [string, "null"] }
+        sources: { type: array, items: { type: object } }
+        inherited_from: { type: [string, "null"] }
+
+    Card:
+      type: object
+      required: [format, entity, fields, summary]
+      properties:
+        format: { type: string, const: amem.card/1 }
+        entity: { $ref: "#/components/schemas/RefLabel" }
+        profile: { type: [string, "null"] }
+        templates: { type: array, items: { type: string } }
+        fields: { type: array, items: { $ref: "#/components/schemas/CardField" } }
+        extra: { type: array, items: { type: object } }
+        summary: { type: object }
+        ancestors: { type: array, items: { $ref: "#/components/schemas/RefLabel" } }
+
+    GraphNode:
+      type: object
+      required: [ref, label, kind_or_class, family, status, pending, degree]
+      properties:
+        ref: { type: string }
+        label: { type: string }
+        kind_or_class: { type: string }
+        family: { type: string, enum: [source, work, object] }
+        status: { $ref: "#/components/schemas/Status" }
+        depth: { type: integer }
+        pending: { type: boolean, description: "Есть открытый пункт проверки (queued или claimed)" }
+        degree: { type: integer, description: "Число всех текущих связей узла в базе, в том числе к узлам вне фильтра статусов и вне выдачи; может быть больше числа видимых линий" }
+
+    GraphResult:
+      type: object
+      required: [ref, nodes, edges, truncated, total]
+      properties:
+        ref: { type: [string, "null"] }
+        nodes: { type: array, items: { $ref: "#/components/schemas/GraphNode" } }
+        edges:
+          type: array
+          items:
+            type: object
+            required: [src, dst, rel]
+            properties: { src: { type: string }, dst: { type: string }, rel: { type: string }, confidence: { type: [number, "null"] } }
+        truncated: { type: boolean }
+        total: { type: integer, description: "Сколько узлов было бы без предела limit" }
+
+    ObjectVersionView:
+      type: object
+      required: [n, digest, size, recorded_at]
+      properties:
+        n: { type: integer }
+        digest: { type: [string, "null"], description: "null — у сайта и переписки (копии файла нет)" }
+        size: { type: [integer, "null"] }
+        recorded_at: { type: string, format: date-time }
+        cited_by: { type: integer }
+
+    ObjectView:
+      type: object
+      required: [id, kind, versions]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [file, web, message] }
+        original_name: { type: string, description: "Нет у страницы сайта (у неё url)" }
+        media_type: { type: [string, "null"] }
+        format_puid: { type: string, description: "Формат по PRONOM (у файлов из подборок)" }
+        url: { type: [string, "null"] }
+        retrieved_at: { type: string, format: date, description: "У страницы сайта — дата обращения" }
+        logical_paths: { type: array, items: { type: string } }
+        versions: { type: array, items: { $ref: "#/components/schemas/ObjectVersionView" } }
+        status: { type: [string, "null"], enum: [parsed, partial, skipped, null] }
+        pages: { type: [integer, "null"], description: "Число страниц из кэша текста; null, пока текст не извлекался" }
+        sheets: { type: [array, "null"], items: { type: string }, description: "Имена листов — только xlsx/xlsm" }
+        cited_by: { type: array, items: { $ref: "#/components/schemas/ObjectCitation" } }
+
+    ObjectCitation:
+      type: object
+      required: [record, version, selectors]
+      properties:
+        record: { $ref: "#/components/schemas/RefLabel" }
+        version: { type: integer }
+        selectors: { type: array, items: { type: object } }
+        quote: { type: [string, "null"] }
+        verdict: { type: [string, "null"], enum: [ok, moved, fuzzy, by_locator, unresolved, not_found, no_file, no_text, external, error, null] }
+
+    ReviewItem:
+      type: object
+      required: [id, ref, reason, state, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        ref: { type: string }
+        label: { type: string }
+        kind_or_class: { type: string }
+        reason: { $ref: "#/components/schemas/ReviewReason" }
+        state: { $ref: "#/components/schemas/ReviewItemState" }
+        details: { type: [object, "null"] }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+        author: { type: [string, "null"] }
+        claimed_by: { type: [string, "null"] }
+        claimed_until: { type: [string, "null"], description: "До какого времени пункт держит claimed_by" }
+        closed_at: { type: [string, "null"] }
+
+    ReviewItemView:
+      type: object
+      required: [item, record]
+      properties:
+        item: { $ref: "#/components/schemas/ReviewItem" }
+        record: { $ref: "#/components/schemas/RecordView" }
+        current: { type: [object, "null"], description: "для edit и imported — текущая ревизия записи (revision, payload, review_state, recorded_at, agent); null — текущей нет" }
+        proposed: { type: [object, "null"], description: "для edit и imported — ревизия пункта (те же поля и changes — отличия от текущей, пути RFC 6901)" }
+        versions: { type: [object, "null"], description: "для source_changed — objects: объект (UUID), его имя, прежние версии (from) и новая (to)" }
+
+    ReviewStats:
+      type: object
+      required: [queue]
+      properties:
+        now: { type: string, format: date-time, description: "На какой момент посчитано" }
+        days: { type: integer, description: "Окно done и changesets, дней назад от now" }
+        queue: { type: object, description: "По причинам: queued, claimed, expired, oldest_queued_age_s" }
+        done: { type: object, description: "by_reason (count, median_s) и obsolete за окно" }
+        changesets: { type: object, description: "approved, rejected и error_codes отклонённых пакетов за окно" }
+        records: { type: object, description: "atoms и entities по статусам" }
+        verdicts: { type: object, description: "Итоги сверки источников текущих ревизий; unchecked — не сверялся" }
+        audit: { type: object, description: "Аудит по автору пакета: decided, refuted" }
+
+    Submitted:
+      type: object
+      required: [changeset_id, complete, records, queued, report]
+      properties:
+        changeset_id: { type: string }
+        complete: { type: boolean }
+        records: { type: array, items: { type: object }, description: "По предложению: label (как CheckIssue.ref), ref, target, record_id, revision_id, created, status, review_state" }
+        queued: { type: array, items: { type: object }, description: "Пункты очереди: id, reason, label (как CheckIssue.ref), ref, record_id" }
+        report: { type: object, description: "Отчёт amem.check/1" }
+        warnings: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "Предупреждения службы: private_removed — скрытое в <private> вырезано из поля" }
+
+    VocabEntry:
+      type: object
+      required: [code, label]
+      properties:
+        code: { type: string }
+        label: { type: object, properties: { ru: { type: string }, en: { type: string } } }
+        definition: { type: [object, "null"], properties: { ru: { type: string }, en: { type: string } } }
+        pack: { type: string, description: "Имя пакета; schema — служебный перечень схемы, agent — добавил агент" }
+        broader: { type: [string, "null"] }
+        unit: { type: [string, "null"], description: "Только словарь property: единица UCUM по умолчанию" }
+        family: { type: string, enum: [source, work], description: "Только у вида атома (scheme kind)" }
+
+    Base:
+      type: object
+      required: [base_id, amem_version, packs]
+      properties:
+        base_id: { type: string, format: uuid }
+        name: { type: [string, "null"], description: "null — имя базе не давали" }
+        amem_version: { type: string }
+        packs:
+          type: array
+          items:
+            type: object
+            required: [name, version]
+            properties: { name: { type: string }, version: { type: string }, digest: { type: string } }
+        counts: { type: object }
+        review_open: { type: integer }
+
+    FormField:
+      type: object
+      required: [key, path, label, type]
+      properties:
+        key: { type: string }
+        path: { type: string, description: "Путь в теле записи: about, content.values[property=X], valid_from, tags, qualifiers[property=K]" }
+        label: { type: object, properties: { ru: { type: string }, en: { type: string } } }
+        type: { type: string, enum: [object, record, quantity, date, period, choice, tags, text] }
+        required: { type: boolean }
+        hint: { type: [object, "null"], properties: { ru: { type: string }, en: { type: string } } }
+        scheme: { type: [string, "null"], description: "Словарь для choice" }
+        property: { type: [string, "null"], description: "Величина для quantity" }
+        unit: { type: [string, "null"], description: "Единица UCUM по умолчанию" }
+        accepts:
+          type: [object, "null"]
+          properties:
+            entity_classes: { type: array, items: { type: string } }
+            kinds: { type: array, items: { type: string } }
+            rel: { type: string }
+
+    TemplateView:
+      type: object
+      required: [code, pack, label, target, family, form, body, widgets, editable]
+      properties:
+        code: { type: string }
+        pack: { type: string }
+        label: { type: object, properties: { ru: { type: string }, en: { type: string } } }
+        target: { type: string, enum: [atom, entity] }
+        applies_to: { type: [string, "null"] }
+        description: { type: [object, "null"], properties: { ru: { type: string }, en: { type: string } } }
+        family: { type: string, enum: [source, work, object] }
+        form: { type: array, items: { $ref: "#/components/schemas/FormField" } }
+        body: { type: string, enum: [wanted, required, none] }
+        widgets: { type: array, items: { type: string, enum: [sources, links, around, values_table, similar, children] } }
+        editable: { type: boolean }
+        records: { type: integer, description: "Сколько записей этого вида" }
+
+    TemplateDraft:
+      type: object
+      required: [label, target, family, form, body, widgets]
+      properties:
+        label: { type: object, required: [ru], properties: { ru: { type: string }, en: { type: string } } }
+        target: { type: string, enum: [atom, entity] }
+        family: { type: string, enum: [source, work, object] }
+        description: { type: object, properties: { ru: { type: string }, en: { type: string } } }
+        form: { type: array, items: { $ref: "#/components/schemas/FormField" } }
+        body: { type: string, enum: [wanted, required, none] }
+        widgets: { type: array, items: { type: string, enum: [sources, links, around, values_table, similar, children] } }
+
+    TaskView:
+      type: object
+      required: [id, kind, object, state, created_by]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [parse] }
+        object: { type: string }
+        version: { type: integer }
+        note: { type: [string, "null"] }
+        state: { type: string, enum: [open, claimed, done, cancelled] }
+        created_by: { type: string }
+        claimed_by: { type: [string, "null"] }
+        claimed_until: { type: [string, "null"], format: date-time }
+
+    Backup:
+      type: object
+      required: [name, created_at]
+      properties:
+        name: { type: string }
+        created_at: { type: [string, "null"], format: date-time, description: "null — время не прочесть ни из манифеста, ни из имени" }
+        size: { type: integer }
+        kind: { type: string }
+
+    Selection:
+      type: object
+      properties:
+        tags: { type: array, items: { type: string } }
+        project: { type: [string, "null"] }
+        kinds: { type: array, items: { type: string } }
+        entity_classes: { type: array, items: { type: string } }
+        refs: { type: array, items: { type: string } }
+        statuses: { type: array, items: { $ref: "#/components/schemas/Status" } }
+        since: { type: [string, "null"], format: date-time }
+        include_private: { type: boolean }
+
+    Imported:
+      type: object
+      required: [complete]
+      properties:
+        changeset_id: { type: [string, "null"] }
+        counts: { type: object }
+        queued: { type: array, items: { type: object } }
+        warnings: { type: array, items: { type: string } }
+        collisions: { type: array, items: { type: string } }
+        report: { type: object }
+        complete: { type: boolean }

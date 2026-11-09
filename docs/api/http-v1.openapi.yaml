@@ -72,6 +72,47 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FolderTree" } } } }
         default: { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [write]
+      operationId: createFolder
+      summary: "folders.create: пустая папка в реестре вместе с родителями; уже есть — 409 folder_exists, неверный путь — 422 folder_invalid; структуру папок меняет только человек (person:), модель — 403 forbidden"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [path], properties: { path: { type: string } } }
+      responses:
+        "201": { description: Создана, content: { application/json: { schema: { $ref: "#/components/schemas/Folder" } } } }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /folders/{path}:
+    parameters: [{ $ref: "#/components/parameters/FolderPath" }]
+    delete:
+      tags: [write]
+      operationId: deleteFolder
+      summary: "folders.delete: только пустая папка — без вложенных и без записей (иначе 409 folder_not_empty); нет такой — 404 folder_not_found; только человек (person:), модель — 403 forbidden"
+      responses:
+        "204": { description: Удалена }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+    patch:
+      tags: [write]
+      operationId: renameFolder
+      summary: "folders.rename: перенести папку с вложенными и записями (по строке журнала на запись); новый путь занят — 409 folder_exists; только человек (person:), модель — 403 forbidden"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [path], properties: { path: { type: string, description: Новый путь } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FolderRenamed" } } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
 
   /records:
     get:
@@ -127,7 +168,7 @@ paths:
     patch:
       tags: [write]
       operationId: setRecordFolder
-      summary: Переложить запись в папку (scope.folder)
+      summary: "folders.move: переложить запись в папку без новой ревизии (null — без папки); переносить вправе и модель, но только в существующую папку (иначе 404 folder_not_found: новую папку создаёт человек)"
       parameters: [{ $ref: "#/components/parameters/Ref" }]
       requestBody:
         required: true
@@ -394,7 +435,7 @@ paths:
     post:
       tags: [review]
       operationId: resolveReviewItem
-      summary: review.resolve; закрытый пункт — 409 с тем, кто и когда решил
+      summary: "review.resolve; закрытый пункт — 409 с тем, кто и когда решил; нет права или пункт держит другой — 403 review_forbidden"
       parameters: [{ $ref: "#/components/parameters/ItemId" }]
       requestBody:
         required: true
@@ -404,8 +445,9 @@ paths:
               type: object
               required: [outcome]
               properties:
-                outcome: { type: string, enum: [confirmed, refuted] }
-                note: { type: string }
+                outcome: { type: string, enum: [confirmed, partial, refuted, uncertain], description: "Человек — confirmed или refuted; модель (только пункты semantic) — любой из четырёх с confidence" }
+                note: { type: string, description: "Скрытое в <private>…</private> вырезается до записи (предупреждения в ответе нет)" }
+                confidence: { type: number, minimum: 0, maximum: 1, description: "Уверенность модели; у решения модели обязательна" }
       responses:
         "200":
           description: OK
@@ -425,7 +467,7 @@ paths:
     post:
       tags: [review]
       operationId: enqueueReview
-      summary: "review.enqueue: аудит или калибровка"
+      summary: "review.enqueue: аудит или калибровка; ставит только человек (person:), модель — 403 review_forbidden"
       requestBody:
         required: true
         content:
@@ -436,7 +478,7 @@ paths:
               properties:
                 ref: { type: string }
                 reason: { type: string, enum: [audit, calibration] }
-                note: { type: string }
+                note: { type: string, description: "Скрытое в <private>…</private> вырезается до записи (предупреждения в ответе нет)" }
       responses:
         "200":
           description: OK
@@ -450,7 +492,7 @@ paths:
       tags: [review]
       operationId: getReviewStats
       summary: review.stats
-      parameters: [{ name: days, in: query, schema: { type: integer, minimum: 1, default: 7 } }]
+      parameters: [{ name: days, in: query, schema: { type: integer, minimum: 1, maximum: 36500, default: 7 } }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ReviewStats" } } } }
         default: { $ref: "#/components/responses/Problem" }
@@ -459,7 +501,7 @@ paths:
     post:
       tags: [write]
       operationId: submit
-      summary: check.submit от агента сессии; отказ уровней 1–2 — 422 с issues
+      summary: "check.submit от агента сессии (поле агента в теле не читается); отказ проверки — 422 check_rejected с issues; <private> вырезается до проверки (предупреждение private_removed в warnings); тело больше 1 МиБ — 413 too_large"
       requestBody:
         required: true
         content:
@@ -468,11 +510,40 @@ paths:
               type: object
               required: [proposals]
               properties:
-                proposals: { type: array, minItems: 1, items: { type: object } }
-                links: { type: array, items: { type: object } }
-                reason: { type: string }
+                proposals: { type: array, minItems: 1, items: { $ref: "#/components/schemas/Proposal" } }
+                links: { type: array, items: { $ref: "#/components/schemas/LinkProposal" } }
+                reason: { type: string, description: "Причина пакета (changeset.reason)" }
+            example:
+              proposals:
+                - target: entity
+                  payload: { ref: "@node", entity_class: artifact, label: { ru: "Узел крепления" } }
+                - target: atom
+                  payload:
+                    ref: "@bracket"
+                    kind: fact
+                    label: { ru: "Кронштейн крепится к закладной анкером" }
+                    summary_plain: { ru: "Кронштейн держится на одном анкере." }
+                    about: ["@node"]
+                    sources:
+                      - path: "Заметки/узел.md"
+                        selectors: [{ type: heading, value: "Кронштейн" }]
+                        quote: "Кронштейн КБ-14 крепится к закладной анкером М10."
+                - target: atom
+                  payload:
+                    ref: "@anchor"
+                    kind: fact
+                    label: { ru: "Анкер М10 держит кронштейн КБ-14" }
+                    summary_plain: { ru: "Кронштейн держится на анкере М10." }
+                    sources:
+                      - path: "Заметки/узел.md"
+                        selectors: [{ type: heading, value: "Кронштейн" }]
+                        quote: "Кронштейн КБ-14 крепится к закладной анкером М10."
+              links:
+                - { rel: depends_on, src: "@bracket", dst: "@anchor", note: { ru: "по заметке об узле" }, confidence: 0.9 }
+              reason: "разбор заметки об узле крепления"
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Submitted" } } } }
+        "413": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         default: { $ref: "#/components/responses/Problem" }
 
@@ -536,7 +607,7 @@ paths:
                 required: [id, summary, download]
                 properties:
                   id: { type: string }
-                  summary: { type: object }
+                  summary: { type: object, description: "format, created_at, counts, packs (имена), with_files, with_packs, selection, anthology" }
                   download: { type: string }
                   report: { type: [string, "null"] }
         default: { $ref: "#/components/responses/Problem" }
@@ -558,7 +629,7 @@ paths:
       summary: "HTML-отчёт антологии"
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses:
-        "200": { description: HTML-отчёт антологии, content: { text/html: { schema: { type: string } } } }
+        "200": { description: "HTML-отчёт антологии: Content-Disposition inline; CSP sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data: (без скриптов); nosniff", content: { text/html: { schema: { type: string } } } }
         default: { $ref: "#/components/responses/Problem" }
 
   /bundles/inspect:
@@ -577,6 +648,7 @@ paths:
           content:
             application/json:
               schema: { type: object, required: [upload_id, report], properties: { upload_id: { type: string }, report: { type: object } } }
+        "413": { $ref: "#/components/responses/Problem" }
         default: { $ref: "#/components/responses/Problem" }
 
   /bundles/import:
@@ -607,6 +679,7 @@ components:
     ObjectId: { name: id, in: path, required: true, schema: { type: string } }
     VersionN: { name: n, in: path, required: true, schema: { type: integer, minimum: 1 } }
     ItemId: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    FolderPath: { name: path, in: path, required: true, schema: { type: string }, description: "Путь папки целиком в encodeURIComponent: «/» внутри пути — %2F" }
     Kind: { name: kind, in: query, schema: { type: array, items: { type: string } }, style: form, explode: true }
     StatusFilter: { name: status, in: query, schema: { type: array, items: { $ref: "#/components/schemas/Status" } }, style: form, explode: true }
     EntityClass: { name: entity_class, in: query, schema: { type: array, items: { type: string } }, style: form, explode: true }
@@ -622,13 +695,17 @@ components:
     Problem:
       type: object
       required: [type, title, status]
+      additionalProperties: true
+      description: "RFC 9457; кроме полей ниже — расширения по code (by и at у review_closed, missing и collisions у подборок…)"
       properties:
         type: { type: string }
         title: { type: string }
         status: { type: integer }
         detail: { type: string }
         code: { type: string }
-        issues: { type: array, items: { $ref: "#/components/schemas/CheckIssue" } }
+        issues: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "у check_rejected — все замечания отчёта" }
+        changeset_id: { type: string, description: "у check_rejected — отклонённый пакет (записан с отчётом)" }
+        warnings: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "у check_rejected — предупреждения службы (private_removed)" }
 
     CheckIssue:
       type: object
@@ -637,8 +714,43 @@ components:
         code: { type: string }
         severity: { type: string, enum: [violation, warning, info] }
         message: { type: string }
-        path: { type: string }
-        ref: { type: string }
+        path: { type: string, description: "Путь поля внутри предложения или связи (label.ru, sources[0].quote); пустая строка — предложение целиком" }
+        ref: { type: string, description: "Какое предложение: @имя (поле ref его тела), иначе proposals[i] или links[i] — номер в теле /submit; пустая строка — пакет целиком (поле reason)" }
+
+    Proposal:
+      type: object
+      required: [target, payload]
+      description: "Предложение пакета /submit (check.Proposal). Связи — не предложения, а links (LinkProposal)"
+      properties:
+        target: { type: string, enum: [atom, entity] }
+        payload: { type: object, description: "Тело атома или сущности (AtomPayload, EntityPayload схемы v1) как есть; @имя записи для ссылок внутри пакета — в его поле ref. Статус тело не задаёт: его ставит автопроверка" }
+        record_id: { type: [string, "null"], format: uuid, description: "Новая запись — без record_id или null; правка существующей — её UUID" }
+
+    LinkProposal:
+      type: object
+      required: [rel, src, dst]
+      description: "Связь пакета /submit — LinkPayload схемы v1; лишних полей схема не принимает (отказ — 422)"
+      properties:
+        rel: { type: string, pattern: "^[a-z][a-z0-9_]*$", description: "Вид связи из словаря rel" }
+        src: { type: string, pattern: "^((atm|ent):([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$", description: "Начало: запись базы (atm:/ent: с UUID или ключом) или @имя записи этого пакета" }
+        dst: { type: string, pattern: "^((atm|ent):([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$", description: "Конец — как src" }
+        note: { type: object, required: [ru], properties: { ru: { type: string }, en: { type: string } }, description: "Пояснение (LangString)" }
+        qualifiers:
+          type: array
+          description: "Уточнения (Qualifier схемы v1)"
+          items:
+            type: object
+            required: [property]
+            properties:
+              property: { type: string, pattern: "^[a-z][a-z0-9_]*$" }
+              label: { type: object, required: [ru], properties: { ru: { type: string }, en: { type: string } } }
+              value_text: { type: string }
+              amount: { type: number }
+              lower_bound: { type: number }
+              upper_bound: { type: number }
+              unit: { type: string }
+              value_state: { type: string, enum: [known, unknown, none] }
+        confidence: { type: number, minimum: 0, maximum: 1 }
 
     Session:
       type: object
@@ -646,7 +758,7 @@ components:
       properties:
         agent: { type: string, pattern: "^(person|model):.+" }
         base: { type: string, format: uuid }
-        base_name: { type: string }
+        base_name: { type: [string, "null"], description: "null — имя базе не давали" }
         amem_version: { type: string }
         semantic: { type: string, enum: [used, unavailable] }
         can_write: { type: boolean }
@@ -695,7 +807,7 @@ components:
           items:
             type: object
             required: [channel, rank]
-            properties: { channel: { type: string }, rank: { type: integer }, source_rank: { type: number } }
+            properties: { channel: { type: string }, rank: { type: integer }, source_rank: { type: [number, "null"], description: "null — у каналов кода (code_exact, code_prefix) своего ранга нет" } }
 
     SearchResult:
       type: object
@@ -706,7 +818,7 @@ components:
         channels: { type: object }
         semantic: { type: string, enum: [used, unavailable] }
         candidate_count: { type: integer }
-        embedding_coverage: { type: [number, "null"] }
+        embedding_coverage: { type: [number, "null"], description: "Доля текущих ревизий с вектором активной модели (0–1); null — активной модели нет" }
         items: { type: array, items: { $ref: "#/components/schemas/SearchHit" } }
         retrieval_id: { type: [string, "null"] }
 
@@ -742,6 +854,15 @@ components:
         count: { type: integer }
         children: { type: array, items: { $ref: "#/components/schemas/Folder" } }
 
+    FolderRenamed:
+      type: object
+      required: [from, to, folders, records]
+      properties:
+        from: { type: string }
+        to: { type: string }
+        folders: { type: integer, description: "Сколько папок реестра переименовано (с вложенными)" }
+        records: { type: integer, description: "Сколько записей перенесено" }
+
     FolderTree:
       type: object
       required: [folders, unfiled, total]
@@ -762,7 +883,11 @@ components:
         selectors: { type: array, items: { type: object } }
         quote: { type: string }
         role: { type: string, enum: [primary, secondary, derived] }
-        verdict: { type: string, enum: [ok, moved, fuzzy, by_locator, unresolved, not_found, no_file, no_text, external, error] }
+        verdict: { type: [string, "null"], enum: [ok, moved, fuzzy, by_locator, unresolved, not_found, no_file, no_text, external, error, null], description: "null — источник ещё не сверялся с файлом" }
+        page: { type: integer, description: "Где сверка нашла цитату" }
+        anchor: { type: string }
+        edition: { type: string, description: "ent: редакции документа" }
+        checked_at: { type: string, format: date-time }
 
     RecordView:
       type: object
@@ -793,12 +918,14 @@ components:
         other: { $ref: "#/components/schemas/RefLabel" }
         note: { type: [string, "null"] }
         confidence: { type: [number, "null"] }
+        agent: { type: string, description: "Кто записал связь" }
+        created_at: { type: string, format: date-time }
 
     ChangeEvent:
       type: object
       required: [type, id, at]
       properties:
-        type: { type: string, enum: [revision, review, status, link_created, link_retired] }
+        type: { type: string, enum: [revision, review, status, folder, link_created, link_retired] }
         id: { type: string }
         at: { type: string, format: date-time }
         ref: { type: string }
@@ -810,7 +937,24 @@ components:
         rel: { type: string }
         src: { type: string }
         dst: { type: string }
-        changes: { type: object }
+        recorded_at: { type: string, format: date-time, description: "у revision" }
+        valid_from: { type: [string, "null"], description: "у revision — с какого момента ревизия верна о мире" }
+        valid_to: { type: [string, "null"] }
+        reviewed_at: { type: string, format: date-time, description: "у review" }
+        reviewed_by: { type: string }
+        changed_at: { type: string, format: date-time, description: "у status и folder" }
+        reason: { type: [string, "null"], description: "у status — причина смены статуса" }
+        created_at: { type: string, format: date-time, description: "у link_created" }
+        retired_at: { type: string, format: date-time, description: "у link_retired" }
+        from: { type: [string, "null"], description: "у folder — прежняя папка; null — запись была без папки" }
+        to: { type: [string, "null"], description: "у folder — новая папка; null — запись вынута из папки" }
+        changes:
+          type: array
+          description: "у revision — отличия тела от прежней ревизии: путь RFC 6901, before и/или after"
+          items:
+            type: object
+            required: [path]
+            properties: { path: { type: string }, before: {}, after: {} }
 
     ChangesResult:
       type: object
@@ -830,6 +974,8 @@ components:
         required: { type: boolean }
         group: { type: [string, "null"] }
         origin: { type: [string, "null"] }
+        rule: { type: [string, "null"], description: "Шаблон, чьё правило дало поле (code@version, как в Card.templates)" }
+        when: { type: [string, "null"], description: "Когда поле нужно (условие правила профиля)" }
         state: { type: string, enum: [known, missing, asked, na, conflict] }
         value: { type: [object, "null"] }
         default: { type: [object, "null"] }
@@ -840,6 +986,7 @@ components:
         status: { type: [string, "null"] }
         by: { type: [string, "null"], enum: [person, model, null] }
         basis: { type: [string, "null"] }
+        rank: { type: [string, "null"], enum: [preferred, normal, deprecated, null] }
         confidence: { type: [number, "null"] }
         source_role: { type: [string, "null"] }
         sources: { type: array, items: { type: object } }
@@ -869,7 +1016,7 @@ components:
         status: { $ref: "#/components/schemas/Status" }
         depth: { type: integer }
         pending: { type: boolean, description: "Есть открытый пункт проверки (queued или claimed)" }
-        degree: { type: integer, description: "Число текущих связей узла в базе, а не только в выдаче" }
+        degree: { type: integer, description: "Число всех текущих связей узла в базе, в том числе к узлам вне фильтра статусов и вне выдачи; может быть больше числа видимых линий" }
 
     GraphResult:
       type: object
@@ -891,20 +1038,22 @@ components:
       required: [n, digest, size, recorded_at]
       properties:
         n: { type: integer }
-        digest: { type: string }
-        size: { type: integer }
+        digest: { type: [string, "null"], description: "null — у сайта и переписки (копии файла нет)" }
+        size: { type: [integer, "null"] }
         recorded_at: { type: string, format: date-time }
         cited_by: { type: integer }
 
     ObjectView:
       type: object
-      required: [id, kind, original_name, versions]
+      required: [id, kind, versions]
       properties:
         id: { type: string }
         kind: { type: string, enum: [file, web, message] }
-        original_name: { type: string }
+        original_name: { type: string, description: "Нет у страницы сайта (у неё url)" }
         media_type: { type: [string, "null"] }
+        format_puid: { type: string, description: "Формат по PRONOM (у файлов из подборок)" }
         url: { type: [string, "null"] }
+        retrieved_at: { type: string, format: date, description: "У страницы сайта — дата обращения" }
         logical_paths: { type: array, items: { type: string } }
         versions: { type: array, items: { $ref: "#/components/schemas/ObjectVersionView" } }
         status: { type: [string, "null"], enum: [parsed, partial, skipped, null] }
@@ -937,6 +1086,7 @@ components:
         created_by: { type: string }
         author: { type: [string, "null"] }
         claimed_by: { type: [string, "null"] }
+        claimed_until: { type: [string, "null"], description: "До какого времени пункт держит claimed_by" }
         closed_at: { type: [string, "null"] }
 
     ReviewItemView:
@@ -945,18 +1095,22 @@ components:
       properties:
         item: { $ref: "#/components/schemas/ReviewItem" }
         record: { $ref: "#/components/schemas/RecordView" }
-        current: { type: [object, "null"], description: "для edit — текущая ревизия" }
-        proposed: { type: [object, "null"], description: "для edit — предложенная ревизия" }
-        versions: { type: [object, "null"], description: "для source_changed — старая и новая версии фрагмента" }
+        current: { type: [object, "null"], description: "для edit и imported — текущая ревизия записи (revision, payload, review_state, recorded_at, agent); null — текущей нет" }
+        proposed: { type: [object, "null"], description: "для edit и imported — ревизия пункта (те же поля и changes — отличия от текущей, пути RFC 6901)" }
+        versions: { type: [object, "null"], description: "для source_changed — objects: объект (UUID), его имя, прежние версии (from) и новая (to)" }
 
     ReviewStats:
       type: object
       required: [queue]
       properties:
-        queue: { type: object }
-        done: { type: object }
-        records: { type: object }
-        verdicts: { type: object }
+        now: { type: string, format: date-time, description: "На какой момент посчитано" }
+        days: { type: integer, description: "Окно done и changesets, дней назад от now" }
+        queue: { type: object, description: "По причинам: queued, claimed, expired, oldest_queued_age_s" }
+        done: { type: object, description: "by_reason (count, median_s) и obsolete за окно" }
+        changesets: { type: object, description: "approved, rejected и error_codes отклонённых пакетов за окно" }
+        records: { type: object, description: "atoms и entities по статусам" }
+        verdicts: { type: object, description: "Итоги сверки источников текущих ревизий; unchecked — не сверялся" }
+        audit: { type: object, description: "Аудит по автору пакета: decided, refuted" }
 
     Submitted:
       type: object
@@ -964,9 +1118,10 @@ components:
       properties:
         changeset_id: { type: string }
         complete: { type: boolean }
-        records: { type: array, items: { type: object } }
-        queued: { type: array, items: { type: object } }
-        report: { type: object }
+        records: { type: array, items: { type: object }, description: "По предложению: label (как CheckIssue.ref), ref, target, record_id, revision_id, created, status, review_state" }
+        queued: { type: array, items: { type: object }, description: "Пункты очереди: id, reason, label (как CheckIssue.ref), ref, record_id" }
+        report: { type: object, description: "Отчёт amem.check/1" }
+        warnings: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "Предупреждения службы: private_removed — скрытое в <private> вырезано из поля" }
 
     VocabEntry:
       type: object
@@ -974,16 +1129,18 @@ components:
       properties:
         code: { type: string }
         label: { type: object, properties: { ru: { type: string }, en: { type: string } } }
-        pack: { type: string }
+        definition: { type: [object, "null"], properties: { ru: { type: string }, en: { type: string } } }
+        pack: { type: string, description: "Имя пакета; schema — служебный перечень схемы, agent — добавил агент" }
         broader: { type: [string, "null"] }
         unit: { type: [string, "null"], description: "Только словарь property: единица UCUM по умолчанию" }
+        family: { type: string, enum: [source, work], description: "Только у вида атома (scheme kind)" }
 
     Base:
       type: object
       required: [base_id, amem_version, packs]
       properties:
         base_id: { type: string, format: uuid }
-        name: { type: string }
+        name: { type: [string, "null"], description: "null — имя базе не давали" }
         amem_version: { type: string }
         packs:
           type: array
@@ -1062,7 +1219,7 @@ components:
       required: [name, created_at]
       properties:
         name: { type: string }
-        created_at: { type: string, format: date-time }
+        created_at: { type: [string, "null"], format: date-time, description: "null — время не прочесть ни из манифеста, ни из имени" }
         size: { type: integer }
         kind: { type: string }
 
@@ -1085,7 +1242,7 @@ components:
         changeset_id: { type: [string, "null"] }
         counts: { type: object }
         queued: { type: array, items: { type: object } }
-        warnings: { type: array, items: { type: object } }
-        collisions: { type: array, items: { type: object } }
+        warnings: { type: array, items: { type: string } }
+        collisions: { type: array, items: { type: string } }
         report: { type: object }
         complete: { type: boolean }

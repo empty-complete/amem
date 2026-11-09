@@ -104,8 +104,11 @@ export const handlersE = [
       },
       records,
       verdicts,
-      changesets: db.events.length,
-      audit: db.reviewItems.filter((i) => i.reason === "audit").length,
+      changesets: { approved: db.events.length, rejected: 0, error_codes: {} },
+      audit: {
+        decided: db.reviewItems.filter((i) => i.reason === "audit" && i.state === "done").length,
+        refuted: 0,
+      },
     });
   }),
   http.get("/api/v1/base", () =>
