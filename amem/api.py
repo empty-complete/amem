@@ -601,8 +601,11 @@ def pick(conn: psycopg.Connection, text, *, target=None) -> str:
         info = labels.get(ref) or {}
         shown.append({"ref": ref, "label": info.get("label") or ref,
                       **{key: info[key] for key in ("kind", "entity_class", "status") if info.get(key)}})
-    raise Ambiguous(f"по тексту {query[:80]!r} нашлось записей: {len(candidates)}, явного лидера нет — выберите "
-                    f"ссылку", candidates=shown)
+    # канал отдаёт не больше search._CHANNEL_LIMIT строк: на пределе настоящих совпадений может быть больше
+    at_limit = any(len(rows) >= search_._CHANNEL_LIMIT for rows in channels)
+    count = f"не меньше {len(candidates)}" if at_limit else str(len(candidates))
+    raise Ambiguous(f"по тексту {query[:80]!r} нашлось записей: {count}, явного лидера нет — выберите ссылку",
+                    candidates=shown)
 
 
 # --- карточка и граф ---
@@ -836,7 +839,9 @@ def base(conn: psycopg.Connection) -> dict:
 
 def base_rename(conn: psycopg.Connection, name, *, agent: str) -> dict:
     """Base после смены имени базы (db.set_base_name); имя меняет только человек, как и структуру папок."""
-    _person_only(agent, "имя базы меняет")
+    if not isinstance(agent, str) or not agent.startswith("person:"):
+        raise Forbidden(f"имя базы меняет только человек (person:), а не {agent}: имя видят все, кто работает "
+                        f"с базой")
     db.set_base_name(conn, _str(name, "name"))
     return base(conn)
 

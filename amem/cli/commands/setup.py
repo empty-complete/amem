@@ -72,6 +72,10 @@ def run_init(ctx, args) -> int:
     conn = ctx.connect(ready=False)
     applied = db.prepare(conn)
     saved = _save_dsn(ctx, args.dsn) if args.dsn and not ctx.env.get("AMEM_DSN", "").strip() else None
+    if args.dsn and saved is None:
+        why = ("задан AMEM_DSN" if ctx.env.get("AMEM_DSN", "").strip()
+               else f"файл настроек {_config_path(ctx)} уже есть и не переписывается")
+        ctx.note(f"amem: --dsn не сохранён ({why}) — впишите dsn в amem.toml или задайте AMEM_DSN сами")
     store = ctx.store()
     root = Path(store.root)
     files = conn.execute("SELECT count(*) FROM object_version WHERE digest IS NOT NULL").fetchone()[0]
@@ -205,7 +209,13 @@ def run_doctor(ctx, args) -> int:
                 conn = ctx.connect(ready=False)
                 check("база", "ok", f"PostgreSQL {conn.info.server_version // 10000}")
             except Exception as e:                      # noqa: BLE001 — любой отказ входа — строка отчёта
-                check("база", "fail", f"недоступна ({type(e).__name__}) — проверьте PostgreSQL и AMEM_DSN")
+                from .. import _auth_failed
+
+                if _auth_failed(e):
+                    check("база", "fail", "вход не удался — проверьте пользователя и пароль в AMEM_DSN")
+                else:
+                    check("база", "fail", f"недоступна ({type(e).__name__}) — проверьте, что PostgreSQL запущен "
+                                          f"и AMEM_DSN верен")
         if conn is not None:
             pending = pending_migrations(conn)
             if pending is None:

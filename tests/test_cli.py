@@ -4,12 +4,15 @@
 (сверка с starlette.testclient); агент по окружению; токены — один показ, только хэш, права 0600; журнал запросов
 пишет явный search; скрипт и python -m amem.cli запускаются.
 """
+import io
 import json
 import os
+import threading
 import shutil
 import stat
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg
@@ -17,7 +20,7 @@ import pytest
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 import contract
-from amem import api, bundle, cli, db, folders, objects, records, review, settings
+from amem import api, backup, bundle, cli, db, folders, objects, records, review, settings
 from amem.cli import errors
 from amem.service import problems
 from test_service_write import BOT, V1, fact, kb, queued, ref_of, start, written  # noqa: F401 — фикстуры
@@ -436,6 +439,30 @@ def test_backup_create_list_verify_restore(run, pgdb, tmp_path, monkeypatch):
     assert code == 1 and "не пустая" in err
 
 
+def test_model_backup_adds_a_copy_but_never_rotates_or_restores(run, pgdb, tmp_path):
+    """Ревью задачи 10: модель (CLAUDECODE=1) с --keep 1 стирала прежние дампы. Теперь модели — только create без
+    ротации; --keep и restore — только человек (код 2)."""
+    source, target = pgdb(), pgdb()
+    with db.connect(source) as conn:
+        db.prepare(conn)
+    folder = tmp_path / "backups"
+    for day in (1, 2):
+        backup.create(source, folder, keep=None, now=datetime(2026, 1, day, tzinfo=timezone.utc))
+    old = [b["name"] for b in backup.backups(folder)]
+    model = {"AMEM_DSN": source, "CLAUDECODE": "1"}
+    code, _, err = run("backup", "create", "--keep", "1", extra=model)
+    assert code == 2 and "только человек" in err and "подсказка: это действие — для человека" in err
+    assert [b["name"] for b in backup.backups(folder)] == old
+    code, out, err = run("backup", "create", "--json", extra=model)
+    assert code == 0, err
+    names = [b["name"] for b in backup.backups(folder)]
+    assert names[:2] == old and len(names) == 3
+    code, _, err = run("backup", "restore", js(out)["manifest"], extra={"AMEM_DSN": target, "CLAUDECODE": "1"})
+    assert code == 2 and "только человек" in err
+    with db.connect(target) as conn:
+        assert conn.execute("SELECT count(*) FROM pg_tables WHERE schemaname = 'public'").fetchone()[0] == 0
+
+
 # --- токены ---
 
 def test_token_create_list_revoke(run, tmp_path):
@@ -511,3 +538,101 @@ def test_token_rules(run, tmp_path):
 def test_exit_code_follows_service_table(exc, code):
     problem = problems.to_problem(exc)
     assert errors.exit_code(problem.status, problem.code) == code
+
+
+# --- ревью задачи 10 ---
+
+def test_closed_pipe_is_not_an_error():
+    """amem … | head: читатель закрыл конвейер — код 0 и ни строки шума в stderr."""
+    proc = subprocess.Popen([sys.executable, "-m", "amem.cli", "--help"], stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE)
+    proc.stdout.close()                       # закрыт до первой записи: запись — BrokenPipeError
+    err = proc.stderr.read().decode()
+    assert proc.wait(timeout=60) == 0 and err == ""
+
+
+def test_json_error_without_http_status_has_no_status(run):
+    code, out, _ = run("search", "x", "--json", extra={"AMEM_DSN": None})
+    body = js(out)
+    assert code == 1 and body["code"] == "no_dsn" and "status" not in body
+    code, out, _ = run("search", "x", "--json", extra={"AMEM_DSN": "postgresql://u:p@127.0.0.1:1/none"})
+    assert js(out)["status"] == 503                            # у HTTP-аналога статус есть
+
+
+def test_wrong_password_is_told_apart_from_a_stopped_server(run, dsn):
+    params = conninfo_to_dict(dsn)
+    params["password"] = "не-тот-пароль"
+    wrong = make_conninfo(**params)
+    code, _, err = run("folders", "tree", extra={"AMEM_DSN": wrong})
+    assert code == 1 and "проверьте пользователя и пароль в AMEM_DSN" in err and "не-тот-пароль" not in err
+    code, out, _ = run("doctor", extra={"AMEM_DSN": wrong})
+    assert code == 1 and "пользователя и пароль" in out
+
+
+def test_amem_debug_prints_traceback_of_internal_error():
+    for env, shown in (({"AMEM_DEBUG": "1"}, True), ({}, False)):
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            raise RuntimeError("сломалось")
+        except RuntimeError as e:
+            code = cli.report(e, as_json=False, out=out, err=err, env=env)
+        assert code == 1 and "внутренняя ошибка: RuntimeError: сломалось" in err.getvalue()
+        assert ("Traceback" in err.getvalue()) is shown
+
+
+def test_ambiguous_at_channel_limit_says_at_least(run, kb, store, docs):
+    written(kb, store, docs, *[fact(ref=f"@a{i}", label=f"Кронштейн номер {i}") for i in range(55)])
+    code, out, err = run("get", "кронштейн")
+    assert code == 3 and "не меньше" in err
+
+
+def test_base_rename_refusal_has_its_own_message(run, kb):
+    code, _, err = run("base", "name", "Чужое", extra={"CLAUDECODE": "1"})
+    assert code == 2 and "имя базы меняет только человек" in err and "папк" not in err
+
+
+def test_anthology_report_does_not_overwrite_html_zip(run, base, tmp_path):
+    out_html = tmp_path / "x.html"
+    code, out, _ = run("export", str(out_html), "--anthology", "--json")
+    made = js(out)
+    assert code == 0 and made["report_file"] == str(tmp_path / "x.report.html")
+    assert out_html.read_bytes()[:2] == b"PK" and (tmp_path / "x.report.html").read_text(encoding="utf-8")
+
+
+def test_repeated_init_with_dsn_warns_that_it_is_not_saved(run, dsn, tmp_path):
+    assert run("init", "--dsn", dsn, extra={"AMEM_DSN": None})[0] == 0
+    code, _, err = run("init", "--dsn", dsn, extra={"AMEM_DSN": None})
+    assert code == 0 and "--dsn не сохранён" in err and "уже есть" in err
+    code, _, err = run("init", "--dsn", dsn)
+    assert code == 0 and "задан AMEM_DSN" in err
+
+
+def test_token_file_symlink_is_edited_in_its_target(run, tmp_path):
+    real = tmp_path / "real" / "amem-tokens.toml"
+    run("token", "create", "person:anna", "--file", str(real))
+    link = tmp_path / "link.toml"
+    link.symlink_to(real)
+    code, _, _ = run("token", "create", "model:bot", "--file", str(link))
+    assert code == 0 and link.is_symlink()
+    assert [t.agent for t in settings.load_tokens(real)] == ["person:anna", "model:bot"]
+    assert stat.S_IMODE(real.stat().st_mode) == 0o600
+    dangling = tmp_path / "dangling.toml"
+    dangling.symlink_to(tmp_path / "нет" / "tokens.toml")
+    code, _, err = run("token", "create", "person:anna", "--file", str(dangling))
+    assert code == 2 and "несуществующий" in err and not (tmp_path / "нет").exists()
+
+
+def test_parallel_token_create_keeps_every_entry(env, tmp_path, capsys):
+    path = tmp_path / "amem-tokens.toml"
+    codes = []
+
+    def create(i):
+        codes.append(cli.main(["token", "create", f"model:bot{i}", "--file", str(path)], env=env))
+    threads = [threading.Thread(target=create, args=(i,)) for i in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    capsys.readouterr()
+    assert codes == [0] * 8
+    assert sorted(t.agent for t in settings.load_tokens(path)) == sorted(f"model:bot{i}" for i in range(8))
