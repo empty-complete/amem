@@ -22,6 +22,7 @@ const pages = [
   "./changes?since=ever",
   `./new?about=${E3}`,
   "./review",
+  "./review?group=source",
   "./review/5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e01",
   "./review/5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e02",
   "./review/5f0c2a8e-1d3b-4c6a-9e7f-0a1b2c3d4e5f",

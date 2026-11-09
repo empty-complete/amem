@@ -14,16 +14,30 @@ A = lambda n: f"atm:{P}{n:02x}"  # noqa: E731
 MANUAL = f"{P}a1"
 
 
+# записи из руководства — с источником-руководством: очередь группируется по документу (часть J)
+FROM_MANUAL = {A(0x09): "в диапазоне от −40 до +60 °C", A(0x0C): None}
+
+
+def manual_source(quote):
+    src = {k: v for k, v in copy.deepcopy(views[A(0x0B)]["sources"][0]).items() if k != "quote"}
+    if quote:
+        src["quote"] = quote
+    else:
+        src |= {"selectors": [], "verdict": "external"}
+    return src
+
+
 def view_of(ref):
     if ref in views:
         return copy.deepcopy(views[ref])
     r = recs[ref]
+    sources = [manual_source(FROM_MANUAL[ref])] if ref in FROM_MANUAL else []
     return {
         "ref": ref, "target": r["target"], "revision": 1,
         "payload": {"kind": r["kind_or_class"], "label": {"ru": r["label"]}, "summary_plain": {"ru": r["label"] + "."},
                     "about": [a["ref"] for a in r.get("about", [])]},
         "status": r["status"], "review_state": "pending", "recorded_at": r["recorded_at"], "agent": r["agent"],
-        "folder": r.get("folder"), "about": r.get("about", []), "ancestors": [], "sources": [], "open_items": [],
+        "folder": r.get("folder"), "about": r.get("about", []), "ancestors": [], "sources": sources, "open_items": [],
         "usefulness": None,
     }
 
@@ -40,14 +54,14 @@ items = [
                                           "note": "Модель сомневается: в тексте два диапазона, взят средний."}, at="2026-11-05T10:12:05Z"),
     item(0x01, A(0x1E), "edit", {"changes": ["label", "body"]}, created_by="model:linker", at="2026-11-07T07:40:00Z"),
     item(0x02, A(0x09), "source_changed", {"object": MANUAL, "from_version": 1, "to_version": 2}, created_by="model:watcher", at="2026-11-06T16:20:00Z"),
-    item(0x03, A(0x0C), "warning", {"issues": [
-        {"code": "unit_suspect", "severity": "warning", "message": "Единица гПа, а в источнике — мм рт. ст.: проверьте пересчёт", "path": "content.values[0].unit"},
-        {"code": "range_wide", "severity": "info", "message": "Диапазон шире, чем у похожих датчиков", "path": "content.values[0]"}]}, at="2026-11-06T09:00:00Z"),
+    # details — в форме ядра (check._details): коды замечаний, риск, кандидаты
+    item(0x03, A(0x0C), "warning", {"issues": ["unit_suspect", "range_wide"], "risk": [], "candidates": []},
+         at="2026-11-06T09:00:00Z"),
     item(0x04, A(0x1A), "high_risk", {"rule": "electrical", "message": "Электрическая величина — проверяет человек"}, at="2026-11-07T06:30:00Z"),
     item(0x05, A(0x1F), "imported", {"bundle": "meteo-2025", "from": "Станция прошлого сезона"}, created_by="person:anna", at="2026-11-04T12:00:00Z"),
     item(0x06, A(0x10), "audit", {"note": "Выборочная проверка записей с итогом «проверено автоматически»"}, created_by="person:anna", at="2026-11-07T05:10:00Z"),
     item(0x07, A(0x0E), "calibration", {"note": "Калибровка: сверка решения модели с человеком"}, at="2026-11-03T15:00:00Z"),
-    item(0x08, A(0x12), "warning", {"issues": [{"code": "superseded", "severity": "warning", "message": "Есть более новая запись", "path": "status"}]},
+    item(0x08, A(0x12), "warning", {"issues": ["superseded"], "risk": [], "candidates": []},
          state="done", at="2026-11-02T10:00:00Z", closed="2026-11-02T11:30:00Z"),
 ]
 

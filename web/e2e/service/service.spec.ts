@@ -123,6 +123,20 @@ test("проверка: Y — решено в службе после окна; 
   expect(problems).toEqual([]);
 });
 
+test("очередь по документам: пункт знает документ, группа с его именем", async ({ page }) => {
+  const problems = watch(page);
+  const items = (await (await page.request.get("/api/v1/review/items?state=queued&limit=500")).json()) as {
+    source: { object_name: string } | null;
+  }[];
+  const named = items.find((i) => i.source?.object_name)?.source?.object_name;
+  expect(named, "у открытого пункта образца есть документ").toBeTruthy();
+  await page.goto("./review?group=source");
+  const list = page.getByRole("listbox", { name: "Очередь проверки" });
+  await expect(list.locator(".qhead").first()).toContainText(named as string);
+  await axe(page);
+  expect(problems).toEqual([]);
+});
+
 test("папки: создать, перенести запись из меню, переименовать, удалить пустую", async ({ page }) => {
   const problems = watch(page);
   const ref = await refOf(page, "Проверить растяжки мачты после ветра");
