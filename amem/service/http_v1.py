@@ -220,6 +220,11 @@ def get_vocab(request: Request) -> JSONResponse:
         return JSONResponse(api.vocab_entries(conn, request.path_params["scheme"]))
 
 
+def get_templates(request: Request) -> JSONResponse:
+    with connection(request) as conn:
+        return JSONResponse(api.templates(conn, target=_q(request, "target")))
+
+
 def get_base(request: Request) -> JSONResponse:
     with connection(request) as conn:
         return JSONResponse(api.base(conn))
@@ -591,6 +596,7 @@ ROUTES = [
     Route(f"{API}/review/stats", get_review_stats, methods=["GET"]),
     Route(f"{API}/submit", submit, methods=["POST"]),
     Route(f"{API}/vocab/{{scheme}}", get_vocab, methods=["GET"]),
+    Route(f"{API}/templates", get_templates, methods=["GET"]),
     Route(f"{API}/base", get_base, methods=["GET"]),
     Route(f"{API}/backups", get_backups, methods=["GET"]),
     Route(f"{API}/bundles/export", export_bundle, methods=["POST"]),

@@ -292,6 +292,41 @@ class CardState(str, Enum):
     conflict = "conflict"
 
 
+class TemplateBody(str, Enum):
+    """
+    Текст записи в форме вида (Template.ui.body) — подсказка интерфейсу, на проверку записи не влияет.
+    """
+    wanted = "wanted"
+    required = "required"
+    none = "none"
+
+
+class TemplateWidget(str, Enum):
+    """
+    Блок страницы записи вида (Template.ui.widgets) — подсказка интерфейсу.
+    """
+    sources = "sources"
+    links = "links"
+    around = "around"
+    values_table = "values_table"
+    similar = "similar"
+    children = "children"
+
+
+class FieldType(str, Enum):
+    """
+    Тип поля формы вида (amem/forms.py); без явного типа выводится из пути поля.
+    """
+    object = "object"
+    record = "record"
+    quantity = "quantity"
+    date = "date"
+    period = "period"
+    choice = "choice"
+    tags = "tags"
+    text = "text"
+
+
 class KindFamily(str, Enum):
     """
     Семья вида атома (Concept.family, спецификация подпроекта 4, разд. 1.2): откуда знание — из документа или из работы. По ней интерфейс группирует виды и раскрашивает граф. Вид без family считается work.
@@ -317,7 +352,7 @@ class Selector(ConfiguredBaseModel):
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
 
-    type: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Selector']} })
+    type: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Selector', 'TemplateUiField']} })
     value: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Selector', 'CardField']} })
     label: Optional[str] = Field(default=None, description="""Как место подписано в документе — «л. 24–25».""", json_schema_extra = { "linkml_meta": {'domain_of': ['Selector',
                        'Value',
@@ -327,6 +362,7 @@ class Selector(ConfiguredBaseModel):
                        'AtomPayload',
                        'EntityPayload',
                        'Concept',
+                       'TemplateUiField',
                        'Activity']} })
     refined_by: Optional[Selector] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Selector']} })
 
@@ -350,7 +386,7 @@ class Source(ConfiguredBaseModel):
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
 
-    path: Optional[str] = Field(default=None, description="""Путь в папке документов или название письма / адрес сайта. Только во входных данных.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Source', 'FieldRule']} })
+    path: Optional[str] = Field(default=None, description="""Путь в папке документов или название письма / адрес сайта. Только во входных данных.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Source', 'FieldRule', 'TemplateUiField']} })
     object: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Source']} })
     object_version: Optional[int] = Field(default=None, ge=1, json_schema_extra = { "linkml_meta": {'domain_of': ['Source']} })
     digest: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Source', 'ObjectVersion']} })
@@ -414,6 +450,7 @@ class Value(ConfiguredBaseModel):
                        'AtomPayload',
                        'EntityPayload',
                        'Concept',
+                       'TemplateUiField',
                        'Activity']} })
     amount: Optional[float] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'Qualifier', 'ParameterDefault']} })
     lower_bound: Optional[float] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'Qualifier']} })
@@ -459,6 +496,7 @@ class Qualifier(ConfiguredBaseModel):
                        'AtomPayload',
                        'EntityPayload',
                        'Concept',
+                       'TemplateUiField',
                        'Activity']} })
     value_text: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'Qualifier', 'ParameterDefault']} })
     amount: Optional[float] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'Qualifier', 'ParameterDefault']} })
@@ -498,6 +536,7 @@ class Symbol(ConfiguredBaseModel):
                        'AtomPayload',
                        'EntityPayload',
                        'Concept',
+                       'TemplateUiField',
                        'Activity']} })
     term: Optional[str] = Field(default=None, description="""Атом-термин с определением обозначения.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Symbol']} })
     unit: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value',
@@ -541,6 +580,7 @@ class Column(ConfiguredBaseModel):
                        'AtomPayload',
                        'EntityPayload',
                        'Concept',
+                       'TemplateUiField',
                        'Activity']} })
     unit: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Value',
                        'Qualifier',
@@ -693,9 +733,10 @@ class AtomPayload(ConfiguredBaseModel):
                        'AtomPayload',
                        'EntityPayload',
                        'Concept',
+                       'TemplateUiField',
                        'Activity']} })
     summary_plain: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload']} })
-    body: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload']} })
+    body: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'TemplateUi']} })
     aliases: Optional[list[str]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'EntityPayload']} })
     codes: Optional[list[str]] = Field(default=None, description="""Марки, обозначения, символы целиком — m10, dn50, w0, 10.1.""", json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'EntityPayload']} })
     retrieval_context: Optional[LangString] = Field(default=None, description="""Фраза агента к контексту поиска; остальное сервер собирает сам.""", json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload']} })
@@ -840,9 +881,10 @@ class Atom(AtomPayload):
                        'AtomPayload',
                        'EntityPayload',
                        'Concept',
+                       'TemplateUiField',
                        'Activity']} })
     summary_plain: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload']} })
-    body: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload']} })
+    body: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'TemplateUi']} })
     aliases: Optional[list[str]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'EntityPayload']} })
     codes: Optional[list[str]] = Field(default=None, description="""Марки, обозначения, символы целиком — m10, dn50, w0, 10.1.""", json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'EntityPayload']} })
     retrieval_context: Optional[LangString] = Field(default=None, description="""Фраза агента к контексту поиска; остальное сервер собирает сам.""", json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload']} })
@@ -1034,6 +1076,7 @@ class EntityPayload(ConfiguredBaseModel):
                        'AtomPayload',
                        'EntityPayload',
                        'Concept',
+                       'TemplateUiField',
                        'Activity']} })
     aliases: Optional[list[str]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'EntityPayload']} })
     codes: Optional[list[str]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'EntityPayload']} })
@@ -1142,6 +1185,7 @@ class Entity(EntityPayload):
                        'AtomPayload',
                        'EntityPayload',
                        'Concept',
+                       'TemplateUiField',
                        'Activity']} })
     aliases: Optional[list[str]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'EntityPayload']} })
     codes: Optional[list[str]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'EntityPayload']} })
@@ -1548,6 +1592,7 @@ class Concept(ConfiguredBaseModel):
                        'AtomPayload',
                        'EntityPayload',
                        'Concept',
+                       'TemplateUiField',
                        'Activity']} })
     definition: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Concept']} })
     inverse_label: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Concept']} })
@@ -1626,7 +1671,7 @@ class FieldRule(ConfiguredBaseModel):
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
 
-    path: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Source', 'FieldRule']} })
+    path: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Source', 'FieldRule', 'TemplateUiField']} })
     required: Optional[bool] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule', 'LinkRules', 'ParameterRule', 'CardField']} })
     min_count: Optional[int] = Field(default=None, ge=0, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule']} })
     severity: Optional[Severity] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule', 'RequiredLink', 'CheckIssue']} })
@@ -1758,7 +1803,7 @@ class ParameterRule(ConfiguredBaseModel):
     origin: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField']} })
     default: Optional[ParameterDefault] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField']} })
     ask: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField']} })
-    hint: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField']} })
+    hint: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField', 'TemplateUiField']} })
     when: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField']} })
 
     @field_validator('property')
@@ -1827,7 +1872,7 @@ class CardField(ConfiguredBaseModel):
     rule: Optional[str] = Field(default=None, description="""Шаблон, чьё правило действует (code@version).""", json_schema_extra = { "linkml_meta": {'domain_of': ['CardField']} })
     default: Optional[Any] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField']} })
     ask: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField']} })
-    hint: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField']} })
+    hint: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField', 'TemplateUiField']} })
     when: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField']} })
     state: CardState = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['CardField', 'Changeset', 'ReviewItem']} })
     value: Optional[Any] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Selector', 'CardField']} })
@@ -1891,7 +1936,7 @@ class Card(ConfiguredBaseModel):
     entity: Any = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Card']} })
     profile: Optional[str] = Field(default=None, description="""Шаблон класса с профилем (code@version) или пусто, если профиля нет.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Card']} })
     templates: Optional[list[str]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Card', 'CheckReport']} })
-    fields: Optional[list[CardField]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Card', 'Template']} })
+    fields: Optional[list[CardField]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Card', 'Template', 'TemplateUi']} })
     extra: Optional[list[Any]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Card']} })
     summary: Any = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Card']} })
     ancestors: Optional[list[Any]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Card']} })
@@ -1992,10 +2037,11 @@ class Template(ConfiguredBaseModel):
     applies_to: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Template']} })
     extends: Optional[list[str]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Template']} })
     description: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['EntityPayload', 'Template']} })
-    fields: Optional[list[FieldRule]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Card', 'Template']} })
+    fields: Optional[list[FieldRule]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Card', 'Template', 'TemplateUi']} })
     links: Optional[LinkRules] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Bundle', 'Template']} })
     high_risk: Optional[list[HighRiskRule]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Template']} })
     parameters: Optional[list[ParameterRule]] = Field(default=None, description="""Профиль параметров — только у target entity.""", json_schema_extra = { "linkml_meta": {'domain_of': ['Template']} })
+    ui: Optional[TemplateUi] = Field(default=None, description="""Как показывать вид в интерфейсе — форма, текст, блоки страницы (TemplateUi).""", json_schema_extra = { "linkml_meta": {'domain_of': ['Template']} })
 
     @field_validator('code')
     def pattern_code(cls, v):
@@ -2050,6 +2096,51 @@ class Template(ConfiguredBaseModel):
         return v
 
 
+class TemplateUiField(ConfiguredBaseModel):
+    """
+    Подпись, подсказка и тип поля формы. path — путь правила поля шаблона (FieldRule.path) или величина content.values[property=X] / qualifiers[property=X]; один path — не больше одного раза.
+    """
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
+
+    path: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Source', 'FieldRule', 'TemplateUiField']} })
+    label: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Selector',
+                       'Value',
+                       'Qualifier',
+                       'Symbol',
+                       'Column',
+                       'AtomPayload',
+                       'EntityPayload',
+                       'Concept',
+                       'TemplateUiField',
+                       'Activity']} })
+    hint: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField', 'TemplateUiField']} })
+    type: Optional[FieldType] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Selector', 'TemplateUiField']} })
+
+    @field_validator('path')
+    def pattern_path(cls, v):
+        pattern=re.compile(r"^[a-z_][a-z0-9_]*(\[\])?(\.[a-z_][a-z0-9_]*(\[\])?)*(\[property=[a-z][a-z0-9_]*\])?$")
+        if isinstance(v, list):
+            for element in v:
+                if isinstance(element, str) and not pattern.fullmatch(element):
+                    err_msg = f"Invalid path format: {element}"
+                    raise ValueError(err_msg)
+        elif isinstance(v, str) and not pattern.fullmatch(v):
+            err_msg = f"Invalid path format: {v}"
+            raise ValueError(err_msg)
+        return v
+
+
+class TemplateUi(ConfiguredBaseModel):
+    """
+    Как показывать вид в интерфейсе (спецификация подпроекта 4, разд. 6a.2): текст записи, блоки страницы, подписи и типы полей формы. На проверку записей не влияет; ключи fields сверяет проверка пакета (packs.py).
+    """
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
+
+    body: Optional[TemplateBody] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['AtomPayload', 'TemplateUi']} })
+    widgets: Optional[list[TemplateWidget]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['TemplateUi']} })
+    fields: Optional[list[TemplateUiField]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Card', 'Template', 'TemplateUi']} })
+
+
 class Agent(ConfiguredBaseModel):
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
 
@@ -2099,6 +2190,7 @@ class Activity(ConfiguredBaseModel):
                        'AtomPayload',
                        'EntityPayload',
                        'Concept',
+                       'TemplateUiField',
                        'Activity']} })
     started_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Activity']} })
     ended_at: Optional[datetime ] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Activity']} })
@@ -2462,6 +2554,8 @@ CardField.model_rebuild()
 Card.model_rebuild()
 BundleManifest.model_rebuild()
 Template.model_rebuild()
+TemplateUiField.model_rebuild()
+TemplateUi.model_rebuild()
 Agent.model_rebuild()
 Activity.model_rebuild()
 Changeset.model_rebuild()

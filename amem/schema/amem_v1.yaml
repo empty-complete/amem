@@ -371,6 +371,38 @@ enums:
       conflict:
         annotations: {label_ru: "расхождение", label_en: "conflict", definition_ru: "Несколько различных значений, ни одно не preferred."}
 
+  TemplateBody:
+    description: Текст записи в форме вида (Template.ui.body) — подсказка интерфейсу, на проверку записи не влияет.
+    permissible_values:
+      wanted:
+        annotations: {label_ru: "желателен", label_en: "wanted", definition_ru: "Поле текста есть, пустое допустимо."}
+      required:
+        annotations: {label_ru: "обязателен", label_en: "required", definition_ru: "Форма просит текст до отправки."}
+      none:
+        annotations: {label_ru: "нет", label_en: "none", definition_ru: "У вида нет текста — только поля формы."}
+
+  TemplateWidget:
+    description: Блок страницы записи вида (Template.ui.widgets) — подсказка интерфейсу.
+    permissible_values:
+      sources: {annotations: {label_ru: "источники", label_en: "sources"}}
+      links: {annotations: {label_ru: "связи", label_en: "links"}}
+      around: {annotations: {label_ru: "окрестность", label_en: "around"}}
+      values_table: {annotations: {label_ru: "таблица значений", label_en: "values table"}}
+      similar: {annotations: {label_ru: "похожие", label_en: "similar"}}
+      children: {annotations: {label_ru: "состав", label_en: "children"}}
+
+  FieldType:
+    description: Тип поля формы вида (amem/forms.py); без явного типа выводится из пути поля.
+    permissible_values:
+      object: {annotations: {label_ru: "сущность", label_en: "object"}}
+      record: {annotations: {label_ru: "запись", label_en: "record"}}
+      quantity: {annotations: {label_ru: "величина", label_en: "quantity"}}
+      date: {annotations: {label_ru: "дата", label_en: "date"}}
+      period: {annotations: {label_ru: "период", label_en: "period"}}
+      choice: {annotations: {label_ru: "выбор из словаря", label_en: "choice"}}
+      tags: {annotations: {label_ru: "теги", label_en: "tags"}}
+      text: {annotations: {label_ru: "текст", label_en: "text"}}
+
   KindFamily:
     description: >-
       Семья вида атома (Concept.family, спецификация подпроекта 4, разд. 1.2): откуда знание — из документа или
@@ -1092,6 +1124,42 @@ classes:
       parameters:
         description: Профиль параметров — только у target entity.
         range: ParameterRule
+        multivalued: true
+        inlined_as_list: true
+      ui:
+        description: Как показывать вид в интерфейсе — форма, текст, блоки страницы (TemplateUi).
+        range: TemplateUi
+        inlined: true
+
+  TemplateUiField:
+    description: >-
+      Подпись, подсказка и тип поля формы. path — путь правила поля шаблона (FieldRule.path) или величина
+      content.values[property=X] / qualifiers[property=X]; один path — не больше одного раза.
+    attributes:
+      path:
+        required: true
+        pattern: '^[a-z_][a-z0-9_]*(\[\])?(\.[a-z_][a-z0-9_]*(\[\])?)*(\[property=[a-z][a-z0-9_]*\])?$'
+      label:
+        range: LangString
+        inlined: true
+      hint:
+        range: LangString
+        inlined: true
+      type:
+        range: FieldType
+
+  TemplateUi:
+    description: >-
+      Как показывать вид в интерфейсе (спецификация подпроекта 4, разд. 6a.2): текст записи, блоки страницы, подписи
+      и типы полей формы. На проверку записей не влияет; ключи fields сверяет проверка пакета (packs.py).
+    attributes:
+      body:
+        range: TemplateBody
+      widgets:
+        range: TemplateWidget
+        multivalued: true
+      fields:
+        range: TemplateUiField
         multivalued: true
         inlined_as_list: true
 

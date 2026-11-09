@@ -33,7 +33,6 @@ METHODS = ("get", "post", "put", "patch", "delete")
 # служба сделает их в 4d; сделанный путь убирается отсюда (тест ниже не даст забыть)
 LATER_4D = frozenset({
     ("/objects", "get"), ("/objects", "post"),
-    ("/templates", "get"),
     ("/packs/mine/templates/{code}", "put"), ("/packs/mine/templates/{code}", "delete"),
     ("/tasks", "get"), ("/tasks", "post"),
 })

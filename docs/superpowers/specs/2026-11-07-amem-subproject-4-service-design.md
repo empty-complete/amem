@@ -431,19 +431,23 @@ amem doctor                          проверка установки
 
 `Concept.family` схемы v1 — `source | work`, только у видов атомов. Контракт (`TemplateView.family`, `TemplateDraft.family`) знает ещё `object` — у шаблонов сущностей. Служба выводит `object` для `target: entity`. В черновике сущности допустима только `object`, у атома — `source | work`, иначе 422 `template_invalid`. Схема v1 не меняется.
 
-### 6a.2. Блок `ui` и форма из шаблона
+### 6a.2. Блок `ui` и форма вида
 
-- **Блок `ui`** — необязательный слот `Template.ui` схемы v1: `body` (`wanted | required | none`), `widgets` (из `sources`, `links`, `around`, `values_table`, `similar`, `children`), `fields` — подписи, подсказки и тип по пути поля (`{<path>: {label, hint, type?}}`). Проверка пакета сверяет ключи `fields` с путями `FieldRule.path` и `parameters` шаблона: лишний путь — ошибка пакета. На проверку записей блок не влияет.
-- **Форма** (`amem/forms.py`) — поле `FormField` на каждое правило поля и каждый параметр шаблона. Тип — из `ui.fields[path].type`, иначе по пути:
-  - `about` → `object`;
-  - `content.values[property=X]` → `quantity` (`property` = X, `unit` — UCUM из словаря property или правила поля);
+- **Блок `ui`** — необязательный слот `Template.ui` схемы v1: `body` (`wanted | required | none`), `widgets` (из `sources`, `links`, `around`, `values_table`, `similar`, `children`), `fields` — список подписей, подсказок и типов полей формы по пути (`[{path, label, hint, type?}]`; список, а не отображение по пути: LinkML строит отображение только по полю-идентификатору, и `path` пришлось бы повторять в каждом значении). На проверку записей блок не влияет.
+- **Проверка пакета** сверяет пути `ui.fields`: правило шаблона, его предков по `extends` или интерфейсов его target; поле, которое форма показывает всегда (у атома `about`, `tags`, у сущности `codes`); величина `content.values[property=X]` / `qualifiers[property=X]` с X из словаря property (только у атома). Лишний или повторный путь, `ui` у шаблона связи — ошибка пакета с файлом, шаблоном и путём. Величины задаются в `ui`, потому что `FieldRule.path` не знает отбора по property: правило `content.values` остаётся проверкой «хотя бы одно значение».
+- **Форма** (`amem/forms.py`) есть у каждого вида атома и класса сущности, с шаблоном или без: веб выбирает вид из `GET /templates`, а у большинства видов ядра своего шаблона нет. Правила сводятся, как при проверке записи (интерфейсы target, затем свой шаблон с `extends`), поэтому форма просит то, что потом проверит `check.submit`.
+- **Поле формы** — правило, чей путь — поле тела верхнего уровня, которое заполняет человек, и `content.values`; поля, которые форма показывает всегда; величины из `ui.fields`. Правила подписи, пояснения, текста, источников, правила с `[]` и внутри составных полей (`label`, `summary_plain`, `sources[].selectors`, `content.values[].unit`) — проверки, а не поля: у редактора для них свои места. Профиль сущности (`parameters`) — не поля формы: это значения атомов `parameter` о сущности, их показывает карточка; у тела сущности нет `content`.
+- **Тип** — из `ui.fields[path].type`, иначе по пути:
+  - `about` → `object` (`accepts.entity_classes` — из правила);
+  - `content.values`, `content.values[property=X]` → `quantity` (`property` = X, `unit` — единица из словаря property); `qualifiers[property=X]` → `text`;
   - `valid_from`, `valid_to` → `date`, оба сразу — одно поле `period`;
-  - `tags` → `tags`;
-  - поле со словарём → `choice` (`scheme`);
-  - ссылка на запись через `rel` → `record` (`accepts`: `rel`, классы сущностей или виды);
+  - `tags` и другие списки строк (`codes`, `aliases`) → `tags`;
+  - перечень схемы со словарём в базе (`rank`, `status`, …) → `choice` (`scheme`);
+  - поле, через которое задаётся связь (`rel.via_field`, кроме `about`: `derived_from`) → `record` (`accepts.rel`);
   - иначе `text`.
-- **Подпись и подсказка** — из `ui.fields`, иначе из словаря property (`label`, `definition`), иначе из пути. `required` — из правила поля. `body` по умолчанию `wanted`, `widgets` — `[sources, links]`.
-- **`GET /templates?target=`** — действующие шаблоны (`template_active`) с формой; `editable` — шаблон из «Моих видов»; `records` — число записей вида (одним запросом на все виды).
+- **Обязательность** — из правила. Величины `ui` заменяют общее поле `content.values`; правило просит хотя бы одно значение, поэтому величина обязательна, только если она одна.
+- **Подпись и подсказка** — из `ui.fields`, иначе из словаря property (`label`, `definition`), иначе подпись поля записи, иначе сам путь. Блок `ui` сводится по порядку применения шаблонов: поле — по пути, `body` и `widgets` — у последнего, где они заданы. `body` по умолчанию `wanted`, `widgets` — `[sources, links]`.
+- **`GET /templates?target=`** — `TemplateView` каждого вида: `code` и `applies_to` — код вида, `pack` — откуда понятие вида, `label` — его подпись, `description` — описание своего шаблона, иначе определение вида; `editable` — вид из «Моих видов»; `records` — число записей вида любого статуса (одним запросом на все виды).
 
 ### 6a.3. «Мои виды»
 
