@@ -4,7 +4,7 @@ import { ApiError, problemFromResponse } from "../../api/errors";
 import type { components } from "../../api/schema";
 import { skyBus } from "../sky/bus";
 import type { Star } from "../sky/model";
-import type { LinkProposal, Proposal } from "./proposal";
+import { type LinkProposal, type Proposal, withSummary } from "./proposal";
 
 type Submitted = components["schemas"]["Submitted"];
 type CheckIssue = components["schemas"]["CheckIssue"];
@@ -53,7 +53,7 @@ async function send(p: Pending, keepalive = false) {
     const res = await globalThis.fetch(url(), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(p.body),
+      body: JSON.stringify(withSummary(p.body)),
       keepalive,
       credentials: "same-origin",
     });

@@ -57,6 +57,24 @@ function check(proposals: Proposal[]): Issue[] {
         path: "label.ru",
         ref,
       });
+    // папка — не часть ревизии: служба отклоняет scope.folder по схеме v1, перенос — POST /records/{ref}/folder
+    if ((p.payload.scope as Record<string, unknown> | undefined)?.folder !== undefined)
+      out.push({
+        code: "schema",
+        severity: "violation",
+        message: "Не по схеме: Extra inputs are not permitted",
+        path: "scope.folder",
+        ref,
+      });
+    // как шаблон ядра has_label: у каждого атома есть пояснение «простыми словами»
+    if (p.target === "atom" && !p.payload.summary_plain?.ru?.trim())
+      out.push({
+        code: "required",
+        severity: "violation",
+        message: "Нет пояснения «простыми словами».",
+        path: "summary_plain",
+        ref,
+      });
     const tpl = db.templates.find((t) => t.code === (p.payload.kind ?? p.payload.entity_class));
     for (const f of tpl?.form ?? []) {
       if (!f.required) continue;
