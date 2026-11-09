@@ -211,11 +211,16 @@ def test_migration_drops_text_cache_of_docx_and_xlsx(pg, tmp_path, monkeypatch):
         pg.execute("INSERT INTO object_text (digest, page, text) VALUES (%s, 0, '')", (digest,))
     # у docx есть и настоящая страница: сброс трогает только page = 0
     pg.execute("INSERT INTO object_text (digest, page, text) VALUES (%s, 1, 'Давление')", (digests["a.docx"],))
-    monkeypatch.setattr(db, "SQL_DIR", real)
-    assert db.migrate(pg)[0] == "0006_check.sql"          # дальше — следующие миграции
+    for old in sorted(real.glob("00[01][0-9]_*.sql")):
+        if "0006" <= old.name[:4] <= "0010":
+            shutil.copy(old, tmp_path / old.name)
+    assert db.migrate(pg)[0] == "0006_check.sql"          # дальше — миграции до 0010
     left = {r[0] for r in pg.execute("SELECT digest FROM object_text WHERE page = 0")}
     assert left == {digests["c.pdf"]}
     assert pg.execute("SELECT text FROM object_text WHERE page = 1").fetchall() == [("Давление",)]
+    monkeypatch.setattr(db, "SQL_DIR", real)
+    assert db.migrate(pg)[0] == "0011_object_text_ocr.sql"  # 0011 сбрасывает page 0 и у PDF: скан распознаётся
+    assert pg.execute("SELECT count(*) FROM object_text WHERE page = 0").fetchone() == (0,)
 
 
 def test_migration_0011_marks_text_source_and_drops_pdf_without_text(pg, tmp_path, monkeypatch):

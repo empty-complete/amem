@@ -156,8 +156,9 @@ def _ocr(doc, pages: list[str], scans: list[int]) -> tuple[set[int], set[int]]:
         return set(), {i + 1 for i in scans}
     ocr: set[int] = set()
     for i in scans:
+        page = doc[i]                    # одна и та же Page: её TextPage живёт, пока жива страница (weakref)
         try:
-            text = doc[i].get_text(textpage=doc[i].get_textpage_ocr(language=languages, full=False))
+            text = page.get_text(textpage=page.get_textpage_ocr(language=languages, full=False))
         except pymupdf.mupdf.FzErrorBase as e:
             raise OcrError(f"страница {i + 1}: {e}") from e
         if len(text.strip()) > len(pages[i].strip()):
