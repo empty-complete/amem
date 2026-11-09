@@ -6,7 +6,7 @@
 и код выхода по разд. 5.1 (amem/cli/errors.py). Агент — по окружению (amem/cli/context.py).
 
 main(argv) возвращает код выхода и не вызывает sys.exit: так его зовут тесты и скрипт `amem` (pyproject).
-Команды частей 4c и задачи MCP (mcp, install, uninstall, hook) появятся вместе со своими частями.
+`amem mcp` — сервер MCP на stdio (amem/service/mcp.py). Команды части 4c (install, uninstall, hook) появятся вместе с ней.
 """
 from __future__ import annotations
 
