@@ -395,13 +395,13 @@ or in the project's `.mcp.json`:
 }
 ```
 
-Codex CLI, in `~/.codex/config.toml`:
+Codex CLI, in `~/.codex/config.toml` (the DSN stays in `amem.toml` or in the environment, not in this file):
 
 ```toml
 [mcp_servers.amem]
 command = "amem"
 args = ["mcp", "--agent", "model:codex"]
-env = { AMEM_DSN = "postgresql://amem:amem@127.0.0.1:5435/amem" }
+env_vars = ["AMEM_DSN", "AMEM_CONFIG"]
 ```
 
 **Over HTTP.** A running service serves the same tools at `/mcp` (Streamable HTTP):
@@ -448,8 +448,12 @@ http_headers = { "X-Amem-Agent" = "model:codex" }
   `model:claude-code` or `model:codex`, never as you.
 - **Edits only its own.** JSON keys `amem` and hook entries with `amem hook`, a `# amem:begin … # amem:end` block in
   TOML, a `<!-- amem:begin … -->` block in Markdown. Before the first edit a file is copied to `<file>.amem-backup`.
-- **Codex.** Codex passes an MCP server only part of the environment, so put the database into `amem.toml` with
-  `amem init --dsn …` rather than into `config.toml`. Codex reads project files only in a trusted project.
+- **Codex.** Codex passes an MCP server only the variables listed in `env_vars`; the installer lists `AMEM_DSN`,
+  `AMEM_CONFIG`, `AMEM_STATE`, `PGPASSFILE` and `PGSERVICE` and never writes a connection string into
+  `config.toml`. Put the database into `amem.toml` with `amem init --dsn …` (or into those variables). Codex reads
+  project files only in a trusted project.
+- **Project files.** With `--project` the files get a bare `amem` command, without this machine's path, so they
+  can be committed; `amem` must be on the agent's `PATH`. A global install uses the full path.
 - **Windows.** Hook commands are POSIX shell lines (`AMEM_AS_MODEL=… amem hook …`): they work on Linux, macOS and
   WSL2, not in native Windows shells. Use WSL2.
 - **Check.** `amem doctor` shows what is installed (globally and for the project of the current folder) and whether

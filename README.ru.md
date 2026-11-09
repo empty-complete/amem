@@ -394,13 +394,13 @@ claude mcp add amem --env AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem --
 }
 ```
 
-Codex CLI, в `~/.codex/config.toml`:
+Codex CLI, в `~/.codex/config.toml` (DSN — в `amem.toml` или в окружении, не в этом файле):
 
 ```toml
 [mcp_servers.amem]
 command = "amem"
 args = ["mcp", "--agent", "model:codex"]
-env = { AMEM_DSN = "postgresql://amem:amem@127.0.0.1:5435/amem" }
+env_vars = ["AMEM_DSN", "AMEM_CONFIG"]
 ```
 
 **Через HTTP.** Запущенная служба отдаёт те же инструменты по `/mcp` (Streamable HTTP):
@@ -447,8 +447,12 @@ http_headers = { "X-Amem-Agent" = "model:codex" }
   `model:codex`, а не от вашего имени.
 - **Правит только своё.** Ключи `amem` и элементы хуков с `amem hook` в JSON, блок `# amem:begin … # amem:end`
   в TOML, блок `<!-- amem:begin … -->` в Markdown. Перед первой правкой файл копируется в `<файл>.amem-backup`.
-- **Codex.** Codex передаёт серверу MCP только часть окружения, поэтому базу задавайте в `amem.toml` через
-  `amem init --dsn …`, а не в `config.toml`. Файлы проекта Codex читает только у доверенного проекта.
+- **Codex.** Codex передаёт серверу MCP только переменные из `env_vars`; установщик перечисляет `AMEM_DSN`,
+  `AMEM_CONFIG`, `AMEM_STATE`, `PGPASSFILE` и `PGSERVICE` и никогда не пишет строку подключения в `config.toml`.
+  Базу задавайте в `amem.toml` через `amem init --dsn …` (или в этих переменных). Файлы проекта Codex читает
+  только у доверенного проекта.
+- **Файлы проекта.** С `--project` в файлы идёт голая команда `amem`, без пути этой машины, — их можно
+  коммитить; `amem` должен быть в `PATH` агента. Глобальная установка пишет полный путь.
 - **Windows.** Команды хуков — строки оболочки POSIX (`AMEM_AS_MODEL=… amem hook …`): они работают в Linux, macOS
   и WSL2, но не в родных оболочках Windows. Используйте WSL2.
 - **Проверка.** `amem doctor` показывает, что установлено (глобально и для проекта текущей папки) и существует ли

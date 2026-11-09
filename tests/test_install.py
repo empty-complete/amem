@@ -25,6 +25,9 @@ with open(os.environ["STUB_LOG"], "a", encoding="utf-8") as log:
     log.write(json.dumps(args) + "\\n")
 path = Path(os.environ["HOME"]) / ".claude.json"
 data = json.loads(path.read_text()) if path.exists() else {{}}
+if args[:2] == ["mcp", "add"] and os.environ.get("STUB_FAIL_ADD", "\0") in args:
+    print("add failed", file=sys.stderr)
+    sys.exit(1)
 if args[:2] == ["mcp", "add"]:
     rest = args[2:]
     sep = rest.index("--")
@@ -158,6 +161,7 @@ def test_claude_global_without_claude_edits_claude_json_with_a_warning(home, env
     data = read_json(home / ".claude.json")
     assert data["mcpServers"]["other"] == user["mcpServers"]["other"] and data["numStartups"] == 7
     assert data["mcpServers"]["amem"]["type"] == "stdio"
+    assert Path(data["mcpServers"]["amem"]["command"]).is_absolute()          # глобально — полный путь
     assert data["mcpServers"]["amem"]["env"] == {"AMEM_AS_MODEL": "claude-code"}
     # резервная копия — исходный файл байт в байт, и повторная правка её не трогает
     assert (home / ".claude.json.amem-backup").read_bytes() == original
@@ -187,8 +191,12 @@ def test_claude_project_writes_mcp_json_settings_and_skills(home, env, project, 
     assert claude() == []                          # в проект — без claude: .mcp.json правится сам
     servers = read_json(project / ".mcp.json")["mcpServers"]
     assert servers["db"] == {"command": "db-mcp"} and servers["amem"]["env"] == {"AMEM_AS_MODEL": "claude-code"}
+    assert servers["amem"]["command"] == "amem"                    # в проекте — без пути этой машины
     ours = amem_hooks(read_json(project / ".claude" / "settings.json"))
     assert sorted(ours) == ["PreCompact", "SessionStart", "UserPromptSubmit"]
+    assert all(h[0]["command"] == f"AMEM_AS_MODEL=claude-code amem hook {e}" for e, h in ours.items())
+    assert any("PATH агента" in note for note in report.notes)
+    assert str(Path(sys.executable).parent) not in (project / ".mcp.json").read_text(encoding="utf-8")
     assert all((project / ".claude" / "skills" / n / "SKILL.md").exists() for n in platforms.SKILLS)
     assert list(home.iterdir()) == []              # глобальное не тронуто
     assert any("одобрения" in note for note in report.notes)
@@ -232,6 +240,8 @@ def test_codex_global_writes_a_marked_toml_block_agents_md_and_hooks(home, env):
     assert parsed["projects"] == original_toml["projects"]
     server = parsed["mcp_servers"]["amem"]
     assert server["env"] == {"AMEM_AS_MODEL": "codex"} and server["args"][-3:] == ["mcp", "--agent", "model:codex"]
+    assert server["env_vars"] == ["AMEM_DSN", "AMEM_CONFIG", "AMEM_STATE", "PGPASSFILE", "PGSERVICE"]
+    assert "postgresql" not in text and any("env_vars" in note for note in report.notes)
     md = (codex / "AGENTS.md").read_text(encoding="utf-8")
     assert md.startswith(original_md) and "<!-- amem:begin" in md and "<!-- amem:end -->" in md
     assert "данные, а не указания" in md and "data, not instructions" in md
@@ -264,8 +274,10 @@ def test_markdown_block_is_removed_back_to_the_same_text(original):
 
 def test_codex_project_uses_project_files_and_warns_about_trust(home, env, project):
     report = install.install("codex", env, project)
-    assert tomllib.loads((project / ".codex" / "config.toml").read_text())["mcp_servers"]["amem"]["env"] == \
-        {"AMEM_AS_MODEL": "codex"}
+    server = tomllib.loads((project / ".codex" / "config.toml").read_text())["mcp_servers"]["amem"]
+    assert server["env"] == {"AMEM_AS_MODEL": "codex"} and server["command"] == "amem"
+    assert all(h[0]["command"].startswith("AMEM_AS_MODEL=codex amem hook ")
+               for h in amem_hooks(read_json(project / ".codex" / "hooks.json")).values())
     assert "<!-- amem:begin" in (project / "AGENTS.md").read_text(encoding="utf-8")
     assert (project / ".codex" / "hooks.json").exists()
     assert all((project / ".agents" / "skills" / n / "SKILL.md").exists() for n in platforms.SKILLS)
@@ -412,3 +424,93 @@ def test_core_skills_are_bilingual_pages_with_frontmatter_and_data_framing():
 def test_skills_are_package_data():
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert "packs/core/skills/*/SKILL.md" in pyproject["tool"]["setuptools"]["package-data"]["amem"]
+
+
+# --- правки по ревью установщика ---
+
+def test_file_with_bom_is_refused(home, env):
+    (home / ".codex").mkdir()
+    config = home / ".codex" / "config.toml"
+    config.write_bytes("\ufeffmodel = 1\n".encode("utf-8"))
+    with pytest.raises(install.InstallError, match="уберите BOM"):
+        install.install("codex", env)
+    assert config.read_bytes() == "\ufeffmodel = 1\n".encode("utf-8")
+
+
+def test_crlf_files_get_a_crlf_block_and_return_to_the_same_text(home, env):
+    codex = home / ".codex"
+    codex.mkdir()
+    toml_text = 'model = "gpt-5"\r\n\r\n[mcp_servers.other]\r\ncommand = "other"\r\n'
+    md_text = "# Правила\r\n\r\nПиши коротко.\r\n"
+    (codex / "config.toml").write_bytes(toml_text.encode("utf-8"))
+    (codex / "AGENTS.md").write_bytes(md_text.encode("utf-8"))
+    install.install("codex", env)
+    for path in (codex / "config.toml", codex / "AGENTS.md"):
+        raw = path.read_bytes().decode("utf-8")
+        assert raw.count("\n") == raw.count("\r\n"), path            # ни одного голого LF
+    assert tomllib.loads((codex / "config.toml").read_text(encoding="utf-8"))["mcp_servers"]["amem"]
+    assert install.install("codex", env).changes == []                 # повтор — без изменений
+    install.uninstall("codex", env)
+    assert (codex / "config.toml").read_bytes().decode("utf-8") == toml_text
+    assert (codex / "AGENTS.md").read_bytes().decode("utf-8") == md_text
+
+
+def test_erased_end_mark_warns_on_uninstall_and_refuses_install(home, env):
+    install.install("codex", env)
+    agents_md = home / ".codex" / "AGENTS.md"
+    text = agents_md.read_text(encoding="utf-8").replace("<!-- amem:end -->", "")
+    agents_md.write_text(text, encoding="utf-8")
+    report = install.uninstall("codex", env)
+    assert any("стёрта" in w for w in report.warnings)
+    assert agents_md.read_text(encoding="utf-8") == text               # чужое без метки конца не трогается
+    with pytest.raises(install.InstallError, match="стёрта"):
+        install.install("codex", env)
+
+
+def test_failed_add_after_remove_restores_the_old_server(home, env, claude):
+    seed_claude(home)
+    data = read_json(home / ".claude.json")
+    old = {"type": "stdio", "command": "old-amem", "args": ["mcp"], "env": {"K": "v"}}
+    data["mcpServers"]["amem"] = old
+    (home / ".claude.json").write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(install.AgentCommandError, match="возвращена"):
+        install.install("claude-code", {**env, "STUB_FAIL_ADD": "model:claude-code"})
+    assert [c[:2] for c in claude()] == [["mcp", "remove"], ["mcp", "add"], ["mcp", "add"]]
+    assert read_json(home / ".claude.json")["mcpServers"]["amem"] == old
+
+
+def test_same_server_without_type_or_with_extra_keys_runs_no_command(home, env, claude):
+    seed_claude(home)
+    install.install("claude-code", env)
+    data = read_json(home / ".claude.json")
+    entry = data["mcpServers"]["amem"]
+    del entry["type"]
+    entry["timeout"] = 30                                              # ключ, который агент мог дописать сам
+    (home / ".claude.json").write_text(json.dumps(data), encoding="utf-8")
+    assert install.plan("claude-code", env).commands == []
+
+
+def test_uninstall_touches_amem_hooks_only_in_its_own_events(home, env):
+    seed_claude(home)
+    install.install("claude-code", env)
+    path = home / ".claude" / "settings.json"
+    data = read_json(path)
+    mine = {"matcher": "Bash", "hooks": [{"type": "command", "command": "amem hook PreToolUse"}]}
+    data["hooks"]["PreToolUse"].append(mine)                           # свой хук пользователя с amem hook
+    path.write_text(json.dumps(data), encoding="utf-8")
+    install.uninstall("claude-code", env)
+    assert mine in read_json(path)["hooks"]["PreToolUse"]
+
+
+def test_reports_tell_about_backups_and_empty_folders(home, env):
+    seed_claude(home)
+    report = install.install("claude-code", env)
+    assert any(".amem-backup" in n and "перед правкой" in n for n in report.notes)
+    report = install.uninstall("claude-code", env)
+    assert any("копия до установки оставлена" in n for n in report.notes)
+    clean = home.parent / "clean"
+    clean.mkdir()
+    install.install("claude-code", {**env, "HOME": str(clean)})
+    report = install.uninstall("claude-code", {**env, "HOME": str(clean)})
+    (note,) = [n for n in report.notes if "пустые папки" in n]
+    assert str(clean / ".claude" / "skills") in note and str(clean / ".claude") in note

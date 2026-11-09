@@ -15,7 +15,14 @@
 - повторная установка ничего не меняет; dry_run ничего не пишет и не запускает, а показывает изменения;
 - uninstall убирает ровно установленное: разобранный JSON и TOML и текст Markdown — как до установки; файл,
   который создал установщик (нет копии .amem-backup), после удаления пустым не остаётся;
-- сеть не нужна; на любой автовыбор (команда amem, `claude` или правка ~/.claude.json) — объявление в notes.
+- сеть не нужна; на любой автовыбор (команда amem, `claude` или правка ~/.claude.json) — объявление в notes;
+- в файлы проекта (.mcp.json, .claude/settings.json, .codex/*) идёт голая команда `amem` — путь этой машины в
+  репозиторий не попадает, amem должен быть в PATH агента; глобально — полный путь;
+- Codex получает `env_vars` — имена переменных, которые он передаёт серверу MCP из своего окружения: строка
+  подключения и пароли в config.toml не пишутся;
+- файл с BOM не правится; блок TOML и Markdown пишется с концами строк самого файла (CRLF или LF); метка начала
+  без метки конца — отказ при установке и предупреждение при удалении;
+- `claude mcp add` упал после `claude mcp remove` — прежняя запись возвращается повторным add.
 """
 from __future__ import annotations
 
@@ -41,6 +48,9 @@ from .platforms import HOOK_TIMEOUT, SERVER, SKILLS, Layout
 BACKUP = ".amem-backup"
 ALL_EVENTS = ("SessionStart", "UserPromptSubmit", "PreCompact")
 CLAUDE_TIMEOUT = 60                         # с на `claude mcp add|remove`
+# переменные, которые Codex передаёт серверу MCP из своего окружения (env_vars): база и её пароль — не в config.toml
+CODEX_ENV_VARS = ("AMEM_DSN", "AMEM_CONFIG", "AMEM_STATE", "PGPASSFILE", "PGSERVICE")
+PROJECT_COMMAND = ["amem"]                  # в файлах проекта — без пути этой машины
 
 # элемент хука amem: команда кончается на `amem hook СОБЫТИЕ` (или `-m amem.cli hook СОБЫТИЕ`), путь — любой
 _OUR_HOOK = re.compile(r"(?:^|[\s/'\"])amem(?:\.cli)?['\"]? hook [A-Za-z]+\s*$")
@@ -77,6 +87,8 @@ class Report:
     dry_run: bool
     changes: list[Change] = field(default_factory=list)
     commands: list[list[str]] = field(default_factory=list)
+    restore: list[str] | None = None            # `claude mcp add` прежней записи — если замена упадёт после remove
+    remove: bool = False
     notes: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -130,11 +142,15 @@ def is_our_hook(handler) -> bool:
 
 def _read(path: Path) -> str | None:
     try:
-        return path.read_bytes().decode("utf-8")
+        text = path.read_bytes().decode("utf-8")
     except FileNotFoundError:
         return None
     except UnicodeDecodeError:
         raise InstallError(f"{path}: файл не в UTF-8 — установщик его не правит") from None
+    if text.startswith("\ufeff"):
+        raise InstallError(f"{path}: файл начинается с BOM — уберите BOM (сохраните как UTF-8 без BOM), установщик "
+                           f"такой файл не правит")
+    return text
 
 
 def _load_json(path: Path, text: str | None) -> dict:
@@ -290,7 +306,7 @@ def drop_hooks(data: dict) -> dict:
     removed = False
     for event in list(hooks):
         groups = hooks[event]
-        if not isinstance(groups, list):
+        if event not in ALL_EVENTS or not isinstance(groups, list):     # чужие события не трогаются
             continue
         kept = _without_ours(groups)
         if kept != groups:
@@ -311,22 +327,40 @@ def _block_re(begin: str, end: str) -> re.Pattern:
                       re.M | re.S)
 
 
+def _eol(text: str) -> str:
+    """Конец строки файла: CRLF, если файл так написан, иначе LF."""
+    return "\r\n" if "\r\n" in text else "\n"
+
+
+def orphan_begin(text: str | None, begin: str, end: str) -> bool:
+    """Метка начала блока есть, а целого блока нет: метку конца стёрли."""
+    return bool(text) and re.search(rf"^{re.escape(begin)}", text, re.M) is not None and \
+        _block_re(begin, end).search(text) is None
+
+
 def put_block(text: str | None, begin: str, end: str, body: str, begin_tail: str = "") -> str:
-    """Текст с блоком begin…end; есть блок — заменяется его тело, нет — дописывается в конец через пустую строку."""
+    """Текст с блоком begin…end; есть блок — заменяется его тело, нет — дописывается в конец через пустую строку.
+    Концы строк блока — как у файла."""
     text = text or ""
+    if orphan_begin(text, begin, end):
+        raise InstallError(f"метка {begin} есть, а {end} стёрта — верните метку конца или уберите блок amem")
+    nl = _eol(text)
+    body = body.replace("\n", nl)
     found = list(_block_re(begin, end).finditer(text))
     if len(found) > 1:
         raise InstallError(f"блок {begin} … {end} встречается {len(found)} раза — оставьте один")
     if found:
         m = found[0]
-        block = f"{begin}{m.group('nl') or ''}{begin_tail}\n{body}{end}\n"
+        rest = m.group("rest")
+        tail = "\r" if rest.endswith("\r") else ""
+        block = f"{begin}{m.group('nl') or ''}{begin_tail}{tail}\n{body}{end}{nl}"
         return text[:m.start()] + block + text[m.end():]
     flag = ""
     if text and not text.endswith("\n"):
-        text += "\n"
+        text += nl
         flag = " +nl"
-    sep = "\n" if text else ""
-    return text + sep + f"{begin}{flag}{begin_tail}\n{body}{end}\n"
+    sep = nl if text else ""
+    return text + sep + f"{begin}{flag}{begin_tail}{nl}{body}{end}{nl}"
 
 
 def drop_block(text: str | None, begin: str, end: str) -> str | None:
@@ -336,11 +370,12 @@ def drop_block(text: str | None, begin: str, end: str) -> str | None:
     m = _block_re(begin, end).search(text)
     if m is None:
         return text
+    nl = _eol(text)
     prefix, suffix = text[:m.start()], text[m.end():]
-    if prefix.endswith("\n\n"):
-        prefix = prefix[:-1]
-    if m.group("nl") and not suffix and prefix.endswith("\n"):
-        prefix = prefix[:-1]
+    if prefix.endswith(nl + nl):
+        prefix = prefix[:-len(nl)]
+    if m.group("nl") and not suffix and prefix.endswith(nl):
+        prefix = prefix[:-len(nl)]
     return prefix + suffix
 
 
@@ -351,8 +386,14 @@ def _toml_str(value: str) -> str:
 def toml_body(entry: dict) -> str:
     args = ", ".join(_toml_str(a) for a in entry["args"])
     env = ", ".join(f"{k} = {_toml_str(v)}" for k, v in entry["env"].items())
+    env_vars = ", ".join(_toml_str(v) for v in CODEX_ENV_VARS)
     return (f"[mcp_servers.{SERVER}]\ncommand = {_toml_str(entry['command'])}\nargs = [{args}]\n"
-            f"env = {{ {env} }}\n")
+            f"env = {{ {env} }}\nenv_vars = [{env_vars}]\n")
+
+
+def toml_entry(entry: dict) -> dict:
+    """Таблица mcp_servers.amem, как её прочтёт tomllib."""
+    return {"command": entry["command"], "args": entry["args"], "env": entry["env"], "env_vars": list(CODEX_ENV_VARS)}
 
 
 def _parse_toml(path: Path, text: str | None) -> dict:
@@ -372,7 +413,7 @@ def put_toml(path: Path, text: str | None, entry: dict) -> str:
                     " — amem install; amem uninstall убирает блок")
     parsed = _parse_toml(path, new)
     got = (parsed.get("mcp_servers") or {}).get(SERVER)
-    if got != {k: entry[k] for k in ("command", "args", "env")}:
+    if got != toml_entry(entry):
         raise InstallError(f"{path}: блок amem в конце файла читается не так, как записан (таблица "
                            f"mcp_servers задана встроенной?) — поставьте сервер amem вручную")
     return new
@@ -425,6 +466,18 @@ def _text_change(path: Path, after: str | None, before: str | None, mode: int, *
     return Change(path, before, after, mode)
 
 
+def same_server(current, entry: dict) -> bool:
+    """Запись сервера та же по существу: command, args и env; type и прочие ключи агента не в счёт."""
+    return isinstance(current, dict) and current.get("command") == entry["command"] and \
+        current.get("args") == entry["args"] and (current.get("env") or {}) == entry["env"]
+
+
+def _add_command(claude: str, entry: dict) -> list[str]:
+    env = [x for k, v in (entry.get("env") or {}).items() for x in ("--env", f"{k}={v}")]
+    return [claude, "mcp", "add", "--scope", "user", *env, "--transport", "stdio", SERVER, "--",
+            entry["command"], *(entry.get("args") or [])]
+
+
 def _claude(env: Mapping[str, str]) -> str | None:
     return shutil.which("claude", path=env.get("PATH"))
 
@@ -437,8 +490,15 @@ def plan(agent: str, env: Mapping[str, str], project: Path | None = None, *, rem
         if not project.is_dir():
             raise InstallError(f"--project {project}: папки нет")
     lay: Layout = platforms.layout(agent, env, project)
-    report = Report(agent, lay.format, project, dry_run, notes=list(lay.notes) if not remove else [])
-    command, note = amem_command(env)
+    report = Report(agent, lay.format, project, dry_run, notes=list(lay.notes) if not remove else [],
+                    remove=remove)
+    if project is not None:
+        command, note = list(PROJECT_COMMAND), ("в файлах проекта команда — просто amem, без пути этой машины: amem "
+                                                "должен быть в PATH агента")
+        if shutil.which("amem", path=env.get("PATH")) is None:
+            note += " (сейчас amem в PATH нет)"
+    else:
+        command, note = amem_command(env)
     if note and not remove:
         report.notes.append(note)
     entry = mcp_entry(command, lay.model)
@@ -453,14 +513,13 @@ def plan(agent: str, env: Mapping[str, str], project: Path | None = None, *, rem
             if remove:
                 if current is not None:
                     report.commands.append(remove_cmd)
-            elif current != entry:
-                if not remove:
-                    report.notes.append(f"сервер MCP ставится командой claude ({claude})")
+            elif not same_server(current, entry):
+                report.notes.append(f"сервер MCP ставится командой claude ({claude})")
                 if current is not None:
                     report.commands.append(remove_cmd)
-                report.commands.append([claude, "mcp", "add", "--scope", "user", "--env",
-                                        f"AMEM_AS_MODEL={lay.model}", "--transport", "stdio", SERVER, "--",
-                                        entry["command"], *entry["args"]])
+                    if isinstance(current, dict) and isinstance(current.get("command"), str):
+                        report.restore = _add_command(claude, current)
+                report.commands.append(_add_command(claude, entry))
         else:
             if lay.use_cli and not remove:
                 report.warnings.append(f"команды claude нет в PATH: сервер amem записан прямо в {lay.mcp_json}; "
@@ -474,14 +533,18 @@ def plan(agent: str, env: Mapping[str, str], project: Path | None = None, *, rem
         before = _read(lay.mcp_toml)
         if remove:
             after = drop_block(before, _TOML_BEGIN, _TOML_END)
+            if orphan_begin(before, _TOML_BEGIN, _TOML_END):
+                report.warnings.append(f"{lay.mcp_toml}: метка {_TOML_BEGIN} есть, а {_TOML_END} стёрта — блок amem "
+                                       f"не убран, уберите его вручную")
         else:
             after = put_toml(lay.mcp_toml, before, entry)
         change = _text_change(lay.mcp_toml, after, before, mode, removing=remove)
         if change is not None:
             report.changes.append(change)
         if not remove:
-            report.notes.append("Codex передаёт серверу MCP не всё окружение: строку подключения amem берёт из "
-                                "amem.toml (amem init --dsn)")
+            report.notes.append(f"Codex передаёт серверу MCP из своего окружения только {', '.join(CODEX_ENV_VARS)} "
+                                f"(env_vars): строку подключения задайте в amem.toml (amem init --dsn) или в этих "
+                                f"переменных, в config.toml её нет")
 
     # хуки
     if lay.hooks_json is not None:
@@ -494,6 +557,9 @@ def plan(agent: str, env: Mapping[str, str], project: Path | None = None, *, rem
     # AGENTS.md
     if lay.agents_md is not None:
         before = _read(lay.agents_md)
+        if remove and orphan_begin(before, _MD_BEGIN, _MD_END):
+            report.warnings.append(f"{lay.agents_md}: метка {_MD_BEGIN} есть, а {_MD_END} стёрта — блок amem не "
+                                   f"убран, уберите его вручную")
         after = drop_block(before, _MD_BEGIN, _MD_END) if remove else \
             put_block(before, _MD_BEGIN, _MD_END, AGENTS_MD, " (amem install; amem uninstall убирает блок) -->")
         change = _text_change(lay.agents_md, after, before, 0o644, removing=remove)
@@ -516,6 +582,12 @@ def plan(agent: str, env: Mapping[str, str], project: Path | None = None, *, rem
                 if before is not None:
                     report.notes.append(f"{path}: навык другой версии — заменяется, прежний — в {path.name}{BACKUP}")
                 report.changes.append(Change(path, before, ours))
+    for change in report.changes:
+        copy = _backup_path(Path(os.path.realpath(change.path)))
+        if not remove and change.before is not None and change.after is not None and not copy.exists():
+            report.notes.append(f"{change.path}: перед правкой — копия {copy}")
+        elif remove and copy.exists():
+            report.notes.append(f"{copy}: копия до установки оставлена — удалите сами, когда не нужна")
     return report
 
 
@@ -523,21 +595,64 @@ def apply(report: Report, env: Mapping[str, str]) -> Report:
     """Выполнить план: команды агента, затем файлы. dry_run — ничего."""
     if report.dry_run:
         return report
+    removed = False
     for command in report.commands:
         user_json = platforms.layout(report.agent, env, report.project).mcp_json
         if user_json is not None:
             backup(user_json)
         try:
-            done = subprocess.run(command, env=dict(env), capture_output=True, text=True, timeout=CLAUDE_TIMEOUT,
-                                  stdin=subprocess.DEVNULL)
-        except (OSError, subprocess.TimeoutExpired) as e:
-            raise AgentCommandError(f"{shlex.join(command)}: {e}") from None
-        if done.returncode != 0:
-            tail = (done.stderr or done.stdout or "").strip().splitlines()[-1:] or [""]
-            raise AgentCommandError(f"{shlex.join(command)}: код {done.returncode} {tail[0]}".rstrip())
+            _run(command, env)
+        except AgentCommandError as e:
+            if removed and report.restore is not None and command[1:3] == ["mcp", "add"]:
+                try:
+                    _run(report.restore, env)
+                except AgentCommandError as again:
+                    raise AgentCommandError(f"{e}; вернуть прежнюю запись не удалось ({again}) — она в "
+                                            f"{user_json}{BACKUP}") from None
+                raise AgentCommandError(f"{e}; прежняя запись сервера amem возвращена") from None
+            raise
+        removed = removed or command[1:3] == ["mcp", "remove"]
     for change in report.changes:
         _apply(change)
+    if report.remove:
+        empty = _empty_folders(report, env)
+        if empty:
+            report.notes.append("пустые папки оставлены (могли быть и до установки): " + ", ".join(map(str, empty)))
     return report
+
+
+def _run(command: list[str], env: Mapping[str, str]) -> None:
+    try:
+        done = subprocess.run(command, env=dict(env), capture_output=True, text=True, timeout=CLAUDE_TIMEOUT,
+                              stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise AgentCommandError(f"{shlex.join(command)}: {e}") from None
+    if done.returncode != 0:
+        tail = (done.stderr or done.stdout or "").strip().splitlines()[-1:] or [""]
+        raise AgentCommandError(f"{shlex.join(command)}: код {done.returncode} {tail[0]}".rstrip())
+
+
+def _empty_folders(report: Report, env: Mapping[str, str]) -> list[Path]:
+    """Пустые папки над удалёнными файлами — до корня проекта или HOME (их самих не считаем)."""
+    stop = {report.project or Path(env.get("HOME") or Path.home())}
+    found: list[Path] = []
+    for change in report.changes:
+        if change.after is not None:
+            continue
+        folder = change.path.parent
+        while folder not in stop and folder != folder.parent:
+            if not folder.exists():               # папку навыка уже убрал _prune
+                folder = folder.parent
+                continue
+            try:                                  # пуста — или в ней только уже найденные пустые папки
+                if not folder.is_dir() or any(child not in found for child in folder.iterdir()):
+                    break
+            except OSError:
+                break
+            if folder not in found:
+                found.append(folder)
+            folder = folder.parent
+    return found
 
 
 def install(agent: str, env: Mapping[str, str], project: Path | None = None, *, dry_run: bool = False) -> Report:
