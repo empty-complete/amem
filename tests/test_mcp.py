@@ -112,6 +112,25 @@ def test_search_in_three_steps_and_query_log(env, base, tmp_path):
     assert lines[0]["query"] == "кронштейн" and lines[0]["retrieval_id"]
 
 
+def test_query_log_strips_private_and_turns_off(env, base, tmp_path):
+    """<private> не попадает в журнал MCP; AMEM_QUERY_LOG=off — журнала нет."""
+    path = tmp_path / "state" / "queries.jsonl"
+
+    async def search(environ):
+        async with connect(environ) as client:
+            err, found = await call(client, "amem_search", query="кронштейн <private>скрытое</private>")
+            assert not err, found
+            err, found = await call(client, "amem_similar", query="анкер <private>скрытое</private>")
+            assert not err, found
+
+    sync(lambda: search({**env, "AMEM_QUERY_LOG": "off"}))
+    assert not path.exists()
+    sync(lambda: search(env))
+    lines = [json.loads(line) for line in path.read_text().splitlines()]
+    assert [l["recipe"] for l in lines] == ["exact_fact", "similar"]
+    assert "скрытое" not in path.read_text() and "private" not in path.read_text()
+
+
 def test_helpful_only_for_own_session(env, base, kb):
     async def main():
         async with connect(env) as mine, connect(env, agent="model:other") as other:
