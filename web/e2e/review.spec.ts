@@ -61,3 +61,22 @@ test("База — таблицы статусов, очереди, пакето
   await expect(page.getByRole("table", { name: "Очередь по причинам" })).toContainText("правка");
   await expect(page.getByRole("table", { name: "Бэкапы" })).toContainText("amem-2026-11-07T03-00.dump");
 });
+
+test("по документам: группы, фильтр документа, решение — следующий в той же группе", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "клавиатура — на компьютере");
+  await page.goto("./review?group=source");
+  const list = page.getByRole("listbox", { name: "Очередь проверки" });
+  await expect(list.locator(".qhead").first()).toContainText("Руководство_МС-1.pdf");
+  await expect(list.locator(".qhead").first()).toContainText("3");
+  await expect(list.locator(".qhead").last()).toContainText("Без источника");
+  await page.getByRole("combobox", { name: "Документ" }).selectOption({ label: "Руководство_МС-1.pdf · 3" });
+  await expect(page).toHaveURL(/object=/);
+  await expect(list.getByRole("option")).toHaveCount(3);
+  await list.getByRole("option").first().click();
+  await page.keyboard.press("y");
+  await expect(list.getByRole("option")).toHaveCount(2);
+  await expect(list.getByRole("option", { selected: true })).toBeVisible();
+});
