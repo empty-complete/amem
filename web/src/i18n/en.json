@@ -586,6 +586,7 @@
     "since": "Changed since",
     "with_files": "With source files",
     "with_packs": "With packs and my kinds",
+    "with_packs_anthology": "An anthology ships without packs: the recipient needs the same packs.",
     "build": "Build bundle",
     "building": "Building",
     "done": "Bundle built",
