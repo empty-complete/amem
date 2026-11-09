@@ -238,15 +238,15 @@ npm run dev:mock      # Node 24+; затем откройте http://127.0.0.1:5
 
 ### Дальше: установка одной командой
 
+`amem init`, `amem serve`, [CLI](#cli) и [сервер MCP](#mcp) уже работают из клона репозитория.
+
 > [!NOTE]
-> **Пока недоступно.** Это задуманный интерфейс службы, CLI и памяти агентов
+> **Пока недоступно:** пакет на PyPI и `amem install` для памяти агентов (хуки и навыки)
 > ([подпроект 4](docs/superpowers/specs/2026-11-07-amem-subproject-4-service-design.md)).
 
 ```bash
 pipx install amem
-amem init                     # база и хранилище объектов
 amem install claude-code      # сервер MCP, хуки и навыки; `amem install codex` — для Codex CLI
-amem serve                    # HTTP API, /mcp и веб-UI на http://127.0.0.1:8767/ui
 ```
 
 ## Служба

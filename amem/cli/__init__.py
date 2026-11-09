@@ -170,7 +170,7 @@ def report(exc: BaseException, *, as_json: bool, out, err, env: Mapping[str, str
         print(dumps(body), file=out)
     else:
         print(f"amem: {detail or code}", file=err)
-        _details(code, extra, out)
+        _details(code, extra, err)
         if hint:
             print(f"подсказка: {hint}", file=err)
     return code_out
@@ -182,19 +182,19 @@ def problems_hint(code: str) -> str | None:
     return HINTS.get(code)
 
 
-def _details(code: str, extra: dict, out) -> None:
+def _details(code: str, extra: dict, err) -> None:
     """Что ещё показать человеку при ошибке: кандидатов, отчёт проверки, коллизии подборки."""
     if code == "ambiguous":
         for item in extra.get("candidates", []):
             kind = item.get("kind") or item.get("entity_class") or ""
             print(f"  {item['ref']}  {item['label']}" + (f"  [{kind}]" if kind else "")
-                  + (f"  {item['status']}" if item.get("status") else ""), file=out)
+                  + (f"  {item['status']}" if item.get("status") else ""), file=err)
     elif code == "check_rejected":
         for issue in extra.get("issues", []):
             where = issue["ref"] + (f": {issue['path']}" if issue.get("path") else "")
-            print(f"  {issue['severity']}  {issue['code']}  {where}: {issue['message']}", file=out)
+            print(f"  {issue['severity']}  {issue['code']}  {where}: {issue['message']}", file=err)
         for warning in extra.get("warnings", []):
-            print(f"  предупреждение  {warning['code']}  {warning['ref']}: {warning['path']}", file=out)
+            print(f"  предупреждение  {warning['code']}  {warning['ref']}: {warning['path']}", file=err)
     elif code == "bundle_key_collision":
         for item in extra.get("collisions", []) or []:
-            print(f"  {item}", file=out)
+            print(f"  {item}", file=err)

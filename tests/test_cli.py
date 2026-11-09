@@ -250,7 +250,7 @@ def test_get_timeline_card(run, base, start):
 def test_ambiguous_text_exits_3_with_candidates(run, base):
     code, out, err = run("get", "кронштейн")
     assert code == 3 and "явного лидера нет" in err
-    assert base["@bracket"] in out and base["@anchor"] in out
+    assert base["@bracket"] in err and base["@anchor"] in err and out == ""     # всё об ошибке — в stderr
     code, out, _ = run("timeline", "кронштейн", "--json")
     body = js(out)
     assert code == 3 and body["code"] == "ambiguous"
@@ -272,7 +272,7 @@ def test_submit_rejected_exits_5_with_report(run, kb, tmp_path):
     bad.write_text(json.dumps({"proposals": [{"target": "atom", "payload": {"ref": "@x", "kind": "fact"}}]}),
                    encoding="utf-8")
     code, out, err = run("submit", str(bad))
-    assert code == 5 and "отклонён" in err and "violation" in out and "@x" in out
+    assert code == 5 and "отклонён" in err and "violation" in err and "@x" in err and out == ""
     code, out, _ = run("submit", str(bad), "--json")
     body = js(out)
     assert code == 5 and body["code"] == "check_rejected" and body["issues"] and body["changeset_id"]
