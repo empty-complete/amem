@@ -328,7 +328,11 @@ def links() -> list[dict]:
             + [{"rel": "contradicts", "src": "@cal_ws4", "dst": "@an_start", "note": text("worn bearing at WS-4")},
                {"rel": "contradicts", "src": "@fog", "dst": "@autonomy", "note": text("fog in December")},
                {"rel": "refines", "src": "@th_edges", "dst": "@th_hacc"},
-               {"rel": "see_also", "src": "@frost", "dst": "@th_edges"}])
+               {"rel": "see_also", "src": "@frost", "dst": "@th_edges"}]
+            # documents next to what they describe, so the sky has no loose stars
+            + [{"rel": "see_also", "src": d, "dst": e} for d, ents in (
+                ("@manual", ("@ws100", "@dl4", "@mast")), ("@sheets", ("@th20", "@pb10", "@an5", "@rg2")),
+                ("@calib", ("@ws1", "@ws2", "@ws3", "@ws4"))) for e in ents])
 
 
 def person_notes(refs: dict[str, str]) -> list[dict]:

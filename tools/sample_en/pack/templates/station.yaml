@@ -5,7 +5,7 @@ applies_to: station
 description: {ru: "Профиль метеостанции: питание, данные, установка.", en: "Weather station profile: power, data, installation."}
 parameters:
   - {property: supply_voltage, required: true, group: power, origin: manual}
-  - {property: power_consumption, required: true, group: power, origin: datasheet, ask: {ru: "поставщик", en: "the vendor"}, hint: {ru: "паспорт регистратора", en: "logger datasheet"}}
+  - {property: power_consumption, required: true, group: power, origin: datasheet}
   - {property: solar_panel_power, required: false, group: power, origin: manual}
   - {property: battery_capacity, required: true, group: power, origin: manual}
   - {property: battery_autonomy, required: true, group: power, origin: manual}

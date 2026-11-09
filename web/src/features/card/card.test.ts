@@ -11,3 +11,8 @@ test("полоса полноты и обязательные без значе�
 test("группы — в порядке полей профиля", () => {
   expect(summarize(card as never).groups.map((g) => g.name)).toEqual(["Измерение", "Условия", "Опрос"]);
 });
+
+test("имя обязательного поля — через name: английская подпись словаря вместо подписи службы", () => {
+  const s = summarize(card as never, (f) => f.property);
+  expect(s.blockers).toEqual(["operating_temperature"]);
+});

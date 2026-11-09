@@ -58,6 +58,39 @@ const esc = (s) =>
   String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const text = (v) =>
   typeof v === "string" ? v : v && typeof v === "object" ? (v.en ?? v.ru ?? Object.values(v)[0]) : "";
+const WORDS = {
+  en: {
+    hits: "hits",
+    retrieval: "retrieval",
+    value: "value",
+    at: "at",
+    summary: "summary",
+    source: "source",
+    page: "page",
+    version: "version",
+    review: "review",
+    helpful: "marked as helpful",
+    nothing: "nothing",
+    session: "agent session · MCP server: amem mcp",
+    verdict: { ok: "quote found", fuzzy: "quote close", not_found: "quote not found" },
+  },
+  ru: {
+    hits: "находки",
+    retrieval: "выдача",
+    value: "значение",
+    at: "при",
+    summary: "суть",
+    source: "источник",
+    page: "стр.",
+    version: "версия",
+    review: "проверка",
+    helpful: "отмечено как полезное",
+    nothing: "ничего",
+    session: "сессия агента · MCP-сервер: amem mcp",
+    verdict: { ok: "цитата найдена", fuzzy: "цитата приблизительно", not_found: "цитата не найдена" },
+  },
+};
+const W = WORDS[lang] ?? WORDS.en;
 const short = (ref) => (ref && ref.length > 20 ? `${ref.slice(0, 12)}…${ref.slice(-4)}` : ref);
 const status = (s) => `<span class="st ${esc(s)}">${esc(String(s).replace("_", " "))}</span>`;
 const args = (a) =>
@@ -72,7 +105,7 @@ function agentHtml(t, theme) {
   const blocks = t.calls.map(({ tool, args: a, result: r }) => {
     let body = "";
     if (tool === "amem_search") {
-      body = `<div class="res">${r.items.length} hits · retrieval ${esc(short(r.retrieval_id))}</div>${r.items
+      body = `<div class="res">${r.items.length} ${W.hits} · ${W.retrieval} ${esc(short(r.retrieval_id))}</div>${r.items
         .map(
           (i) =>
             `<div class="row"><span class="ref">${esc(short(i.ref))}</span><span class="lab">${esc(i.label)}</span><span class="meta">${esc(i.kind)} · ${status(i.status)}</span></div>`,
@@ -85,18 +118,20 @@ function agentHtml(t, theme) {
           const val = p.content?.values?.[0];
           const q = val?.qualifiers?.[0];
           const value = val
-            ? `<div class="row"><span class="k2">value</span><span>${esc(val.value_text ?? val.amount ?? `${val.lower_bound}…${val.upper_bound}`)} ${esc(val.unit)}${q ? ` <span class="muted">at ${esc(String(q.property).replaceAll("_", " "))} ${esc(q.lower_bound)}–${esc(q.upper_bound)} ${esc(q.unit)}</span>` : ""}</span></div>`
+            ? `<div class="row"><span class="k2">${W.value}</span><span>${esc(val.value_text ?? val.amount ?? `${val.lower_bound}…${val.upper_bound}`)} ${esc(val.unit)}${q ? ` <span class="muted">${W.at} ${esc(String(q.property).replaceAll("_", " "))} ${esc(q.lower_bound)}–${esc(q.upper_bound)} ${esc(q.unit)}</span>` : ""}</span></div>`
             : "";
           const sources = (v.sources ?? [])
             .map((s) => {
               const page = (s.selectors ?? []).find((x) => x.type === "page");
-              return `<div class="row"><span class="k2">source</span><span>${esc(s.object_name ?? s.object)}${page ? ` · page ${esc(page.label ?? page.value)}` : ""} · version ${esc(s.object_version)} · <span class="ok">${esc(String(s.verdict ?? "").replace("_", " "))}</span></span></div>${s.quote ? `<div class="row"><span class="k2"></span><mark>“${esc(s.quote)}”</mark></div>` : ""}`;
+              return `<div class="row"><span class="k2">${W.source}</span><span>${esc(s.object_name ?? s.object)}${page ? ` · ${W.page} ${esc(page.label ?? page.value)}` : ""} · ${W.version} ${esc(s.object_version)} · <span class="ok">${esc(W.verdict[s.verdict] ?? String(s.verdict ?? "").replace("_", " "))}</span></span></div>${s.quote ? `<div class="row"><span class="k2"></span><mark>“${esc(s.quote)}”</mark></div>` : ""}`;
             })
             .join("");
           const open = (v.open_items ?? []).map((i) => `${esc(i.reason)} ${esc(i.state)}`).join(", ");
-          return `<div class="res"><b>${esc(text(p.label))}</b> <span class="meta">${esc(p.kind)} · ${status(v.status)}</span></div>${value}<div class="row"><span class="k2">summary</span><span>${esc(text(p.summary_plain))}</span></div>${sources}${open ? `<div class="row"><span class="k2">review</span><span>${open}</span></div>` : ""}`;
+          return `<div class="res"><b>${esc(text(p.label))}</b> <span class="meta">${esc(p.kind)} · ${status(v.status)}</span></div>${value}<div class="row"><span class="k2">${W.summary}</span><span>${esc(text(p.summary_plain))}</span></div>${sources}${open ? `<div class="row"><span class="k2">${W.review}</span><span>${open}</span></div>` : ""}`;
         })
         .join("");
+    } else if (tool === "amem_helpful") {
+      body = `<div class="res">${W.helpful}: ${(r.marked ?? []).map((m) => esc(short(m))).join(", ") || W.nothing}</div>`;
     } else {
       body = `<div class="res">${esc(JSON.stringify(r))}</div>`;
     }
@@ -110,9 +145,9 @@ function agentHtml(t, theme) {
 --src:${dark ? "#3987e5" : "#2a78d6"};--work:${dark ? "#d95926" : "#eb6834"};--obj:${dark ? "#199e70" : "#1baf7a"};
 --ok:${dark ? "#5fc183" : "#0a7e3a"};--warn:${dark ? "#e0a64a" : "#a46400"}}
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--paper);color:var(--ink)}
-body{display:flex;align-items:center;justify-content:center;font:17px/1.55 "JetBrains Mono","DejaVu Sans Mono",ui-monospace,monospace}
-.win{width:1440px;height:800px;background:var(--win);border:1px solid var(--line);border-radius:16px;overflow:hidden;
-box-shadow:0 18px 50px #0000${dark ? "66" : "1f"}}
+body{display:flex;align-items:center;justify-content:center;font:19px/1.6 "JetBrains Mono","DejaVu Sans Mono",ui-monospace,monospace}
+.win{width:1440px;min-height:520px;background:var(--win);border:1px solid var(--line);border-radius:16px;overflow:hidden;
+box-shadow:0 18px 50px rgb(0 0 0 / ${dark ? "0.45" : "0.12"})}
 .bar{height:46px;display:flex;align-items:center;gap:9px;padding:0 18px;border-bottom:1px solid var(--line);color:var(--muted);font-size:14px}
 .bar i{width:12px;height:12px;border-radius:50%;display:inline-block}.bar .t{margin:0 auto;transform:translateX(-30px)}
 main{padding:26px 34px}.prompt{font-weight:600;margin-bottom:22px}.prompt span{color:var(--muted);margin-right:10px}
@@ -123,7 +158,7 @@ main{padding:26px 34px}.prompt{font-weight:600;margin-bottom:22px}.prompt span{c
 .lab{flex:1;overflow:hidden;text-overflow:ellipsis}.meta,.muted{color:var(--muted)}.k2{color:var(--muted);min-width:80px}
 .st{font-weight:600}.st.verified,.st.auto_verified{color:var(--ok)}.st.needs_review,.st.draft{color:var(--warn)}
 .ok{color:var(--ok)}mark{background:var(--mark);color:inherit;padding:0 4px;border-radius:3px}
-</style><div class="win"><div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="t">agent session · MCP server: amem mcp</span></div>
+</style><div class="win"><div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="t">${W.session}</span></div>
 <main><div class="prompt"><span>›</span>${esc(t.prompt)}</div>${blocks.join("")}</main></div>`;
 }
 
