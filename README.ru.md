@@ -237,7 +237,7 @@ print(hits["items"][0]["label"]["ru"])  # pgvector: индекс HNSW по vecto
 .venv/bin/pip install -e . -e web/python          # служба и пакет веб-UI
 (cd web && npm ci && npm run build)               # Node 24+; сборка ложится в пакет amem-web
 export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem AMEM_DOCS=~/amem-sample/docs
-.venv/bin/python tools/seed_sample.py             # образец: 20 записей, 2 открытых пункта проверки
+.venv/bin/python tools/seed_sample.py             # образец: 22 записи, 2 открытых пункта проверки
 .venv/bin/python -m amem.service                  # затем откройте http://127.0.0.1:8767/ui/
 ```
 
