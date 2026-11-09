@@ -21,9 +21,10 @@ from mcp.client.streamable_http import streamable_http_client
 
 from amem import folders, service, settings
 from amem.service import mcp
-from test_cli import base, env, js, run  # noqa: F401 — фикстуры
 from test_service_core import tokens_file
-from test_service_write import BOT, fact, kb, queued, written  # noqa: F401 — фикстуры
+from test_service_write import fact, queued, written
+
+pytest_plugins = ["test_service_write", "test_cli"]     # фикстуры kb, env, run, base
 
 AGENT = "model:claude-code"
 PERSON = "person:ann"

@@ -23,7 +23,9 @@ import contract
 from amem import api, backup, bundle, cli, db, folders, objects, records, review, settings
 from amem.cli import errors
 from amem.service import problems
-from test_service_write import BOT, V1, fact, kb, queued, ref_of, start, written  # noqa: F401 — фикстуры
+from test_service_write import V1, fact, queued, written
+
+pytest_plugins = ["test_service_write"]     # фикстуры kb и start
 
 PERSON = "person:ann"
 AGENT_VARS = ("CLAUDECODE", "AMEM_AS_MODEL", "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_HOME")
