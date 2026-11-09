@@ -1053,6 +1053,7 @@
         "pdf_quote_required",
         "quote_not_found",
         "quote_fuzzy",
+        "quote_ocr",
         "number_not_found",
         "page_moved",
         "place_unresolved",

@@ -453,12 +453,14 @@ def test_existing_base_gets_no_default_folders(pg, tmp_path, monkeypatch):
     (old / "0008_folders.sql").unlink()
     (old / "0009_record_list.sql").unlink()
     (old / "0010_graph_overview.sql").unlink()
+    (old / "0011_object_text_ocr.sql").unlink()
     with monkeypatch.context() as m:
         m.setattr(db, "SQL_DIR", old)
         db.migrate(pg)
         db.load_vocab(pg)
         pg.execute("INSERT INTO meta (key, value) VALUES ('base_id', %s)", (json.dumps(str(ids.uuid7())),))
-    assert db.prepare(pg) == ["0008_folders.sql", "0009_record_list.sql", "0010_graph_overview.sql"]
+    assert db.prepare(pg) == ["0008_folders.sql", "0009_record_list.sql", "0010_graph_overview.sql",
+                              "0011_object_text_ocr.sql"]
     assert registry(pg) == set()
 
 
@@ -469,6 +471,7 @@ def test_migrations_0008_0009_over_base_with_data(pg, tmp_path, monkeypatch):
     (old / "0008_folders.sql").unlink()
     (old / "0009_record_list.sql").unlink()
     (old / "0010_graph_overview.sql").unlink()
+    (old / "0011_object_text_ocr.sql").unlink()
     with monkeypatch.context() as m:
         m.setattr(db, "SQL_DIR", old)
         db.migrate(pg)
@@ -477,7 +480,8 @@ def test_migrations_0008_0009_over_base_with_data(pg, tmp_path, monkeypatch):
         made = records.commit(pg, [Item("atom", {"kind": "fact", "label": {"ru": "Ветер"}, "sources": []}),
                                    Item("entity", {"entity_class": "project", "label": {"ru": "Альфа"}})],
                               agent=MODEL)
-    assert db.prepare(pg) == ["0008_folders.sql", "0009_record_list.sql", "0010_graph_overview.sql"]
+    assert db.prepare(pg) == ["0008_folders.sql", "0009_record_list.sql", "0010_graph_overview.sql",
+                              "0011_object_text_ocr.sql"]
     assert registry(pg) == set()
     refs = {f"{records.PREFIX[r.target]}:{r.record_id}" for r in made.revisions}
     page = lookup.list_records(pg)

@@ -5,7 +5,9 @@
    разбирается один раз на пакет, и ошибка по нему повторяется у каждого источника с этим путём);
    у источника с object проверяются версия и digest;
 2. место — селекторы с цепочкой refined_by дают ожидаемую страницу, диапазон, локатор, лист и цитату (place);
-   сверка — sources.judge по тексту версии (objects.text, кэш по digest);
+   сверка — sources.judge по тексту версии (objects.extraction, кэш по digest); страницы скана, распознанные
+   OCR, сверяются как остальные, с отметкой info quote_ocr и мягче по нечёткости; скан, который нечем распознать
+   (нет языковых данных tesseract), — no_text или quote_not_found с объяснением;
 3. числа атома ищутся во фрагментах — страницах, где сверка нашла место, и страницах диапазона селектора page;
 4. редакция — если у источника атома её нет, а версия его объекта — источник ровно одной текущей сущности
    класса edition, она подставляется в тело.
@@ -47,6 +49,7 @@ ONE_PAGE_OK = (".md", ".txt")              # одностраничное ok б�
 RANGE = re.compile(r"^\s*(\d+)\s*[-–—‒]\s*(\d+)\s*$")
 MAX_RANGE = 50                             # страниц в диапазоне селектора page: больше — это не фрагмент
 RETIRED = ("rejected", "deprecated", "superseded")
+NO_OCR = "нет языковых данных tesseract (rus, eng)"
 FILE_KINDS = ("file",)
 
 
@@ -150,7 +153,7 @@ def judge_source(conn: psycopg.Connection, store: ObjectStore, target: str, sour
 class _Level2:
     def __init__(self, conn, store, docs, report: Report, agent: str):
         self.conn, self.store, self.docs, self.report, self.agent = conn, store, docs, report, agent
-        self.texts: dict[tuple, sources.DocText | None] = {}
+        self.texts: dict[tuple, tuple[sources.DocText | None, bool]] = {}   # текст версии, OCR недоступен
         # путь → поля разобранного источника (object, object_version, digest) или текст ошибки разбора — на пакет:
         # иначе sha256 файла считался бы заново для каждого источника с этим путём
         self.paths: dict[str, dict | str] = {}
@@ -239,12 +242,13 @@ class _Level2:
 
     # --- место ---
 
-    def text(self, src: dict, where: str) -> sources.DocText | None:
-        """Текст версии; сбой извлечения — _ExtractError (итог error). StoreError и ошибки базы — наружу."""
+    def text(self, src: dict, where: str) -> tuple[sources.DocText | None, bool]:
+        """(текст версии или None, в файле есть сканы, а OCR недоступен); сбой извлечения — _ExtractError
+        (итог error). StoreError и ошибки базы — наружу."""
         key = (src["object"], src["object_version"])
         if key not in self.texts:
             try:
-                pages = objects.text(self.conn, self.store, src["object"], src["object_version"])
+                got = objects.extraction(self.conn, self.store, src["object"], src["object_version"])
             except FileNotFoundError as e:             # копии версии нет — хранилище не в порядке, а не данные
                 raise StoreError(f"{where}: копии файла нет в хранилище ({e})") from e
             except (StoreError, psycopg.Error):
@@ -252,7 +256,8 @@ class _Level2:
             except Exception as e:                     # сбой разбора файла (PyMuPDF, openpyxl …) — не ошибка данных
                 log.exception("%s: сбой извлечения текста %s v%s", where, src["object"], src["object_version"])
                 raise _ExtractError(f"{type(e).__name__}: {e}") from e
-            self.texts[key] = sources.DocText.of(pages) if pages is not None else None
+            doc = sources.DocText.of(got.pages, got.ocr, got.image) if got.pages is not None else None
+            self.texts[key] = (doc, got.ocr_unavailable)
         return self.texts[key]
 
     def judge(self, i: int, src: dict, info, where: str, is_atom: bool) -> SourceCheck:
@@ -278,15 +283,22 @@ class _Level2:
         if not is_atom and not p.given:
             return SourceCheck(i, None, None, None)              # источник сущности-документа — сам файл
         try:
-            doc = self.text(src, where)
+            doc, no_ocr = self.text(src, where)
         except _ExtractError as e:
             self.add("warning", "source_error", where, f"Сбой при извлечении текста: {e}",
                      error=type(e.__cause__).__name__)
             return SourceCheck(i, "error", None, None)
         if doc is None:
-            self.add("warning", "no_text", where, f"У файла «{name}» нет текста: место не сверяется")
+            if no_ocr:
+                self.add("warning", "no_text", where, f"У файла «{name}» нет текстового слоя (скан), а OCR "
+                         f"недоступен — {NO_OCR}: место не сверяется", ocr="unavailable")
+            else:
+                self.add("warning", "no_text", where, f"У файла «{name}» нет текста: место не сверяется")
             return SourceCheck(i, "no_text", None, None)
         v, expected = self.locate(doc, p, name)              # ошибка сверки — ошибка кода: она уходит наружу
+        if v.page in doc.ocr:
+            self.add("info", "quote_ocr", where, f"Место сверено с текстом, распознанным OCR (страница {v.page} — "
+                     f"скан без текстового слоя), а не с текстовым слоем", page=v.page)
         if v.verdict in ("ok", "moved", "by_locator"):
             if v.verdict == "moved":
                 self.add("info", "page_moved", where, f"Цитата найдена на странице {v.page}, а не {expected}",
@@ -299,7 +311,13 @@ class _Level2:
                      anchor=v.anchor, page=v.page, score=round(v.score, 1))
             return SourceCheck(i, "fuzzy", v.page, v.anchor)
         if v.verdict == "not_found":
-            self.add(quote_sev, "quote_not_found", f"{where}.quote", "Цитаты нет в тексте документа", quote=p.quote)
+            if p.page in doc.image:
+                self.add(quote_sev, "quote_not_found", f"{where}.quote", f"На странице {p.page} нет текстового "
+                         f"слоя (скан), а OCR недоступен — {NO_OCR}: цитату не с чем сверить",
+                         quote=p.quote, page=p.page, ocr="unavailable")
+            else:
+                self.add(quote_sev, "quote_not_found", f"{where}.quote", "Цитаты нет в тексте документа",
+                         quote=p.quote)
             return SourceCheck(i, "not_found", None, None)
         self.add("warning", "place_unresolved", where, "Цитата не задана, и место в документе не найдено")
         return SourceCheck(i, "unresolved", None, None)

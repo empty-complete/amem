@@ -135,10 +135,11 @@ check.submit(conn, store, docs, proposals, links=(), *, agent, activity=None, re
 | `pdf_quote_required` | 2 | violation | У источника атома из PDF нет цитаты или она короче `sources.MIN_QUOTE` |
 | `quote_not_found` | 2 | violation; warning у сущности | Цитата задана, но в тексте её нет |
 | `quote_fuzzy` | 2 | violation; warning у сущности | Цитата найдена только нечётким поиском; `details`: точный текст, страница, схожесть |
+| `quote_ocr` | 2 | info | Место найдено в тексте, распознанном OCR (страница-скан без текстового слоя); порог нечёткости на ней `sources.FUZZY_SCORE_OCR` |
 | `number_not_found` | 2 | violation или warning | Числа атома нет во фрагменте (разд. 4.5) |
 | `page_moved` | 2 | info | Цитата на другой странице — номер исправлен в `source.page` |
 | `place_unresolved` | 2 | warning | Цитата не задана, и место не найдено |
-| `no_text` | 2 | warning | У файла нет текста: скан, чертёж, неподдерживаемый формат |
+| `no_text` | 2 | warning | У файла нет текста: скан без OCR (`details.ocr = unavailable`), чертёж, неподдерживаемый формат |
 | `external_source` | 2 | warning | Источник — страница сайта или переписка |
 | `source_error` | 2 | warning | Сбой извлечения или сверки |
 | `numbers_unchecked` | 2 | info | Числа не с чем сверить: ни у одного источника нет фрагмента |

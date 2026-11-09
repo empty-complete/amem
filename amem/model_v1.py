@@ -200,6 +200,7 @@ class CheckCode(str, Enum):
     pdf_quote_required = "pdf_quote_required"
     quote_not_found = "quote_not_found"
     quote_fuzzy = "quote_fuzzy"
+    quote_ocr = "quote_ocr"
     number_not_found = "number_not_found"
     page_moved = "page_moved"
     place_unresolved = "place_unresolved"
