@@ -22,6 +22,8 @@ dependencies = [
   "uvicorn>=0.30",
   "psycopg-pool>=3.2,<4",
   "python-multipart>=0.0.20",
+  # MCP (подпроект 4b): /mcp службы (Streamable HTTP) и amem mcp (stdio) — официальный SDK, мажорная версия 2
+  "mcp>=2.3,<3",
 ]
 
 [project.scripts]

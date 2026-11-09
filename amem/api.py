@@ -264,21 +264,24 @@ def session(conn: psycopg.Connection, *, agent: str, can_write: bool, provider=N
 # --- поиск ---
 
 def search(conn: psycopg.Connection, q, *, agent: str, kind=None, status=None, entity_class=None, target=None,
-           limit=None, provider=None) -> dict:
-    """SearchResult рецепта exact_fact; выдача пишется в retrieval от имени agent. Если provider не может посчитать
-    вектор запроса, смысловой канал пропускается (semantic: unavailable, причина в channels.reasons.vector), а не
-    валит поиск: марки и полнотекстовый канал отвечают и так."""
+           limit=None, provider=None, activity: uuid.UUID | None = None) -> dict:
+    """SearchResult рецепта exact_fact; выдача пишется в retrieval от имени agent (activity — задача сессии MCP:
+    находки этой выдачи сессия потом отмечает helpful). Если provider не может посчитать вектор запроса, смысловой
+    канал пропускается (semantic: unavailable, причина в channels.reasons.vector), а не валит поиск: марки
+    и полнотекстовый канал отвечают и так."""
     if _str(q, "q") is None:
         raise BadRequest("q: нужен текст запроса")
     result = recipes.exact_fact(
-        conn, private.strip(q), agent=agent, limit=_int(limit, "limit", low=1, high=100, default=10),
+        conn, private.strip(q), agent=agent, activity=activity,
+        limit=_int(limit, "limit", low=1, high=100, default=10),
         target=_enum(target, "target", TARGETS), kind=_codes(kind, "kind"),
         entity_class=_codes(entity_class, "entity_class"), statuses=_statuses(status), provider=provider,
         on_semantic_error="skip")
     return _search_result(conn, result)
 
 
-def similar(conn: psycopg.Connection, *, agent: str, ref=None, q=None, limit=None, provider=None) -> dict:
+def similar(conn: psycopg.Connection, *, agent: str, ref=None, q=None, limit=None, provider=None,
+            activity: uuid.UUID | None = None) -> dict:
     """SearchResult рецепта similar — по ссылке на запись (ref) или по тексту (q), ровно одно из двух. Без вектора
     запроса похожие по тексту ищет полнотекстовый канал (semantic: unavailable), как у search."""
     if (ref in (None, "")) == (q in (None, "")):
@@ -289,8 +292,9 @@ def similar(conn: psycopg.Connection, *, agent: str, ref=None, q=None, limit=Non
         query = private.strip(_str(q, "q"))
         if query.startswith(("atm:", "ent:")):
             raise BadRequest("q: похожие на запись ищутся по параметру ref, а не по тексту atm:/ent:")
-    result = recipes.similar(conn, query, agent=agent, limit=_int(limit, "limit", low=1, high=100, default=10),
-                             provider=provider, on_semantic_error="skip")
+    result = recipes.similar(conn, query, agent=agent, activity=activity,
+                             limit=_int(limit, "limit", low=1, high=100, default=10), provider=provider,
+                             on_semantic_error="skip")
     return _search_result(conn, result)
 
 
@@ -331,6 +335,37 @@ def _current_about(conn: psycopg.Connection, items: list[dict]) -> dict[str, lis
         "JOIN unnest(%s::uuid[], %s::int[]) AS q(id, n) ON r.atom_id = q.id AND r.n = q.n",
         ([a for a, _ in atoms], [n for _, n in atoms])).fetchall()
     return {f"atm:{atom_id}": [ref for ref in (about or []) if isinstance(ref, str)] for atom_id, about in rows}
+
+
+HELPFUL_MAX = 100                   # ссылок в одной отметке, не больше: выдача — до 100 находок
+
+
+def helpful(conn: psycopg.Connection, retrieval_id, refs, *, agent: str, activity: uuid.UUID | None) -> dict:
+    """Отметить атомы выдачи, которые помогли (usefulness.mark_helpful): только выдачи той же задачи сессии —
+    находки другой сессии (или выдачи без сессии, как у HTTP и CLI) не отмечаются. {retrieval_id, marked}."""
+    try:
+        rid = uuid.UUID(_str(retrieval_id, "retrieval_id") or "")
+    except ValueError:
+        raise BadRequest(f"retrieval_id {retrieval_id!r}: нужен UUID выдачи из ответа поиска") from None
+    if isinstance(refs, str) or not isinstance(refs, list) or not refs:
+        raise BadRequest("refs: нужен непустой список ссылок atm: из этой выдачи")
+    if len(refs) > HELPFUL_MAX:
+        raise BadRequest(f"refs: не больше {HELPFUL_MAX} ссылок за раз")
+    for ref in refs:
+        if not isinstance(ref, str) or not ref.startswith("atm:"):
+            raise BadRequest(f"refs: {ref!r} — полезность отмечается только у атомов (atm:<UUID>) выдачи")
+        _ref(ref, "refs")
+    row = conn.execute("SELECT activity FROM retrieval WHERE id = %s", (rid,)).fetchone()
+    if row is None:
+        raise BadRequest(f"retrieval_id {rid}: такой выдачи нет — возьмите retrieval_id из ответа поиска")
+    if activity is None or row[0] != activity:
+        raise BadRequest(f"retrieval_id {rid}: выдача не из этой сессии — отмечать можно только находки поиска "
+                         f"своей сессии")
+    try:
+        usefulness.mark_helpful(conn, rid, refs, agent=agent, activity=activity)
+    except ValueError as e:                  # атом не из этой выдачи, ссылка не UUID
+        raise BadRequest(f"refs: {e}") from None
+    return {"retrieval_id": str(rid), "marked": list(dict.fromkeys(refs))}
 
 
 # --- папки и списки ---
@@ -727,6 +762,52 @@ def object_sheet(conn: psycopg.Connection, store: ObjectStore, object_id, n, *, 
         return objects.sheet(conn, store, oid, n, name, cell_range or None)
     except (StoreError, OSError) as e:
         raise _store_failure(store, oid, n, e) from e
+
+
+def _document(conn: psycopg.Connection, path) -> tuple[str, str | None]:
+    """Путь в папке документов или ссылка obj:<UUID> → (как спросили, obj:<UUID> или None — объекта ещё нет)."""
+    path = _str(path, "path")
+    if not path or not path.strip():
+        raise BadRequest("path: нужен путь документа от корня папки документов (или obj:<UUID>)")
+    if path.startswith("obj:"):
+        oid = _object_id(path)
+        found = conn.execute("SELECT 1 FROM object WHERE id = %s", (oid,)).fetchone()
+        return path, f"obj:{oid}" if found else None
+    return path, lookup.object_by_path(conn, path)
+
+
+def object_status(conn: psycopg.Connection, path) -> dict:
+    """Что из документа атомизировано: {path, object, status, note?, agent?, changed_at?, cited_by}. Документа нет
+    в базе (его ещё не цитировали и не отмечали) — object и status null: это ответ, а не ошибка."""
+    path, ref = _document(conn, path)
+    out = {"path": path, "object": ref, "status": None, "cited_by": 0}
+    if ref is not None:
+        mark = lookup.object_status(conn, ref)
+        if mark is not None:
+            out |= {**mark, "changed_at": _iso(mark["changed_at"])}
+        view = lookup.object_view(conn, ref)
+        out["cited_by"] = len(view["cited_by"]) if view else 0
+    return out
+
+
+def object_mark(conn: psycopg.Connection, store: ObjectStore, docs: Path | None, path, status, *, agent: str,
+                note=None) -> dict:
+    """Отметить, что из документа атомизировано (objects.mark: parsed, partial, skipped). Документа ещё нет в базе —
+    он принимается из папки документов (objects.ingest: копия в хранилище), как источник при submit. Ответ —
+    object_status после отметки."""
+    statuses = tuple(sorted(objects.STATUSES))
+    status = _enum(status, "status", statuses)
+    if status is None:
+        raise BadRequest(f"status: нужен один из {', '.join(statuses)}")
+    path, ref = _document(conn, path)
+    if ref is None:
+        if path.startswith("obj:"):
+            raise objects.ObjectError(f"{path}: такого объекта нет", code="not_found")
+        if docs is None:
+            raise BadRequest(f"{path}: документа нет в базе, а папка документов не настроена (AMEM_DOCS)")
+        ref = f"obj:{objects.ingest(conn, store, docs, path, agent=agent).object_id}"
+    objects.mark(conn, ref, status, agent=agent, note=_note(note))
+    return object_status(conn, ref) | {"path": path}
 
 
 # --- словарь, база, бэкапы ---

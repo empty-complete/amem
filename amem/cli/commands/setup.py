@@ -1,4 +1,8 @@
-"""Подготовка и запуск: init, serve, base, doctor.
+"""Подготовка и запуск: init, serve, mcp, base, doctor.
+
+mcp — сервер MCP на stdin/stdout (amem/service/mcp.py): агент — всегда модель: --agent model:…, иначе агент
+окружения (AMEM_AS_MODEL, CLAUDECODE, Codex), иначе AMEM_MODEL_AGENT (model:local); person: не принимается.
+Пул соединений маленький и переподключается; база должна быть подготовлена (amem init).
 
 init — db.prepare (миграции, словари, base_id и четыре папки новой базы) и корень хранилища AMEM_DATA. С --dsn
 строка подключения ещё и запоминается в amem.toml ($AMEM_CONFIG или ~/.config/amem/amem.toml, права 0600 — в ней
@@ -14,7 +18,7 @@ import logging
 import os
 from pathlib import Path
 
-from ..errors import ENV, CliError
+from ..errors import ENV, USAGE, CliError
 from . import add
 
 
@@ -27,6 +31,8 @@ def register(sub, shared) -> None:
     p.add_argument("--port", type=int, help="порт (AMEM_PORT, по умолчанию 8767)")
     p.add_argument("--no-auth", action="store_true",
                    help="разрешить адрес не loopback без AMEM_TOKENS (закрытая сеть, compose)")
+
+    add(sub, shared, "mcp", "сервер MCP на stdio для агента (агент — model:…, --agent model:имя)", run_mcp)
 
     p = add(sub, shared, "base", "база: сводка; base name [ИМЯ] — имя базы", run_base)
     p.add_argument("what", nargs="?", choices=("name",), help="name — показать или задать имя базы")
@@ -104,6 +110,49 @@ def run_serve(ctx, args) -> int:
         raise CliError("база не задана", exit=ENV, code="no_dsn")
     kw = {"runner": ctx.runner} if ctx.runner is not None else {}
     server.serve(settings, no_auth=args.no_auth, **kw)
+    return 0
+
+
+# --- mcp ---
+
+def mcp_agent(ctx) -> str:
+    """Агент amem mcp: --agent (только model:), иначе агент окружения, иначе AMEM_MODEL_AGENT."""
+    from ... import settings as settings_
+    from ..context import detected_agent
+
+    explicit = getattr(ctx.args, "agent", None)
+    if explicit is not None:
+        explicit = explicit.strip()
+        if not settings_.MODEL.fullmatch(explicit):
+            raise CliError(f"--agent {explicit!r}: amem mcp пишет от модели — нужен model:<имя> (строчные латинские "
+                           f"буквы, цифры, «_.-»)", exit=USAGE, code="bad_agent")
+        return explicit
+    detected = detected_agent(ctx.env)
+    return detected[0] if detected is not None else ctx.settings.model_agent
+
+
+def run_mcp(ctx, args) -> int:
+    from psycopg_pool import PoolTimeout
+
+    from ...service import mcp
+    from ..context import pending_migrations
+
+    if not logging.getLogger().handlers:          # stdout — канал протокола: журнал только в stderr
+        logging.basicConfig(level=logging.WARNING, format="amem mcp: %(levelname)s %(name)s: %(message)s")
+    agent = mcp_agent(ctx)
+    ctx.dsn()                                     # нет AMEM_DSN — код 1 с подсказкой
+
+    def ready(conn) -> None:
+        pending = pending_migrations(conn)
+        if pending is None or pending:
+            raise CliError("база не подготовлена" + (f": не применены миграции {', '.join(pending)}" if pending
+                                                    else ": в ней нет схемы amem"), exit=ENV, code="not_ready")
+
+    try:
+        with mcp.open_stdio(ctx.settings, agent=agent, ready=ready) as runtime:
+            mcp.serve_stdio(runtime)
+    except PoolTimeout:
+        raise CliError("база недоступна: соединение не открылось", exit=ENV, code="db_unavailable") from None
     return 0
 
 
