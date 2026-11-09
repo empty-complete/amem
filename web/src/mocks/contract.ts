@@ -33,10 +33,6 @@ ops.sort((a, b) => (a.template.match(/\{/g)?.length ?? 0) - (b.template.match(/\
 
 const cache = new Map<string, ValidateFunction | null>();
 
-/** Пути, которые служба вносит в контракт в части 4a; веб пока ходит к ним прямым fetch (api/folders.ts).
- * Список убирается в части H, Task 1, вместе с переходом на типизированный клиент. */
-const AWAITING_4A = [/^POST \/folders$/, /^(PATCH|DELETE) \/folders\/[^/]+$/];
-
 /** Схема JSON-ответа операции по коду (или default); нет её в контракте — null. */
 function validator(op: Op, status: number, type: string): ValidateFunction | null {
   const key = `${op.method} ${op.template} ${status} ${type}`;
@@ -68,8 +64,7 @@ export async function checkResponse(request: Request, response: Response): Promi
   const path = url.pathname.slice(BASE.length);
   const where = `${request.method} ${path} → ${response.status}`;
   const op = ops.find((o) => o.method === request.method && o.re.test(path));
-  if (!op)
-    return AWAITING_4A.some((r) => r.test(`${request.method} ${path}`)) ? [] : [`${where}: нет в контракте`];
+  if (!op) return [`${where}: нет в контракте`];
   if (!(String(response.status) in op.responses) && !("default" in op.responses))
     return [`${where}: код не описан в контракте`];
   const fn = validator(op, response.status, type);

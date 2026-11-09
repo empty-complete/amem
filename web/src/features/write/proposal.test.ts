@@ -1,6 +1,6 @@
 import recs from "../../mocks/fixtures/records-b.json";
 import templates from "../../mocks/fixtures/templates.json";
-import { emptyDraft, fromPayload, issuesToFields, type Template, toProposal } from "./proposal";
+import { emptyDraft, fromPayload, issuesToFields, type Template, toProposal, withSummary } from "./proposal";
 
 const T = (code: string) => (templates as Template[]).find((t) => t.code === code);
 const E3 = "ent:0193b7c2-5e1a-7d40-9f2e-000000000003";
@@ -71,4 +71,29 @@ test("замечания проверки — к полям формы, исто
     sources: { 0: "Цитаты нет" },
     other: ["Прочее"],
   });
+});
+
+test("пояснение «простыми словами» по умолчанию — заголовок, только у атома и только если его нет", () => {
+  const atom = (pl: object) => ({
+    target: "atom" as const,
+    record_id: null,
+    payload: { kind: "note", ...pl },
+  });
+  const out = withSummary({
+    proposals: [
+      atom({ label: { ru: "Проверить мачту" } }),
+      atom({ label: { ru: "Своё" }, summary_plain: { ru: "своё пояснение" } }),
+      {
+        target: "entity" as const,
+        record_id: null,
+        payload: { entity_class: "artifact", label: { ru: "Мачта" } },
+      },
+    ],
+    links: [],
+  });
+  expect(out.proposals.map((p) => (p.payload as { summary_plain?: unknown }).summary_plain)).toEqual([
+    { ru: "Проверить мачту" },
+    { ru: "своё пояснение" },
+    undefined,
+  ]);
 });

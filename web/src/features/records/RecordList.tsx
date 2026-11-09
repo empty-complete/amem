@@ -21,9 +21,12 @@ export function recordPath(ref: string) {
     : ({ to: "/atom/$ref", params: { ref } } as const);
 }
 
+/** Подпись вида или класса словами, с заглавной буквы: в словарях ядра подписи строчные («факт»).
+ * Нет английской — русская; нет в словаре — код как есть. */
 export function kindLabel(vocab: Vocab | undefined, code: string, lang: string) {
   const v = vocab?.find((x) => x.code === code);
-  return (lang.startsWith("en") ? v?.label.en : v?.label.ru) ?? code;
+  const text = lang.startsWith("en") ? (v?.label.en ?? v?.label.ru) : v?.label.ru;
+  return text ? text.charAt(0).toLocaleUpperCase(lang) + text.slice(1) : code;
 }
 
 export function RecordRow({ r, vocab, classes }: { r: Summary; vocab?: Vocab; classes?: Vocab }) {
