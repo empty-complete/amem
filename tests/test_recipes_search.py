@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from amem import db, embed, ids, lookup, records, search
+from amem import db, embed, ids, lookup, records
 from amem.records import Item, RecordError
 from conftest import FakeProvider
 
