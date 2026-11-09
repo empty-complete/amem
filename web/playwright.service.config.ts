@@ -22,7 +22,9 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [["html", { open: "never", outputFolder: "playwright-report-service" }], ["github"]] : "list",
+  reporter: process.env.CI
+    ? [["html", { open: "never", outputFolder: "playwright-report-service" }], ["github"]]
+    : "list",
   use: { baseURL: `http://127.0.0.1:${PORT}/ui/`, trace: "retain-on-failure", locale: "ru-RU" },
   webServer: {
     command: `${python} ../tools/seed_sample.py && ${python} -m amem.service --port ${PORT}`,
@@ -31,5 +33,7 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 180_000,
   },
-  projects: [{ name: "service", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } } }],
+  projects: [
+    { name: "service", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } } },
+  ],
 });

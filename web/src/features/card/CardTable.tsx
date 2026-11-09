@@ -201,3 +201,40 @@ export function CardTable({
     </div>
   );
 }
+
+type Extra = { property: string; atom: string; value?: ValueLike | null; status?: string };
+
+/** Значения из записей о сущности, которых нет в профиле (или профиля нет вовсе): свойство, значение, статус. */
+export function ExtraValues({ items }: { items: unknown[] }) {
+  const { t, i18n } = useTranslation();
+  const props = useQuery(q.vocab("property"));
+  const rows = items as Extra[];
+  if (!rows.length) return null;
+  const name = (code: string) => {
+    const v = props.data?.find((p) => p.code === code);
+    return (
+      (i18n.language.startsWith("en") ? (v?.label.en ?? v?.label.ru) : v?.label.ru) ??
+      code.replaceAll("_", " ")
+    );
+  };
+  return (
+    <div className="ctable">
+      <section aria-label={t("card.extra")}>
+        <h2>{t("card.extra")}</h2>
+        <ul>
+          {rows.map((x) => (
+            <li className="crow" key={`${x.atom}-${x.property}`}>
+              <span className="crow__name">
+                <Link {...recordPath(x.atom)}>{name(x.property)}</Link>
+                <span className="crow__sub">{x.status ? t(`status.${x.status}`) : ""}</span>
+              </span>
+              <span className="cval">
+                <span className="num">{formatValue(x.value, i18n.language)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  );
+}
