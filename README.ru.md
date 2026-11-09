@@ -249,25 +249,25 @@ cd web && npm ci && npm run dev:mock              # затем откройте 
 
 ### Дальше: установка одной командой
 
+`amem init`, `amem serve`, [CLI](#cli) и [сервер MCP](#mcp) уже работают из клона репозитория.
+
 > [!NOTE]
-> **Пока недоступно.** Это задуманный интерфейс службы, CLI и памяти агентов
+> **Пока недоступно:** пакет на PyPI и `amem install` для памяти агентов (хуки и навыки)
 > ([подпроект 4](docs/superpowers/specs/2026-11-07-amem-subproject-4-service-design.md)).
 
 ```bash
 pipx install amem
-amem init                     # база и хранилище объектов
 amem install claude-code      # сервер MCP, хуки и навыки; `amem install codex` — для Codex CLI
-amem serve                    # HTTP API, /mcp и веб-UI на http://127.0.0.1:8767/ui
 ```
 
 ## Служба
 
-HTTP-служба отдаёт [контракт v1](docs/api/http-v1.openapi.yaml) по `/api/v1` и веб-UI по `/ui`. Пока команды
-`amem serve` нет (она придёт с CLI), служба запускается модулем:
+HTTP-служба отдаёт [контракт v1](docs/api/http-v1.openapi.yaml) по `/api/v1` и веб-UI по `/ui`. Запускается
+командой `amem serve` (или `python -m amem.service`):
 
 ```bash
 export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
-.venv/bin/python -m amem.service      # http://127.0.0.1:8767; адрес меняют --host и --port
+.venv/bin/amem serve      # http://127.0.0.1:8767; адрес меняют --host и --port
 ```
 
 - **Локальное доверие.** По умолчанию служба слушает только `127.0.0.1`. Она отвечает только на своё имя в `Host`
@@ -287,6 +287,117 @@ export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
   выключает его. Свой журнал служба пишет в stderr.
 - **Веб-UI.** Для `/ui` нужен пакет веба: `pip install 'amem[web]'`. Без него `/ui` отвечает 404 с подсказкой,
   а API работает как обычно.
+
+## CLI
+
+`pip install -e .` ставит команду `amem` в venv. Она работает с базой напрямую (`AMEM_DSN` или
+`amem init --dsn …`, который запоминает строку в `~/.config/amem/amem.toml`), служба ей не нужна.
+
+```
+amem init [--dsn DSN]                 база и хранилище объектов
+amem serve [--host --port --no-auth]  HTTP API, /mcp и веб-UI
+amem mcp [--agent model:ИМЯ]          сервер MCP на stdio для агента
+amem search ЗАПРОС [--kind --limit]   поиск, шаг 1
+amem timeline REF                     что вокруг записи, шаг 2
+amem get REF...                       полные записи, шаг 3
+amem card REF                         карточка сущности
+amem submit FILE.json                 запись пакета (тело как у POST /submit; «-» — stdin)
+amem review list|claim|release|resolve|stats
+amem folders tree|create|delete|rename|move
+amem export|inspect|import FILE.zip   подборки (import без --apply — пробный)
+amem backup create|list|restore|verify
+amem token create|list|revoke         токены общей службы
+amem base [name [ИМЯ]]                сводка и имя базы
+amem doctor                           база, миграции, хранилище, смысловой поиск
+```
+
+- **Вывод.** Текст для человека или `--json` с тем же объектом, что HTTP API отдаёт на ту же операцию.
+  Ошибка называет, что сделать: «задайте AMEM_DSN или выполните amem init».
+- **Коды выхода.** `0` успех, `1` окружение (нет базы, нет хранилища), `2` неверный вызов, `3` неоднозначный
+  текст вместо ссылки (выведены кандидаты), `4` не найдено, `5` проверка отклонила пакет (выведен отчёт),
+  `6` конфликт (пункт уже решён, папка занята, коллизия подборки).
+- **Кто пишет.** В обычном терминале — человек `AMEM_AGENT` (по умолчанию `person:` и имя пользователя ОС).
+  В окружении агента команда идёт от модели: `CLAUDECODE=1` — `model:claude-code`, переменные песочницы Codex —
+  `model:codex`, `AMEM_AS_MODEL=имя` — `model:имя`. `--agent` задаёт агента явно, но `person:` в окружении агента
+  не принимается.
+- **Токены.** `amem token create person:ann` (или `model:…`, `--read-only`) показывает токен один раз и хранит
+  в `AMEM_TOKENS` только его хэш. Выдаёт и отзывает токены только человек.
+- **Бэкап.** Модели доступен `amem backup create`, но без ротации: `--keep` и `restore` — только человеку.
+- **Отладка.** `AMEM_DEBUG=1` добавляет в stderr traceback внутренней ошибки.
+
+## MCP
+
+Сервер MCP даёт агенту 14 инструментов над теми же операциями, что HTTP API:
+
+| Инструмент | Что делает |
+|---|---|
+| `amem_search(query, kind?, limit?)` | Шаг 1: короткие находки `{ref, label, kind, status, snippet}` и `retrieval_id` |
+| `amem_similar(query \| ref, limit?)` | Похожие записи, в той же форме |
+| `amem_timeline(ref)` | Шаг 2: последние события записи и её соседи |
+| `amem_get(refs)` | Шаг 3: полные записи — тело, источники, статус, открытые пункты |
+| `amem_card(ref)` | Карточка сущности `amem.card/1` |
+| `amem_submit(proposals, links?, reason?)` | Запись пакета через `check.submit` |
+| `amem_helpful(retrieval_id, refs)` | Отметить атомы, которые помогли |
+| `amem_move(ref, folder)` | Переложить запись в существующую папку |
+| `amem_object_status(path)`, `amem_mark_object(path, status, note?)` | Что из документа уже атомизировано |
+| `amem_review_claim`, `amem_review_release`, `amem_review_resolve` | Для смыслового проверяющего |
+| `amem_vocab(scheme)` | Коды словаря с подписями |
+
+Поиск идёт в три шага, чтобы агент читал только нужное: `amem_search` даёт короткие карточки, `amem_timeline`
+показывает, что вокруг находки, `amem_get` отдаёт выбранные записи целиком. Текст, под который подходят несколько
+записей без явного лидера, возвращается как `ambiguous: true` с кандидатами, а не первой попавшейся записью.
+
+**Через stdio.** `amem mcp` — одна сессия на процесс со своим маленьким пулом соединений. Claude Code:
+
+```bash
+claude mcp add amem --env AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem -- amem mcp --agent model:claude-code
+```
+
+или в `.mcp.json` проекта:
+
+```json
+{
+  "mcpServers": {
+    "amem": {
+      "command": "amem",
+      "args": ["mcp", "--agent", "model:claude-code"],
+      "env": { "AMEM_DSN": "postgresql://amem:amem@127.0.0.1:5435/amem" }
+    }
+  }
+}
+```
+
+Codex CLI, в `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.amem]
+command = "amem"
+args = ["mcp", "--agent", "model:codex"]
+env = { AMEM_DSN = "postgresql://amem:amem@127.0.0.1:5435/amem" }
+```
+
+**Через HTTP.** Запущенная служба отдаёт те же инструменты по `/mcp` (Streamable HTTP):
+
+```bash
+claude mcp add --transport http amem http://127.0.0.1:8767/mcp --header "X-Amem-Agent: model:claude-code"
+```
+
+```toml
+[mcp_servers.amem]
+url = "http://127.0.0.1:8767/mcp"
+http_headers = { "X-Amem-Agent" = "model:codex" }
+```
+
+- **Всегда модель.** Клиент MCP пишет как `model:…`, и его записи идут через проверку. У stdio агент — из
+  `--agent model:…` или окружения агента; у `/mcp` — из заголовка `X-Amem-Agent`, иначе агент-модель токена,
+  иначе `AMEM_MODEL_AGENT` (`model:local`). `person:` не принимается.
+- **Общая служба.** С `AMEM_TOKENS` `/mcp`, как и API, требует `Authorization: Bearer <токен>`; токен только для
+  чтения ищет, а инструменты записи отвечают `read_only`. Заголовок, который спорит с агентом-моделью токена,
+  отвергается.
+- **Полезность.** `amem_helpful` отмечает атомы только из поиска той же сессии (у клиентов без сессий — того же
+  агента и входа); чужой `retrieval_id` — `forbidden`.
+- **Журнал запросов.** Явные поиски (`amem search`, `amem_search`, `amem_similar`) пишут строку в
+  `AMEM_STATE/queries.jsonl`, как `/search` службы; шаги чтения — нет.
 
 ## Как это устроено
 
@@ -377,8 +488,8 @@ sources:
 - [x] **Автопроверка** (уровни 1–4) и **очередь проверки** с арендой пунктов, аудитом и метриками
 - [x] **Онтология:** профили сущностей, карточки на лету, переносимые подборки
 - [x] **Библиотека для службы:** папки, списки записей, ссылки по ключу, карточка объекта
-- [ ] **Служба HTTP:** `amem serve` по [контракту v1](docs/api/http-v1.openapi.yaml) *(в работе)*
-- [ ] **CLI и сервер MCP:** поиск в три шага, отметки полезности, вырезание `<private>`
+- [x] **Служба HTTP:** `amem serve` по [контракту v1](docs/api/http-v1.openapi.yaml)
+- [x] **CLI и сервер MCP:** поиск в три шага, отметки полезности, вырезание `<private>`
 - [ ] **Память агентов:** хуки Claude Code, Codex CLI, `amem install`, навыки ядра
 - [x] **Веб-UI:** все экраны — на службе и на моках; сквозные проверки против службы
 - [ ] **asearch:** поиск по файлам как плагин amem
