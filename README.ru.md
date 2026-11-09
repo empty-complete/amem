@@ -425,6 +425,8 @@ docker compose --profile test up -d --wait db-test db-test-pg16
 .venv/bin/python tools/gen_schema.py          # пишет amem/model_v1.py и JSON Schema
 .venv/bin/python tools/gen_schema.py --check  # проверка в CI: сгенерированное актуально
 ```
+Перед push — проверка на приватное: `git config core.hooksPath tools/hooks`; список образцов хук читает из `~/.config/amem/private-patterns.txt` (вне репозитория).
+
 
 Веб-UI лежит в [`web/`](web/) (React 19, HeroUI v3, TanStack). Там же — `npm run lint`, `npm test`
 и `npm run e2e`.

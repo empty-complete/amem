@@ -1,5 +1,4 @@
 """Антология: отбор verified + preferred, подборка amem.bundle/1 и HTML-отчёт (подпроект 5, часть F)."""
-import json
 import os
 from pathlib import Path
 

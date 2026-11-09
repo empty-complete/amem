@@ -425,6 +425,8 @@ After editing `amem/schema/amem_v1.yaml`, regenerate the models:
 .venv/bin/python tools/gen_schema.py          # writes amem/model_v1.py and the JSON Schema
 .venv/bin/python tools/gen_schema.py --check  # CI check: generated files are up to date
 ```
+Before pushing, enable the privacy check: `git config core.hooksPath tools/hooks`; the hook reads its patterns from `~/.config/amem/private-patterns.txt` (outside the repository).
+
 
 The web UI lives in [`web/`](web/) (React 19, HeroUI v3, TanStack). Run `npm run lint`, `npm test` and
 `npm run e2e` there.
