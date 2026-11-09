@@ -2,7 +2,8 @@
 
 Два входа, один набор инструментов (build):
 - `/mcp` службы — Streamable HTTP SDK (HttpMcp): менеджер сессий живёт в lifespan службы, защиту Host, Origin и
-  Sec-Fetch-Site делает session.Guard (и повторно — TransportSecuritySettings SDK), вход в общей службе — Bearer;
+  Sec-Fetch-Site делает session.Guard (своя защита SDK выключена: вторая проверка с другими правилами только
+  расходилась бы с первой), вход в общей службе — Bearer;
 - `amem mcp` — stdio (open_stdio): один процесс — одна сессия, маленький пул соединений с переподключением.
 
 Кто пишет: /mcp — всегда модель. Агента задаёт заголовок X-Amem-Agent: model:<имя> (его пишет установщик), иначе
@@ -11,14 +12,17 @@
 Токен только для чтения пускается в /mcp, но инструменты записи ему отвечают ошибкой read_only.
 
 Задача сессии (usefulness.session_activity): у stdio — одна на процесс, у /mcp — на сессию SDK (Mcp-Session-Id).
-Клиент протокола 2026-07-28 и новее сессий не открывает: его задача — одна на вход (токен или локальная служба) и
-агента в этом запуске службы. Задачу передают поиски, отметки helpful и submit сессии; helpful отмечает только
-выдачу своей задачи. Сессия /mcp привязана к входу и агенту, которые её открыли: чужой вход с её id — ошибка.
+Клиент протокола 2026-07-28 и новее сессий не открывает: его задача — на вход (токен или локальная служба) и агента,
+новая после IDLE_CUT тишины; helpful такого клиента сверяет саму выдачу — её агента и вход по метке её задачи
+(retrieval_id — доказательство). Задачу передают поиски, отметки helpful и submit сессии; helpful отмечает только
+свою выдачу, чужая — forbidden. Сессия /mcp привязана к входу и агенту, которые её открыли: HttpMcp кладёт их в
+scope["user"], SDK запоминает на initialize и чужому входу с тем же Mcp-Session-Id отвечает 404.
 
 Инструменты синхронную библиотеку зовут в потоке (anyio.to_thread.run_sync). Ответ — JSON (structured_content и
 текст). Ошибка — isError с текстом «код: что случилось» и подсказкой, structured_content — тело problem+json, как
 у HTTP (problems.to_problem). Неоднозначный текст вместо ссылки (api.Ambiguous) — не ошибка, а ответ
-{ambiguous: true, candidates}: модели нужно выбрать ссылку и повторить. Явные amem_search и amem_similar пишут
+{ambiguous: true, candidates}: модели нужно выбрать ссылку и повторить. Неверные аргументы и неизвестный инструмент
+(их отвергает SDK до инструмента) — тоже isError с problem+json bad_request (_Server.call_tool). Явные amem_search и amem_similar пишут
 строку журнала запросов (amem/journal.py), как /search службы.
 """
 import collections
@@ -34,18 +38,21 @@ from dataclasses import dataclass
 from typing import Annotated, Any
 
 import anyio
+from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
+from mcp.server.auth.provider import AccessToken
 from mcp.server.mcpserver import Context, MCPServer
+from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
-from pydantic import Field
+from pydantic import Field, ValidationError
 from starlette.datastructures import Headers
 from starlette.types import Receive, Scope, Send
 
 from .. import __version__, api, journal, private, usefulness
 from .. import settings as settings_
 from ..ids import uuid7
-from . import problems, session
+from . import problems
 
 log = logging.getLogger("amem.service")
 
@@ -54,6 +61,7 @@ SESSION_HEADER = "mcp-session-id"
 SESSIONS_KEPT = 4096          # задач сессий в памяти процесса; старые вытесняются (задача в базе остаётся)
 GET_MAX = 20                  # записей в одном amem_get
 BODY_LIMIT = 1 << 20          # байт тела запроса /mcp — как у записи HTTP (1 МиБ)
+IDLE_CUT = 30 * 60            # секунд тишины, после которых у клиента без сессии новая задача
 INSTRUCTIONS = (
     "amem — база знаний из атомов с источниками. Поиск в три шага: amem_search (короткий список и retrieval_id) → "
     "amem_timeline(ref) — что вокруг находки → amem_get(refs) — полные записи. Атом — утверждение с источником и "
@@ -64,7 +72,8 @@ HINTS = {
     "not_found": "найдите запись: amem_search(query) и передайте её ссылку atm:/ent:",
     "check_rejected": "исправьте замечания issues и отправьте пакет снова",
     "read_only": "токен только для чтения: запись — по токену с write = true",
-    "forbidden": "это действие — для человека (папки создаёт и переименовывает человек)",
+    "forbidden": "это действие не по праву вашего входа: папки создаёт и переименовывает человек, helpful — только "
+                 "для своей выдачи",
     "review_forbidden": "свободные пункты для вас — amem_review_claim",
     "review_closed": "пункт уже решён — возьмите другой: amem_review_claim",
     "folder_not_found": "переносить можно только в существующую папку",
@@ -73,14 +82,17 @@ HINTS = {
 }
 READ = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 WRITE = ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=False)
+SETTLE = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
 
 
 @dataclass(frozen=True)
 class Caller:
-    """Кто вызывает инструмент: агент (всегда model:), право записи и метка задачи сессии."""
+    """Кто вызывает инструмент: агент (всегда model:), право записи и метка задачи сессии; issued_to — у клиента без
+    сессии начало меток его задач (api.helpful сверяет по нему саму выдачу)."""
     agent: str
     can_write: bool
     session: str
+    issued_to: str | None = None
 
 
 class Runtime:
@@ -161,10 +173,45 @@ def ambiguous(exc: api.Ambiguous, **extra) -> CallToolResult:
 
 # --- инструменты ---
 
+class _Server(MCPServer):
+    """MCPServer, у которого и отказы SDK до инструмента — неверные аргументы, неизвестный инструмент — в той же
+    форме, что прочие ошибки (failure: problem+json bad_request), а не голым текстом SDK."""
+
+    async def call_tool(self, name, arguments, context=None):
+        try:
+            return await super().call_tool(name, arguments, context)
+        except UnexpectedToolError:
+            raise
+        except ToolError as e:
+            cause = e.__cause__
+            if isinstance(cause, ValidationError):
+                fields = "; ".join(f"{'.'.join(str(p) for p in err['loc']) or '(аргументы)'}: {err['msg']}"
+                                   for err in cause.errors(include_url=False, include_input=False))
+                return failure(api.BadRequest(f"{name}: неверные аргументы — {fields}"))
+            if cause is None and self._tool_manager.get_tool(name) is None:
+                return failure(api.BadRequest(f"инструмента {name!r} нет: есть {', '.join(TOOLS)}"))
+            raise
+
+
+@contextlib.contextmanager
+def _quiet_root_logger():
+    """MCPServer зовёт logging.basicConfig (свой обработчик на корневой логгер), если у того нет обработчиков. Логи
+    настраивает приложение (служба, CLI), поэтому на время создания у корня — NullHandler, и basicConfig ничего не
+    делает."""
+    root = logging.getLogger()
+    stub = logging.NullHandler()
+    root.addHandler(stub)
+    try:
+        yield
+    finally:
+        root.removeHandler(stub)
+
+
 def build(runtime: Runtime) -> MCPServer:
     """Сервер MCP с инструментами amem_* над runtime."""
-    server = MCPServer("amem", version=__version__, instructions=INSTRUCTIONS, log_level="WARNING",
-                       warn_on_duplicate_tools=True)
+    with _quiet_root_logger():
+        server = _Server("amem", version=__version__, instructions=INSTRUCTIONS, log_level="WARNING",
+                         warn_on_duplicate_tools=True)
 
     async def call(ctx: Context, work: Callable, *, write: bool = False, where: str | None = None) -> CallToolResult:
         """work(conn, caller) в потоке; ошибки — failure, неоднозначность — ambiguous."""
@@ -280,18 +327,20 @@ def build(runtime: Runtime) -> MCPServer:
                               provider=runtime.provider())
         return await call(ctx, work, write=True)
 
-    @server.tool(annotations=WRITE, description=(
+    @server.tool(annotations=SETTLE, description=(
         "Отметить атомы выдачи этой сессии, которые помогли. / Mark atoms of this session's result as helpful."))
     async def amem_helpful(
             retrieval_id: Annotated[str, Field(description="retrieval_id из amem_search или amem_similar")],
             refs: Annotated[list[str], Field(description="ссылки atm: из этой выдачи")],
             ctx: Context) -> CallToolResult:
         def work(conn, caller):
-            return api.helpful(conn, retrieval_id, refs, agent=caller.agent,
-                               activity=runtime.activity(conn, caller.session))
+            # у клиента без сессии сверяется сама выдача, и отметка пишется в её задачу: своя ему не нужна
+            activity = None if caller.issued_to else runtime.activity(conn, caller.session)
+            return api.helpful(conn, retrieval_id, refs, agent=caller.agent, activity=activity,
+                               issued_to=caller.issued_to)
         return await call(ctx, work, write=True)
 
-    @server.tool(annotations=WRITE, description=(
+    @server.tool(annotations=SETTLE, description=(
         "Переложить запись в существующую папку (folder null — без папки). / Move a record to a folder."))
     async def amem_move(ref: Annotated[str, Field(description="ссылка atm:/ent: или текст")],
                         folder: Annotated[str | None, Field(description="путь папки или null")],
@@ -307,8 +356,10 @@ def build(runtime: Runtime) -> MCPServer:
             ctx: Context) -> CallToolResult:
         return await call(ctx, lambda conn, caller: api.object_status(conn, path))
 
-    @server.tool(annotations=WRITE, description=(
-        "Отметить, что из документа атомизировано: parsed, partial или skipped, с заметкой. / Mark document status."))
+    @server.tool(annotations=SETTLE, description=(
+        "Отметить, что из документа атомизировано: parsed, partial или skipped, с заметкой. Файл папки документов, "
+        "которого ещё нет в базе, будет принят в хранилище. / Mark document status; an unknown file from the "
+        "documents folder is ingested into the store."))
     async def amem_mark_object(
             path: Annotated[str, Field(description="путь от корня папки документов или obj:<UUID>")],
             status: Annotated[str, Field(description="parsed | partial | skipped")],
@@ -350,7 +401,13 @@ def build(runtime: Runtime) -> MCPServer:
         "Коды словаря с подписями: kind, entity_class, property, rel, … / Vocabulary codes with labels."))
     async def amem_vocab(scheme: Annotated[str, Field(description="схема: kind, entity_class, property, rel, …")],
                          ctx: Context) -> CallToolResult:
-        return await call(ctx, lambda conn, caller: {"scheme": scheme, "entries": api.vocab_entries(conn, scheme)})
+        def work(conn, caller):
+            entries = api.vocab_entries(conn, scheme)
+            if not entries:          # HTTP отдаёт пустой список; модели полезнее знать, какие схемы есть
+                known = [r[0] for r in conn.execute("SELECT DISTINCT scheme FROM concept ORDER BY 1")]
+                raise api.BadRequest(f"схемы словаря {scheme!r} нет: есть {', '.join(known)}")
+            return {"scheme": scheme, "entries": entries}
+        return await call(ctx, work)
 
     return server
 
@@ -366,16 +423,22 @@ def _digest(*parts: str) -> str:
     return hashlib.sha256("\x00".join(parts).encode()).hexdigest()[:24]
 
 
+def _principal(state: dict, agent: str) -> str:
+    """Вход и агент запроса /mcp одной строкой: токен (его хэш из Guard) или локальная служба."""
+    return _digest(f"token:{state['token']}" if state.get("token") else "local", agent)
+
+
 class ServiceRuntime(Runtime):
     """Инструменты /mcp: пул, хранилище и provider службы; кто вызывает — из scope запроса (session.Guard и
-    HttpMcp), задача — на сессию SDK."""
+    HttpMcp), задача — на сессию SDK, у клиента без сессии — на вход и агента до IDLE_CUT тишины."""
+
+    clock = staticmethod(time.monotonic)
 
     def __init__(self, settings: settings_.Settings) -> None:
         super().__init__()
         self.settings = settings
-        self.run_id = uuid7().hex            # метки задач клиентов без сессии — свои у каждого запуска службы
         self.app = None
-        self._owners: dict[str, str] = {}
+        self._open: collections.OrderedDict[str, tuple[str, float]] = collections.OrderedDict()
 
     @property
     def store(self):
@@ -393,33 +456,40 @@ class ServiceRuntime(Runtime):
 
         return choose_provider(self.app.state)
 
+    def open_label(self, principal: str) -> str:
+        """Метка задачи клиента без сессии: mcp:http:<вход и агент>:<UUIDv7>, новая после IDLE_CUT тишины."""
+        now = self.clock()
+        with self._lock:
+            found = self._open.get(principal)
+            label = found[0] if found is not None and now - found[1] < IDLE_CUT else \
+                f"{self.issued_to(principal)}{uuid7().hex}"
+            self._open[principal] = (label, now)
+            self._open.move_to_end(principal)
+            while len(self._open) > SESSIONS_KEPT:
+                self._open.popitem(last=False)
+        return label
+
+    @staticmethod
+    def issued_to(principal: str) -> str:
+        return f"mcp:http:{principal}:"
+
     def caller(self, ctx: Context) -> Caller:
         request = ctx.request_context.request
         state = getattr(request, "scope", {}).get("state") or {}
         agent = state.get("mcp_agent")
         if agent is None:
             raise _Refused(500, "internal", "запрос MCP без агента")
-        owner = f"token:{state['token']}" if state.get("token") else "local"
+        can_write = bool(state.get("can_write"))
         sid = request.headers.get(SESSION_HEADER)
-        if sid:
-            bound = _digest(owner, agent)
-            with self._lock:
-                known = self._owners.setdefault(sid, bound)
-                while len(self._owners) > SESSIONS_KEPT:
-                    self._owners.pop(next(iter(self._owners)))
-            if known != bound:
-                raise _Refused(403, "forbidden", "сессия MCP открыта другим входом или агентом — откройте свою")
-            return Caller(agent, bool(state.get("can_write")), f"mcp:http:{sid}")
-        return Caller(agent, bool(state.get("can_write")), f"mcp:http:{self.run_id}:{_digest(owner, agent)}")
+        if sid:                    # чужому входу с этим id SDK уже ответил 404 (scope["user"], HttpMcp)
+            return Caller(agent, can_write, f"mcp:http:{sid}")
+        principal = _principal(state, agent)
+        return Caller(agent, can_write, self.open_label(principal), issued_to=self.issued_to(principal))
 
 
-def _security(settings: settings_.Settings) -> TransportSecuritySettings:
-    """Те же имена и источники, что у session.Guard, — в форме SDK (порт любой)."""
-    hosts = sorted(session.allowed_hosts(settings.host, settings.allowed_hosts))
-    origins = [f"{scheme}://{host}{port}" for host in hosts for scheme in ("http", "https") for port in ("", ":*")]
-    return TransportSecuritySettings(enable_dns_rebinding_protection=True,
-                                     allowed_hosts=[h for host in hosts for h in (host, f"{host}:*")],
-                                     allowed_origins=origins + [o.rstrip("/") for o in settings.ui_origins])
+# Host, Origin и Sec-Fetch-Site проверил session.Guard (без учёта регистра, со своими сообщениями problem+json);
+# своя проверка SDK их бы повторила по другим правилам — выключена явно (иначе SDK включает её сам для localhost).
+SECURITY = TransportSecuritySettings(enable_dns_rebinding_protection=False)
 
 
 class HttpMcp:
@@ -431,7 +501,7 @@ class HttpMcp:
         self.runtime = ServiceRuntime(settings)
         self.server = build(self.runtime)
         # приложение SDK не монтируется (его маршрут и lifespan не нужны): берём только его менеджер сессий
-        self.server.streamable_http_app(json_response=True, transport_security=_security(settings),
+        self.server.streamable_http_app(json_response=True, transport_security=SECURITY,
                                         max_request_body_size=BODY_LIMIT)
         self.manager: StreamableHTTPSessionManager = self.server.session_manager
 
@@ -462,7 +532,12 @@ class HttpMcp:
         if isinstance(agent, problems.Problem):
             await problems.response(agent.status, agent.code, agent.detail)(scope, receive, send)
             return
-        scope.setdefault("state", {})["mcp_agent"] = agent
+        state = scope.setdefault("state", {})
+        state["mcp_agent"] = agent
+        # вход и агент — «пользователь» SDK: на initialize он привязывает к нему сессию, чужому с её id отвечает 404
+        # на любой метод (и DELETE), а при закрытии сессии забывает привязку
+        principal = _principal(state, agent)
+        scope["user"] = AuthenticatedUser(AccessToken(token=principal, client_id=principal, scopes=[]))
         await self.manager.handle_request(scope, receive, send)
 
 

@@ -340,9 +340,14 @@ def _current_about(conn: psycopg.Connection, items: list[dict]) -> dict[str, lis
 HELPFUL_MAX = 100                   # ссылок в одной отметке, не больше: выдача — до 100 находок
 
 
-def helpful(conn: psycopg.Connection, retrieval_id, refs, *, agent: str, activity: uuid.UUID | None) -> dict:
+def helpful(conn: psycopg.Connection, retrieval_id, refs, *, agent: str, activity: uuid.UUID | None,
+            issued_to: str | None = None) -> dict:
     """Отметить атомы выдачи, которые помогли (usefulness.mark_helpful): только выдачи той же задачи сессии —
-    находки другой сессии (или выдачи без сессии, как у HTTP и CLI) не отмечаются. {retrieval_id, marked}."""
+    находки другой сессии (или выдачи без сессии, как у HTTP и CLI) не отмечаются, чужая выдача — Forbidden.
+
+    issued_to — у клиента без сессии (MCP 2026-07-28): начало метки его задач. Тогда сверяется сама выдача — её агент
+    и метка её задачи, — а отметка пишется в задачу выдачи: задача такого клиента режется по простою, а retrieval_id
+    доказывает, что выдача его. {retrieval_id, marked}."""
     try:
         rid = uuid.UUID(_str(retrieval_id, "retrieval_id") or "")
     except ValueError:
@@ -355,12 +360,19 @@ def helpful(conn: psycopg.Connection, retrieval_id, refs, *, agent: str, activit
         if not isinstance(ref, str) or not ref.startswith("atm:"):
             raise BadRequest(f"refs: {ref!r} — полезность отмечается только у атомов (atm:<UUID>) выдачи")
         _ref(ref, "refs")
-    row = conn.execute("SELECT activity FROM retrieval WHERE id = %s", (rid,)).fetchone()
+    row = conn.execute("SELECT r.activity, r.agent, a.label FROM retrieval r LEFT JOIN activity a ON a.id = r.activity "
+                       "WHERE r.id = %s", (rid,)).fetchone()
     if row is None:
         raise BadRequest(f"retrieval_id {rid}: такой выдачи нет — возьмите retrieval_id из ответа поиска")
-    if activity is None or row[0] != activity:
-        raise BadRequest(f"retrieval_id {rid}: выдача не из этой сессии — отмечать можно только находки поиска "
-                         f"своей сессии")
+    found, found_agent, label = row
+    if issued_to is not None:
+        if found is None or found_agent != agent or not (label or "").startswith(issued_to):
+            raise Forbidden(f"retrieval_id {rid}: выдача не из этой сессии — отмечать можно только находки своего "
+                            f"поиска (тот же вход и агент)")
+        activity = found
+    elif activity is None or found != activity:
+        raise Forbidden(f"retrieval_id {rid}: выдача не из этой сессии — отмечать можно только находки поиска "
+                        f"своей сессии")
     try:
         usefulness.mark_helpful(conn, rid, refs, agent=agent, activity=activity)
     except ValueError as e:                  # атом не из этой выдачи, ссылка не UUID

@@ -6,8 +6,11 @@ StdioRuntime, как у `amem mcp`; /mcp службы — сырым JSON-RPC ч
 """
 import contextlib
 import json
+import logging
 import os
+import re
 import sys
+from pathlib import Path
 
 import anyio
 import httpx2
@@ -62,6 +65,10 @@ def test_tools_list_matches_spec(env, kb, mode):
             assert tool.description and len(tool.description) < 400, tool.name
         hints = {t.name: t.annotations.read_only_hint for t in tools}
         assert hints["amem_search"] and hints["amem_get"] and not hints["amem_submit"] and not hints["amem_move"]
+        idempotent = {t.name for t in tools if t.annotations.idempotent_hint}
+        assert idempotent == {"amem_move", "amem_helpful", "amem_mark_object"}
+        mark = next(t for t in tools if t.name == "amem_mark_object")
+        assert "хранилище" in mark.description
         schema = {t.name: t.input_schema for t in tools}
         assert schema["amem_search"]["required"] == ["query"]
         assert schema["amem_review_resolve"]["required"] == ["item", "outcome", "confidence"]
@@ -97,6 +104,8 @@ def test_search_in_three_steps_and_query_log(env, base, tmp_path):
 
             err, vocab = await call(client, "amem_vocab", scheme="kind")
             assert not err and "fact" in {e["code"] for e in vocab["entries"]}
+            err, body = await call(client, "amem_vocab", scheme="нет_такой")
+            assert err and body["code"] == "bad_request" and "kind" in body["detail"]
     sync(main)
     lines = [json.loads(line) for line in (tmp_path / "state" / "queries.jsonl").read_text().splitlines()]
     assert [(l["recipe"], l["agent"]) for l in lines] == [("exact_fact", AGENT), ("similar", AGENT)]
@@ -111,7 +120,8 @@ def test_helpful_only_for_own_session(env, base, kb):
             atom = next(i["ref"] for i in found["items"] if i["ref"].startswith("atm:"))
 
             err, body = await call(other, "amem_helpful", retrieval_id=rid, refs=[atom])
-            assert err and body["code"] == "bad_request" and "не из этой сессии" in body["detail"]
+            assert err and body["code"] == "forbidden" and body["status"] == 403
+            assert "не из этой сессии" in body["detail"]
             err, body = await call(mine, "amem_helpful", retrieval_id=rid, refs=[atom])
             assert not err and body == {"retrieval_id": rid, "marked": [atom]}
             err, body = await call(mine, "amem_helpful", retrieval_id=rid, refs=["atm:019a0000-0000-7000-8000-0000"
@@ -124,6 +134,34 @@ def test_helpful_only_for_own_session(env, base, kb):
     assert agent == AGENT
     labels = {r[0] for r in kb.execute("SELECT label FROM activity WHERE kind = 'session'")}
     assert len(labels) == 2 and all(label.startswith("mcp:stdio:") for label in labels)
+
+
+def test_bad_arguments_and_unknown_tool_answer_problem(env, kb):
+    """Отказы SDK до инструмента — в той же форме, что прочие ошибки: isError и problem+json bad_request."""
+    async def main():
+        async with connect(env) as client:
+            for name, arguments, word in [("amem_search", {}, "query"),
+                                          ("amem_search", {"query": "анкер", "limit": "много"}, "limit"),
+                                          ("amem_review_resolve", {"item": "x", "outcome": "confirmed"}, "confidence"),
+                                          ("amem_nope", {}, "amem_nope")]:
+                result = await client.call_tool(name, arguments)
+                assert result.is_error, (name, arguments)
+                body = result.structured_content
+                assert body["code"] == "bad_request" and body["status"] == 400, body
+                assert word in body["detail"] and result.content[0].text.startswith("bad_request:")
+    sync(main)
+
+
+def test_building_server_leaves_root_logger_alone(dsn, tmp_path):
+    """MCPServer зовёт logging.basicConfig — у службы корневой логгер после create_app без новых обработчиков."""
+    root = logging.getLogger()
+    saved, level = root.handlers[:], root.level
+    root.handlers.clear()                    # у pytest свои обработчики: без них basicConfig сработал бы
+    try:
+        service.create_app(settings.load({"AMEM_DSN": dsn, "HOME": str(tmp_path / "home"), "USER": "ann"}))
+        assert root.handlers == [] and root.level == level
+    finally:
+        root.handlers[:] = saved
 
 
 def test_submit_as_model_with_private_and_secret_warnings(env, kb):
@@ -277,7 +315,10 @@ def _tool(client, sid, name, arguments, **headers) -> dict:
 
 def test_http_mcp_is_guarded_by_host_origin_and_fetch_site(http):
     client = http()
-    assert client.mcp(INIT, Host="evil.example:8767").status_code == 421
+    refused = client.mcp(INIT, Host="evil.example:8767")         # Host проверяет Guard, не SDK
+    assert refused.status_code == 421 and refused.headers["content-type"].startswith("application/problem+json")
+    assert refused.json()["code"] == "bad_host"
+    assert client.mcp(INIT, Host="Localhost:8767").status_code == 200       # имя — без учёта регистра
     refused = client.mcp(INIT, Origin="http://evil.example")
     assert refused.status_code == 403 and refused.json()["code"] == "bad_origin"
     assert client.mcp(INIT, **{"Sec-Fetch-Site": "cross-site"}).status_code == 403
@@ -306,9 +347,11 @@ def test_http_mcp_agent_header_is_model_only(http, kb, docs):
         label="Анкер ставят в бетон класса B25")}]})
     assert kb.execute("SELECT agent FROM changeset WHERE id = %s",
                       (done["structuredContent"]["changeset_id"],)).fetchone()[0] == "model:local"
-    # сессия привязана к агенту, который её открыл
-    taken = _tool(client, sid, "amem_search", {"query": "анкер"}, **{"X-Amem-Agent": "model:intruder"})
-    assert taken["isError"] and taken["structuredContent"]["code"] == "forbidden"
+    # сессия привязана к агенту, который её открыл: чужому SDK отвечает «сессии нет»
+    taken = client.mcp({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+        "name": "amem_search", "arguments": {"query": "анкер"}}}, session=sid, **{"X-Amem-Agent": "model:intruder"})
+    assert taken.status_code == 404
+    assert not _tool(client, sid, "amem_search", {"query": "анкер"}).get("isError")
 
 
 def test_http_mcp_tokens_bearer_and_read_only(http, tmp_path):
@@ -322,9 +365,17 @@ def test_http_mcp_tokens_bearer_and_read_only(http, tmp_path):
     assert not found.get("isError"), found
     refused = _tool(client, sid, "amem_submit", {"proposals": [{"target": "atom", "payload": fact()}]}, **auth)
     assert refused["isError"] and refused["structuredContent"]["code"] == "read_only"
-    other = _tool(client, sid, "amem_search", {"query": "анкер"}, Authorization="Bearer tok-write")
-    assert other["isError"] and other["structuredContent"]["code"] == "forbidden"      # чужая сессия
     writer = {"Authorization": "Bearer tok-write"}
+    # чужая сессия: другой токен с её id — 404 на любой метод, и DELETE её не закрывает
+    other = client.mcp({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+        "name": "amem_search", "arguments": {"query": "анкер"}}}, session=sid, **writer)
+    assert other.status_code == 404
+    assert client.mcp({"jsonrpc": "2.0", "id": 3, "method": "tools/list"}, session=sid, **writer).status_code == 404
+    assert client.delete("/mcp", headers={"Mcp-Session-Id": sid, **writer}).status_code == 404
+    listed = client.mcp({"jsonrpc": "2.0", "id": 4, "method": "tools/list"}, session=sid, **auth)
+    assert listed.status_code == 200 and {t["name"] for t in listed.json()["result"]["tools"]} == set(mcp.TOOLS)
+    assert client.delete("/mcp", headers={"Mcp-Session-Id": sid, **auth}).status_code == 200    # свой — закрывает
+    assert client.mcp({"jsonrpc": "2.0", "id": 5, "method": "tools/list"}, session=sid, **auth).status_code == 404
     sid = _open(client, **writer)
     refused = client.mcp(INIT, **writer, **{"X-Amem-Agent": "model:someone"})
     assert refused.status_code == 403                                                  # токен выдан model:writer
@@ -333,11 +384,13 @@ def test_http_mcp_tokens_bearer_and_read_only(http, tmp_path):
 
 
 def test_http_mcp_sessions_with_sdk_client(dsn, kb, store, docs, tmp_path):
-    """Клиент SDK через ASGI: у двух сессий /mcp — свои задачи; выдачу чужой сессии helpful не отмечает."""
+    """Клиент SDK через ASGI: у двух сессий /mcp — свои задачи; выдачу чужой сессии helpful не отмечает. Клиент без
+    сессии (2026-07-28): выдачу сверяют по агенту и входу, задача режется по простою."""
     environ = {"AMEM_DSN": dsn, "HOME": str(tmp_path / "home"), "USER": "ann", "AMEM_DATA": str(tmp_path / "objects"),
                "AMEM_STATE": str(tmp_path / "state"), "AMEM_DOCS": str(docs)}
     app = service.create_app(settings.load(environ))
     written(kb, store, docs, fact())
+    seen = {}
 
     async def main():
         async with app.router.lifespan_context(app):
@@ -353,27 +406,60 @@ def test_http_mcp_sessions_with_sdk_client(dsn, kb, store, docs, tmp_path):
                     _, found = await call(one, "amem_search", query="кронштейн")
                     atom = found["items"][0]["ref"]
                     err, body = await call(two, "amem_helpful", retrieval_id=found["retrieval_id"], refs=[atom])
-                    assert err and "не из этой сессии" in body["detail"]
+                    assert err and body["code"] == "forbidden" and "не из этой сессии" in body["detail"]
                     err, body = await call(one, "amem_helpful", retrieval_id=found["retrieval_id"], refs=[atom])
                     assert not err, body
-                async with Client(streamable_http_client("http://127.0.0.1:8767/mcp", http_client=h1)) as modern:
+                async with Client(streamable_http_client("http://127.0.0.1:8767/mcp", http_client=h1)) as modern, \
+                        Client(streamable_http_client("http://127.0.0.1:8767/mcp", http_client=h2)) as stranger:
                     err, found = await call(modern, "amem_search", query="кронштейн")
                     assert not err and found["retrieval_id"]
-                    err, body = await call(modern, "amem_helpful", retrieval_id=found["retrieval_id"],
-                                           refs=[found["items"][0]["ref"]])
-                    assert not err, body
+                    rid, atom = found["retrieval_id"], found["items"][0]["ref"]
+                    err, body = await call(stranger, "amem_helpful", retrieval_id=rid, refs=[atom])
+                    assert err and body["code"] == "forbidden"                   # другой агент
+                    runtime = app.state.mcp.runtime
+                    started = runtime.clock()
+                    runtime.clock = lambda: started + mcp.IDLE_CUT + 1           # полчаса тишины: задача разрезана
+                    err, body = await call(modern, "amem_helpful", retrieval_id=rid, refs=[atom])
+                    assert not err, body                                         # выдача своя — отметка проходит
+                    err, again = await call(modern, "amem_search", query="кронштейн")
+                    assert not err
+                    seen.update(first=rid, again=again["retrieval_id"])
     sync(main)
     labels = sorted(r[0] for r in kb.execute("SELECT label FROM activity WHERE kind = 'session'"))
-    assert len(labels) == 3 and all(label.startswith("mcp:http:") for label in labels)
+    assert len(labels) == 4 and all(label.startswith("mcp:http:") for label in labels)
+    rows = kb.execute("SELECT a.label FROM retrieval r JOIN activity a ON a.id = r.activity "
+                      "WHERE r.id::text = ANY(%s)", ([seen["first"], seen["again"]],)).fetchall()
+    open_labels = {label for label, in rows}
+    assert len(open_labels) == 2                                                 # после простоя — новая задача
+    assert all(re.fullmatch(r"mcp:http:[0-9a-f]{24}:[0-9a-f]{32}", label) for label in open_labels)
     assert {r[0] for r in kb.execute("SELECT agent FROM atom_use")} == {"model:one"}
+    used, = kb.execute("SELECT u.activity = r.activity FROM atom_use u JOIN retrieval r ON r.id = u.retrieval_id "
+                       "WHERE r.id = %s", (seen["first"],)).fetchone()
+    assert used                                                                  # отметка — в задаче выдачи
+
+
+def test_open_client_task_is_cut_by_idle(dsn, tmp_path):
+    """Клиент без сессии: та же метка задачи, пока он не молчит IDLE_CUT; другие вход или агент — свои метки."""
+    runtime = mcp.ServiceRuntime(settings.load({"AMEM_DSN": dsn, "HOME": str(tmp_path / "home"), "USER": "ann"}))
+    now = [1000.0]
+    runtime.clock = lambda: now[0]
+    first = runtime.open_label("p1")
+    now[0] += mcp.IDLE_CUT - 1
+    assert runtime.open_label("p1") == first                                    # тишина короче — та же задача
+    now[0] += mcp.IDLE_CUT - 1
+    assert runtime.open_label("p1") == first                                    # отсчёт — от последнего вызова
+    now[0] += mcp.IDLE_CUT + 1
+    second = runtime.open_label("p1")
+    assert second != first and second.startswith(runtime.issued_to("p1")) and first.startswith(runtime.issued_to("p1"))
+    assert not runtime.open_label("p2").startswith(runtime.issued_to("p1"))
 
 
 # --- stdio ---
 
 def test_stdio_subprocess_initialize_and_list_tools(env, base):
     environ = {**{k: v for k, v in os.environ.items() if not k.startswith(("AMEM_", "CLAUDECODE", "CODEX_"))},
-               **env, "AMEM_BACKEND": "none"}
-    environ.pop("PYTHONPATH", None)
+               **env, "AMEM_BACKEND": "none",
+               "PYTHONPATH": str(Path(mcp.__file__).resolve().parents[2])}     # код этого дерева, а не установленный
     params = StdioServerParameters(command=sys.executable, args=["-m", "amem.cli", "mcp", "--agent", "model:stdio"],
                                    env=environ)
 
