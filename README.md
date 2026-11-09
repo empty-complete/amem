@@ -41,9 +41,9 @@
 > [!IMPORTANT]
 > **amem is in early development.** The core library works today: storage with revisions, hybrid search,
 > automatic checks, the review queue, entity cards, bundles and backups, tested in CI on PostgreSQL 18
-> and 16. The HTTP service and the web UI run on it; the screenshots of the sky, a record and the review
-> queue are taken from the service. The CLI, the MCP server and agent memory are being built now; the card
-> and agent pictures are placeholders until then.
+> and 16. The HTTP service and the web UI run on it; the screenshots of the sky, a record, the review
+> queue and an entity card are taken from the service. The agent picture is a placeholder until agent
+> memory ships.
 
 ## Why amem
 
@@ -107,8 +107,8 @@ file it came from, the full history of its changes, and the decision of a person
   <tr>
     <td width="50%" valign="top">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/card-dark.svg">
-        <img alt="An entity card with completeness and grouped parameters (placeholder)" src="docs/assets/readme/en/card-light.svg">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/card-dark.png">
+        <img alt="An entity card with completeness and grouped parameters" src="docs/assets/readme/en/card-light.png">
       </picture>
       <h3>Entity cards</h3>
       A profile says which parameters an object needs. The card shows what is known, missing or in

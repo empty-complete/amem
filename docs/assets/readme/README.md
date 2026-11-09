@@ -1,9 +1,9 @@
 # Картинки README
 
 - `banner-light.svg`, `banner-dark.svg` — баннер в шапке `README.md` и `README.ru.md`. Не заглушка.
-- `en/*.png`, `ru/*.png` — **настоящие снимки** `sky`, `record`, `review`: веб-UI на службе с образцом
+- `en/*.png`, `ru/*.png` — **настоящие снимки** `sky`, `record`, `review`, `card`: веб-UI на службе с образцом
   `tools/seed_sample.py`, окно 1600×900, светлая и тёмная тема. Снимает их `web/tools/readme-shots.mjs`.
-- `en/*.svg`, `ru/*.svg` — **заглушки** `card` и `agent`: каркас экрана в цветах веб-UI и табличка
+- `en/*.svg`, `ru/*.svg` — **заглушка** `agent`: каркас экрана в цветах веб-UI и табличка
   «Placeholder · screenshot coming soon».
 - Английские — для `README.md`, русские — для `README.ru.md`; у каждой картинки светлый (`-light`) и тёмный
   (`-dark`) вариант, README выбирает по теме GitHub через `<picture>`.
@@ -29,8 +29,8 @@ export AMEM_DSN=postgresql://…/пустая_база AMEM_DOCS=/tmp/amem-sampl
 cd web && npm run build && node tools/readme-shots.mjs http://127.0.0.1:8770
 ```
 
-Карточку (`card`) снимать, когда в образце появится пакет области с профилем сущности; агента (`agent`) —
-после подпроекта 4b.
+Снимки делает CI (задача `web-service`, артефакт `readme-shots`); карточка — по профилю пакета-образца
+`tools/sample-pack/meteo`. Агента (`agent`) — после памяти агентов.
 
 ## Как снять (старый способ, на моках)
 

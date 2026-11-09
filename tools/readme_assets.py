@@ -579,7 +579,7 @@ def screen_agent(theme, lang):
 
 # заглушки — только экранов, которых ещё нет на настоящих снимках (sky, record, review снимает
 # web/tools/readme-shots.mjs со службы); остальные функции остаются для сравнения и черновиков
-SCREENS = {"card": screen_card, "agent": screen_agent}
+SCREENS = {"agent": screen_agent}
 
 
 def main(root: Path):
