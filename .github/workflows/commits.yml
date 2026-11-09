@@ -1,0 +1,12 @@
+name: commits
+on: [push, pull_request]
+
+jobs:
+  commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Conventional Commits in English for every non-merge commit in the history
+      - run: python3 tools/check_commits.py --revs HEAD

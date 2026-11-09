@@ -1,0 +1,4 @@
+#!/bin/sh
+# Commit messages follow Conventional Commits in English — the same check as the
+# `commits` workflow in CI. Enabled together with pre-push: git config core.hooksPath tools/hooks
+exec python3 "$(git rev-parse --show-toplevel)/tools/check_commits.py" "$1"
