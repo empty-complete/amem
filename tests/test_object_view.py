@@ -196,5 +196,13 @@ def test_sheet_not_a_workbook(kb, docs, store):
     assert e.value.code == "invalid"
 
 
+def test_sheet_without_the_copy_in_the_store_is_a_store_error(kb, book, tmp_path):
+    """Копии нет в хранилище — StoreError (или отказ файловой системы), а не «версия не книга xlsx»."""
+    from amem.ocfl_store import StoreError
+
+    with pytest.raises(StoreError):
+        objects.sheet(kb, ObjectStore(tmp_path / "пустое"), book.object_id, 1, "Нагрузки")
+
+
 def test_object_error_code_defaults_to_none():
     assert ObjectError("x").code is None

@@ -6,7 +6,9 @@
 """
 from __future__ import annotations
 
+import importlib.util
 import time
+import uuid
 from datetime import datetime
 
 import psycopg
@@ -32,6 +34,62 @@ def _check_query_provider(model, provider: embed.EmbeddingProvider) -> None:
     if actual != expected:
         raise embed.EmbeddingError(
             f"provider не соответствует активной модели: ожидалось {expected!r}, получено {actual!r}")
+
+
+def availability(conn: psycopg.Connection, provider: embed.EmbeddingProvider | None = None) -> dict:
+    """Пойдёт ли смысловой канал у exact_fact и similar по тексту: {"semantic": "used" | "unavailable", "reason"}.
+
+    reason у unavailable: no_active_model — в базе нет активной модели; backend_disabled — AMEM_BACKEND=none;
+    backend_unknown — неизвестный AMEM_BACKEND; provider_mismatch — provider не той модели, что активна в базе
+    (поиск по тексту тогда отвечает EmbeddingError); fastembed_missing — модель fastembed, а пакета нет. У used
+    reason — None. Вектора не считаются: проверка дешёвая, служба зовёт её на каждый /session."""
+    try:
+        model, selected, reason = _availability(conn, provider)
+    except embed.EmbeddingError:
+        return {"semantic": "unavailable", "reason": "backend_unknown"}
+    if selected is None:
+        return {"semantic": "unavailable", "reason": reason}
+    try:
+        _check_query_provider(model, selected)
+    except embed.EmbeddingError:
+        return {"semantic": "unavailable", "reason": "provider_mismatch"}
+    if selected.backend == "fastembed" and importlib.util.find_spec("fastembed") is None:
+        return {"semantic": "unavailable", "reason": "fastembed_missing"}
+    return {"semantic": "used", "reason": None}
+
+
+SEMANTIC_ERRORS = ("raise", "skip")
+
+
+def _select(conn: psycopg.Connection, provider, on_error: str):
+    """_availability с выбором реакции на ошибку provider: raise — EmbeddingError наружу, skip — причина пропуска."""
+    if on_error not in SEMANTIC_ERRORS:
+        raise ValueError(f"on_semantic_error {on_error!r}: допустимы {', '.join(SEMANTIC_ERRORS)}")
+    try:
+        return _availability(conn, provider)
+    except embed.EmbeddingError:
+        if on_error == "raise":
+            raise
+        return search._active_model(conn), None, "backend_unknown"
+
+
+def _query_vector(model, provider: embed.EmbeddingProvider, query: str, on_error: str):
+    """Вектор запроса активной моделью → (вектор, None); при skip ошибка provider — (None, причина):
+    provider_mismatch — provider не той модели, fastembed_missing — нет пакета fastembed, embedding_failed — прочий
+    отказ модели (нет файлов в кэше, сбой счёта)."""
+    try:
+        _check_query_provider(model, provider)
+    except embed.EmbeddingError:
+        if on_error == "raise":
+            raise
+        return None, "provider_mismatch"
+    try:
+        return provider.embed([query])[0], None
+    except embed.EmbeddingError:
+        if on_error == "raise":
+            raise
+        missing = provider.backend == "fastembed" and importlib.util.find_spec("fastembed") is None
+        return None, "fastembed_missing" if missing else "embedding_failed"
 
 
 def _timed(channel, function, durations):
@@ -112,8 +170,9 @@ def _json_equal(before, after) -> bool:
     return before == after
 
 
-def _diff(before, after) -> list[dict]:
-    """Рекурсивный diff JSON: RFC 6901-пути; массив — одно значение, отсутствующая сторона опущена."""
+def diff(before, after) -> list[dict]:
+    """Рекурсивный diff JSON: RFC 6901-пути; массив — одно значение, отсутствующая сторона опущена.
+    Им же служба сравнивает текущую и предложенную ревизии у пункта очереди (edit, imported)."""
     changes = []
 
     def walk(old, new, path):
@@ -199,7 +258,7 @@ def what_changed(conn: psycopg.Connection, *, ref: str | None = None,
                     previous_content_hash=row["previous_content_hash"], content_hash=row["content_hash"],
                     valid_from=row["valid_from"].isoformat() if row["valid_from"] else None,
                     valid_to=row["valid_to"].isoformat() if row["valid_to"] else None,
-                    changes=_diff(previous if previous is not None else {}, row["payload"]))
+                    changes=diff(previous if previous is not None else {}, row["payload"]))
             rows = cur.execute(
                 f"SELECT r.id, r.{t}_id AS record_id, r.n, r.review_state, r.reviewed_by, r.reviewed_at "
                 f"FROM {t}_revision r WHERE r.reviewed_at IS NOT NULL "
@@ -269,11 +328,13 @@ def what_changed(conn: psycopg.Connection, *, ref: str | None = None,
 def exact_fact(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
                limit: int = 10, target=None, kind=None, entity_class=None, statuses=None,
                include_record: bool = False, provider: embed.EmbeddingProvider | None = None,
-               usefulness: bool = True, log: bool = True, now=None) -> dict:
+               usefulness: bool = True, log: bool = True, now=None, on_semantic_error: str = "raise") -> dict:
     """Найти марку или формулировку всеми четырьмя каналами, не выбирая один «лучший» ответ.
 
     kind и entity_class — код строкой или несколько кодов (search._codes); log=False — выдача не пишется
-    в retrieval, retrieval_id равен None."""
+    в retrieval, retrieval_id равен None. on_semantic_error — что делать, если provider не может посчитать вектор
+    запроса (не та модель, нет fastembed, сбой модели, неизвестный AMEM_BACKEND): raise — EmbeddingError, skip —
+    смысловой канал пропускается с причиной в channels.reasons.vector, остальные каналы отвечают как обычно."""
     filters = {"target": target, "kind": search._codes(kind, "kind"),
                "entity_class": search._codes(entity_class, "entity_class"), "statuses": statuses}
     durations = {}
@@ -283,14 +344,14 @@ def exact_fact(conn: psycopg.Connection, query: str, *, agent: str, activity=Non
         "fts": _timed("fts", lambda: search._fts(conn, query, **filters), durations),
         "vector": None,
     }
-    model, selected, reason = _availability(conn, provider)
+    model, selected, reason = _select(conn, provider, on_semantic_error)
     if selected is not None and not query.strip():
         reason = "empty_query"
     if selected is not None and reason is None:
-        _check_query_provider(model, selected)
-        vector = selected.embed([query])[0]
-        channels["vector"] = _timed(
-            "vector", lambda: search._vector(conn, vector, model[0], **filters), durations)
+        vector, reason = _query_vector(model, selected, query, on_semantic_error)
+        if vector is not None:
+            channels["vector"] = _timed(
+                "vector", lambda: search._vector(conn, vector, model[0], **filters), durations)
     reasons = {"vector": reason} if reason is not None else {}
     return _response(conn, "exact_fact", channels, query=query, agent=agent, activity=activity,
                      limit=limit, include_record=include_record,
@@ -321,10 +382,10 @@ def _source_document(conn: psycopg.Connection, ref: str):
 def similar(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
             limit: int = 10, target=None, kind=None, entity_class=None, statuses=None,
             include_record: bool = False, provider: embed.EmbeddingProvider | None = None,
-            usefulness: bool = True, log: bool = True, now=None) -> dict:
+            usefulness: bool = True, log: bool = True, now=None, on_semantic_error: str = "raise") -> dict:
     """Найти похожие записи по тексту либо по atm:/ent: ссылке (UUID или ключ) на существующую запись.
 
-    Фильтры и log — как у exact_fact."""
+    Фильтры, log и on_semantic_error — как у exact_fact: при skip похожие по тексту ищет один канал fts."""
     if not isinstance(query, str):
         raise ValueError("запрос должен быть строкой")
     kind, entity_class = search._codes(kind, "kind"), search._codes(entity_class, "entity_class")
@@ -340,13 +401,12 @@ def similar(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
                "statuses": statuses, "exclude": exclude}
     durations = {}
     channels = {"vector": None, "fts": None}
-    model, selected, reason = _availability(conn, provider)
+    model, selected, reason = _select(conn, provider, on_semantic_error)
     if selected is not None and not fts_query.strip():
         reason = "empty_query"
     if selected is not None and reason is None:
         if source is None:
-            _check_query_provider(model, selected)
-            vector = selected.embed([query])[0]
+            vector, reason = _query_vector(model, selected, query, on_semantic_error)
         else:
             stored = search._current_embedding(conn, source[0], source[1], model[0])
             if stored is None:
@@ -365,6 +425,7 @@ def similar(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
                      reasons=reasons, model=model, durations_ms=durations, useful=usefulness, log=log, now=now)
 
 
+GRAPH_LIMIT = 300                    # узлов графа по умолчанию (around_entity, overview); контракт /graph — до 1000
 _GRAPH_STRUCTURAL = {"about", "derived_from"}
 _GRAPH_ROLE_RANK = {"primary": 0, "secondary": 1, "derived": 2}
 
@@ -415,9 +476,11 @@ def _graph_rels(conn: psycopg.Connection, rels) -> frozenset[str] | None:
     return values
 
 
-def _graph_edges(conn: psycopg.Connection, frontier, rels: frozenset[str] | None) -> list[dict]:
-    """Активные link и структурные ребра только текущих ревизий, прилегающие к frontier."""
+def _graph_edges(conn: psycopg.Connection, frontier, rels: frozenset[str] | None, *, inner: bool = False) -> list[dict]:
+    """Активные link и структурные ребра только текущих ревизий, прилегающие к frontier; inner — только рёбра,
+    оба конца которых во frontier (обзор: рёбра между вернувшимися узлами)."""
     ids = [ref.split(":", 1)[1] for ref in frontier]
+    join = "AND" if inner else "OR"
     link_rels = None if rels is None else sorted(rels - _GRAPH_STRUCTURAL)
     params = {"ids": ids, "rels": link_rels}
     edges = []
@@ -431,7 +494,7 @@ def _graph_edges(conn: psycopg.Connection, frontier, rels: frozenset[str] | None
                 "CASE WHEN l.dst_atom IS NULL THEN 'ent' ELSE 'atm' END AS dst_prefix, "
                 "l.qualifiers, l.confidence, l.changeset_id, l.agent, l.created_at FROM link l "
                 "WHERE l.retired_at IS NULL AND (coalesce(l.src_atom, l.src_entity) = ANY(%(ids)s::uuid[]) "
-                f"OR coalesce(l.dst_atom, l.dst_entity) = ANY(%(ids)s::uuid[])) {condition} ORDER BY l.id",
+                f"{join} coalesce(l.dst_atom, l.dst_entity) = ANY(%(ids)s::uuid[])) {condition} ORDER BY l.id",
                 params).fetchall()
             for row in rows:
                 edges.append({
@@ -450,12 +513,16 @@ def _graph_edges(conn: psycopg.Connection, frontier, rels: frozenset[str] | None
             select = (f"SELECT r.atom_id, f.{other} AS other_id, r.id AS revision_id, r.changeset_id, cs.agent, "
                       f"r.recorded_at AS created_at FROM atom_current r JOIN {table} f ON f.revision_id = r.id "
                       f"JOIN changeset cs ON cs.id = r.changeset_id ")
-            rows = cur.execute(
-                f"{select} WHERE r.atom_id = ANY(%(ids)s::uuid[]) UNION "
-                f"{select} WHERE f.{other} = ANY(%(ids)s::uuid[]) AND r.atom_id = ANY(ARRAY("
-                f"SELECT ar.atom_id FROM {table} g JOIN atom_revision ar ON ar.id = g.revision_id "
-                f"WHERE g.{other} = ANY(%(ids)s::uuid[]))) "
-                "ORDER BY revision_id, other_id", params).fetchall()
+            if inner:
+                query = (f"{select} WHERE r.atom_id = ANY(%(ids)s::uuid[]) AND f.{other} = ANY(%(ids)s::uuid[]) "
+                         "ORDER BY revision_id, other_id")
+            else:
+                query = (f"{select} WHERE r.atom_id = ANY(%(ids)s::uuid[]) UNION "
+                         f"{select} WHERE f.{other} = ANY(%(ids)s::uuid[]) AND r.atom_id = ANY(ARRAY("
+                         f"SELECT ar.atom_id FROM {table} g JOIN atom_revision ar ON ar.id = g.revision_id "
+                         f"WHERE g.{other} = ANY(%(ids)s::uuid[]))) "
+                         "ORDER BY revision_id, other_id")
+            rows = cur.execute(query, params).fetchall()
             for row in rows:
                 edges.append({
                     "id": f"{field}:{row['revision_id']}:{row['other_id']}", "rel": field,
@@ -464,6 +531,70 @@ def _graph_edges(conn: psycopg.Connection, frontier, rels: frozenset[str] | None
                     "created_at": row["created_at"].isoformat(), "confidence": None,
                 })
     return edges
+
+
+# структурные поля: таблица и столбец второго конца (atom_about → сущность, atom_derived → атом)
+_GRAPH_FIELD_TABLES = {"about": ("atom_about", "entity_id"), "derived_from": ("atom_derived", "atom_id")}
+
+
+def _graph_adjacent_sql(rels: frozenset[str] | None, *, ids: str = "%(ids)s::uuid[]") -> str:
+    """Строки (near, far) — текущие рёбра, у которых конец near в массиве ids (параметр %(ids)s или подзапрос
+    ARRAY(…) — выражение из кода, не из запроса): действующие link (с %(rels)s, если набор видов задан) и поля
+    about/derived_from текущих ревизий. Ребро с обоими концами в ids — две строки, по одной на конец: так степень
+    считает его у обоих. Таблицы и столбцы — из _GRAPH_FIELD_TABLES."""
+    link_rels = None if rels is None else rels - _GRAPH_STRUCTURAL
+    parts = []
+    if link_rels is None or link_rels:
+        condition = " AND l.rel = ANY(%(rels)s)" if link_rels is not None else ""
+        for near, far in (("src", "dst"), ("dst", "src")):
+            parts.append(f"SELECT coalesce(l.{near}_atom, l.{near}_entity) AS near, "
+                         f"coalesce(l.{far}_atom, l.{far}_entity) AS far FROM link l WHERE l.retired_at IS NULL "
+                         f"AND coalesce(l.{near}_atom, l.{near}_entity) = ANY({ids}){condition}")
+    for field in sorted(_GRAPH_STRUCTURAL if rels is None else _GRAPH_STRUCTURAL & rels):
+        table, other = _GRAPH_FIELD_TABLES[field]
+        joined = f"FROM atom_current r JOIN {table} f ON f.revision_id = r.id"
+        parts.append(f"SELECT r.atom_id AS near, f.{other} AS far {joined} WHERE r.atom_id = ANY({ids})")
+        # входящие: условие на atom_id без OR — PostgreSQL подставляет его внутрь atom_current (см. _graph_edges)
+        parts.append(f"SELECT f.{other} AS near, r.atom_id AS far {joined} WHERE f.{other} = ANY({ids}) "
+                     f"AND r.atom_id = ANY(ARRAY(SELECT ar.atom_id FROM {table} g JOIN atom_revision ar "
+                     f"ON ar.id = g.revision_id WHERE g.{other} = ANY({ids})))")
+    return " UNION ALL ".join(parts) or "SELECT NULL::uuid AS near, NULL::uuid AS far WHERE false"
+
+
+def _graph_marks(conn: psycopg.Connection, nodes: dict, degrees: dict | None = None) -> None:
+    """degree — число текущих связей узла во всей базе (входящих и исходящих, с любыми соседями), одним агрегатом
+    (degrees — уже посчитанные, UUID → число); pending — у записи есть открытый пункт очереди проверки (queued или
+    claimed), одним запросом."""
+    ids = [ref.split(":", 1)[1] for ref in nodes]
+    if not ids:
+        return
+    if degrees is None:
+        degrees = dict(conn.execute(f"SELECT near, count(*) FROM ({_graph_adjacent_sql(None)}) e GROUP BY near",
+                                    {"ids": ids}).fetchall())
+    pending = {row[0] for row in conn.execute(
+        "SELECT DISTINCT record_id FROM review_item WHERE record_id = ANY(%s::uuid[]) "
+        "AND state IN ('queued', 'claimed')", (ids,))}
+    for ref, node in nodes.items():
+        record_id = uuid.UUID(ref.split(":", 1)[1])
+        node["degree"] = degrees.get(record_id, 0)
+        node["pending"] = record_id in pending
+
+
+def _graph_neighbours(conn: psycopg.Connection, frontier, rels: frozenset[str] | None, statuses) -> set[str]:
+    """Соседи frontier по текущим рёбрам, у которых есть текущая ревизия и статус из statuses, — только ссылки:
+    счёт узлов за пределом обхода (total) без путей и подписей."""
+    ids = [ref.split(":", 1)[1] for ref in frontier]
+    if not ids:
+        return set()
+    rows = conn.execute(
+        f"WITH n AS (SELECT DISTINCT far AS id FROM ({_graph_adjacent_sql(rels)}) e) "
+        "SELECT 'atm', a.id FROM atom a JOIN n ON n.id = a.id WHERE a.status = ANY(%(statuses)s) "
+        "AND EXISTS (SELECT 1 FROM atom_revision r WHERE r.atom_id = a.id AND r.review_state <> 'declined') "
+        "UNION ALL SELECT 'ent', e.id FROM entity e JOIN n ON n.id = e.id WHERE e.status = ANY(%(statuses)s) "
+        "AND EXISTS (SELECT 1 FROM entity_revision r WHERE r.entity_id = e.id AND r.review_state <> 'declined')",
+        {"ids": ids, "rels": None if rels is None else sorted(rels - _GRAPH_STRUCTURAL),
+         "statuses": list(statuses)}).fetchall()
+    return {f"{prefix}:{record_id}" for prefix, record_id in rows}
 
 
 def _graph_source_roles(conn: psycopg.Connection, nodes: dict) -> dict:
@@ -501,15 +632,23 @@ def _path_evidence_role(path: dict, nodes: dict, roles: dict):
     return next(role for role, rank in _GRAPH_ROLE_RANK.items() if rank == weakest)
 
 
-def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=None, statuses=None) -> dict:
+def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=None, statuses=None,
+                  limit: int | None = GRAPH_LIMIT) -> dict:
     """Кратчайшие пути от записи (ref — atm:/ent: с UUID или ключом) по link/about/derived_from; узел посещается
     один раз.
 
     rels — набор видов связей (about и derived_from — тоже), statuses — статусы соседей, как у других рецептов.
     При равной длине путь выбирается по последовательности id рёбер, затем по ref; рёбра вне дерева кратчайших
-    путей (параллельные связи, связи между уже найденными узлами) не возвращаются."""
+    путей (параллельные связи, связи между уже найденными узлами) не возвращаются.
+
+    limit — сколько узлов (вместе с начальным) найти, не больше: обход останавливается на нём, ближние узлы —
+    раньше дальних, в том же порядке, что без предела; truncated — были узлы сверх предела. None — без предела.
+    total — сколько узлов было бы без предела: за пределом обход досчитывает только ссылки соседей, без путей.
+    У узла degree — число его текущих связей во всей базе, pending — открытый пункт очереди проверки."""
     if isinstance(depth, bool) or not isinstance(depth, int) or not 1 <= depth <= 3:
         raise records.RecordError("depth должен быть целым числом от 1 до 3")
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+        raise records.RecordError(f"limit {limit!r}: нужно целое число от 1 или None")
     _, _, start = _history_ref(conn, ref)
     allowed_statuses = search._channel_statuses(statuses)
     rels = _graph_rels(conn, rels)
@@ -521,6 +660,7 @@ def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=No
     result_edges = []
     visited = {start}
     frontier = [start]
+    truncated = False
 
     for level in range(1, depth + 1):
         adjacent = _graph_edges(conn, frontier, rels)
@@ -539,10 +679,14 @@ def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=No
                 path_key = (*paths[current]["edges"], edge["id"])
                 candidates.append((path_key, neighbor, current, edge, direction, info))
         candidates.sort(key=lambda item: (item[0], item[1], item[2]))
+        level_refs = {item[1] for item in candidates}
         next_frontier = []
         for _, neighbor, current, edge, direction, info in candidates:
             if neighbor in visited:
                 continue
+            if limit is not None and len(nodes) >= limit:
+                truncated = True                     # узел сверх предела: обход дальше не идёт
+                break
             info["depth"] = level
             nodes[neighbor] = info
             oriented = {**edge, "from": current, "to": neighbor, "direction": direction}
@@ -552,9 +696,20 @@ def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=No
             visited.add(neighbor)
             next_frontier.append(neighbor)
         frontier = next_frontier
+        if truncated:
+            seen = visited | level_refs
+            reached = level_refs
+            for _ in range(level + 1, depth + 1):
+                reached = _graph_neighbours(conn, reached, rels, allowed_statuses) - seen
+                seen |= reached
+            total = len(seen)
+            break
         if not frontier:
             break
+    if not truncated:
+        total = len(nodes)
 
+    _graph_marks(conn, nodes)
     edge_by_id = {edge["id"]: edge for edge in result_edges}
     roles = _graph_source_roles(conn, nodes)
     public_paths = []
@@ -567,5 +722,102 @@ def around_entity(conn: psycopg.Connection, ref: str, *, depth: int = 1, rels=No
         "recipe": "around_entity", "start": start, "depth": depth,
         "nodes": [{key: value for key, value in node.items() if not key.startswith("_")}
                   for node in nodes.values()],
-        "edges": result_edges, "paths": public_paths, "retrieval_id": None,
+        "edges": result_edges, "paths": public_paths, "truncated": truncated, "total": total, "retrieval_id": None,
+    }
+
+
+# Степень всех узлов базы — один агрегат по концам текущих рёбер: действующие link и поля about/derived_from текущих
+# ревизий (то же, что _graph_adjacent_sql для набора узлов). Ребро даёт по единице обоим концам.
+_OVERVIEW_DEGREE = (
+    "cur AS MATERIALIZED (SELECT id, atom_id FROM atom_current), "
+    "degree AS (SELECT id, count(*) AS n FROM ("
+    "SELECT coalesce(src_atom, src_entity) AS id FROM link WHERE retired_at IS NULL "
+    "UNION ALL SELECT coalesce(dst_atom, dst_entity) FROM link WHERE retired_at IS NULL "
+    "UNION ALL SELECT c.atom_id FROM cur c JOIN atom_about f ON f.revision_id = c.id "
+    "UNION ALL SELECT f.entity_id FROM cur c JOIN atom_about f ON f.revision_id = c.id "
+    "UNION ALL SELECT c.atom_id FROM cur c JOIN atom_derived f ON f.revision_id = c.id "
+    "UNION ALL SELECT f.atom_id FROM cur c JOIN atom_derived f ON f.revision_id = c.id) e GROUP BY id)")
+_CURRENT_ENTITY = "EXISTS (SELECT 1 FROM entity_revision r WHERE r.entity_id = e.id AND r.review_state <> 'declined')"
+# Узлы обзора: записи с текущей ревизией и статусом из набора. С проектом — атомы со статусом из набора, у текущей
+# ревизии которых scope.project — этот проект (кандидаты — по индексу 0010, текущая ли ревизия — по cur), и сущности
+# на другом конце текущего ребра хотя бы одного такого атома (смежность — по индексам рёбер, как в обходе): сущность,
+# связанная только с атомом проекта вне фильтра статусов, в обзор не попадает.
+_OVERVIEW_NODES = {
+    False: (
+        # cur — одна строка на атом: соединение, а не IN, — PostgreSQL 16 иначе идёт по индексу atom 50 тыс. раз
+        "nodes AS (SELECT 'atm' AS prefix, a.id, a.created_at FROM atom a JOIN cur c ON c.atom_id = a.id "
+        "WHERE a.status = ANY(%(statuses)s) "
+        f"UNION ALL SELECT 'ent', e.id, e.created_at FROM entity e WHERE e.status = ANY(%(statuses)s) "
+        f"AND {_CURRENT_ENTITY})"),
+    True: (
+        "project_atoms AS MATERIALIZED (SELECT r.atom_id AS id FROM atom_revision r JOIN atom a ON a.id = r.atom_id "
+        "WHERE r.payload->'scope'->>'project' = %(project)s AND r.id IN (SELECT id FROM cur) "
+        "AND a.status = ANY(%(statuses)s)), "
+        "project_entities AS (SELECT far AS id FROM ("
+        + _graph_adjacent_sql(None, ids="ARRAY(SELECT id FROM project_atoms)") + ") e), "
+        "nodes AS (SELECT 'atm' AS prefix, a.id, a.created_at FROM atom a "
+        "WHERE a.id IN (SELECT id FROM project_atoms) "
+        "UNION ALL SELECT 'ent', e.id, e.created_at FROM entity e WHERE e.status = ANY(%(statuses)s) "
+        f"AND e.id IN (SELECT id FROM project_entities) AND {_CURRENT_ENTITY})"),
+}
+
+
+# Отбор обзора: ranked — все узлы под фильтром по degree (при равенстве новые первыми) с номером и total; хабы —
+# первые %(hubs)s; near — соседи хабов по текущим рёбрам (тем же, что считает degree). Предел заполняется по очереди:
+# хабы, их соседи по degree, остальные по degree — иначе top-N по degree на базе с хабами — почти одни сущности,
+# и линий между ними нет.
+_OVERVIEW_PICK = (
+    "ranked AS MATERIALIZED (SELECT n.prefix, n.id, coalesce(d.n, 0) AS degree, row_number() OVER ("
+    "ORDER BY coalesce(d.n, 0) DESC, n.created_at DESC, n.id DESC) AS rank, count(*) OVER () AS total "
+    "FROM nodes n LEFT JOIN degree d ON d.id = n.id), "
+    "hubs AS MATERIALIZED (SELECT id FROM ranked WHERE rank <= %(hubs)s), "
+    "near AS (SELECT DISTINCT far AS id FROM (" + _graph_adjacent_sql(None, ids="ARRAY(SELECT id FROM hubs)") + ") e) "
+    "SELECT r.prefix, r.id, r.degree, r.total, r.rank FROM ranked r "
+    "ORDER BY CASE WHEN r.rank <= %(hubs)s THEN 0 WHEN r.id IN (SELECT id FROM near) THEN 1 ELSE 2 END, r.rank "
+    "LIMIT %(limit)s")
+
+
+def overview(conn: psycopg.Connection, *, limit: int | None = GRAPH_LIMIT, project: str | None = None,
+             statuses=None, rels=None) -> dict:
+    """Обзор базы без начальной записи (небо на главной): текущие сущности и записи, не больше limit узлов (None —
+    все). Отбор: хабы — limit // 4 узлов (не меньше одного) с наибольшим degree, затем их соседи по текущим рёбрам
+    по degree, оставшиеся места — прочие узлы по degree; при равенстве degree — новые первыми (время создания записи,
+    затем id). Так в выдаче есть и линии, а не одни хабы без связей между собой. Порядок выдачи — по degree тем же
+    правилом.
+
+    degree — число текущих связей узла во всей базе (входящих и исходящих, в том числе к узлам вне фильтра и вне
+    выдачи), pending — открытый пункт очереди проверки. Рёбра — только между вернувшимися узлами. total — сколько
+    узлов было бы без предела (с тем же project и статусами), truncated — total > limit. project — ent:<UUID или
+    ключ>: атомы с scope.project этого проекта и сущности, связанные хотя бы с одним из них (атомы — под фильтром
+    статусов). statuses — как у других рецептов, ко всем шагам отбора; rels — виды рёбер выдачи (как
+    у around_entity), на отбор узлов и степень не влияют.
+
+    Отбор — один запрос: степень агрегатом по всем рёбрам, номер по degree и total — оконными функциями, соседи
+    хабов — по индексам рёбер, предел — в базе; в Python приходят только вернувшиеся узлы."""
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+        raise records.RecordError(f"limit {limit!r}: нужно целое число от 1 или None")
+    allowed_statuses = search._channel_statuses(statuses)
+    rels = _graph_rels(conn, rels)
+    project_ref = None
+    if project is not None:
+        if not isinstance(project, str):
+            raise records.RecordError("project должен быть ссылкой ent:<UUID или ключ>")
+        target, _, project_ref = _history_ref(conn, project)
+        if target != "entity":
+            raise records.RecordError(f"project {project}: нужна сущность ent:, а не атом")
+    rows = conn.execute(
+        f"WITH {_OVERVIEW_DEGREE}, {_OVERVIEW_NODES[project_ref is not None]}, {_OVERVIEW_PICK}",
+        {"statuses": list(allowed_statuses), "project": project_ref, "limit": limit,
+         "hubs": max(1, limit // 4) if limit is not None else 0}).fetchall()
+    rows.sort(key=lambda row: row[4])                             # выдача — по degree, как номер в ranked
+    total = rows[0][3] if rows else 0
+    refs = [f"{prefix}:{record_id}" for prefix, record_id, *_ in rows]
+    found = _graph_node_rows(conn, refs)
+    nodes = {ref: found[ref] for ref in refs if ref in found}
+    _graph_marks(conn, nodes, {record_id: degree for _, record_id, degree, *_ in rows})
+    edges = _graph_edges(conn, list(nodes), rels, inner=True) if nodes else []
+    return {
+        "recipe": "overview", "project": project_ref,
+        "nodes": [{key: value for key, value in node.items() if not key.startswith("_")} for node in nodes.values()],
+        "edges": edges, "truncated": limit is not None and total > limit, "total": total, "retrieval_id": None,
     }

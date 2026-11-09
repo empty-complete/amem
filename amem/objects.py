@@ -476,8 +476,9 @@ def sheet(conn: psycopg.Connection, store: ObjectStore, object_id: uuid.UUID | s
         raise ObjectError(f"obj:{object_id}: нет версии {n}", code="not_found")
     if row[0] is None:
         raise ObjectError(f"obj:{object_id}: у версии {n} нет файла", code="invalid")
+    file = store.content(object_id, n)            # StoreError — не «не книга»: _BAD_FILE ловит и RuntimeError
     try:
-        wb = load_workbook(store.content(object_id, n), read_only=True, data_only=True)
+        wb = load_workbook(file, read_only=True, data_only=True)
     except (InvalidFileException, *extract._BAD_FILE) as e:
         raise ObjectError(f"obj:{object_id}: версия {n} не книга xlsx", code="invalid") from e
     try:

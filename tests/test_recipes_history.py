@@ -110,7 +110,7 @@ def test_revision_review_and_sequential_diffs_use_transaction_time(kb):
     paths = [change["path"] for change in second_event["changes"]]
     assert paths == sorted(paths)
     changes = {change["path"]: change for change in second_event["changes"]}
-    # null в каноническом теле удаляется; его отличие от отсутствия проверяет чистый _diff ниже.
+    # null в каноническом теле удаляется; его отличие от отсутствия проверяет чистый diff ниже.
     assert changes["/content/removed"] == {"path": "/content/removed", "before": "old"}
     assert changes["/content/array"] == {
         "path": "/content/array", "before": [1, 2], "after": [1, 3],
@@ -141,7 +141,7 @@ def test_recursive_diff_distinguishes_missing_null_and_treats_array_as_value():
     }
     before_copy, after_copy = copy.deepcopy(before), copy.deepcopy(after)
 
-    assert recipes._diff(before, after) == [
+    assert recipes.diff(before, after) == [
         {"path": "/array", "before": [1, 2], "after": [1, 3]},
         {"path": "/nested/add_null", "after": None},
         {"path": "/nested/change", "before": 1, "after": 2},
@@ -149,12 +149,12 @@ def test_recursive_diff_distinguishes_missing_null_and_treats_array_as_value():
         {"path": "/slash~1key", "after": True},
         {"path": "/tilde~0key", "before": 1, "after": 2},
     ]
-    assert recipes._diff(1, 2) == [{"path": "", "before": 1, "after": 2}]
+    assert recipes.diff(1, 2) == [{"path": "", "before": 1, "after": 2}]
     assert before == before_copy and after == after_copy
 
 
 def test_recursive_diff_sorts_by_escaped_json_pointer():
-    assert recipes._diff({"/": 1, "0": 1}, {"/": 2, "0": 2}) == [
+    assert recipes.diff({"/": 1, "0": 1}, {"/": 2, "0": 2}) == [
         {"path": "/0", "before": 1, "after": 2},
         {"path": "/~1", "before": 1, "after": 2},
     ]

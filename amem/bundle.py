@@ -65,8 +65,25 @@ class BundleError(ValueError):
     машины: missing, collisions, report (отчёт amem.check/1 уровня 1)."""
 
     def __init__(self, message: str, *, code: str | None = None, **details):
-        super().__init__(message)
+        # сообщение уходит наружу (ответ службы, вывод CLI): полных путей на диске в нём нет — только имя файла,
+        # даже если путь пришёл в тексте вложенной ошибки (OSError, StoreError)
+        super().__init__(_without_paths(message))
         self.code, self.details = code, details
+
+
+_ABSOLUTE = re.compile(r"(?<![\w.~])/(?:[^\s/:'\"()]+/)+([^\s/:'\"()]+)")
+
+
+def _without_paths(text: str) -> str:
+    """Абсолютные пути в тексте → последнее имя: «/…/uploads/<id>/bundle.zip» → «bundle.zip»."""
+    return _ABSOLUTE.sub(r"\1", text)
+
+
+def _reason(e: BaseException) -> str:
+    """Причина ошибки без пути: у OSError — strerror, иначе текст ошибки."""
+    if isinstance(e, OSError) and e.strerror:
+        return e.strerror
+    return str(e)
 
 
 @dataclass(frozen=True)
@@ -361,7 +378,8 @@ def _copy_files(store, objects: list[dict], dst: Path) -> None:
             try:
                 shutil.copyfile(store.content(o["id"], v["n"]), target)
             except (StoreError, OSError) as e:
-                raise BundleError(f"obj:{o['id']} версия {v['n']}: файл не скопирован из хранилища: {e}") from e
+                raise BundleError(f"obj:{o['id']} версия {v['n']}: файл не скопирован из хранилища: "
+                                  f"{_reason(e)}") from e
             if _sha256(target) != hexdigest:
                 raise BundleError(f"obj:{o['id']} версия {v['n']}: копия в хранилище не совпадает с digest базы")
 
@@ -381,7 +399,7 @@ def _copy_packs(pack_rows: list[dict], dst: Path) -> None:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(file, target)
             except OSError as e:
-                raise BundleError(f"пакет {row['name']}: {file.name} не скопирован: {e}") from e
+                raise BundleError(f"пакет {row['name']}: {file.name} не скопирован: {_reason(e)}") from e
 
 
 def _files(root: Path) -> list[str]:
@@ -406,7 +424,7 @@ def export(conn: psycopg.Connection, *, store, folder: Path, selection: Selectio
     with_packs — копии пакетов, digest которых совпал с базой."""
     folder = Path(folder)
     if folder.exists():
-        raise BundleError(f"{folder}: уже есть — подборка пишется в новое место")
+        raise BundleError(f"{folder.name}: уже есть — подборка пишется в новое место")
     if with_files and store is None:
         raise BundleError("with_files: нужно хранилище объектов (store)")
     as_zip = folder.suffix == ".zip"
@@ -473,62 +491,80 @@ def export(conn: psycopg.Connection, *, store, folder: Path, selection: Selectio
 
 
 @contextlib.contextmanager
-def opened(path: Path):
-    """Корень подборки: папка как есть, zip — распакованный во временную папку (удаляется на выходе)."""
+def opened(path: Path, *, tmp_dir: Path | None = None):
+    """Корень подборки: папка как есть, zip — распакованный во временную папку в tmp_dir (по умолчанию —
+    системная временная), удаляется на выходе."""
     path = Path(path)
     if path.suffix != ".zip":
         yield path
         return
-    with tempfile.TemporaryDirectory(prefix="amem-bundle-") as tmp:
-        try:
-            with zipfile.ZipFile(path) as z:
-                _check_zip(path, z.infolist())        # до распаковки: ни байта на диск из вредного архива
-                z.extractall(tmp)
-        except (OSError, zipfile.BadZipFile) as e:
-            raise BundleError(f"{path}: не читается как zip: {e}") from e
+    with tempfile.TemporaryDirectory(prefix="amem-bundle-", dir=tmp_dir) as tmp:
+        _extract(path, Path(tmp))
         yield Path(tmp)
+
+
+def _extract(path: Path, dest: Path) -> None:
+    try:
+        with zipfile.ZipFile(path) as z:
+            _check_zip(path, z.infolist())        # до распаковки: ни байта на диск из вредного архива
+            z.extractall(dest)
+    except (OSError, zipfile.BadZipFile) as e:
+        raise BundleError(f"{path.name}: не читается как zip: {_reason(e)}") from e
+
+
+def unpack(path: Path, dest: Path) -> Path:
+    """Распаковать zip подборки в новую папку dest (с теми же проверками архива, что у opened) и вернуть её:
+    так служба распаковывает загрузку один раз — для inspect и import_. Отказ — BundleError, dest не остаётся."""
+    dest = Path(dest)
+    dest.mkdir()
+    try:
+        _extract(Path(path), dest)
+    except BaseException:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise
+    return dest
 
 
 def _check_zip(path: Path, members: list[zipfile.ZipInfo]) -> None:
     """Имена, ссылки и размеры записей архива: вредное — BundleError, не полагаясь на чистку extractall."""
     if len(members) > MAX_MEMBERS:
-        raise BundleError(f"{path}: {len(members)} записей в архиве — больше предела {MAX_MEMBERS}")
+        raise BundleError(f"{path.name}: {len(members)} записей в архиве — больше предела {MAX_MEMBERS}")
     total = 0
     for m in members:
         name = m.filename
         parts = PurePosixPath(name).parts
         if (not name or "\\" in name or "\0" in name or name.startswith("/") or ".." in parts
                 or (len(name) > 1 and name[1] == ":")):
-            raise BundleError(f"{path}: недопустимое имя в архиве {name!r}")
+            raise BundleError(f"{path.name}: недопустимое имя в архиве {name!r}")
         if (m.external_attr >> 16) & 0o170000 == 0o120000:
-            raise BundleError(f"{path}: {name} — символическая ссылка, в подборке их не бывает")
+            raise BundleError(f"{path.name}: {name} — символическая ссылка, в подборке их не бывает")
         total += m.file_size
         if total > MAX_UNPACKED:
-            raise BundleError(f"{path}: распакованный размер больше предела {MAX_UNPACKED} байт")
+            raise BundleError(f"{path.name}: распакованный размер больше предела {MAX_UNPACKED} байт")
         if m.file_size > RATIO_FROM and m.file_size > MAX_RATIO * max(m.compress_size, 1):
-            raise BundleError(f"{path}: {name} сжат больше {MAX_RATIO}:1 — похоже на zip-бомбу")
+            raise BundleError(f"{path.name}: {name} сжат больше {MAX_RATIO}:1 — похоже на zip-бомбу")
 
 
 def _manifest(root: Path, label: Path) -> dict:
     try:
         manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     except FileNotFoundError:
-        raise BundleError(f"{label}: нет manifest.json — это не подборка или она записана не до конца") from None
+        raise BundleError(f"{label.name}: нет manifest.json — это не подборка или она записана не до конца") from None
     except (OSError, ValueError) as e:
-        raise BundleError(f"{label}/manifest.json: не читается: {e}") from e
+        raise BundleError(f"{label.name}/manifest.json: не читается: {_reason(e)}") from e
     if not isinstance(manifest, dict) or manifest.get("format") != FORMAT:
         got = manifest.get("format") if isinstance(manifest, dict) else None
-        raise BundleError(f"{label}: формат {got!r}, ожидается {FORMAT}")
+        raise BundleError(f"{label.name}: формат {got!r}, ожидается {FORMAT}")
     try:
         model_v1.BundleManifest.model_validate(manifest)
     except ValidationError as e:
-        raise BundleError(f"{label}/manifest.json: {e}") from e
+        raise BundleError(f"{label.name}/manifest.json: {e}") from e
     if not isinstance(manifest["parts"], dict):
-        raise BundleError(f"{label}/manifest.json: parts — не словарь")
+        raise BundleError(f"{label.name}/manifest.json: parts — не словарь")
     for name in manifest["parts"]:
         p = PurePosixPath(name)
         if not isinstance(name, str) or p.is_absolute() or ".." in p.parts or name == "manifest.json":
-            raise BundleError(f"{label}/manifest.json: недопустимый путь части {name!r}")
+            raise BundleError(f"{label.name}/manifest.json: недопустимый путь части {name!r}")
     return manifest
 
 
@@ -544,12 +580,13 @@ def _damaged(root: Path, manifest: dict) -> list[str]:
     return sorted(out)
 
 
-def inspect(path: Path) -> dict:
+def inspect(path: Path, *, tmp_dir: Path | None = None) -> dict:
     """Манифест и сверка частей без базы: манифест + ok, damaged (части с ошибкой), unexpected (файлы вне parts).
+    zip распаковывается во временную папку в tmp_dir (opened).
 
     Неверный формат или манифест — BundleError; повреждённая часть — не исключение, а damaged."""
     path = Path(path)
-    with opened(path) as root:
+    with opened(path, tmp_dir=tmp_dir) as root:
         manifest = _manifest(root, path)
         damaged = _damaged(root, manifest)
         unexpected = [n for n in _files(root) if n != "manifest.json" and n not in manifest["parts"]]
@@ -632,7 +669,7 @@ def _check_packs(conn, manifest: dict, root: Path, folder: Path) -> None:
     missing, names = [], []
     for p in manifest["packs"]:
         if not isinstance(p, dict):
-            raise BundleError(f"{folder}/manifest.json: пакет {p!r} — не объект")
+            raise BundleError(f"{folder.name}/manifest.json: пакет {p!r} — не объект")
         name, version, digest = p.get("name"), p.get("version"), p.get("digest")
         got = have.get((name, version))
         if got is not None and got == digest:
@@ -647,8 +684,8 @@ def _check_packs(conn, manifest: dict, root: Path, folder: Path) -> None:
     if bundled and folder.suffix == ".zip":
         hint = "; пакеты лежат в подборке (packs/): распакуйте её, добавьте их папки в AMEM_PACKS и выполните prepare"
     elif bundled:
-        hint = (f"; пакеты лежат в подборке: добавьте в AMEM_PACKS "
-                f"{os.pathsep.join(str(root / 'packs' / n) for n in bundled)} и выполните prepare")
+        hint = (f"; пакеты лежат в подборке {folder.name}: добавьте в AMEM_PACKS её папки "
+                f"{', '.join('packs/' + n for n in bundled)} и выполните prepare")
     else:
         hint = "; добавьте папки пакетов в AMEM_PACKS и выполните prepare"
     raise BundleError("не загружены пакеты подборки: " + "; ".join(missing) + hint, code="bundle_pack_missing",
@@ -1089,7 +1126,7 @@ def _stale_sources(conn, rec: _Rec) -> dict | None:
 
 
 def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust: str = "keep",
-            dry_run: bool = False) -> Imported:
+            dry_run: bool = False, tmp_dir: Path | None = None) -> Imported:
     """Влить подборку (папку или zip): id сохраняются, ничего не затирается (спецификация 3c, разд. 4.3).
 
     Порядок: манифест и sha256 частей → пакеты (bundle_pack_missing) → строки и хэши тел (и истории) → объекты
@@ -1120,18 +1157,19 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
     trust=keep — статус записи из подборки; модель (не person:) не сохраняет проверенное и решённое в чужой базе,
     basis author и записи человека — они needs_review с пунктом imported. review — все новые записи needs_review
     с пунктом imported. Расхождение с локальной записью — ревизия pending с пунктом imported, текущая не
-    меняется. dry_run — план без записи: счётчики, предупреждения, коллизии (вместо отказа) и отчёт уровня 1."""
+    меняется. dry_run — план без записи: счётчики, предупреждения, коллизии (вместо отказа) и отчёт уровня 1.
+    zip распаковывается во временную папку в tmp_dir (opened)."""
     if not conn.autocommit:
         raise BundleError("import_: нужно соединение с autocommit=True (db.connect): иначе приём объектов и запись "
                           "не фиксируются")
     if trust not in TRUST:
         raise BundleError(f"trust: {trust!r} — ожидается keep или review")
     folder = Path(folder)
-    with opened(folder) as root:
+    with opened(folder, tmp_dir=tmp_dir) as root:
         manifest = _manifest(root, folder)
         damaged = _damaged(root, manifest)
         if damaged:
-            raise BundleError(f"{folder}: повреждены части подборки: {', '.join(damaged)}", code=DAMAGED,
+            raise BundleError(f"{folder.name}: повреждены части подборки: {', '.join(damaged)}", code=DAMAGED,
                               damaged=damaged)
         _check_packs(conn, manifest, root, folder)
         own = conn.execute("SELECT value FROM meta WHERE key = 'base_id'").fetchone()

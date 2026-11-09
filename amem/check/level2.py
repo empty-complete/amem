@@ -122,9 +122,10 @@ def _sheet_page(pages: list[str], sheet: str) -> int | None:
     return None
 
 
-def check(conn: psycopg.Connection, store: ObjectStore, docs: Path, batch: Batch, report: Report, *,
+def check(conn: psycopg.Connection, store: ObjectStore, docs: Path | None, batch: Batch, report: Report, *,
           agent: str) -> dict[str, list[SourceCheck]]:
-    """Уровень 2 над разобранной пачкой: замечания — в report, итоги — по меткам записей. StoreError — наружу."""
+    """Уровень 2 над разобранной пачкой: замечания — в report, итоги — по меткам записей. StoreError — наружу.
+    docs None — папка документов не настроена: источник с path — source_unresolved (спецификация 4, разд. 2)."""
     run = _Level2(conn, store, docs, report, agent)
     results: dict[str, list[SourceCheck]] = {}
     for item in batch.items:
@@ -185,6 +186,10 @@ class _Level2:
         if not source.get("object"):
             path = source.get("path")
             if not path:
+                return None
+            if self.docs is None:            # служба без AMEM_DOCS: путь не разобрать — ни файл, ни сайт, ни письмо
+                self.add("violation", "source_unresolved", where, "Источник не разобрался: папка документов не "
+                         "настроена (AMEM_DOCS) — путь источника не разобрать", path=path)
                 return None
             if path not in self.paths:
                 try:

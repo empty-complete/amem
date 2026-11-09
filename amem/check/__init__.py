@@ -84,15 +84,18 @@ class _Retired(Exception):
         self.item, self.status = item, status
 
 
-def submit(conn: psycopg.Connection, store: ObjectStore, docs: Path, proposals: Sequence[Proposal],
+def submit(conn: psycopg.Connection, store: ObjectStore, docs: Path | None, proposals: Sequence[Proposal],
            links: Sequence[dict] = (), *, agent: str, activity: uuid.UUID | None = None, reason: str | None = None,
-           provider=None) -> Submitted:
+           provider=None, on_semantic_error: str = "raise") -> Submitted:
     """Проверить пакет уровнями 1–4 и записать его со статусами, итогами сверки и пунктами очереди (разд. 1.1).
 
     Ошибка (violation) любого уровня — пакет отклонён целиком (records.reject), записей нет. Ошибки окружения
-    (StoreError, сбой базы, EmbeddingError явного провайдера) уходят вызывающему: пакета в базе нет.
-    Неверный вызов — CheckError до любой записи."""
+    (StoreError, сбой базы, EmbeddingError явного провайдера) уходят вызывающему: пакета в базе нет; при
+    on_semantic_error="skip" отказ провайдера только ослабляет уровень 4 (degraded отчёта). docs None — папка
+    документов не настроена: источник с path получает source_unresolved. Неверный вызов — CheckError до любой
+    записи."""
     _check_call(conn, proposals, links, activity)
+    level4.check_semantic_error(on_semantic_error)       # и у пакета, который до уровня 4 не дойдёт
     report = Report()
     levels = {"1": "done", "2": "done", "3": "skipped", "4": "skipped"}
     batch = level1.check(conn, proposals, links, report, agent=agent)
@@ -100,7 +103,7 @@ def submit(conn: psycopg.Connection, store: ObjectStore, docs: Path, proposals: 
     if report.has_violations():
         return _reject(conn, report, batch, levels, degraded=[], agent=agent, activity=activity, reason=reason)
     conflicts = level3.check(conn, batch, report)
-    degraded = level4.check(conn, batch, report, provider=provider)
+    degraded = level4.check(conn, batch, report, provider=provider, on_semantic_error=on_semantic_error)
     levels["3"] = levels["4"] = "done"
     person = _is_person(agent)
     plans = [_risk(item, report, conflicts, person=person) for item in batch.items]

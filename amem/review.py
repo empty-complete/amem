@@ -1,5 +1,5 @@
 """Очередь проверки (спецификация подпроекта 3, разд. 7.2–7.5 и 8): постановка пунктов, устаревание, выборка аудита,
-захват с арендой, решение с вердиктом и последствиями, ручная постановка, список.
+захват с арендой, решение с вердиктом и последствиями, ручная постановка, список и один пункт (item).
 
 Пункт ставится в транзакции записи, когда запись уже заблокирована; открытый пункт на (ревизия, причина) один —
 повтор не плодит дубликатов (индекс review_item_open).
@@ -475,6 +475,16 @@ def _record_id(conn, record) -> uuid.UUID:
     except records.RecordError as e:
         raise ReviewError(f"items: record {record!r} — нужна ссылка atm:… или ent:… (UUID или ключ, например "
                           f"atm:{record}) либо UUID записи", code="invalid") from e
+
+
+def item(conn: psycopg.Connection, item_id: uuid.UUID | str) -> dict:
+    """Один пункт очереди — в форме строки items (и с revision_id: ревизия, о которой спрашивают); экран пункта
+    берёт его отсюда. Нет такого пункта — ReviewError not_found, неверный id — invalid."""
+    item_id = _id(item_id)
+    row = conn.execute(f"{_ITEM} WHERE ri.id = %s", (item_id,)).fetchone()
+    if row is None:
+        raise ReviewError(f"пункта очереди {item_id} нет", code="not_found")
+    return _row(row)
 
 
 def items(conn: psycopg.Connection, *, state: str | None = None, reason: str | None = None,
