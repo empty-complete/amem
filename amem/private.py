@@ -5,6 +5,9 @@ strip(text) убирает всё между <private> и </private> вмест�
 и переводами строк внутри угловых скобок («< private >», «</ private >»): набранная небрежно метка тоже скрывает.
 Вложенная <private> не закрывается первой же </private>, поэтому скрытое внутри неё тоже не выходит наружу.
 Одиночная </private> без открывающей — обычный текст.
+
+secret_like(text) — виды известных форм секретов в тексте (ключи API, токены, PEM, пароль в строке подключения):
+submit предупреждает о них (secret_like в warnings), не вырезая — страховка к забытой метке <private>.
 """
 from __future__ import annotations
 
@@ -42,3 +45,35 @@ def strip(text: str) -> str:
     if depth == 0:
         kept.append(text[start:])
     return "".join(kept)
+
+
+# --- следы секретов (разд. 6.6) ---
+#
+# <private> — явная метка, её можно забыть. secret_like находит в тексте известные формы секретов, чтобы submit
+# предупредил (secret_like в warnings), а не отклонил: это страховка, а не граница безопасности. Список нарочно
+# консервативный — только формы с характерной приставкой или разметкой; марки и обозначения (ВН-45, КБ-14), хэши
+# (sha256:…), UUID и адреса без пароля не срабатывают. Само значение наружу не отдаётся — только вид.
+SECRETS: dict[str, re.Pattern] = {
+    "aws_access_key": re.compile(r"(?<![A-Z0-9])(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}(?![A-Z0-9])"),
+    "github_token": re.compile(r"(?<![A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,})"),
+    "api_key": re.compile(r"(?<![A-Za-z0-9_-])sk-(?:ant-|proj-|live-)?[A-Za-z0-9_-]{20,}"),
+    "slack_token": re.compile(r"(?<![A-Za-z0-9_-])xox[abprs]-[A-Za-z0-9-]{10,}"),
+    "google_api_key": re.compile(r"(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])"),
+    "stripe_key": re.compile(r"(?<![A-Za-z0-9_])[rs]k_live_[0-9A-Za-z]{20,}"),
+    "amem_token": re.compile(r"(?<![A-Za-z0-9_-])amem_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])"),
+    "private_key": re.compile(r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----"),
+    "jwt": re.compile(r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{16,}"),
+    # строка подключения с паролем: схема://пользователь:пароль@хост
+    "url_password": re.compile(r"(?<![A-Za-z0-9+.-])[A-Za-z][A-Za-z0-9+.-]{1,20}://"
+                               r"[^\s:/@<>\"']+:[^\s/@<>\"']+@[^\s/@]"),
+    # пароль присвоением: password=…, пароль: …; значение — без пробелов, от 6 знаков, не заглушка
+    "password": re.compile(r"(?i)(?<![\w-])(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?key|пароль)"
+                           r"[\"']?\s*[:=]\s*[\"']?(?![$%{<])(?![*xх.•_-]+(?:[\"'\s,;]|$))[^\s\"'<>,;]{6,}"),
+}
+
+
+def secret_like(text: str) -> list[str]:
+    """Виды секретов, похожих на найденные в тексте (по порядку SECRETS, без повторов); пусто — ничего похожего."""
+    if not isinstance(text, str):
+        raise TypeError(f"private.secret_like: нужна строка, получено {type(text).__name__}")
+    return [name for name, pattern in SECRETS.items() if pattern.search(text)]

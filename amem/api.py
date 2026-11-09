@@ -64,8 +64,8 @@ class Forbidden(Exception):
 
 class CheckRejected(ValueError):
     """Пакет submit отклонён автопроверкой (Submitted.state == "rejected"): записей нет, отказ записан в changeset.
-    issues — замечания в форме CheckIssue (ref и path), warnings — предупреждения службы (private_removed).
-    У службы — 422 check_rejected; CLI — код 5."""
+    issues — замечания в форме CheckIssue (ref и path), warnings — предупреждения службы (private_removed,
+    secret_like). У службы — 422 check_rejected; CLI — код 5."""
 
     def __init__(self, message: str, *, changeset_id: str, issues: list[dict], warnings: list[dict]):
         super().__init__(message)
@@ -79,6 +79,15 @@ class ReadOnly(Exception):
 class Missing(LookupError):
     """Подборки или загрузки нет: не было, срок хранения истёк или она чужая (чужая неотличима от несуществующей).
     У службы — 404 not_found."""
+
+
+class Ambiguous(ValueError):
+    """Текст вместо ссылки указал не на одну запись: явного лидера нет (pick). candidates — RefLabel со статусом.
+    CLI — код 3 со списком кандидатов; у службы такого пути нет (там ссылки), перевод — 409 ambiguous."""
+
+    def __init__(self, message: str, *, candidates: list[dict]):
+        super().__init__(message)
+        self.candidates = candidates
 
 
 class QuotaExceeded(Exception):
@@ -504,6 +513,63 @@ def links(conn: psycopg.Connection, ref) -> list[dict]:
     return out
 
 
+TIMELINE_EVENTS = 10                # событий истории в timeline по умолчанию (последние)
+
+
+def timeline(conn: psycopg.Connection, ref, *, limit=None) -> dict:
+    """Timeline — шаг 2 поиска «что вокруг находки»: запись (RefLabel, статус, папка), последние limit событий её
+    истории (по времени, как в ChangesResult) и действующие связи с подписью другого конца (LinkView)."""
+    limit = _int(limit, "limit", low=1, high=500, default=TIMELINE_EVENTS)
+    target, record_id = records.resolve(conn, _ref(ref))
+    own = f"{records.PREFIX[target]}:{record_id}"
+    status, folder = conn.execute(f"SELECT status, folder FROM {target} WHERE id = %s", (record_id,)).fetchone()
+    events = history(conn, own)["events"]
+    return {"record": {**_labels(conn, [own])[own], "status": status, "folder": folder},
+            "events": events[-limit:], "total_events": len(events), "links": links(conn, own)}
+
+
+PICK_CANDIDATES = 10                # кандидатов в ответе неоднозначного pick
+
+
+def pick(conn: psycopg.Connection, text, *, target=None) -> str:
+    """Одна запись по ссылке или по тексту: ссылка atm:/ent: — каноническая ссылка (нет записи — RecordNotFound);
+    текст — лексические каналы без записи выдачи (марка целиком, начало марки, полнотекстовый). Явный лидер —
+    единственное совпадение марки целиком, а без него — единственная находка канала (сначала полнотекстового,
+    затем начала марки). Иначе Ambiguous с кандидатами; ничего — RecordNotFound с подсказкой найти запись."""
+    from . import search as search_
+
+    text = _str(text, "ref")
+    if not text or not text.strip():
+        raise BadRequest("ref: нужна ссылка atm:/ent: или текст для поиска записи")
+    if _REF.fullmatch(text):
+        found_target, record_id = records.resolve(conn, text)
+        return f"{records.PREFIX[found_target]}:{record_id}"
+    query = private.strip(text).strip()
+    filters = {"target": _enum(target, "target", TARGETS), "kind": None, "entity_class": None, "statuses": None}
+    channels = [search_._code_exact(conn, query, **filters), search_._fts(conn, query, **filters),
+                search_._code_prefix(conn, query, **filters)]
+    refs = [list(dict.fromkeys(row["ref"] for row in rows)) for rows in channels]
+    exact, fts, prefix = refs
+    if len(exact) == 1:
+        return exact[0]
+    if not exact:
+        for found in (fts, prefix):
+            if len(found) == 1 and not (found is prefix and fts):
+                return found[0]
+    candidates = list(dict.fromkeys(exact + fts + prefix))
+    if not candidates:
+        raise records.RecordNotFound(f"по тексту {query[:80]!r} записей нет — найдите запись поиском "
+                                     f"(amem search, amem_search) и передайте её ссылку atm:/ent:")
+    labels = lookup.labels(conn, candidates[:PICK_CANDIDATES])
+    shown = []
+    for ref in candidates[:PICK_CANDIDATES]:
+        info = labels.get(ref) or {}
+        shown.append({"ref": ref, "label": info.get("label") or ref,
+                      **{key: info[key] for key in ("kind", "entity_class", "status") if info.get(key)}})
+    raise Ambiguous(f"по тексту {query[:80]!r} нашлось записей: {len(candidates)}, явного лидера нет — выберите "
+                    f"ссылку", candidates=shown)
+
+
 # --- карточка и граф ---
 
 def card(conn: psycopg.Connection, ref, *, ancestors=None) -> dict:
@@ -687,6 +753,13 @@ def base(conn: psycopg.Connection) -> dict:
             "packs": packs, "counts": counts, "review_open": review_open}
 
 
+def base_rename(conn: psycopg.Connection, name, *, agent: str) -> dict:
+    """Base после смены имени базы (db.set_base_name); имя меняет только человек, как и структуру папок."""
+    _person_only(agent, "имя базы меняет")
+    db.set_base_name(conn, _str(name, "name"))
+    return base(conn)
+
+
 def backup_list(backup_dir: Path) -> list[dict]:
     """Backup[]: готовые копии по времени — имя, время, размер; пути на диске наружу не отдаются."""
     return [{"name": b["name"], "created_at": b["created_at"], "size": b["size"]}
@@ -776,6 +849,24 @@ def review_items(conn: psycopg.Connection, *, state=None, reason=None, record=No
     return [_review_item(row, labels) for row in rows]
 
 
+def review_claim(conn: psycopg.Connection, *, agent: str, reasons=None, limit=None) -> list[dict]:
+    """Захватить самые старые пункты, которые агент вправе решать (review.claim; модель — только semantic и не свой
+    пакет): ReviewItem и то, что нужно для решения, — revision (номер ревизии пункта), payload и sources с итогами
+    сверки. Пусто — решать нечего."""
+    rows = review.claim(conn, agent=agent, reasons=_codes(reasons, "reason"),
+                        limit=_int(limit, "limit", low=1, high=REVIEW_LIMIT, default=1))
+    labels = _labels(conn, [row["ref"] for row in rows])
+    return [{**_review_item(row, labels), "revision": row["n"], "payload": row["payload"],
+             "sources": _jsonable(row["sources"])} for row in rows]
+
+
+def review_release(conn: psycopg.Connection, item_id, *, agent: str) -> dict:
+    """Вернуть захваченный пункт в очередь (review.release): вернуть может только тот, кто его держит; {id, state}."""
+    iid = _item_id(item_id)
+    review.release(conn, iid, agent=agent)
+    return {"id": str(iid), "state": "queued"}
+
+
 def _revision(conn: psycopg.Connection, target: str, revision_id) -> dict:
     with conn.cursor(row_factory=dict_row) as cur:
         row = cur.execute(f"SELECT r.n, r.payload, r.review_state, r.recorded_at, cs.agent FROM {target}_revision r "
@@ -863,11 +954,14 @@ def review_stats(conn: psycopg.Connection, *, days=None) -> dict:
 
 BODY_DEPTH = 64                     # вложенность тела записи, не больше: тело атома — единицы уровней
 PRIVATE_REMOVED = "private_removed"
+SECRET_LIKE = "secret_like"           # строка похожа на секрет (private.secret_like): предупреждение, не отказ
 
 
-def _scrub(value, where: str, removed: list[str], *, strip: bool, path: str = "", depth: int = 0):
-    """Копия значения JSON: строки — после private.strip (strip), путь изменённой — в removed; NUL в строке или
-    ключе, метка <private> в ключе и вложенность глубже BODY_DEPTH — BadRequest (до проверки и базы)."""
+def _scrub(value, where: str, removed: list[str], *, strip: bool, path: str = "", depth: int = 0,
+           secrets: list[tuple[str, list[str]]] | None = None):
+    """Копия значения JSON: строки — после private.strip (strip), путь изменённой — в removed; путь строки, похожей
+    на секрет (private.secret_like по оставшемуся тексту), и виды — в secrets. NUL в строке или ключе, метка <private>
+    в ключе и вложенность глубже BODY_DEPTH — BadRequest (до проверки и базы)."""
     if depth > BODY_DEPTH:
         raise BadRequest(f"{where}: вложенность глубже {BODY_DEPTH} уровней")
     place = f"{where}.{path}" if path else where
@@ -877,6 +971,8 @@ def _scrub(value, where: str, removed: list[str], *, strip: bool, path: str = ""
             removed.append(path)
         if "\x00" in out:
             raise BadRequest(f"{place}: знак NUL (\\x00) в строке не допускается")
+        if secrets is not None and (kinds := private.secret_like(out)):
+            secrets.append((path, kinds))
         return out
     if isinstance(value, dict):
         out = {}
@@ -887,10 +983,10 @@ def _scrub(value, where: str, removed: list[str], *, strip: bool, path: str = ""
                 raise BadRequest(f"{place}: имя поля с меткой <private> не допускается — скрытое в имени поля "
                                  f"не вырезать; уберите метку из имени")
             out[key] = _scrub(item, where, removed, strip=strip, path=f"{path}.{key}" if path else key,
-                              depth=depth + 1)
+                              depth=depth + 1, secrets=secrets)
         return out
     if isinstance(value, list):
-        return [_scrub(item, where, removed, strip=strip, path=f"{path}[{i}]", depth=depth + 1)
+        return [_scrub(item, where, removed, strip=strip, path=f"{path}[{i}]", depth=depth + 1, secrets=secrets)
                 for i, item in enumerate(value)]
     return value
 
@@ -898,6 +994,20 @@ def _scrub(value, where: str, removed: list[str], *, strip: bool, path: str = ""
 def _private_removed(ref: str, paths: list[str]) -> list[dict]:
     return [{"code": PRIVATE_REMOVED, "severity": "warning", "ref": ref, "path": path,
              "message": "Скрытое в <private>…</private> вырезано: в ревизию оно не попало"} for path in paths]
+
+
+SECRET_KINDS = {"aws_access_key": "ключ AWS", "github_token": "токен GitHub", "api_key": "ключ API (sk-…)",
+                "slack_token": "токен Slack", "google_api_key": "ключ Google API", "stripe_key": "ключ Stripe",
+                "amem_token": "токен amem", "private_key": "приватный ключ PEM", "jwt": "токен JWT",
+                "url_password": "пароль в строке подключения", "password": "пароль"}
+
+
+def _secret_like(ref: str, found: list[tuple[str, list[str]]]) -> list[dict]:
+    """Предупреждения secret_like: поле, похожее на секрет, и вид; самого значения в ответе нет."""
+    return [{"code": SECRET_LIKE, "severity": "warning", "ref": ref, "path": path,
+             "message": f"Похоже на секрет ({', '.join(SECRET_KINDS.get(k, k) for k in kinds)}): значение записано "
+                        f"как есть — если это секрет, исправьте запись; скрыть при записи можно меткой "
+                        f"<private>…</private>"} for path, kinds in found]
 
 
 def _proposal_label(label: str) -> str:
@@ -919,8 +1029,10 @@ def submit(conn: psycopg.Connection, store: ObjectStore, docs: Path | None, *, a
 
     proposals — [{target, payload, record_id?}], links — тела связей, reason — причина пакета. Строки тел и reason
     проходят private.strip до проверки: вырезанное не попадает в ревизию, о каждом поле — предупреждение
-    private_removed в warnings (ref — @имя записи или proposals[i], links[i]; path — путь поля). Отказ проверки —
-    CheckRejected (422) с issues; ошибка провайдера эмбеддингов только ослабляет уровень 4 (degraded отчёта)."""
+    private_removed в warnings (ref — @имя записи или proposals[i], links[i]; path — путь поля). Строка, похожая
+    на секрет (private.secret_like), записывается как есть, с предупреждением secret_like без значения. Отказ
+    проверки — CheckRejected (422) с issues; ошибка провайдера эмбеддингов только ослабляет уровень 4 (degraded
+    отчёта)."""
     if not isinstance(proposals, list) or not proposals:
         raise BadRequest("proposals: нужен непустой список предложений [{target, payload, record_id?}]")
     links = [] if links is None else links
@@ -940,19 +1052,22 @@ def submit(conn: psycopg.Connection, store: ObjectStore, docs: Path | None, *, a
         if named and target in TARGETS:
             names.add(ref)
         removed: list[str] = []
-        payload = _scrub(payload, f"{where}.payload", removed, strip=True)
-        warnings += _private_removed(label, removed)
+        found: list[tuple[str, list[str]]] = []
+        payload = _scrub(payload, f"{where}.payload", removed, strip=True, secrets=found)
+        warnings += _private_removed(label, removed) + _secret_like(label, found)
         record_id = _scrub(proposal.get("record_id"), f"{where}.record_id", [], strip=False)
         items.append(check.Proposal(target=target, payload=payload, record_id=record_id))
     bodies = []
     for i, link in enumerate(links):
-        removed = []
-        bodies.append(_scrub(link, f"links[{i}]", removed, strip=True))
-        warnings += _private_removed(f"links[{i}]", removed)
+        removed, found = [], []
+        bodies.append(_scrub(link, f"links[{i}]", removed, strip=True, secrets=found))
+        warnings += _private_removed(f"links[{i}]", removed) + _secret_like(f"links[{i}]", found)
     if _str(reason, "reason") is not None:
         cleaned = private.strip(reason)
         if cleaned != reason:
             warnings += _private_removed("", ["reason"])
+        if kinds := private.secret_like(cleaned):
+            warnings += _secret_like("", [("reason", kinds)])
         reason = cleaned or None
     result = check.submit(conn, store, docs, items, bodies, agent=agent, activity=activity, reason=reason,
                           provider=provider, on_semantic_error="skip")

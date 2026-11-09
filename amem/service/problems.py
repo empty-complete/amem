@@ -3,12 +3,13 @@
 Тело: type, title, status, detail, code и, где есть, расширения (issues, changeset_id и warnings у check_rejected;
 by и at у review_closed; missing…); расширение не заменяет пять основных полей. Исключения библиотеки — наследники
 ValueError, поэтому перевод идёт от частного к общему одной цепочкой (to_problem): отказ проверки (api.CheckRejected)
-и RecordNotFound раньше RecordError (api.Missing — подборки нет — тоже 404), коды ReviewError, FolderError
-и ObjectError раньше «прочего», EmbeddingError (503) раньше прочего ValueError — последней ступени перед 500:
-так библиотека отвечает на неверный ввод, и ответ — 400 с её сообщением. Необработанная ошибка — 500 internal:
-подробности уходят в журнал службы (logger amem.service), в ответе их нет. Недоступная база — 503 без строки
-соединения: в тексте ошибки psycopg бывают адрес и порт сервера; значение, которое база не приняла
-(psycopg.DataError), — 400 тоже без её текста. Хранилище копий без корня (том не подключён) — 503
+и RecordNotFound раньше RecordError (api.Missing — подборки нет — тоже 404; api.Ambiguous — текст указал не на
+одну запись — 409 ambiguous с candidates: путей с текстом вместо ссылки у службы нет, перевод — для CLI и MCP),
+коды ReviewError, FolderError и ObjectError раньше «прочего», EmbeddingError (503) раньше прочего ValueError —
+последней ступени перед 500: так библиотека отвечает на неверный ввод, и ответ — 400 с её сообщением.
+Необработанная ошибка — 500 internal: подробности уходят в журнал службы (logger amem.service), в ответе их нет.
+Недоступная база — 503 без строки соединения: в тексте ошибки psycopg бывают адрес и порт сервера; значение,
+которое база не приняла (psycopg.DataError), — 400 тоже без её текста. Хранилище копий без корня (том не подключён) — 503
 store_unavailable, копии версии нет — 404; путь на диске — только в журнале. Тяжёлый запрос, который база оборвала
 по statement_timeout (psycopg.errors.QueryCanceled — подкласс OperationalError, поэтому раньше него), — 503 timeout;
 подборки владельца сверх предела места (api.QuotaExceeded) — 507 quota_exceeded.
@@ -47,7 +48,8 @@ CODE_TITLES = {"read_only": "Только чтение", "review_closed": "Уж�
                "folder_exists": "Папка уже есть", "folder_not_empty": "Папка не пуста",
                "semantic_unavailable": "Смысловой поиск недоступен", "db_unavailable": "База недоступна",
                "store_unavailable": "Хранилище копий недоступно", "timeout": "Запрос слишком долгий",
-               "body_timeout": "Тело запроса не дошло", "quota_exceeded": "Нет места для подборок"}
+               "body_timeout": "Тело запроса не дошло", "quota_exceeded": "Нет места для подборок",
+               "ambiguous": "Неоднозначно"}
 RESERVED = frozenset({"type", "title", "status", "code", "detail"})       # расширения их не заменяют
 REVIEW = {"closed": (409, "review_closed"), "forbidden": (403, "review_forbidden"),
           "claimed": (403, "review_forbidden"), "stale": (400, "review_bad"), "bad_outcome": (400, "review_bad"),
@@ -66,17 +68,22 @@ class Problem(Exception):
         self.status, self.code, self.detail, self.headers, self.extra = status, code, detail, headers, extra
 
 
-def response(status: int, code: str, detail: str | None = None, *, headers: dict | None = None,
-             extra: Mapping | None = None) -> JSONResponse:
-    body = {"type": "about:blank", "title": CODE_TITLES.get(code) or TITLES.get(status, "Ошибка"), "status": status,
-            "code": code}
+def body(status: int, code: str, detail: str | None = None, *, extra: Mapping | None = None) -> dict:
+    """Тело problem+json: пять основных полей и расширения. Его же печатает CLI с --json при ошибке."""
+    out = {"type": "about:blank", "title": CODE_TITLES.get(code) or TITLES.get(status, "Ошибка"), "status": status,
+           "code": code}
     if detail:
-        body["detail"] = detail
+        out["detail"] = detail
     # расширения — только то, что переводится в JSON: в деталях BundleError бывают произвольные значения
     extensions = {str(k): v for k, v in (extra or {}).items() if str(k) not in RESERVED}
-    body.update(json.loads(json.dumps(extensions, ensure_ascii=False, default=str)))
-    return JSONResponse(body, status_code=status, headers={"X-Content-Type-Options": "nosniff", **(headers or {})},
-                        media_type=MEDIA_TYPE)
+    out.update(json.loads(json.dumps(extensions, ensure_ascii=False, default=str)))
+    return out
+
+
+def response(status: int, code: str, detail: str | None = None, *, headers: dict | None = None,
+             extra: Mapping | None = None) -> JSONResponse:
+    return JSONResponse(body(status, code, detail, extra=extra), status_code=status,
+                        headers={"X-Content-Type-Options": "nosniff", **(headers or {})}, media_type=MEDIA_TYPE)
 
 
 def to_problem(exc: BaseException) -> Problem:
@@ -91,6 +98,8 @@ def to_problem(exc: BaseException) -> Problem:
         return Problem(403, "forbidden", message)
     if isinstance(exc, api.ReadOnly):
         return Problem(403, "read_only", message)
+    if isinstance(exc, api.Ambiguous):
+        return Problem(409, "ambiguous", message, candidates=exc.candidates)
     if isinstance(exc, (records.RecordNotFound, api.Missing)):
         return Problem(404, "not_found", message)
     if isinstance(exc, review.ReviewError):
@@ -149,8 +158,8 @@ async def handle(request: Request, exc: Exception) -> JSONResponse:
 
 # классы, которые ловит ExceptionMiddleware (поиск по MRO исключения); Exception — последний рубеж
 # (ServerErrorMiddleware): он отвечает 500 и передаёт исключение серверу дальше
-HANDLED = (Problem, api.CheckRejected, api.Forbidden, api.ReadOnly, api.Missing, api.BadRequest, records.RecordError,
-           review.ReviewError, FolderError, bundle.BundleError, objects.ObjectError, CheckError, db.BaseNameError,
-           vocab.VocabError, CanonError, PackError, embed.EmbeddingError, api.StoreUnavailable,
+HANDLED = (Problem, api.CheckRejected, api.Ambiguous, api.Forbidden, api.ReadOnly, api.Missing, api.BadRequest,
+           records.RecordError, review.ReviewError, FolderError, bundle.BundleError, objects.ObjectError, CheckError,
+           db.BaseNameError, vocab.VocabError, CanonError, PackError, embed.EmbeddingError, api.StoreUnavailable,
            api.QuotaExceeded, psycopg.OperationalError, psycopg.DataError, HTTPException, ValueError, Exception)
 HANDLERS = {cls: handle for cls in HANDLED}
