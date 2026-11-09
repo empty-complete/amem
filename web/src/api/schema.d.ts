@@ -1020,6 +1020,15 @@ export interface components {
             /** @description До какого времени пункт держит claimed_by */
             claimed_until?: string | null;
             closed_at?: string | null;
+            /** @description У списка очереди: первый источник ревизии пункта (документ); null — источника нет (основание basis или сущность) */
+            source?: {
+                /** Format: uuid */
+                object: string;
+                /** @description Имя файла или адрес; нет — UUID объекта */
+                object_name: string;
+            } | null;
+            /** @description У списка очереди: о ком запись (about атома, по порядку тела); у сущности — пусто */
+            about?: components["schemas"]["RefLabel"][];
         };
         ReviewItemView: {
             item: components["schemas"]["ReviewItem"];

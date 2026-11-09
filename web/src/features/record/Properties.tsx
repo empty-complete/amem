@@ -2,9 +2,9 @@ import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { components } from "../../api/schema";
-import { familyOf } from "../../ui/families";
 import { agentName, formatDate, formatValue, type ValueLike } from "../../ui/format";
 import { Icon, type IconName } from "../../ui/icons";
+import { useFamily } from "../../ui/useFamily";
 import { recordPath } from "../records/RecordList";
 import { type LangString, text } from "./doc";
 
@@ -55,12 +55,13 @@ export function Properties({ view, kindLabel }: { view: View; kindLabel: string 
   const lang = i18n.language;
   const p = view.payload as unknown as Payload;
   const kind = p.kind ?? p.entity_class ?? "";
+  const family = useFamily();
   // значение параметра стоит крупно над текстом — в свойствах только остальные
   const values = (p.content?.values ?? []).slice(kind === "parameter" ? 1 : 0);
   return (
     <dl className="props" aria-label={t("record.props")}>
       <Row icon="stack" name={t("record.p_kind")}>
-        <span className="pill kind" data-family={familyOf(kind, view.target)}>
+        <span className="pill kind" data-family={family(kind, view.target)}>
           {kindLabel}
         </span>
       </Row>
