@@ -497,8 +497,38 @@ def _sources(conn: psycopg.Connection, target: str, revision_id) -> list[dict]:
     return out
 
 
-def _review_item(row: dict, labels: dict[str, dict]) -> dict:
-    """ReviewItem из строки review.items: подпись и вид записи, время — ISO 8601."""
+def _item_context(conn: psycopg.Connection, rows: list[dict]) -> tuple[dict, dict]:
+    """Документ и объекты пунктов очереди пакетом на весь список (часть J веб-UI): id пункта → первый источник ревизии
+    {object, object_name} и id пункта → about атома (ссылки ent: по порядку тела). Без запроса на каждый пункт."""
+    by_target: dict[str, list] = {}
+    for row in rows:
+        by_target.setdefault(row["target"], []).append(row["revision_id"])
+    first: dict = {}
+    for target, revisions in by_target.items():
+        for rid, srcs in lookup.revisions_sources(conn, target, revisions).items():
+            if srcs:
+                first[rid] = srcs[0]["object"].split(":", 1)[1]
+    names = {}
+    if first:
+        names = {str(oid): name for oid, name in conn.execute(
+            "SELECT id, coalesce(original_name, url) FROM object WHERE id = ANY(%s::uuid[])",
+            (list(set(first.values())),)).fetchall()}
+    about = {}
+    atoms = by_target.get("atom", [])
+    if atoms:
+        about = {rid: [r for r in (refs or []) if isinstance(r, str)] for rid, refs in conn.execute(
+            "SELECT id, payload->'about' FROM atom_revision WHERE id = ANY(%s::uuid[])", (atoms,)).fetchall()}
+    sources, abouts = {}, {}
+    for row in rows:
+        oid = first.get(row["revision_id"])
+        sources[row["id"]] = {"object": oid, "object_name": names.get(oid) or oid} if oid else None
+        abouts[row["id"]] = about.get(row["revision_id"], [])
+    return sources, abouts
+
+
+def _review_item(row: dict, labels: dict[str, dict], source: dict | None = None,
+                 about: list[str] | None = None) -> dict:
+    """ReviewItem из строки review.items: подпись и вид записи, время — ISO 8601; source и about — у списка очереди."""
     label = labels.get(row["ref"])
     item = {"id": str(row["id"]), "ref": row["ref"]}
     if label is not None:
@@ -509,6 +539,9 @@ def _review_item(row: dict, labels: dict[str, dict]) -> dict:
              "created_at": _iso(row["created_at"]), "created_by": row["created_by"], "author": row["author"],
              "claimed_by": row["claimed_by"], "claimed_until": _iso(row["claimed_until"]),
              "closed_at": _iso(row["closed_at"])}
+    if about is not None:
+        item["source"] = source
+        item["about"] = [{"ref": ref, "label": labels.get(ref, {}).get("label", ref)} for ref in about]
     return item
 
 
@@ -943,8 +976,9 @@ def review_items(conn: psycopg.Connection, *, state=None, reason=None, record=No
     rows = review.items(conn, state=_enum(state, "state", review.STATES),
                         reason=_enum(reason, "reason", review.REASONS), record=record,
                         limit=_int(limit, "limit", low=1, high=REVIEW_LIMIT, default=100))
-    labels = _labels(conn, [row["ref"] for row in rows])
-    return [_review_item(row, labels) for row in rows]
+    sources, abouts = _item_context(conn, rows)
+    labels = _labels(conn, [row["ref"] for row in rows] + [ref for refs in abouts.values() for ref in refs])
+    return [_review_item(row, labels, sources[row["id"]], abouts[row["id"]]) for row in rows]
 
 
 def review_claim(conn: psycopg.Connection, *, agent: str, reasons=None, limit=None) -> list[dict]:

@@ -519,6 +519,22 @@ def test_review_items(start, queue):
     problem(client.get(f"{V1}/review/items", params={"record": "atm:no_such"}), 404, "not_found", "/review/items")
 
 
+def test_review_items_know_document_and_about(start, queue, kb):
+    """Список очереди сразу знает документ пункта (первый источник ревизии) и о ком запись — для группировки
+    очереди по документам в веб-UI; без запроса на каждый пункт."""
+    every = contract.check(start().get(f"{V1}/review/items"), "/review/items")
+    assert all("source" in i and "about" in i for i in every)
+    semantic = next(i for i in every if i["id"] == queue["semantic"])
+    obj = kb.execute("SELECT o.id, o.original_name FROM source s JOIN object o ON o.id = s.object_id "
+                     "JOIN atom_current a ON a.id = s.atom_revision_id WHERE a.atom_id = %s ORDER BY s.position LIMIT 1",
+                     (queue["semantic_ref"].removeprefix("atm:"),)).fetchone()
+    assert semantic["source"] == {"object": str(obj[0]), "object_name": obj[1] or str(obj[0])}
+    assert semantic["about"] == []
+    # один пункт по ссылке — без полей списка: их несёт только список очереди
+    single = contract.check(start().get(f"{V1}/review/items/{queue['semantic']}"), "/review/items/{id}")
+    assert "source" not in single["item"]
+
+
 def test_review_item_edit_has_current_and_proposed(start, queue):
     body = contract.check(start().get(f"{V1}/review/items/{queue['edit']}"), "/review/items/{id}")
     assert (body["item"]["id"], body["item"]["reason"]) == (queue["edit"], "edit")
