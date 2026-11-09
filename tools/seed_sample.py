@@ -155,6 +155,22 @@ def person_notes(refs: dict[str, str]) -> list[dict]:
              "Растяжки и основание. Записать, что нашли.", [refs["@mast"]]),
         note("@dew", "term", "Точка росы",
              "Температура, при которой пар в воздухе становится насыщенным и выпадает роса или иней.", []),
+        note("@magnus", "method", "Точка росы по формуле Магнуса",
+             "Считаем по температуре и влажности с В-2 и Т-1.", [refs["@v2"], refs["@t1"]],
+             content={"formula": {
+                 "latex": "T_d = \\frac{b\\,\\gamma}{a - \\gamma}, \\quad "
+                          "\\gamma = \\ln\\frac{RH}{100} + \\frac{aT}{b+T}",
+                 "plain": "Td = b·γ / (a − γ), γ = ln(RH/100) + a·T / (b + T)",
+                 "symbols": [{"symbol": "T_d", "label": ru("точка росы"), "unit": "Cel"},
+                             {"symbol": "T", "label": ru("температура воздуха"), "unit": "Cel"},
+                             {"symbol": "RH", "label": ru("относительная влажность"), "unit": "%"}]}}),
+        note("@frost_log", "fact", "В-2 и психрометр: наблюдения с инеем",
+             "Сводка журнала: при инее В-2 показывает на 10–11 % больше психрометра.", [refs["@v2"]],
+             content={"table": {
+                 "columns": [{"code": "date", "label": ru("Дата")}, {"code": "v2", "label": ru("В-2"), "unit": "%"},
+                             {"code": "psy", "label": ru("Психрометр"), "unit": "%"},
+                             {"code": "t", "label": ru("T"), "unit": "Cel"}],
+                 "rows": [["03.11", 99, 88, -2.4], ["04.11", 100, 89, -4.0], ["05.11", 97, 87, -3.1]]}}),
     ]
 
 
@@ -162,9 +178,9 @@ FOLDERS = {
     "Проекты/Метеоплощадка": ["@site", "@ms1", "@mast", "@ms1_power", "@ms1_rs485", "@ms1_kit", "@mast_2m",
                               "@heating", "@after_wind"],
     "Области/Приборы": ["@t1", "@v2", "@d3", "@t1_range", "@t1_error", "@t1_cold", "@v2_range", "@v2_error",
-                        "@frost"],
+                        "@frost", "@frost_log"],
     "Ресурсы/Источники": ["@manual"],
-    "Ресурсы/Методики и термины": ["@dew"],
+    "Ресурсы/Методики и термины": ["@dew", "@magnus"],
 }
 
 

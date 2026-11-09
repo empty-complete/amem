@@ -14,6 +14,8 @@ const pages = [
   `./atom/${A3}?view=source`,
   `./atom/${A3}?view=agent`,
   `./atom/${N1}`,
+  "./atom/atm:0193b7c2-5e1a-7d40-9f2e-000000000021",
+  "./atom/atm:0193b7c2-5e1a-7d40-9f2e-000000000022",
   `./entity/${E3}`,
   "./object/0193b7c2-5e1a-7d40-9f2e-0000000000a1",
   "./object/0193b7c2-5e1a-7d40-9f2e-0000000000a2",

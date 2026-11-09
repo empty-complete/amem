@@ -67,3 +67,14 @@ test("⌘K: командная строка открывает команду", 
   await page.getByRole("option", { name: /Открыть изменения/ }).click();
   await expect(page).toHaveURL(/\/changes/);
 });
+
+test("содержание записи: формула с обозначениями и таблица с единицами", async ({ page }) => {
+  await page.goto("./atom/atm:0193b7c2-5e1a-7d40-9f2e-000000000021");
+  const formula = page.getByRole("region", { name: "Формула" });
+  await expect(formula.locator(".katex").first()).toBeVisible();
+  await expect(formula.getByRole("definition").first()).toContainText("точка росы");
+  await page.goto("./atom/atm:0193b7c2-5e1a-7d40-9f2e-000000000022");
+  const table = page.getByRole("region", { name: "Таблица", exact: true });
+  await expect(table.getByRole("columnheader", { name: "В-2, %" })).toBeVisible();
+  await expect(table.getByRole("row")).toHaveCount(5);
+});

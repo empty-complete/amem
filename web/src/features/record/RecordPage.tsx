@@ -21,6 +21,7 @@ import { type Draft, type FieldIssues, fromPayload } from "../write/proposal";
 import { RecordEditor } from "../write/RecordEditor";
 import { AgentView } from "./AgentView";
 import { Body, type WikiTarget } from "./Body";
+import { type Content, RecordContent } from "./Content";
 import { recordToDocument, text } from "./doc";
 import { type Payload, Properties, valueLine } from "./Properties";
 import { HistoryWidget, LinksWidget, SimilarWidget, SourcesWidget } from "./Widgets";
@@ -252,6 +253,7 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
                 <Properties view={view} kindLabel={kindLabel(vocab.data, kind, lang)} />
                 {main && kind === "parameter" && <p className="bigvalue">{valueLine(main, lang)}</p>}
                 {summary && <p className="lede">{summary}</p>}
+                <RecordContent content={p.content as Content | undefined} />
                 {body ? (
                   <Body text={body} target={target} />
                 ) : (
