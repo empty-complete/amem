@@ -5,3 +5,14 @@ __pycache__/
 build/
 *.egg-info/
 backups/
+.git/
+.github/
+.env
+web/node_modules/
+web/python/amem_web/dist/
+web/dist-mock/
+web/test-results/
+web/playwright-report*/
+**/*.tsbuildinfo
+.pytest_cache/
+tests/

@@ -466,15 +466,15 @@ amem doctor                          проверка установки
 | Запуск | `127.0.0.1:8767` по умолчанию; `--host` не loopback без токенов и без `--no-auth` — код 2; с `--no-auth` — предупреждение | 4a ✓ (`python -m amem.service`, `amem.service.serve`); 4b ✓ (`amem serve`) |
 | Вход общей службы | Без токена — 401, токен только для чтения — 403 на запись, верный — 200 | 4a ✓ |
 | Файлы | `Range` даёт 206; HTML и SVG отдаются вложением с `nosniff` и `sandbox` | 4a ✓ |
-| `/ui` | С `amem_web` — статика с правильными заголовками; без него — 404 с подсказкой | 4a ✓ (пакет `amem_web` по `pip install 'amem[web]'` — с поставкой, 4c) |
+| `/ui` | С `amem_web` — статика с правильными заголовками; без него — 404 с подсказкой | 4a ✓; 4c ✓ (образ compose с целью `web` — `amem[web]`, профиль `web`; CI собирает образ и проверяет `amem_web.static_dir()`) |
 | Папки | Перенос не создаёт ревизию; пустая папка видна в дереве; переименование переносит записи; четыре папки новой базы | 4.0 ✓ |
 | CLI | Коды выхода 0–6 на своих случаях; `--json` совпадает с HTTP; агент по окружению | 4b ✓ (`tests/test_cli.py`; README «CLI») |
 | Поиск в три шага | `amem_search` → `amem_timeline` → `amem_get`; `retrieval_id` переходит в `amem_helpful` той же сессии | 4b ✓ (stdio и `/mcp`, чужая выдача — 403; README «MCP») |
-| `<private>` | Скрытое не попадает ни в журнал, ни в ревизию, ни в поиск | 4a ✓ (HTTP: ревизия, журнал, поиск); 4b ✓ (CLI и MCP: поиск, журнал, `submit`); хуки — 4c |
-| Журнал | Строка на явный поиск без ответов; хук не пишет; `off` — пусто | 4a ✓ (HTTP); 4b ✓ (`amem search`, `amem_search`, `amem_similar` пишут, шаги чтения — нет, `off` — пусто); хук — 4c |
-| Хуки | «Сначала amem» укладывается в бюджет; сбой — пустой ответ с кодом 0 | 4c |
-| Установщик | Claude Code и Codex, глобально и `--project`; `uninstall` возвращает разобранное содержимое файлов к исходному | 4c |
-| Одной командой | `amem init` с готовым DSN, `amem install claude-code`, `amem doctor` — в CI | 4c |
+| `<private>` | Скрытое не попадает ни в журнал, ни в ревизию, ни в поиск | 4a ✓ (HTTP: ревизия, журнал, поиск); 4b ✓ (CLI и MCP: поиск, журнал, `submit`); 4c ✓ (хуки: до поиска, `tests/test_hooks.py`) |
+| Журнал | Строка на явный поиск без ответов; хук не пишет; `off` — пусто | 4a ✓ (HTTP); 4b ✓ (`amem search`, `amem_search`, `amem_similar` пишут, шаги чтения — нет, `off` — пусто); 4c ✓ (хук не пишет ни журнал, ни `retrieval`) |
+| Хуки | «Сначала amem» укладывается в бюджет; сбой — пустой ответ с кодом 0 | 4c ✓ (`tests/test_hooks.py`: бюджет, сбой базы, `<private>`, проект по `cwd`, `PreCompact`) |
+| Установщик | Claude Code и Codex, глобально и `--project`; `uninstall` возвращает разобранное содержимое файлов к исходному | 4c ✓ (`tests/test_install.py` на временном HOME; `amem doctor` проверяет установленное — `tests/test_cli.py`) |
+| Одной командой | `amem init` с готовым DSN, `amem install claude-code`, `amem doctor` — в CI | 4c ✓ (шаг «One command» в `.github/workflows/ci.yml`; задание `docker`: образ, compose, `/health`, `amem doctor` в контейнере) |
 | PostgreSQL 18 и 16 | Все тесты базы — на обеих версиях | 4a ✓ |
 
 ## 10. Риски

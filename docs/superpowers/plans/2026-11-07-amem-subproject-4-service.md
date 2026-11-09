@@ -351,8 +351,8 @@ env -u PYTHONPATH .venv/bin/pytest -q -p no:cacheprovider; echo "exit=$?"
 
 **Files:** `Dockerfile`, `docker-compose.yml` (служба `amem`, профиль `web`), `amem doctor`, README и README.ru (установка одной командой, агенты, хуки, навыки, расписание `amem-verify`), `.github/workflows/ci.yml` (шаг «одной командой»: `amem init`, `amem install claude-code --project tmp`, `amem doctor`).
 
-- [ ] `amem doctor`: проверка базы, хранилища, модели, установленных агентов; коды выхода.
-- [ ] Шаг CI и тест `doctor`.
+- [x] `amem doctor`: проверка базы, хранилища, модели, установленных агентов; коды выхода.
+- [x] Шаг CI и тест `doctor`.
 - [ ] Ревью всей части, полный прогон, проверка на приватное, PR, автослияние; сообщить вебу.
 
 ---

@@ -247,18 +247,18 @@ export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem AMEM_DOCS=~/amem-samp
 cd web && npm ci && npm run dev:mock              # затем откройте http://127.0.0.1:5173/ui/
 ```
 
-### Дальше: установка одной командой
-
-`amem init`, `amem serve`, [CLI](#cli) и [сервер MCP](#mcp) уже работают из клона репозитория.
-
-> [!NOTE]
-> **Пока недоступно:** пакет на PyPI и `amem install` для памяти агентов (хуки и навыки)
-> ([подпроект 4](docs/superpowers/specs/2026-11-07-amem-subproject-4-service-design.md)).
+### Установка одной командой
 
 ```bash
-pipx install amem
+pip install amem              # или pipx / uv tool install; до выхода на PyPI — pip install -e . из клона
+amem init --dsn postgresql://amem:amem@127.0.0.1:5435/amem   # база и хранилище; DSN запоминается в amem.toml
 amem install claude-code      # сервер MCP, хуки и навыки; `amem install codex` — для Codex CLI
+amem doctor                   # что работает и что поправить
 ```
+
+`amem init --dsn` запоминает строку подключения в `~/.config/amem/amem.toml` (права `0600`): агенты, хуки и CLI
+находят базу без `AMEM_DSN` в окружении. PostgreSQL с pgvector — из `docker compose up -d --wait db` или свой.
+CI проходит эти шаги на каждом push.
 
 ## Служба
 
@@ -288,6 +288,33 @@ export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
 - **Веб-UI.** Для `/ui` нужен пакет веба: `pip install 'amem[web]'`. Без него `/ui` отвечает 404 с подсказкой,
   а API работает как обычно.
 
+## Docker compose
+
+`docker-compose.yml` поднимает базу и службу; настройки — в `.env` (образец `.env.example`), в самом файле
+секретов нет.
+
+```bash
+cp .env.example .env                          # задайте AMEM_PG_PASSWORD и AMEM_AGENT
+docker compose up -d --wait amem              # PostgreSQL 18 + pgvector и служба на http://127.0.0.1:8767
+docker compose exec amem amem doctor
+docker compose --profile web up -d --wait amem-web   # то же с веб-UI по /ui (вместо amem)
+```
+
+- **Внутри и снаружи.** Служба слушает `0.0.0.0:8767` внутри сети compose, наружу публикуется только
+  `127.0.0.1:8767`. `AMEM_ALLOWED_HOSTS=amem` — другие контейнеры зовут её как `http://amem:8767`.
+- **Вход.** Без `AMEM_TOKENS` служба идёт с `--no-auth`: любой, кто достучится до порта, пишет как модель, поэтому
+  порт — только на `127.0.0.1`. Для общей службы выдайте токен
+  (`docker compose exec amem amem token create person:me --file /var/lib/amem/state/tokens`), задайте
+  `AMEM_TOKENS=/var/lib/amem/state/tokens` в `.env` и перезапустите.
+- **Тома.** `amem-pg` (база), `amem-objects` (хранилище копий), `amem-state` (подборки, загрузки, журнал запросов,
+  токены), `amem-backups` (`docker compose exec amem amem backup create`; в образе есть клиент PostgreSQL 18).
+  `AMEM_DOCS_DIR` подключает вашу папку документов только для чтения.
+- **Живость.** Образ и compose проверяют `/health`; `docker compose up --wait` ждёт его.
+- **Профиль `web`.** `amem-web` — та же служба, собранная с `amem[web]`. Порт и тома у них общие: запускайте
+  либо `amem`, либо `amem-web`.
+- **Образ.** `docker build -t amem .` (цель `service`) или `--target web`; `--build-arg AMEM_EXTRAS=embed`
+  добавляет локальную модель векторов.
+
 ## CLI
 
 `pip install -e .` ставит команду `amem` в venv. Она работает с базой напрямую (`AMEM_DSN` или
@@ -308,7 +335,7 @@ amem export|inspect|import FILE.zip   подборки (import без --apply �
 amem backup create|list|restore|verify
 amem token create|list|revoke         токены общей службы
 amem base [name [ИМЯ]]                сводка и имя базы
-amem doctor                           база, миграции, хранилище, смысловой поиск
+amem doctor [--project DIR]          база, хранилище, модель, документы, агенты, служба
 ```
 
 - **Вывод.** Текст для человека или `--json` с тем же объектом, что HTTP API отдаёт на ту же операцию.
@@ -398,6 +425,61 @@ http_headers = { "X-Amem-Agent" = "model:codex" }
   агента и входа); чужой `retrieval_id` — `forbidden`.
 - **Журнал запросов.** Явные поиски (`amem search`, `amem_search`, `amem_similar`) пишут строку в
   `AMEM_STATE/queries.jsonl`, как `/search` службы; шаги чтения — нет.
+
+## Память агентов
+
+`amem install claude-code` и `amem install codex` подключают amem к агенту — глобально или с `--project DIR`.
+`amem uninstall …` убирает ровно установленное; `--dry-run` сначала показывает изменения.
+
+| | Claude Code | Codex CLI |
+|---|---|---|
+| Сервер MCP | `claude mcp add --scope user` (или `~/.claude.json`); проект — `.mcp.json` | `[mcp_servers.amem]` в `~/.codex/config.toml`; проект — `.codex/config.toml` |
+| Хуки | `SessionStart`, `UserPromptSubmit`, `PreCompact` в `settings.json` | `SessionStart`, `UserPromptSubmit` в `hooks.json` |
+| Навыки | `~/.claude/skills/amem-*`; проект — `.claude/skills/` | `~/.agents/skills/`; проект — `.agents/skills/`, и блок в `AGENTS.md` |
+
+- **Хуки.** `amem hook SessionStart` добавляет 3–5 проверенных атомов о проекте (по имени корня git) и
+  напоминание; `UserPromptSubmit` — уверенные находки по запросу («сначала amem»); `PreCompact` просит сводку
+  перечислить выводы, которые стоит записать. Хук читает базу напрямую, укладывается в 1,5 с и при любом сбое
+  отвечает пусто с кодом 0. Текст из памяти приходит в рамке как данные со статусом проверки, а не как указания.
+- **Навыки.** `amem-remember` (записать 1–3 атома в конце задачи), `amem-answer` (ответ по памяти со ссылками на
+  источники), `amem-verify` (смысловой проверяющий, уровень 5).
+- **Кто пишет.** Установщик задаёт `AMEM_AS_MODEL` серверу MCP и хукам: агент пишет как `model:claude-code` или
+  `model:codex`, а не от вашего имени.
+- **Правит только своё.** Ключи `amem` и элементы хуков с `amem hook` в JSON, блок `# amem:begin … # amem:end`
+  в TOML, блок `<!-- amem:begin … -->` в Markdown. Перед первой правкой файл копируется в `<файл>.amem-backup`.
+- **Codex.** Codex передаёт серверу MCP только часть окружения, поэтому базу задавайте в `amem.toml` через
+  `amem init --dsn …`, а не в `config.toml`. Файлы проекта Codex читает только у доверенного проекта.
+- **Windows.** Команды хуков — строки оболочки POSIX (`AMEM_AS_MODEL=… amem hook …`): они работают в Linux, macOS
+  и WSL2, но не в родных оболочках Windows. Используйте WSL2.
+- **Проверка.** `amem doctor` показывает, что установлено (глобально и для проекта текущей папки) и существует ли
+  ещё его команда; затем `claude mcp list` или `codex mcp list` подтверждают, что агент видит сервер.
+
+**Расписание `amem-verify`.** Смысловой проверяющий — это агент, которого запускают по вашему расписанию,
+например каждую ночь через cron:
+
+```cron
+# м ч д мес дн
+30 3 * * *  cd ~/notes && claude -p "Use the amem-verify skill: review up to 20 open semantic items." >> ~/.local/state/amem/verify.log 2>&1
+```
+
+или таймером systemd пользователя:
+
+```ini
+# ~/.config/systemd/user/amem-verify.service
+[Service]
+Type=oneshot
+WorkingDirectory=%h/notes
+ExecStart=/usr/bin/env claude -p "Use the amem-verify skill: review up to 20 open semantic items."
+
+# ~/.config/systemd/user/amem-verify.timer
+[Timer]
+OnCalendar=*-*-* 03:30
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+`systemctl --user enable --now amem-verify.timer`. Агенту нужен сервер MCP amem (`amem install …`).
 
 ## Как это устроено
 
@@ -490,7 +572,7 @@ sources:
 - [x] **Библиотека для службы:** папки, списки записей, ссылки по ключу, карточка объекта
 - [x] **Служба HTTP:** `amem serve` по [контракту v1](docs/api/http-v1.openapi.yaml)
 - [x] **CLI и сервер MCP:** поиск в три шага, отметки полезности, вырезание `<private>`
-- [ ] **Память агентов:** хуки Claude Code, Codex CLI, `amem install`, навыки ядра
+- [x] **Память агентов:** хуки Claude Code, Codex CLI, `amem install`, навыки ядра
 - [x] **Веб-UI:** все экраны — на службе и на моках; сквозные проверки против службы
 - [ ] **asearch:** поиск по файлам как плагин amem
 

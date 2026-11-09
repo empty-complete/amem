@@ -157,12 +157,23 @@ def test_base_summary_and_name(run, base, start):
     assert run("base", "name", " ")[0] == 2                     # пустое имя — BaseNameError
 
 
-def test_doctor(run, base, tmp_path):
-    code, out, _ = run("doctor", "--json")
+def _free_port() -> int:
+    import socket
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def test_doctor(run, base, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)                                  # не корень git: проекта для агентов нет
+    code, out, _ = run("doctor", "--json", extra={"AMEM_PORT": str(_free_port())})
     report = js(out)
     assert code == 0 and report["ok"]
     assert {c["name"]: c["status"] for c in report["checks"]} == {
-        "настройки": "ok", "база": "ok", "миграции": "ok", "хранилище": "ok", "смысловой поиск": "warn"}
+        "настройки": "ok", "база": "ok", "миграции": "ok", "id базы": "ok", "хранилище": "ok",
+        "смысловой поиск": "warn", "документы": "ok", "агенты": "warn"}
+    assert base_id_of(report) == js(run("base", "--json")[1])["base_id"]
     code, out, _ = run("doctor", extra={"AMEM_DSN": "postgresql://u:p@127.0.0.1:1/none"})
     assert code == 1 and "FAIL  база" in out
 
@@ -174,6 +185,83 @@ def test_doctor_reports_missing_store_of_a_base_with_files(run, kb, store, docs,
     shutil.rmtree(tmp_path / "objects")
     code, out, _ = run("doctor")
     assert code == 1 and "FAIL  хранилище" in out
+
+
+def base_id_of(report) -> str:
+    return next(c["detail"] for c in report["checks"] if c["name"] == "id базы").split()[0]
+
+
+def statuses(out: str) -> dict:
+    return {c["name"]: c["status"] for c in js(out)["checks"]}
+
+
+def test_doctor_documents_folder(run, kb, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert statuses(run("doctor", "--json", extra={"AMEM_DOCS": None})[1])["документы"] == "warn"
+    code, out, _ = run("doctor", extra={"AMEM_DOCS": str(tmp_path / "нет")})
+    assert code == 1 and "FAIL  документы" in out and "AMEM_DOCS" in out
+
+
+def test_doctor_checks_installed_agents_globally_and_in_project(run, kb, tmp_path, monkeypatch):
+    from amem.agents import install
+
+    project = tmp_path / "proj"
+    (project / ".git").mkdir(parents=True)
+    work = project / "src"
+    work.mkdir()
+    monkeypatch.chdir(work)                                      # проект — корень git над текущей папкой
+    home = tmp_path / "home"
+    env = {"HOME": str(home), "PATH": os.environ.get("PATH", "")}
+    install.install("codex", env)
+    install.install("claude-code", env, project)
+    code, out, _ = run("doctor", "--json")
+    found = statuses(out)
+    assert code == 0, out
+    assert found["агент codex"] == "ok" and found[f"агент claude-code (проект {project})"] == "ok"
+    assert "агент claude-code" not in found and "агенты" not in found
+    detail = next(c["detail"] for c in js(out)["checks"] if c["name"] == "агент codex")
+    assert "MCP" in detail and "codex mcp list" in detail
+
+    (project / ".claude" / "skills" / "amem-verify" / "SKILL.md").unlink()       # нет части — warn
+    assert statuses(run("doctor", "--json")[1])[f"агент claude-code (проект {project})"] == "warn"
+
+    mcp = project / ".mcp.json"                                  # команда не существует — fail, код 1
+    data = json.loads(mcp.read_text(encoding="utf-8"))
+    data["mcpServers"]["amem"]["command"] = str(tmp_path / "нет" / "amem")
+    mcp.write_text(json.dumps(data), encoding="utf-8")
+    code, out, _ = run("doctor", "--project", str(project))
+    assert code == 1 and f"FAIL  агент claude-code (проект {project})" in out and "такой команды нет" in out
+    assert run("doctor", "--project", str(tmp_path / "нет"))[0] == 1
+
+
+def test_doctor_service_health(run, kb, tmp_path, monkeypatch):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class Health(BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = b"ok" if self.path == "/health" else b""
+            self.send_response(200 if body else 404)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    monkeypatch.chdir(tmp_path)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Health)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        port = server.server_address[1]
+        assert statuses(run("doctor", "--json", extra={"AMEM_URL": f"http://127.0.0.1:{port}"})[1])["служба"] == "ok"
+        assert statuses(run("doctor", "--json", extra={"AMEM_PORT": str(port)})[1])["служба"] == "ok"   # порт слушает
+    finally:
+        server.shutdown()
+        server.server_close()
+    free = _free_port()
+    assert "служба" not in statuses(run("doctor", "--json", extra={"AMEM_PORT": str(free)})[1])        # не запущена
+    code, out, _ = run("doctor", extra={"AMEM_URL": f"http://127.0.0.1:{free}"})
+    assert code == 1 and "FAIL  служба" in out
 
 
 # --- serve ---

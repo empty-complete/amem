@@ -9,8 +9,10 @@ init — db.prepare (миграции, словари, base_id и четыре �
 бывает пароль), если файла настроек ещё нет. Корень хранилища создаётся, только если база не знает ни одного файла:
 пустая папка на месте хранилища, файлы которого база знает, — неподключённый том, а не новое хранилище (код 1).
 
-doctor здесь короткий — база, миграции, хранилище, смысловой поиск, файл токенов; полный (агенты, установка) —
-в части 4c.
+doctor — проверки по порядку: настройки, база (вход, миграции, id), хранилище, смысловой поиск (модель и провайдер),
+папка документов, файл токенов, агенты (Claude Code и Codex глобально и в проекте: --project или корень git над
+текущей папкой), служба (/health по AMEM_URL или на порту AMEM_PORT, если он слушает). У каждой — ok, warn или fail
+с подсказкой; код 0 без fail, 1 — есть fail.
 """
 from __future__ import annotations
 
@@ -38,7 +40,9 @@ def register(sub, shared) -> None:
     p.add_argument("what", nargs="?", choices=("name",), help="name — показать или задать имя базы")
     p.add_argument("name", nargs="?", metavar="ИМЯ", help="новое имя базы (только человек)")
 
-    add(sub, shared, "doctor", "проверка: база, миграции, хранилище, смысловой поиск", run_doctor)
+    p = add(sub, shared, "doctor", "проверка: база, хранилище, модель, документы, агенты, служба", run_doctor)
+    p.add_argument("--project", metavar="DIR", type=Path,
+                   help="проект для проверки агентов (по умолчанию — корень git над текущей папкой)")
 
 
 # --- init ---
@@ -185,6 +189,10 @@ def run_base(ctx, args) -> int:
 
 # --- doctor ---
 
+SERVICE_TIMEOUT = 3                  # с на /health службы
+PORT_PROBE = 0.3                     # с на «порт слушает?»
+
+
 def run_doctor(ctx, args) -> int:
     from ... import api, recipes, settings as settings_
     from ..context import pending_migrations
@@ -216,6 +224,7 @@ def run_doctor(ctx, args) -> int:
                 else:
                     check("база", "fail", f"недоступна ({type(e).__name__}) — проверьте, что PostgreSQL запущен "
                                           f"и AMEM_DSN верен")
+        ready = False
         if conn is not None:
             pending = pending_migrations(conn)
             if pending is None:
@@ -224,9 +233,16 @@ def run_doctor(ctx, args) -> int:
                 check("миграции", "fail", f"не применены: {', '.join(pending)} — выполните amem init")
             else:
                 check("миграции", "ok", "все применены")
+                ready = True
+        if ready:
+            info = api.base(conn)
+            if info["base_id"]:
+                check("id базы", "ok", info["base_id"] + (f" «{info['name']}»" if info["name"] else ""))
+            else:
+                check("id базы", "fail", "у базы нет id — выполните amem init")
         root = Path(settings.data)
         files = None
-        if conn is not None and pending_migrations(conn) == []:
+        if ready:
             files = conn.execute("SELECT count(*) FROM object_version WHERE digest IS NOT NULL").fetchone()[0]
         if (root / api.STORE_MARK).is_file():
             check("хранилище", "ok", str(root))
@@ -235,20 +251,98 @@ def run_doctor(ctx, args) -> int:
                                       f"данных или восстановите хранилище")
         else:
             check("хранилище", "warn", f"{root}: корня ещё нет — его создаст amem init или первая запись файла")
-        if conn is not None and files is not None:
+        if ready:
             found = recipes.availability(conn, ctx.provider())
             if found["semantic"] == "used":
                 check("смысловой поиск", "ok", "модель и провайдер на месте")
             else:
-                check("смысловой поиск", "warn", f"недоступен ({found['reason']}): работают марки и полнотекстовый")
+                check("смысловой поиск", "warn", f"недоступен ({found['reason']}): работают марки и полнотекстовый "
+                                                 f"— модель: AMEM_BACKEND и pip install 'amem[embed]'")
+        if settings.docs is None:
+            check("документы", "warn", "AMEM_DOCS не задан — источники с path получат замечание source_unresolved")
+        elif Path(settings.docs).is_dir():
+            check("документы", "ok", str(settings.docs))
+        else:
+            check("документы", "fail", f"{settings.docs}: папки нет — проверьте AMEM_DOCS или подключите том")
         if settings.tokens is not None:
             try:
                 count = len(settings_.load_tokens(settings.tokens))
                 check("токены", "ok", f"{settings.tokens}: {count}")
             except settings_.SettingsError as e:
                 check("токены", "fail", str(e))
+    _check_agents(ctx, args, check)
+    _check_service(ctx, settings, check)
     ok = all(c["status"] != "fail" for c in checks)
     marks = {"ok": "ok  ", "warn": "!   ", "fail": "FAIL"}
     ctx.emit({"ok": ok, "checks": checks},
              lambda r: "\n".join(f"{marks[c['status']]}  {c['name']}: {c['detail']}" for c in r["checks"]))
     return 0 if ok else ENV
+
+
+def _check_agents(ctx, args, check) -> None:
+    """Агенты глобально и в проекте; не установленные молчат, а если amem нет нигде — одно предупреждение."""
+    from ...agents import hooks, install, platforms
+
+    project = getattr(args, "project", None)
+    if project is not None:
+        project = Path(project).expanduser().absolute()
+        if not project.is_dir():
+            check("агенты", "fail", f"--project {project}: папки нет")
+            return
+    else:
+        project = hooks.project_root(str(Path.cwd()))
+    found = 0
+    for agent in platforms.AGENTS:
+        for where in (None, project) if project is not None else (None,):
+            try:
+                result = install.inspect(agent, ctx.env, where)
+            except OSError as e:
+                check(f"агент {agent}", "fail", f"файлы агента не читаются: {e}")
+                continue
+            if result is None:
+                continue
+            found += 1
+            name = f"агент {agent}" + (f" (проект {where})" if where is not None else "")
+            check(name, result.status, result.detail)
+    if not found:
+        check("агенты", "warn", "amem не поставлен ни в Claude Code, ни в Codex — amem install claude-code "
+                                "(или codex), для проекта — с --project DIR")
+
+
+def _check_service(ctx, settings, check) -> None:
+    """Служба: /health по AMEM_URL; без него — на AMEM_PORT этой машины, если порт слушает (иначе молчим)."""
+    import socket
+    import urllib.error
+    import urllib.request
+
+    url = ctx.env.get("AMEM_URL", "").strip().rstrip("/")
+    if not url:
+        if settings is None:
+            return
+        host = settings.host if settings.host not in ("0.0.0.0", "::", "") else "127.0.0.1"
+        try:
+            with socket.create_connection((host, settings.port), timeout=PORT_PROBE):
+                pass
+        except OSError:
+            return                                       # служба не запущена — это не ошибка
+        url = f"http://{f'[{host}]' if ':' in host else host}:{settings.port}"
+        explicit = False
+    else:
+        explicit = True
+    try:
+        with urllib.request.urlopen(f"{url}/health", timeout=SERVICE_TIMEOUT) as r:   # noqa: S310 — адрес из настроек
+            body = r.read(64).decode("utf-8", "replace").strip()
+            status = r.status
+    except urllib.error.HTTPError as e:
+        hint = "база службы недоступна" if e.code == 503 else "ответ не от amem?"
+        check("служба", "fail" if explicit else "warn", f"{url}/health: {e.code} — {hint}")
+        return
+    except (OSError, ValueError) as e:
+        reason = getattr(e, "reason", e)
+        check("служба", "fail" if explicit else "warn", f"{url}/health не отвечает ({reason}) — запущена ли служба "
+                                                         f"(amem serve, docker compose up -d amem)? Проверьте AMEM_URL")
+        return
+    if status == 200 and body == "ok":
+        check("служба", "ok", f"{url}: /health ok")
+    else:
+        check("служба", "fail" if explicit else "warn", f"{url}/health: {status} {body!r} — ответ не от amem?")

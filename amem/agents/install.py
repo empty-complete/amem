@@ -546,3 +546,126 @@ def install(agent: str, env: Mapping[str, str], project: Path | None = None, *, 
 
 def uninstall(agent: str, env: Mapping[str, str], project: Path | None = None, *, dry_run: bool = False) -> Report:
     return apply(plan(agent, env, project, remove=True, dry_run=dry_run), env)
+
+
+# --- проверка установленного (amem doctor) ---
+
+@dataclass
+class Found:
+    """Что от amem стоит у агента: status ok | warn | fail и пояснение с подсказкой."""
+    agent: str
+    project: Path | None
+    status: str
+    detail: str
+
+
+def _runnable(command: list[str], env: Mapping[str, str]) -> bool:
+    """Первое слово команды — существующий исполняемый файл (полный путь) или имя из PATH."""
+    if not command or not command[0]:
+        return False
+    exe = command[0]
+    if os.path.isabs(exe):
+        return os.path.isfile(exe) and os.access(exe, os.X_OK)
+    return shutil.which(exe, path=env.get("PATH")) is not None
+
+
+def _hook_argv(command: str) -> list[str]:
+    """Команда хука без присваиваний окружения в начале (`AMEM_AS_MODEL=… amem hook …` → [amem, hook, …])."""
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return []
+    while words and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", words[0]):
+        words.pop(0)
+    return words
+
+
+def inspect(agent: str, env: Mapping[str, str], project: Path | None = None) -> Found | None:
+    """Проверка установки агента глобально или в проект: сервер MCP, хуки, навыки (у Codex — и блок AGENTS.md) на
+    месте, команда amem существует. None — от amem у агента нет ничего (не установлен)."""
+    lay = platforms.layout(agent, env, project)
+    where = f" --project {project}" if project is not None else ""
+    again = f"повторите amem install {agent}{where}"
+    present, missing, broken, stale = [], [], [], []
+
+    # MCP
+    entry = None
+    try:
+        if lay.mcp_json is not None:
+            entry = (_load_json(lay.mcp_json, _read(lay.mcp_json)).get("mcpServers") or {}).get(SERVER)
+        elif lay.mcp_toml is not None:
+            entry = (_parse_toml(lay.mcp_toml, _read(lay.mcp_toml)).get("mcp_servers") or {}).get(SERVER)
+    except (InstallError, AttributeError) as e:
+        broken.append(str(e) if isinstance(e, InstallError) else "mcpServers — не объект")
+    if isinstance(entry, dict):
+        present.append("MCP")
+        argv = [entry.get("command") or "", *(entry.get("args") or [])]
+        if not isinstance(argv[0], str) or not _runnable(argv, env):
+            broken.append(f"сервер MCP зовёт {argv[0]!r} — такой команды нет")
+    else:
+        missing.append("сервер MCP")
+
+    # хуки
+    if lay.hooks_json is not None:
+        try:
+            hooks = _load_json(lay.hooks_json, _read(lay.hooks_json)).get("hooks") or {}
+        except InstallError as e:
+            broken.append(str(e))
+            hooks = {}
+        got = 0
+        for event in lay.hook_events:
+            groups = hooks.get(event) if isinstance(hooks, dict) else None
+            ours = [h for g in groups or [] if isinstance(g, dict) and isinstance(g.get("hooks"), list)
+                    for h in g["hooks"] if is_our_hook(h)]
+            if not ours:
+                missing.append(f"хук {event}")
+                continue
+            got += 1
+            for handler in ours:
+                argv = _hook_argv(handler["command"])
+                if not _runnable(argv, env):
+                    broken.append(f"хук {event} зовёт {argv[0] if argv else handler['command']!r} — такой команды нет")
+        if got:
+            present.append(f"хуки ({got})")
+
+    # AGENTS.md
+    if lay.agents_md is not None:
+        try:
+            text = _read(lay.agents_md)
+        except InstallError as e:
+            broken.append(str(e))
+            text = None
+        if text is not None and _block_re(_MD_BEGIN, _MD_END).search(text):
+            present.append("AGENTS.md")
+        else:
+            missing.append("блок AGENTS.md")
+
+    # навыки
+    if lay.skills is not None:
+        got = 0
+        for name in SKILLS:
+            path = lay.skills / name / "SKILL.md"
+            try:
+                text = _read(path)
+            except InstallError:
+                text = ""
+            if text is None:
+                missing.append(f"навык {name}")
+                continue
+            got += 1
+            if text != skill_text(name):
+                stale.append(name)
+        if got:
+            present.append(f"навыки ({got})")
+
+    if not present and not broken:
+        return None
+    detail = ", ".join(present) or "файлы не читаются"
+    if broken:
+        return Found(agent, project, "fail", f"{detail}; " + "; ".join(broken) + f" — {again}")
+    if missing:
+        return Found(agent, project, "warn", f"{detail}; нет: {', '.join(missing)} — {again}")
+    if stale:
+        return Found(agent, project, "warn", f"{detail}; навыки другой версии: {', '.join(stale)} — {again}")
+    check = "claude mcp list" if agent == "claude-code" else "codex mcp list"
+    return Found(agent, project, "ok", f"{detail}; проверьте у агента: {check}")
