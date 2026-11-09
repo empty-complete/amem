@@ -78,6 +78,7 @@ def create_app(settings: Settings, *, provider: embed.EmbeddingProvider | None =
     app.state.provider_chosen = provider is not None
     app.state.store = ObjectStore(settings.data)      # только чтение копий: корень создаёт первая запись файла
     app.state.base_id = None
+    app.state.mcp = endpoint                          # /mcp: его runtime (задачи клиентов без сессии)
     return app
 
 
