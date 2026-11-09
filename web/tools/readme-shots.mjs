@@ -60,7 +60,7 @@ const text = (v) =>
   typeof v === "string" ? v : v && typeof v === "object" ? (v.en ?? v.ru ?? Object.values(v)[0]) : "";
 const WORDS = {
   en: {
-    hits: "hits",
+    hits: (n) => `${n} ${n === 1 ? "hit" : "hits"}`,
     retrieval: "retrieval",
     value: "value",
     at: "at",
@@ -75,7 +75,7 @@ const WORDS = {
     verdict: { ok: "quote found", fuzzy: "quote close", not_found: "quote not found" },
   },
   ru: {
-    hits: "находки",
+    hits: (n) => `найдено: ${n}`,
     retrieval: "выдача",
     value: "значение",
     at: "при",
@@ -105,7 +105,7 @@ function agentHtml(t, theme) {
   const blocks = t.calls.map(({ tool, args: a, result: r }) => {
     let body = "";
     if (tool === "amem_search") {
-      body = `<div class="res">${r.items.length} ${W.hits} · ${W.retrieval} ${esc(short(r.retrieval_id))}</div>${r.items
+      body = `<div class="res">${W.hits(r.items.length)} · ${W.retrieval} ${esc(short(r.retrieval_id))}</div>${r.items
         .map(
           (i) =>
             `<div class="row"><span class="ref">${esc(short(i.ref))}</span><span class="lab">${esc(i.label)}</span><span class="meta">${esc(i.kind)} · ${status(i.status)}</span></div>`,
