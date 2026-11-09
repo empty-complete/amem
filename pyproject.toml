@@ -51,7 +51,7 @@ include = ["amem*"]
 
 [tool.setuptools.package-data]
 amem = ["schema/*.yaml", "schema/*.json", "sql/*.sql", "packs/core/pack.yaml", "packs/core/vocab/*.yaml", "packs/core/templates/*.yaml",
-        "service/*.yaml"]
+        "service/*.yaml", "packs/core/skills/*/SKILL.md"]
 
 [tool.ruff]
 line-length = 120

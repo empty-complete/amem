@@ -54,3 +54,41 @@ jobs:
             done
           done
       - run: python tools/gen_schema.py --check
+      - name: One command — amem init, amem install claude-code --project, amem doctor
+        run: |
+          PGPASSWORD=test "$AMEM_PG_BIN/psql" -h localhost -p 5433 -U test -d test -qc "CREATE DATABASE onecmd"
+          export HOME="$(mktemp -d)" AMEM_BACKEND=none
+          project="$(mktemp -d)"
+          amem init --dsn postgresql://test:test@localhost:5433/onecmd
+          amem install claude-code --project "$project"
+          cd "$project"
+          amem doctor --project "$project"
+          amem doctor --project "$project" --json > "$RUNNER_TEMP/doctor.json"
+          python - "$project" "$RUNNER_TEMP/doctor.json" <<'PY'
+          import json, sys
+          project, path = sys.argv[1:]
+          checks = {c["name"]: c["status"] for c in json.load(open(path, encoding="utf-8"))["checks"]}
+          for name in ("база", "миграции", "id базы", "хранилище", f"агент claude-code (проект {project})"):
+              assert checks.get(name) == "ok", (name, checks)
+          PY
+
+  # образ службы: обе цели Dockerfile, служба из compose отвечает /health и проходит amem doctor
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config -q
+      - run: docker build --target web -t amem-web:ci .
+      - name: amem-web in the web image
+        run: |
+          docker run --rm amem-web:ci python -c "import amem_web; p = amem_web.static_dir() / 'index.html'; assert p.is_file(), p"
+      - run: docker compose build amem
+      - name: compose — db and amem, /health, amem doctor
+        run: |
+          docker compose up -d --wait --wait-timeout 180 amem
+          curl -fsS http://127.0.0.1:8767/health
+          docker compose exec -T amem amem doctor
+      - if: failure()
+        run: docker compose logs amem db
+      - if: always()
+        run: docker compose down -v

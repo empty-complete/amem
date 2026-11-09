@@ -248,18 +248,18 @@ On mock data, without a database:
 cd web && npm ci && npm run dev:mock              # then open http://127.0.0.1:5173/ui/
 ```
 
-### Coming next: one-command install
-
-`amem init`, `amem serve`, the [CLI](#cli) and the [MCP server](#mcp) already work from a clone.
-
-> [!NOTE]
-> **Not available yet:** the package on PyPI and `amem install` for agent memory (hooks and skills)
-> ([subproject 4](docs/superpowers/specs/2026-11-07-amem-subproject-4-service-design.md)).
+### One-command install
 
 ```bash
-pipx install amem
+pip install amem              # or pipx / uv tool install; until the PyPI release: pip install -e . from a clone
+amem init --dsn postgresql://amem:amem@127.0.0.1:5435/amem   # database, object store; the DSN goes to amem.toml
 amem install claude-code      # MCP server, hooks and skills; `amem install codex` for Codex CLI
+amem doctor                   # what works and what to fix
 ```
+
+`amem init --dsn` remembers the connection string in `~/.config/amem/amem.toml` (mode `0600`), so agents, hooks
+and the CLI find the database without `AMEM_DSN` in their environment. PostgreSQL with pgvector comes from
+`docker compose up -d --wait db` or your own server. CI runs these steps on every push.
 
 ## Service
 
@@ -289,6 +289,33 @@ export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
 - **Web UI.** `/ui` needs the web package: `pip install 'amem[web]'`. Without it `/ui` answers 404 with a hint,
   and the API works as usual.
 
+## Docker compose
+
+`docker-compose.yml` runs the database and the service; settings live in `.env` (copy `.env.example`), the file
+itself holds no secrets.
+
+```bash
+cp .env.example .env                          # set AMEM_PG_PASSWORD and AMEM_AGENT
+docker compose up -d --wait amem              # PostgreSQL 18 + pgvector and the service on http://127.0.0.1:8767
+docker compose exec amem amem doctor
+docker compose --profile web up -d --wait amem-web   # the same with the web UI at /ui (instead of amem)
+```
+
+- **Inside and outside.** The service listens on `0.0.0.0:8767` inside the compose network and is published only
+  on `127.0.0.1:8767`. `AMEM_ALLOWED_HOSTS=amem` lets other containers call it as `http://amem:8767`.
+- **Login.** Without `AMEM_TOKENS` the service runs with `--no-auth`: anyone who reaches the port writes as a model,
+  so keep it on `127.0.0.1`. For a shared service issue a token
+  (`docker compose exec amem amem token create person:me --file /var/lib/amem/state/tokens`), set
+  `AMEM_TOKENS=/var/lib/amem/state/tokens` in `.env` and restart.
+- **Volumes.** `amem-pg` (database), `amem-objects` (object store), `amem-state` (bundles, uploads, query log,
+  tokens), `amem-backups` (`docker compose exec amem amem backup create`; the image has the PostgreSQL 18 client).
+  `AMEM_DOCS_DIR` mounts your documents folder read-only.
+- **Health.** Both the image and compose check `/health`; `docker compose up --wait` waits for it.
+- **Profile `web`.** `amem-web` is the same service built with `amem[web]`. It shares the port and the volumes, so
+  run either `amem` or `amem-web`.
+- **Image.** `docker build -t amem .` (target `service`) or `--target web`; `--build-arg AMEM_EXTRAS=embed` adds
+  the local embedding model.
+
 ## CLI
 
 `pip install -e .` puts the `amem` command in the venv. It talks to the database directly (`AMEM_DSN` or
@@ -309,7 +336,7 @@ amem export|inspect|import FILE.zip   bundles (import is a dry run without --app
 amem backup create|list|restore|verify
 amem token create|list|revoke         tokens of a shared service
 amem base [name [NAME]]               database summary and name
-amem doctor                           database, migrations, store, semantic search
+amem doctor [--project DIR]          database, store, model, documents, agents, service
 ```
 
 - **Output.** Text for people, or `--json` with the same object the HTTP API returns for that operation.
@@ -368,13 +395,13 @@ or in the project's `.mcp.json`:
 }
 ```
 
-Codex CLI, in `~/.codex/config.toml`:
+Codex CLI, in `~/.codex/config.toml` (the DSN stays in `amem.toml` or in the environment, not in this file):
 
 ```toml
 [mcp_servers.amem]
 command = "amem"
 args = ["mcp", "--agent", "model:codex"]
-env = { AMEM_DSN = "postgresql://amem:amem@127.0.0.1:5435/amem" }
+env_vars = ["AMEM_DSN", "AMEM_CONFIG"]
 ```
 
 **Over HTTP.** A running service serves the same tools at `/mcp` (Streamable HTTP):
@@ -399,6 +426,65 @@ http_headers = { "X-Amem-Agent" = "model:codex" }
   sessions, of the same agent and login); someone else's `retrieval_id` answers `forbidden`.
 - **Query log.** Explicit searches (`amem search`, `amem_search`, `amem_similar`) add a line to
   `AMEM_STATE/queries.jsonl`, like the service's `/search`; reading steps do not.
+
+## Agent memory
+
+`amem install claude-code` and `amem install codex` connect amem to an agent, globally or with `--project DIR`.
+`amem uninstall …` removes exactly what was installed; `--dry-run` shows the changes first.
+
+| | Claude Code | Codex CLI |
+|---|---|---|
+| MCP server | `claude mcp add --scope user` (or `~/.claude.json`); project — `.mcp.json` | `[mcp_servers.amem]` in `~/.codex/config.toml`; project — `.codex/config.toml` |
+| Hooks | `SessionStart`, `UserPromptSubmit`, `PreCompact` in `settings.json` | `SessionStart`, `UserPromptSubmit` in `hooks.json` |
+| Skills | `~/.claude/skills/amem-*`; project — `.claude/skills/` | `~/.agents/skills/`; project — `.agents/skills/`, plus a block in `AGENTS.md` |
+
+- **Hooks.** `amem hook SessionStart` adds 3–5 verified atoms about the project (by the git root name) and a
+  reminder; `UserPromptSubmit` adds confident hits for the prompt («amem first»); `PreCompact` asks the summary
+  to list findings worth saving. A hook reads the database directly, fits in 1.5 s, and on any failure answers
+  nothing with exit code 0. Text from memory comes framed as data with its review status, not as instructions.
+- **Skills.** `amem-remember` (write 1–3 atoms at the end of a task), `amem-answer` (answer from memory with
+  sources), `amem-verify` (the semantic reviewer, level 5).
+- **Who writes.** The installer sets `AMEM_AS_MODEL` for the MCP server and the hooks, so the agent writes as
+  `model:claude-code` or `model:codex`, never as you.
+- **Edits only its own.** JSON keys `amem` and hook entries with `amem hook`, a `# amem:begin … # amem:end` block in
+  TOML, a `<!-- amem:begin … -->` block in Markdown. Before the first edit a file is copied to `<file>.amem-backup`.
+- **Codex.** Codex passes an MCP server only the variables listed in `env_vars`; the installer lists `AMEM_DSN`,
+  `AMEM_CONFIG`, `AMEM_STATE`, `PGPASSFILE` and `PGSERVICE` and never writes a connection string into
+  `config.toml`. Put the database into `amem.toml` with `amem init --dsn …` (or into those variables). Codex reads
+  project files only in a trusted project.
+- **Project files.** With `--project` the files get a bare `amem` command, without this machine's path, so they
+  can be committed; `amem` must be on the agent's `PATH`. A global install uses the full path.
+- **Windows.** Hook commands are POSIX shell lines (`AMEM_AS_MODEL=… amem hook …`): they work on Linux, macOS and
+  WSL2, not in native Windows shells. Use WSL2.
+- **Check.** `amem doctor` shows what is installed (globally and for the project of the current folder) and whether
+  its command still exists; then `claude mcp list` or `codex mcp list` confirms the agent sees the server.
+
+**Scheduling `amem-verify`.** The semantic reviewer is an agent run on a schedule of your choice, for example
+every night with cron:
+
+```cron
+# m h dom mon dow
+30 3 * * *  cd ~/notes && claude -p "Use the amem-verify skill: review up to 20 open semantic items." >> ~/.local/state/amem/verify.log 2>&1
+```
+
+or a systemd user timer:
+
+```ini
+# ~/.config/systemd/user/amem-verify.service
+[Service]
+Type=oneshot
+WorkingDirectory=%h/notes
+ExecStart=/usr/bin/env claude -p "Use the amem-verify skill: review up to 20 open semantic items."
+
+# ~/.config/systemd/user/amem-verify.timer
+[Timer]
+OnCalendar=*-*-* 03:30
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+`systemctl --user enable --now amem-verify.timer`. The agent needs the amem MCP server (`amem install …`).
 
 ## How it works
 
@@ -496,7 +582,7 @@ ranking. They never change a status or skip a check.
 - [x] **Library for the service:** folders, record lists, references by key, object view
 - [x] **HTTP service:** `amem serve` with the [v1 contract](docs/api/http-v1.openapi.yaml)
 - [x] **CLI and MCP server:** three-step retrieval, usefulness marks, `<private>` stripping
-- [ ] **Agent memory:** Claude Code hooks, Codex CLI, `amem install`, core skills
+- [x] **Agent memory:** Claude Code hooks, Codex CLI, `amem install`, core skills
 - [x] **Web UI:** all screens, on the service and on mock data; checked end to end against the service
 - [ ] **asearch:** file search as an amem plugin
 

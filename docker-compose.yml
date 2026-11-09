@@ -1,4 +1,50 @@
+# Служба amem и её база. Настройки — в .env (образец .env.example); секретов в этом файле нет.
+#   docker compose up -d --wait amem                    — база и служба на http://127.0.0.1:8767
+#   docker compose --profile web up -d --wait amem-web  — то же с веб-интерфейсом (/ui); вместо amem, не вместе:
+#                                                        порт и тома у них общие
+# Тестовые базы — профиль test (ниже).
+
+x-amem: &amem
+  build: {context: ., target: service}
+  image: amem:local
+  restart: unless-stopped
+  depends_on:
+    db: {condition: service_healthy}
+  environment: &amem-env
+    AMEM_DSN: postgresql://amem:${AMEM_PG_PASSWORD:-amem}@db:5432/amem
+    AMEM_AGENT: ${AMEM_AGENT:-}                # человек службы (person:…); пусто — person: + имя пользователя ОС
+    AMEM_TOKENS: ${AMEM_TOKENS:-}              # пусто — без входа (--no-auth): порт наружу только 127.0.0.1
+    AMEM_ALLOWED_HOSTS: amem                   # Host: amem:8767 из сети compose; localhost и 127.0.0.1 — всегда
+    AMEM_DOCS: /var/lib/amem/docs
+    # служба слушает 0.0.0.0:8767 внутри сети (AMEM_HOST и AMEM_PORT заданы в образе)
+  volumes:
+    - amem-objects:/var/lib/amem/objects       # хранилище копий (OCFL)
+    - amem-state:/var/lib/amem/state           # загрузки, подборки, журнал запросов, файл токенов
+    - amem-backups:/var/lib/amem/backups       # amem backup create
+    - ${AMEM_DOCS_DIR:-amem-docs}:/var/lib/amem/docs:ro
+  ports:
+    - "127.0.0.1:${AMEM_PUBLISH_PORT:-8767}:8767"
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8767/health', timeout=4).read() == b'ok' else 1)"]
+    interval: 10s
+    timeout: 5s
+    start_period: 30s
+    retries: 5
+
 services:
+  amem:
+    <<: *amem
+
+  # Служба с веб-интерфейсом: образ с amem[web] (пакет amem-web, статика /ui)
+  amem-web:
+    <<: *amem
+    profiles: ["web"]
+    build: {context: ., target: web}
+    image: amem-web:local
+    environment:
+      <<: *amem-env
+      AMEM_ALLOWED_HOSTS: amem,amem-web
+
   # База схемы v1: PostgreSQL 18 + pgvector. Запуск: docker compose up -d --wait db
   db:
     image: pgvector/pgvector:0.8.1-pg18
@@ -50,3 +96,11 @@ services:
 volumes:
   amem-pg:
     name: amem-pg      # имя не зависит от папки проекта: из рабочего дерева и из основной папки — один том
+  amem-objects:
+    name: amem-objects
+  amem-state:
+    name: amem-state
+  amem-backups:
+    name: amem-backups
+  amem-docs:
+    name: amem-docs

@@ -6,7 +6,9 @@
 и код выхода по разд. 5.1 (amem/cli/errors.py). Агент — по окружению (amem/cli/context.py).
 
 main(argv) возвращает код выхода и не вызывает sys.exit: так его зовут тесты и скрипт `amem` (pyproject).
-`amem mcp` — сервер MCP на stdio (amem/service/mcp.py). Команды части 4c (install, uninstall, hook) появятся вместе с ней.
+`amem mcp` — сервер MCP на stdio (amem/service/mcp.py). `amem hook СОБЫТИЕ` — хук Claude Code (amem/agents/hooks.py):
+он идёт мимо разбора опций и всегда выходит с кодом 0. `amem install|uninstall АГЕНТ` — установщик
+(amem/agents/install.py).
 """
 from __future__ import annotations
 
@@ -68,6 +70,15 @@ def main(argv: Sequence[str] | None = None, *, env: Mapping[str, str] | None = N
     у `amem serve` (тесты)."""
     argv = list(sys.argv[1:] if argv is None else argv)
     environment = environ(env)
+    if argv and argv[0] == "hook" and argv[1:] not in (["-h"], ["--help"]):
+        from ..agents import hooks
+
+        # хук не роняет сессию агента: код 0 при любом сбое и при любом вызове — `amem hook`, лишние аргументы
+        # и опции дают пустой ответ и строку в hooks.log (код 2 у Claude Code заблокировал бы запрос)
+        if len(argv) == 2 and not argv[1].startswith("-"):
+            return hooks.main(argv[1], environment)
+        hooks.log(environment, "hook", f"неверный вызов amem {' '.join(argv)!r}: нужно amem hook СОБЫТИЕ")
+        return OK
     made: list[Context] = []              # Context вызова: report берёт из него вывод и --json; close — в конце
     try:
         try:
