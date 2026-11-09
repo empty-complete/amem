@@ -1,0 +1,9 @@
+scheme: property
+concepts:
+  - {code: humidity_range, label: {ru: диапазон влажности, en: humidity range}, definition: {ru: "Диапазон измерения относительной влажности."}, unit: "%", plausible_min: 0, plausible_max: 100}
+  - {code: humidity_error, label: {ru: погрешность влажности, en: humidity error}, definition: {ru: "Погрешность измерения влажности."}, unit: "%", plausible_min: 0, plausible_max: 20}
+  - {code: temperature_range, label: {ru: диапазон температуры, en: temperature range}, definition: {ru: "Диапазон измерения температуры воздуха."}, unit: Cel, plausible_min: -80, plausible_max: 80}
+  - {code: temperature_error, label: {ru: погрешность температуры, en: temperature error}, definition: {ru: "Погрешность измерения температуры."}, unit: Cel, plausible_min: 0, plausible_max: 5}
+  - {code: supply_voltage, label: {ru: напряжение питания, en: supply voltage}, definition: {ru: "Напряжение питания."}, unit: V, plausible_min: 0, plausible_max: 400}
+  - {code: operating_temperature, label: {ru: рабочая температура, en: operating temperature}, definition: {ru: "Нижний предел рабочей температуры датчика."}, unit: Cel, plausible_min: -80, plausible_max: 80}
+  - {code: protection_class, label: {ru: степень защиты, en: protection class}, definition: {ru: "Степень защиты корпуса (IP)."}}

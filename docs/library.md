@@ -104,6 +104,10 @@ usually comes from, vocabulary `parameter_origin`), `default` (shown, but never 
 value), and `ask` / `hint` / `when` (whom to ask, where to look, when it applies). Profiles
 inherit through `extends`: a descendant's rule replaces its ancestor's rule for the same quantity.
 
+`group` is a code. To show groups in words, a pack may add an optional `parameter_group` vocabulary
+(code, label); the core does not check it, and the web UI falls back to the code itself
+(`operating_conditions` → “Operating conditions”). The sample pack `tools/sample-pack/meteo` shows all of it.
+
 `amem.profile.card(conn, ref, ancestors=True)` builds the card of an entity (format `amem.card/1`)
 from the live `parameter` atoms about it; nothing is stored. Each field in `fields` has a `state`:
 

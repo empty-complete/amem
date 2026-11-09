@@ -1,0 +1,5 @@
+name: meteo
+version: 1.0.0
+title: Метеостанция (образец)
+description: Пакет образца базы tools/seed_sample.py — датчики с профилями для карточки сущности в веб-UI и e2e.
+license: MIT

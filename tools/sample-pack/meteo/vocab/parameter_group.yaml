@@ -1,0 +1,5 @@
+# Подписи групп полей карточки (rule.group) — необязательный словарь пакета; веб-UI берёт подписи отсюда.
+scheme: parameter_group
+concepts:
+  - {code: measurement, label: {ru: Измерение, en: Measurement}, definition: {ru: "Что и с какой точностью измеряет датчик."}}
+  - {code: environment, label: {ru: Условия работы, en: Operating conditions}, definition: {ru: "Где и в каких условиях датчик работает."}}

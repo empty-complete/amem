@@ -58,6 +58,7 @@ jobs:
           --health-interval 2s --health-timeout 3s --health-retries 30
     env:
       AMEM_DSN: postgresql://test:test@127.0.0.1:5432/test
+      AMEM_PACKS: ${{ github.workspace }}/tools/sample-pack/meteo
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -88,6 +89,23 @@ jobs:
         env:
           AMEM_PYTHON: /tmp/amem/bin/python
         run: npx playwright test -c playwright.service.config.ts
+      # снимки README со службы на образце — артефактом (снимать здесь, а не на машине разработчика)
+      - name: Снимки README
+        env:
+          PGPASSWORD: test
+        run: |
+          psql -h 127.0.0.1 -U test -d test -qc "CREATE DATABASE shots"
+          export AMEM_DSN=postgresql://test:test@127.0.0.1:5432/shots
+          export AMEM_DATA=/tmp/shots/objects AMEM_DOCS=/tmp/shots/docs AMEM_STATE=/tmp/shots/state AMEM_BACKEND=none
+          /tmp/amem/bin/python tools/seed_sample.py
+          /tmp/amem/bin/python -m amem.service --port 8770 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8770/health && break; sleep 1; done
+          cd web && node tools/readme-shots.mjs http://127.0.0.1:8770
+      - uses: actions/upload-artifact@v4
+        with:
+          name: readme-shots
+          path: docs/assets/readme/*/*.png
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

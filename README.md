@@ -238,6 +238,7 @@ open review queue), in an empty database:
 .venv/bin/pip install -e . -e web/python          # the service and the web UI package
 (cd web && npm ci && npm run build)               # Node 24+; the build goes into the amem-web package
 export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem AMEM_DOCS=~/amem-sample/docs
+export AMEM_PACKS=$PWD/tools/sample-pack/meteo          # sample pack: sensors with profiles
 .venv/bin/python tools/seed_sample.py             # the sample: 22 records, 2 open review items
 .venv/bin/python -m amem.service                  # then open http://127.0.0.1:8767/ui/
 ```
