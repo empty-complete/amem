@@ -69,10 +69,15 @@ def main(argv: Sequence[str] | None = None, *, env: Mapping[str, str] | None = N
     у `amem serve` (тесты)."""
     argv = list(sys.argv[1:] if argv is None else argv)
     environment = environ(env)
-    if len(argv) == 2 and argv[0] == "hook" and not argv[1].startswith("-"):
+    if argv and argv[0] == "hook" and argv[1:] not in (["-h"], ["--help"]):
         from ..agents import hooks
 
-        return hooks.main(argv[1], environment)       # хук не роняет сессию агента: код 0 при любом сбое
+        # хук не роняет сессию агента: код 0 при любом сбое и при любом вызове — `amem hook`, лишние аргументы
+        # и опции дают пустой ответ и строку в hooks.log (код 2 у Claude Code заблокировал бы запрос)
+        if len(argv) == 2 and not argv[1].startswith("-"):
+            return hooks.main(argv[1], environment)
+        hooks.log(environment, "hook", f"неверный вызов amem {' '.join(argv)!r}: нужно amem hook СОБЫТИЕ")
+        return OK
     made: list[Context] = []              # Context вызова: report берёт из него вывод и --json; close — в конце
     try:
         try:
