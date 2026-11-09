@@ -46,6 +46,7 @@ from pathlib import Path, PurePosixPath
 import psycopg
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
+from . import lang
 from .objects import OBJECTS_LOCK
 from .ocfl_store import ObjectStore, StoreError
 from .search import SEARCH_TEXT_VERSION
@@ -275,15 +276,17 @@ def _facts(conn: psycopg.Connection) -> dict:
     migrations = [{"name": name, "sha256": digest} for name, digest in
                   conn.execute("SELECT name, sha256 FROM schema_migrations ORDER BY name")]
     counts = {table: conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] for table in COUNTED}
-    # пробный атом — тот, чья подпись даёт непустой полнотекстовый запрос и находит его поисковый документ
+    # пробный атом — тот, чья подпись (любого языка: amem.lang.sql) даёт непустой полнотекстовый запрос и находит
+    # его поисковый документ
+    label = lang.sql("r.payload->'label'")
     probe = conn.execute(
-        "SELECT r.atom_id, r.payload->'label'->>'ru' FROM atom_current r JOIN atom a ON a.id = r.atom_id "
-        "JOIN search_document d ON d.target = 'atom' AND d.record_id = r.atom_id "
-        "WHERE a.status IN ('draft', 'needs_review', 'auto_verified', 'verified') "
-        "AND coalesce(r.payload->'label'->>'ru', '') <> '' "
-        "AND numnode(websearch_to_tsquery('russian', r.payload->'label'->>'ru')) > 0 "
-        "AND d.search_vector @@ websearch_to_tsquery('russian', r.payload->'label'->>'ru') "
-        "ORDER BY r.recorded_at DESC, r.atom_id LIMIT 1").fetchone()
+        f"SELECT p.atom_id, p.label FROM (SELECT r.atom_id, r.recorded_at, {label} AS label FROM atom_current r "
+        "JOIN atom a ON a.id = r.atom_id "
+        "WHERE a.status IN ('draft', 'needs_review', 'auto_verified', 'verified')) p "
+        "JOIN search_document d ON d.target = 'atom' AND d.record_id = p.atom_id "
+        f"WHERE p.label IS NOT NULL AND numnode({lang.tsquery('p.label')}) > 0 "
+        f"AND d.search_vector @@ {lang.tsquery('p.label')} "
+        "ORDER BY p.recorded_at DESC, p.atom_id LIMIT 1").fetchone()
     return {
         "base_id": row[0], "migrations": migrations, "counts": counts,
         "server_version": conn.execute("SHOW server_version").fetchone()[0],
@@ -709,9 +712,9 @@ def verify(source: Path, dsn: str, *, provider=None, scratch: Path | None = None
             if probe:
                 with psycopg.connect(temp_dsn, autocommit=True) as conn:
                     row = conn.execute(
-                        "SELECT d.search_vector @@ websearch_to_tsquery('russian', %s) FROM search_document d "
-                        "WHERE d.target = 'atom' AND d.record_id = %s",
-                        (probe["query"], probe["ref"].split(":", 1)[1])).fetchone()
+                        f"SELECT d.search_vector @@ {lang.tsquery('%(query)s')} FROM search_document d "
+                        "WHERE d.target = 'atom' AND d.record_id = %(id)s",
+                        {"query": probe["query"], "id": probe["ref"].split(":", 1)[1]}).fetchone()
                     found = bool(row and row[0])
                     if not found:
                         raise BackupError(f"атом {probe['ref']} не находится по своей подписи")

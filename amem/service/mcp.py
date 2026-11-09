@@ -35,7 +35,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import anyio
 from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
@@ -50,6 +50,7 @@ from starlette.datastructures import Headers
 from starlette.types import Receive, Scope, Send
 
 from .. import __version__, api, journal, private, usefulness
+from .. import lang as lang_
 from .. import settings as settings_
 from ..ids import uuid7
 from . import problems
@@ -60,6 +61,8 @@ AGENT_HEADER = "x-amem-agent"
 SESSION_HEADER = "mcp-session-id"
 SESSIONS_KEPT = 4096          # задач сессий в памяти процесса; старые вытесняются (задача в базе остаётся)
 GET_MAX = 20                  # записей в одном amem_get
+# язык подписей и фрагментов у инструментов чтения (amem.lang): без него — AMEM_LANG службы, затем ru, затем en
+Lang = Annotated[Literal["ru", "en"] | None, Field(description="язык подписей: ru | en / label language")]
 BODY_LIMIT = 1 << 20          # байт тела запроса /mcp — как у записи HTTP (1 МиБ)
 IDLE_CUT = 30 * 60            # секунд тишины, после которых у клиента без сессии новая задача
 INSTRUCTIONS = (
@@ -213,15 +216,21 @@ def build(runtime: Runtime) -> MCPServer:
         server = _Server("amem", version=__version__, instructions=INSTRUCTIONS, log_level="WARNING",
                          warn_on_duplicate_tools=True)
 
-    async def call(ctx: Context, work: Callable, *, write: bool = False, where: str | None = None) -> CallToolResult:
-        """work(conn, caller) в потоке; ошибки — failure, неоднозначность — ambiguous."""
+    async def call(ctx: Context, work: Callable, *, write: bool = False, where: str | None = None,
+                   lang: str | None = None) -> CallToolResult:
+        """work(conn, caller) в потоке на языке lang (иначе Settings.lang — AMEM_LANG); ошибки — failure,
+        неоднозначность — ambiguous."""
         try:
             caller = runtime.caller(ctx)
             if write and not caller.can_write:
                 raise _Refused(403, "read_only", f"вход {caller.agent} — только для чтения")
+            try:
+                language = lang_.check(lang) or runtime.settings.lang
+            except lang_.LangError as e:
+                raise api.BadRequest(str(e)) from None
 
             def run():
-                with runtime.connection() as conn:
+                with runtime.connection() as conn, lang_.using(language):
                     return work(conn, caller)
 
             return ok(await anyio.to_thread.run_sync(run))
@@ -250,14 +259,15 @@ def build(runtime: Runtime) -> MCPServer:
             query: Annotated[str, Field(description="текст или марка / text or code")],
             ctx: Context,
             kind: Annotated[list[str] | None, Field(description="виды атомов или классы сущностей")] = None,
-            limit: Annotated[int | None, Field(description="1–100, по умолчанию 10")] = None) -> CallToolResult:
+            limit: Annotated[int | None, Field(description="1–100, по умолчанию 10")] = None,
+            lang: Lang = None) -> CallToolResult:
         def work(conn, caller):
             started = time.monotonic()
             result = api.search(conn, query, agent=caller.agent, kind=kind, limit=limit, provider=runtime.provider(),
                                 activity=runtime.activity(conn, caller.session))
             logged(conn, caller, result, query, started)
             return short(result)
-        return await call(ctx, work)
+        return await call(ctx, work, lang=lang)
 
     @server.tool(annotations=READ, description=(
         "Похожие записи — по тексту (query) или по записи (ref: ссылка или текст), ровно одно из двух; ответ как у "
@@ -266,7 +276,8 @@ def build(runtime: Runtime) -> MCPServer:
             ctx: Context,
             query: Annotated[str | None, Field(description="текст")] = None,
             ref: Annotated[str | None, Field(description="ссылка atm:/ent: или текст, по которому найти запись")] = None,
-            limit: Annotated[int | None, Field(description="1–100, по умолчанию 10")] = None) -> CallToolResult:
+            limit: Annotated[int | None, Field(description="1–100, по умолчанию 10")] = None,
+            lang: Lang = None) -> CallToolResult:
         def work(conn, caller):
             if (ref in (None, "")) == (query in (None, "")):
                 raise api.BadRequest("amem_similar: нужен ровно один из параметров query (текст) или ref (запись)")
@@ -276,23 +287,25 @@ def build(runtime: Runtime) -> MCPServer:
                                  provider=runtime.provider(), activity=runtime.activity(conn, caller.session))
             logged(conn, caller, result, found or query, started)
             return short(result)
-        return await call(ctx, work, where=ref)
+        return await call(ctx, work, where=ref, lang=lang)
 
     @server.tool(annotations=READ, description=(
         "Шаг 2: что вокруг находки — запись, последние события её истории и связи. / Step 2: record context."))
     async def amem_timeline(
             ref: Annotated[str, Field(description="ссылка atm:/ent: или текст")],
             ctx: Context,
-            limit: Annotated[int | None, Field(description="последних событий, по умолчанию 10")] = None
-    ) -> CallToolResult:
-        return await call(ctx, lambda conn, caller: api.timeline(conn, api.pick(conn, ref), limit=limit), where=ref)
+            limit: Annotated[int | None, Field(description="последних событий, по умолчанию 10")] = None,
+            lang: Lang = None) -> CallToolResult:
+        return await call(ctx, lambda conn, caller: api.timeline(conn, api.pick(conn, ref), limit=limit), where=ref,
+                          lang=lang)
 
     @server.tool(annotations=READ, description=(
         f"Шаг 3: полные записи — тело, источники с итогом сверки, статус, открытые пункты; до {GET_MAX} ссылок. / "
         f"Step 3: full records."))
     async def amem_get(
             refs: Annotated[list[str], Field(description="ссылки atm:/ent: (или текст) из amem_search")],
-            ctx: Context) -> CallToolResult:
+            ctx: Context,
+            lang: Lang = None) -> CallToolResult:
         def work(conn, caller):
             if not isinstance(refs, list) or not refs or len(refs) > GET_MAX:
                 raise api.BadRequest(f"refs: нужен список от 1 до {GET_MAX} ссылок")
@@ -304,13 +317,15 @@ def build(runtime: Runtime) -> MCPServer:
                     e.ref = ref
                     raise
             return {"records": out}
-        return await call(ctx, work)
+        return await call(ctx, work, lang=lang)
 
     @server.tool(annotations=READ, description=(
         "Карточка сущности amem.card/1: поля профиля с подписями. / Entity card."))
     async def amem_card(ref: Annotated[str, Field(description="ссылка ent: или текст")],
-                        ctx: Context) -> CallToolResult:
-        return await call(ctx, lambda conn, caller: api.card(conn, api.pick(conn, ref, target="entity")), where=ref)
+                        ctx: Context,
+                        lang: Lang = None) -> CallToolResult:
+        return await call(ctx, lambda conn, caller: api.card(conn, api.pick(conn, ref, target="entity")), where=ref,
+                          lang=lang)
 
     @server.tool(annotations=WRITE, description=(
         "Записать пакет: proposals [{target: atom|entity, payload, record_id?}], links — связи, reason — причина. "

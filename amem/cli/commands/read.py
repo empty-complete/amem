@@ -122,9 +122,10 @@ def run_get(ctx, args) -> int:
 
 
 def _lang(value) -> str | None:
-    if isinstance(value, dict):
-        return value.get("ru") or value.get("en") or next((v for v in value.values() if isinstance(v, str)), None)
-    return value if isinstance(value, str) else None
+    """Текст LangString на языке вызова (--lang, AMEM_LANG) с заменой на другой слот; строка — как есть."""
+    from ... import lang
+
+    return lang.pick(value, lang.current())
 
 
 def record_text(view: dict) -> str:

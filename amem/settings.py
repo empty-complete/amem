@@ -2,7 +2,7 @@
 
 Порядок источников: явный аргумент → окружение (AMEM_…) → amem.toml ($AMEM_CONFIG, затем ~/.config/amem/amem.toml).
 Ключи amem.toml — имена полей Settings (dsn, data, docs, state, backups, host, port, agent, model_agent, ui_origins,
-allowed_hosts, tokens, query_log, state_quota); неизвестный ключ — ошибка, а не тихий пропуск опечатки. Относительный путь в amem.toml считается
+allowed_hosts, tokens, query_log, state_quota, lang); неизвестный ключ — ошибка, а не тихий пропуск опечатки. Относительный путь в amem.toml считается
 от папки файла, в окружении и аргументе — от текущей папки; «~» раскрывается везде.
 
 Токены общей службы — amem-tokens.toml с правами 0600: строки [[token]] с hash = "sha256:…", agent и write. Сам токен
@@ -48,7 +48,7 @@ ENV = {
     "dsn": "AMEM_DSN", "data": "AMEM_DATA", "docs": "AMEM_DOCS", "state": "AMEM_STATE", "backups": "AMEM_BACKUPS",
     "host": "AMEM_HOST", "port": "AMEM_PORT", "agent": "AMEM_AGENT", "model_agent": "AMEM_MODEL_AGENT",
     "ui_origins": "AMEM_UI_ORIGINS", "allowed_hosts": "AMEM_ALLOWED_HOSTS", "tokens": "AMEM_TOKENS",
-    "query_log": "AMEM_QUERY_LOG", "state_quota": "AMEM_STATE_QUOTA",
+    "query_log": "AMEM_QUERY_LOG", "state_quota": "AMEM_STATE_QUOTA", "lang": "AMEM_LANG",
 }
 
 
@@ -72,6 +72,7 @@ class Settings:
     tokens: Path | None             # файл токенов общей службы; None — локальная служба
     query_log: Path | None          # журнал запросов; None — выключен (AMEM_QUERY_LOG=off)
     state_quota: int                # байт подборок и загрузок одного владельца в AMEM_STATE
+    lang: str | None                # язык подписей CLI и MCP без явного (ru | en); None — ru, затем en (amem.lang)
     config: Path | None             # прочитанный amem.toml, если был
 
 
@@ -133,6 +134,7 @@ def load(env: Mapping[str, str] | None = None, **explicit) -> Settings:
         tokens=path("tokens"),
         query_log=query_log,
         state_quota=_quota(raw.get("state_quota")),
+        lang=_lang(raw.get("lang")),
         config=config,
     )
 
@@ -344,6 +346,18 @@ def _allowed_hosts(entry) -> tuple[str, ...]:
                                 f"по имени, порт любой (например amem)")
         hosts.append(host)
     return tuple(dict.fromkeys(hosts))
+
+
+def _lang(entry) -> str | None:
+    from . import lang
+
+    if entry is None:
+        return None
+    value, where, _ = entry
+    try:
+        return lang.check(value)
+    except lang.LangError:
+        raise SettingsError(f"{where}: язык {value!r} — допустимы {', '.join(lang.LANGS)}") from None
 
 
 def _quota(entry) -> int:

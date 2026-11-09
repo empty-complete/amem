@@ -613,6 +613,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Текст на нескольких языках (LangString схемы v1): нужен хотя бы один из слотов ru, en */
+        LangString: {
+            ru?: string;
+            en?: string;
+        };
         /** @description RFC 9457; кроме полей ниже — расширения по code (by и at у review_closed, missing и collisions у подборок…) */
         Problem: {
             type: string;
@@ -659,18 +664,12 @@ export interface components {
             src: string;
             /** @description Конец — как src */
             dst: string;
-            /** @description Пояснение (LangString) */
-            note?: {
-                ru: string;
-                en?: string;
-            };
+            /** @description Пояснение */
+            note?: components["schemas"]["LangString"];
             /** @description Уточнения (Qualifier схемы v1) */
             qualifiers?: {
                 property: string;
-                label?: {
-                    ru: string;
-                    en?: string;
-                };
+                label?: components["schemas"]["LangString"];
                 value_text?: string;
                 amount?: number;
                 lower_bound?: number;
@@ -1160,10 +1159,7 @@ export interface components {
             records?: number;
         };
         TemplateDraft: {
-            label: {
-                ru: string;
-                en?: string;
-            };
+            label: components["schemas"]["LangString"];
             /** @enum {string} */
             target: "atom" | "entity";
             /** @enum {string} */

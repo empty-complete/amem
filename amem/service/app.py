@@ -22,7 +22,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
-from .. import api, db, embed
+from .. import api, db, embed, lang
 from ..ocfl_store import ObjectStore
 from ..settings import Settings, SettingsError, load_tokens
 from . import problems, session
@@ -112,9 +112,13 @@ async def _sweeper(settings: Settings) -> None:
         await anyio.to_thread.run_sync(_sweep, settings)
 
 
+@contextlib.contextmanager
 def connection(request: Request):
-    """Соединение из пула службы на время запроса: with connection(request) as conn."""
-    return request.app.state.pool.connection()
+    """Соединение из пула службы на время запроса: with connection(request) as conn. На то же время — язык вызова
+    по Accept-Language (amem.lang.using): подписи ответов операций api — на нём, с заменой на другой слот."""
+    language = lang.from_header(request.headers.get("accept-language"))
+    with request.app.state.pool.connection() as conn, lang.using(language):
+        yield conn
 
 
 def provider(request: Request) -> embed.EmbeddingProvider | None:
