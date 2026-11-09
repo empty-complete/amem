@@ -1,7 +1,6 @@
 """Задел под хаб баз: base_id в meta и provenance.origin_base у атома (спека, разд. 5)."""
 import re
 
-import pytest
 
 from amem import db, records
 from amem.ids import uuid7

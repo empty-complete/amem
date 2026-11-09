@@ -188,7 +188,7 @@ def _select(conn, s: Selection) -> tuple[set[uuid.UUID], set[uuid.UUID]]:
     def chosen(target: Target, own: list[str]) -> set[uuid.UUID]:
         if anything and not own:
             return set()                                  # заданы только условия другого вида
-        where = [f"rec.status = ANY(%(statuses)s)", *own]
+        where = ["rec.status = ANY(%(statuses)s)", *own]
         if s.since is not None:
             where.append("r.recorded_at >= %(since)s")
         if target == "atom" and not s.include_private:
