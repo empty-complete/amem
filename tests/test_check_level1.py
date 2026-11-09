@@ -11,7 +11,7 @@ from datetime import date
 
 import pytest
 
-from amem import db, model_v1, records
+from amem import db, lang, model_v1, records
 from amem.check import Proposal, level1, templates
 from amem.check.report import Issue, Report
 from amem.ids import uuid7
@@ -370,7 +370,7 @@ def memo_kb(pg, monkeypatch, tmp_path):
         "memo": {"code": "memo", "version": "1.0.0", "target": "atom", "applies_to": "memo", "fields": [
             {"path": "sources[].selectors", "selector_types": ["page"]},
             {"path": "about", "entity_classes": ["document", "edition"]},
-            {"path": "codes", "min_count": 2, "severity": "warning", "message": {"ru": "Нужны два обозначения."}}]},
+            {"path": "codes", "min_count": 2, "severity": "warning", "message": {"ru": "Нужны два обозначения.", "en": "Two designations are needed."}}]},
         "remark": {"code": "remark", "version": "1.0.0", "target": "atom", "applies_to": "remark",
                  "links": {"allowed": ["see_also", "about"], "required": [{"rel": "see_also"}]}},
         "see_also_note": {"code": "see_also_note", "version": "1.0.0", "target": "link", "applies_to": "see_also",
@@ -413,6 +413,10 @@ MEMO = {
                              ("link_not_allowed", "violation", "links[1]")),
     "link_without_note": ([note(), atom("@a")], [{k: v for k, v in SEE.items() if k != "note"}],
                           ("template", "warning", "links[0]: note")),
+    # LangString непуст, если непуст хотя бы один слот: английской заметки хватает, пробелы в обоих — пусто
+    "link_note_in_english": ([note(), atom("@a")], [{**SEE, "note": {"en": "same place"}}], None),
+    "link_note_blank": ([note(), atom("@a")], [{**SEE, "note": {"ru": " ", "en": ""}}],
+                        ("template", "warning", "links[0]: note")),
 }
 
 
@@ -442,6 +446,13 @@ def test_rule_message_and_link_template(memo_kb):
     assert issue.message == "Нужны два обозначения."
     assert issue.details == {"template": "memo@1.0.0", "path": "codes", "rule": "min_count"}
     assert "see_also_note@1.0.0" in batch.templates
+
+
+def test_rule_message_in_call_language(memo_kb):
+    """Сообщение правила шаблона — на языке вызова (amem.lang.using), с заменой на другой слот."""
+    with lang.using("en"):
+        [issue] = run(memo_kb, memo(codes=["w0"]), DOC)[2].issues
+    assert issue.message == "Two designations are needed."
 
 
 def test_existing_entity_class_breaks_template_rule(memo_kb):

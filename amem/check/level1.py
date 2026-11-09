@@ -30,7 +30,7 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError
 
-from .. import canon, model_v1, packs
+from .. import canon, lang, model_v1, packs
 from ..records import PREFIX, TARGET, RecordError, as_uuid
 from . import templates, units
 from .report import Report
@@ -338,7 +338,7 @@ class _Level1:
     def _broken(self, slot: _Slot, where: str, kind: str, default: str, **extra) -> None:
         """Замечание правила поля: код ucum у правила ucum, иначе template; текст — message правила или общий."""
         rule = slot.rule
-        message = (rule.get("message") or {}).get("ru") or default
+        message = lang.pick(rule.get("message"), lang.current()) or default
         self.add(rule.get("severity") or "violation", "ucum" if kind == "ucum" else "template",
                  f"{slot.label}: {where}", message, template=slot.origin, path=rule["path"], rule=kind, **extra)
 
@@ -533,7 +533,8 @@ def _slots(body: dict, path: str) -> Iterator[tuple[str, object]]:
 
 
 def _empty(value, range_: str | None) -> bool:
-    """Пусто для required: список без элементов, LangString без ru, объект без непустых полей, строка из пробелов."""
+    """Пусто для required: список без элементов, LangString без непустого слота, объект без непустых полей, строка
+    из пробелов."""
     if value is None:
         return True
     if isinstance(value, str):
@@ -542,7 +543,7 @@ def _empty(value, range_: str | None) -> bool:
         return not value
     if isinstance(value, dict):
         if range_ == "LangString":
-            return _empty(value.get("ru"), None)
+            return not lang.texts(value)
         return all(_empty(v, None) for v in value.values())
     return False
 

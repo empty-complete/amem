@@ -35,6 +35,9 @@ INVALID = {
     "about ведёт на атом": lambda d: d.update(about=[ATOM_V7]),
     "старое поле props": lambda d: d.update(props={"w0, кПа": 0.3}),
     "нет подписи": lambda d: d.pop("label"),
+    "подпись без слотов": lambda d: d.update(label={}),
+    "подпись с null в обоих слотах": lambda d: d.update(label={"ru": None, "en": None}),
+    "подпись с неизвестным языком": lambda d: d.update(label={"de": "Winddruck"}),
     "ссылка с UUID v4": lambda d: d.update(about=[ATOM_V4.replace("atm:", "ent:")]),
     "единица в коде столбца": lambda d: d["content"]["table"]["columns"][1].update(code="w0, кПа"),
     "неизвестный селектор": lambda d: d["sources"][0]["selectors"].append({"type": "стр", "value": "27"}),
@@ -54,6 +57,22 @@ def test_invalid_atoms_rejected(change):
     data = changed("atom_table_11_1.yaml", change)
     assert pydantic_errors("AtomPayload", data)
     assert json_errors("AtomPayload", data)
+
+
+LABELS = {
+    "только ru": {"ru": "Нормативное значение ветрового давления"},
+    "только en": {"en": "Normative wind pressure"},
+    "оба слота": {"ru": "Нормативное значение ветрового давления", "en": "Normative wind pressure"},
+    "en и null в ru": {"ru": None, "en": "Normative wind pressure"},
+}
+
+
+@pytest.mark.parametrize("label", LABELS.values(), ids=LABELS.keys())
+def test_lang_string_needs_one_slot(label):
+    """LangString: хотя бы один из слотов ru, en — строка; ни один по отдельности не обязателен."""
+    data = changed("atom_table_11_1.yaml", lambda d: d.update(label=label, summary_plain=label))
+    assert pydantic_errors("AtomPayload", data) == []
+    assert json_errors("AtomPayload", data) == []
 
 
 def test_tags_with_designations_accepted():
