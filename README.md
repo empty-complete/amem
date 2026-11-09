@@ -250,7 +250,7 @@ cd web && npm ci && npm run dev:mock              # then open http://127.0.0.1:5
 ### One-command install
 
 ```bash
-pip install amem              # or pipx / uv tool install; until the PyPI release: pip install -e . from a clone
+pipx install 'amem[web]'      # or pip install / uv tool install; [web] adds the web UI at /ui
 amem init --dsn postgresql://amem:amem@127.0.0.1:5435/amem   # database, object store; the DSN goes to amem.toml
 amem install claude-code      # MCP server, hooks and skills; `amem install codex` for Codex CLI
 amem doctor                   # what works and what to fix
