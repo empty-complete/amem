@@ -1088,6 +1088,17 @@ components:
         claimed_by: { type: [string, "null"] }
         claimed_until: { type: [string, "null"], description: "До какого времени пункт держит claimed_by" }
         closed_at: { type: [string, "null"] }
+        source:
+          type: [object, "null"]
+          description: "У списка очереди: первый источник ревизии пункта (документ); null — источника нет (основание basis или сущность)"
+          required: [object, object_name]
+          properties:
+            object: { type: string, format: uuid }
+            object_name: { type: string, description: "Имя файла или адрес; нет — UUID объекта" }
+        about:
+          type: array
+          description: "У списка очереди: о ком запись (about атома, по порядку тела); у сущности — пусто"
+          items: { $ref: "#/components/schemas/RefLabel" }
 
     ReviewItemView:
       type: object
