@@ -4,4 +4,5 @@ python/amem_web/dist/*
 dist-mock/
 test-results/
 playwright-report/
+playwright-report-service/
 *.tsbuildinfo
