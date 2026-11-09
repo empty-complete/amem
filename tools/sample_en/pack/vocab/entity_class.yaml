@@ -1,0 +1,4 @@
+scheme: entity_class
+concepts:
+  - {code: station, label: {ru: метеостанция, en: weather station}, definition: {ru: "Автоматическая метеостанция.", en: "An automatic weather station."}, broader: artifact}
+  - {code: sensor, label: {ru: датчик, en: sensor}, definition: {ru: "Датчик метеостанции.", en: "A sensor of a weather station."}, broader: artifact}

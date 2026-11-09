@@ -1,0 +1,8 @@
+code: sensor
+version: 1.0.0
+target: entity
+applies_to: sensor
+description: {ru: "Профиль датчика: питание и рабочая температура.", en: "Sensor profile: supply and operating temperature."}
+parameters:
+  - {property: supply_voltage, required: false, group: power, origin: datasheet}
+  - {property: operating_temperature, required: true, group: environment, origin: datasheet}
