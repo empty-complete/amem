@@ -32,7 +32,6 @@ export interface Draft {
   values: Record<string, FieldValue>;
   extra: { property: string; label: string; value: string }[];
   sources: DraftSource[];
-  folder?: string | null;
   basis?: "author" | "default" | "assumed";
   derived_from?: string[];
 }
@@ -151,8 +150,6 @@ export function toProposal(
     payload.basis = d.basis ?? (payload.basis as string | undefined) ?? "author";
   }
   if (d.derived_from?.length) payload.derived_from = d.derived_from;
-  if (d.folder !== undefined)
-    payload.scope = { ...((payload.scope as object) ?? {}), folder: d.folder ?? undefined };
   // новой записи — имя в пакете: связи ссылаются на него, проверка ищет его в payload.ref
   if (!opts.recordId) payload.ref = NEW_REF;
   else delete payload.ref;
@@ -164,6 +161,20 @@ export function toProposal(
   // record_id в /submit — UUID записи без приставки atm:/ent: (контракт 4a)
   const recordId = opts.recordId ? opts.recordId.replace(/^(atm|ent):/, "") : null;
   return { proposal: { target: d.target, payload, record_id: recordId }, links };
+}
+
+/** Пояснение «простыми словами» ядро требует у каждого атома (шаблон has_label). Где человек его не дал —
+ * заметка одной строкой, значение из карточки, — им становится заголовок: это и есть его слова.
+ * Зовётся перед каждой отправкой /submit, чтобы правило жило в одном месте. */
+export function withSummary<T extends { proposals: Proposal[] }>(body: T): T {
+  return {
+    ...body,
+    proposals: body.proposals.map((p) => {
+      const pl = p.payload as { label?: { ru?: string }; summary_plain?: { ru?: string } };
+      if (p.target !== "atom" || pl.summary_plain?.ru?.trim() || !pl.label?.ru?.trim()) return p;
+      return { ...p, payload: { ...p.payload, summary_plain: { ...pl.label } } };
+    }),
+  };
 }
 
 export interface FieldIssues {
