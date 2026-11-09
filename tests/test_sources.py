@@ -1,12 +1,14 @@
 import random
 
+import pymupdf
 import pytest
 
+from amem import sources
 from amem.sources import (
-    DocText, Verdict, as_page, clean_anchor, extract_pages, find_locator, find_quote, judge, looks_like_file,
-    normalize, safe_join,
+    DocText, Verdict, as_page, clean_anchor, extract_pages, extract_text, find_locator, find_quote, judge,
+    looks_like_file, normalize, safe_join,
 )
-from samples import NOTE_MD, SP_PAGES, make_pdf
+from samples import NOTE_MD, SCAN_PAGES, SCAN_QUOTE, SP_PAGES, make_pdf, make_scanned_pdf, needs_ocr
 
 
 def test_looks_like_file():
@@ -87,6 +89,58 @@ def _cyclic_pdf(path):
     out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, xref)
     path.write_bytes(bytes(out))
     return path
+
+
+def test_extract_text_scan_without_ocr(tmp_path, monkeypatch):
+    """Страницы-картинки без текстового слоя, а OCR недоступен: текста нет, но это отмечено (ocr_unavailable);
+    пустые страницы без картинок — просто нет текста."""
+    monkeypatch.setattr(sources, "ocr_languages", lambda: None)
+    scan = make_scanned_pdf(tmp_path / "скан.pdf", SCAN_PAGES)
+    got = extract_text(scan)
+    assert got.pages is None and got.ocr_unavailable and got.ocr == frozenset()
+    assert extract_pages(scan) is None
+    blank = extract_text(make_pdf(tmp_path / "пусто.pdf", ["", ""]))
+    assert blank.pages is None and not blank.ocr_unavailable
+    mixed = extract_text(make_scanned_pdf(tmp_path / "смешанный.pdf", [SP_PAGES[0], SCAN_PAGES[1]], text_pages=(0,)))
+    assert mixed.pages is not None and "Содержание" in mixed.pages[0] and mixed.pages[1].strip() == ""
+    assert mixed.image == {2} and mixed.ocr_unavailable
+
+
+@needs_ocr
+def test_extract_text_scan_with_ocr(tmp_path):
+    """Со словарями tesseract страницы-картинки распознаются и отмечаются; страница с текстовым слоем — как была."""
+    got = extract_text(make_scanned_pdf(tmp_path / "смешанный.pdf", [SP_PAGES[0], SCAN_PAGES[1]], text_pages=(0,)))
+    assert got.ocr == {2} and got.image == frozenset() and not got.ocr_unavailable
+    assert "Содержание" in got.pages[0]
+    assert find_quote(DocText.of(got.pages, got.ocr), SCAN_QUOTE).verdict in ("ok", "fuzzy")
+    assert normalize(SCAN_QUOTE)[0] in normalize(got.pages[1])[0]
+
+
+def test_ocr_languages_need_traineddata(tmp_path, monkeypatch):
+    monkeypatch.setattr(pymupdf, "get_tessdata", lambda tessdata=None: str(tmp_path))
+    monkeypatch.delenv("AMEM_OCR_LANGUAGES", raising=False)
+    assert sources.ocr_languages() is None
+    (tmp_path / "eng.traineddata").write_bytes(b"")
+    assert sources.ocr_languages() == "eng"
+    (tmp_path / "rus.traineddata").write_bytes(b"")
+    assert sources.ocr_languages() == "rus+eng"
+    monkeypatch.setenv("AMEM_OCR_LANGUAGES", "deu+eng")
+    assert sources.ocr_languages() == "eng"
+
+    def missing(tessdata=None):
+        raise RuntimeError("No tessdata specified and Tesseract is not installed")
+
+    monkeypatch.setattr(pymupdf, "get_tessdata", missing)
+    assert sources.ocr_languages() is None
+
+
+def test_fuzzy_threshold_is_lower_on_ocr_pages():
+    page = ("ПРОТОКОЛ ИСПЫТАНИЙ № 12. Сопротивление теплопередаче образца составило 0,72 м2·°C/Вт при температуре "
+            "наружного воздуха минус 20 °C.")
+    quote = "Сопрот1вленне тепл0пер6даче о6рззца с0ст8в1ло 0.72 мЗ"     # схожесть ≈ 79 %: между двумя порогами
+    assert find_quote(DocText.of([page]), quote).verdict == "not_found"
+    v = find_quote(DocText.of([page], ocr=frozenset({1})), quote)
+    assert v.verdict == "fuzzy" and sources.FUZZY_SCORE_OCR <= v.score < sources.FUZZY_SCORE
 
 
 def test_extract_pages_cyclic_page_tree(tmp_path):

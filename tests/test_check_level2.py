@@ -9,12 +9,13 @@ from amem.check import Proposal, level1, level2
 from amem.check.report import Report
 from amem.ocfl_store import StoreError
 from check_support import CHECK_PACK, MD, PDF, atom, entity, source_md, source_pdf, value
-from samples import make_docx, make_xlsx
+from samples import SCAN_PAGES, SCAN_QUOTE, SP_PAGES, make_docx, make_scanned_pdf, make_xlsx, needs_ocr
 
 AGENT = "model:tester"
 PAGE2 = "Ветровой район II: w0 = 0,30 кПа"
 PAGE3 = "Самара относится ко II ветровому району по карте."
 XLSX = "Таблицы/нагрузки.xlsx"
+SCAN = "НД/протокол.pdf"
 DOCX1 = "Письма/записка.docx"
 DOCX2 = "Письма/отчёт.docx"
 VERDICTS = {v.value for v in model_v1.SourceVerdict}
@@ -260,13 +261,68 @@ def test_no_text_and_numbers_unchecked(kb, store, docs):
     assert issues == [("no_text", "warning", "@a: sources[0]"), ("numbers_unchecked", "info", "@a")]
 
 
+# --- сканы: OCR ---
+
+def scan_atom(page=2, quote=SCAN_QUOTE):
+    return atom("@a", sources=[source_pdf(SCAN, page, quote)])
+
+
+def text_sources(conn):
+    return conn.execute("SELECT page, text_source FROM object_text ORDER BY page").fetchall()
+
+
+@needs_ocr
+def test_scan_quote_found_by_ocr(kb, store, docs):
+    """У скана нет текстового слоя: страницы распознаются, цитата находится, об OCR сказано в info quote_ocr."""
+    make_scanned_pdf(docs / SCAN, SCAN_PAGES)
+    check, issues, _, report = one(kb, store, docs, scan_atom())
+    assert check.verdict in ("ok", "fuzzy") and check.page == 2, check
+    assert ("quote_ocr", "info", "@a: sources[0]") in issues
+    assert l2(report, "quote_ocr")[0].details == {"page": 2}
+    assert text_sources(kb) == [(1, "ocr"), (2, "ocr")]
+
+
+def test_scan_without_ocr_says_so(kb, store, docs):
+    """Без языковых данных tesseract — как раньше, no_text, но с объяснением; кэш «скан без OCR» не вечен:
+    когда OCR появляется, текст извлекается заново."""
+    make_scanned_pdf(docs / SCAN, SCAN_PAGES)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(sources, "ocr_languages", lambda: None)
+        check, issues, _, report = one(kb, store, docs, scan_atom())
+    assert check.verdict == "no_text"
+    assert issues == [("no_text", "warning", "@a: sources[0]")]
+    issue = l2(report, "no_text")[0]
+    assert "OCR" in issue.message and "текстового слоя" in issue.message and issue.details == {"ocr": "unavailable"}
+    assert text_sources(kb) == [(0, "image")]
+    if sources.ocr_languages():
+        check, issues, _, _ = one(kb, store, docs, scan_atom())
+        assert check.verdict in ("ok", "fuzzy") and ("quote_ocr", "info", "@a: sources[0]") in issues
+        assert text_sources(kb) == [(1, "ocr"), (2, "ocr")]
+
+
+def test_quote_on_scan_page_without_ocr_names_the_page(kb, store, docs, monkeypatch):
+    """PDF с текстовым слоем, где одна страница — скан: цитата с неё не находится, и причина названа."""
+    monkeypatch.setattr(sources, "ocr_languages", lambda: None)
+    make_scanned_pdf(docs / SCAN, [SP_PAGES[0], SCAN_PAGES[1]], text_pages=(0,))
+    check, issues, _, report = one(kb, store, docs, scan_atom())
+    assert check.verdict == "not_found"
+    assert issues == [("quote_not_found", "violation", "@a: sources[0].quote")]
+    issue = l2(report, "quote_not_found")[0]
+    assert "странице 2" in issue.message and "OCR" in issue.message
+    assert issue.details == {"quote": SCAN_QUOTE, "page": 2, "ocr": "unavailable"}
+    assert text_sources(kb) == [(1, "layer"), (2, "image")]
+    # цитата со страницы с текстовым слоем того же файла — обычное дело
+    check, issues, _, _ = one(kb, store, docs, atom("@a", sources=[source_pdf(SCAN, 1, "Значения принимают по таблице 1.1")]))
+    assert check.verdict == "ok" and issues == []
+
+
 # --- сбои ---
 
 def test_extract_error(kb, store, docs, monkeypatch):
     def broken(file):
         raise RuntimeError("сбой разбора")
 
-    monkeypatch.setattr(sources, "extract_pages", broken)
+    monkeypatch.setattr(sources, "extract_text", broken)
     check, issues, _, report = one(kb, store, docs, pdf_atom(2, PAGE2))
     assert check.verdict == "error"
     assert issues == [("source_error", "warning", "@a: sources[0]")]
@@ -353,7 +409,7 @@ def test_all_returned_verdicts_in_schema(kb, store, more, monkeypatch):
     seen = {c.verdict for checks in results.values() for c in checks}
     assert seen == {"ok", "moved", "fuzzy", "not_found", "by_locator", "unresolved", "no_text", "external"}
     assert seen <= VERDICTS
-    monkeypatch.setattr(sources, "extract_pages", lambda file: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr(sources, "extract_text", lambda file: (_ for _ in ()).throw(RuntimeError("x")))
     _, results, _, _ = run(kb, store, more, atom("@a", sources=[{"path": DOCX2, "quote": "кронштейн КБ-14"}]))
     assert results["@a"][0].verdict == "error" and "error" in VERDICTS
 

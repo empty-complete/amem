@@ -31,7 +31,8 @@ ENUM_COLUMNS = [
 # перечни, которых нет в схеме LinkML: служебные значения базы
 NOT_ENUM = {("status_log", "target"), ("search_document", "target"), ("search_code", "target"),
             ("embedding", "target"), ("review_item", "target"), ("import_history", "target"),
-            ("folder_log", "target")}
+            ("folder_log", "target"),
+            ("object_text", "text_source")}     # откуда текст страницы в кэше — деталь хранения, не модели
 
 # поля записей схемы, которых нет в теле ревизии, → где они хранятся (у концов связи — пара столбцов)
 RECORD_COLUMNS = {

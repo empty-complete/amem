@@ -419,7 +419,12 @@ Every write goes through `check.submit`. It checks the whole batch, then writes 
 
 1. **Schema and templates:** fields, types, link rules and UCUM units.
 2. **Binding to the source:** the quote is found in the file, the page matches, and the numbers of the
-   claim appear in the fragment. Works for PDF, Markdown, xlsx and docx.
+   claim appear in the fragment. Works for PDF, Markdown, xlsx and docx. A scanned PDF page (an image
+   without a text layer) is OCR'd with Tesseract through PyMuPDF when its language data is installed
+   (`sudo apt install tesseract-ocr tesseract-ocr-rus` on Debian/Ubuntu, `brew install tesseract tesseract-lang`
+   on macOS; languages `rus+eng` by default, `AMEM_OCR_LANGUAGES` to change). A quote matched against OCR
+   text gets an `info` finding `quote_ocr` and a softer fuzzy threshold; without Tesseract such pages are
+   reported as having no text layer.
 3. **Common sense:** value ranges, units, and contradictions with atoms already in the base.
 4. **Duplicates:** by text and by vector.
 

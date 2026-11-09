@@ -211,8 +211,42 @@ def test_migration_drops_text_cache_of_docx_and_xlsx(pg, tmp_path, monkeypatch):
         pg.execute("INSERT INTO object_text (digest, page, text) VALUES (%s, 0, '')", (digest,))
     # у docx есть и настоящая страница: сброс трогает только page = 0
     pg.execute("INSERT INTO object_text (digest, page, text) VALUES (%s, 1, 'Давление')", (digests["a.docx"],))
-    monkeypatch.setattr(db, "SQL_DIR", real)
-    assert db.migrate(pg)[0] == "0006_check.sql"          # дальше — следующие миграции
+    for old in sorted(real.glob("00[01][0-9]_*.sql")):
+        if "0006" <= old.name[:4] <= "0010":
+            shutil.copy(old, tmp_path / old.name)
+    assert db.migrate(pg)[0] == "0006_check.sql"          # дальше — миграции до 0010
     left = {r[0] for r in pg.execute("SELECT digest FROM object_text WHERE page = 0")}
     assert left == {digests["c.pdf"]}
     assert pg.execute("SELECT text FROM object_text WHERE page = 1").fetchall() == [("Давление",)]
+    monkeypatch.setattr(db, "SQL_DIR", real)
+    assert db.migrate(pg)[0] == "0011_object_text_ocr.sql"  # 0011 сбрасывает page 0 и у PDF: скан распознаётся
+    assert pg.execute("SELECT count(*) FROM object_text WHERE page = 0").fetchone() == (0,)
+
+
+def test_migration_0011_marks_text_source_and_drops_pdf_without_text(pg, tmp_path, monkeypatch):
+    """0011: у прежних строк кэша text_source layer (страницы) и none (page 0); page 0 у PDF сбрасывается —
+    скан теперь можно распознать."""
+    for old in sorted(db.SQL_DIR.glob("00[01][0-9]_*.sql")):
+        if old.name < "0011":
+            shutil.copy(old, tmp_path / old.name)
+    real = db.SQL_DIR
+    monkeypatch.setattr(db, "SQL_DIR", tmp_path)
+    assert db.migrate(pg)[-1] == "0010_graph_overview.sql"
+    digests = {}
+    for i, name in enumerate(["скан.pdf", "норматив.pdf", "записка.docx"]):
+        oid, digest = uuid7(), f"sha256:{i:064x}"
+        digests[name] = digest
+        pg.execute("INSERT INTO object (id, kind, original_name, created_at) VALUES (%s, 'file', %s, now())",
+                   (oid, name))
+        pg.execute("INSERT INTO object_version (object_id, kind, n, digest, size, recorded_at) "
+                   "VALUES (%s, 'file', 1, %s, 0, now())", (oid, digest))
+    pg.execute("INSERT INTO object_text (digest, page, text) VALUES (%s, 0, '')", (digests["скан.pdf"],))
+    pg.execute("INSERT INTO object_text (digest, page, text) VALUES (%s, 1, 'Ветер')", (digests["норматив.pdf"],))
+    pg.execute("INSERT INTO object_text (digest, page, text) VALUES (%s, 0, '')", (digests["записка.docx"],))
+    monkeypatch.setattr(db, "SQL_DIR", real)
+    assert db.migrate(pg) == ["0011_object_text_ocr.sql"]
+    rows = pg.execute("SELECT digest, page, text_source FROM object_text ORDER BY digest").fetchall()
+    assert rows == [(digests["норматив.pdf"], 1, "layer"), (digests["записка.docx"], 0, "none")]
+    with pytest.raises(psycopg.errors.CheckViolation):
+        pg.execute("INSERT INTO object_text (digest, page, text, text_source) VALUES (%s, 0, '', 'ocr')",
+                   (digests["скан.pdf"],))

@@ -13,7 +13,7 @@ by_locator  цитаты нет, страница найдена по локат
 unresolved  цитаты нет, локатор не помог
 not_found   цитата не найдена — новый атом не записывается
 no_file     путь похож на файл, но файла нет — новый атом не записывается
-no_text     у файла нет текста: скан, .doc, .pptx, повреждённый или слишком большой файл …
+no_text     у файла нет текста: скан без OCR, .doc, .pptx, повреждённый или слишком большой файл …
 external    источник — название, а не файл (письмо, сайт)
 error       сбой при чтении или сверке файла (ошибка PyMuPDF и т. п.) — фоновая сверка его больше не повторяет,
             заново — check-sources --all
@@ -21,6 +21,8 @@ error       сбой при чтении или сверке файла (оши�
 """
 from __future__ import annotations
 
+import logging
+import os
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -30,10 +32,14 @@ from rapidfuzz import fuzz
 
 from . import extract
 
+log = logging.getLogger(__name__)
+
 MIN_QUOTE = 15            # цитата короче не находится однозначно
 FUZZY_MIN_LEN = 20        # нечёткий поиск — только для цитат не короче
 FUZZY_SCORE = 85          # минимальная схожесть нечёткого совпадения, %
-MIN_CHARS_PER_PAGE = 50   # меньше в среднем — у PDF нет текстового слоя
+FUZZY_SCORE_OCR = 75      # то же для страниц, распознанных OCR: знаки путаются (0/О, 1/l), цитата та же
+MIN_CHARS_PER_PAGE = 50   # меньше в среднем — у PDF нет текстового слоя; меньше на странице с картинкой — скан
+OCR_LANGUAGES = "rus+eng"  # языки tesseract по умолчанию; свои — AMEM_OCR_LANGUAGES через «+»
 
 # значок сверки для kb_get и веб-интерфейса; verdict-ов без значка в словаре нет
 MARKS = {"ok": "✓", "moved": "✓", "by_locator": "✓", "fuzzy": "≈",
@@ -63,6 +69,19 @@ class Verdict:
     page: int | None = None
     anchor: str = ""          # текст для подсветки — как он записан в документе
     score: float = 0.0        # схожесть нечёткого совпадения, %
+
+
+@dataclass
+class Extracted:
+    """Текст файла по страницам и откуда он: текстовый слой или OCR."""
+    pages: list[str] | None                  # None — извлекаемого текста нет
+    ocr: frozenset[int] = frozenset()        # страницы (с 1), текст которых распознан OCR, а не взят из слоя
+    image: frozenset[int] = frozenset()      # страницы-картинки без текстового слоя, не распознанные: OCR недоступен
+    ocr_unavailable: bool = False            # в файле есть такие страницы (и при pages None тоже)
+
+
+class OcrError(Exception):
+    """Сбой распознавания (tesseract): ошибка окружения, а не «нет текста» — у уровня 2 это source_error."""
 
 
 def looks_like_file(path: str) -> bool:
@@ -95,27 +114,72 @@ def safe_join(root: Path, rel: str) -> Path | None:
 
 def extract_pages(file: Path) -> list[str] | None:
     """Текст по страницам; у .md и .txt — одна «страница». None — извлекаемого текста нет."""
+    return extract_text(file).pages
+
+
+def extract_text(file: Path) -> Extracted:
+    """Текст файла по страницам с отметками OCR. Страница PDF без текстового слоя (короче MIN_CHARS_PER_PAGE
+    знаков), но с картинкой — скан: она распознаётся tesseract через PyMuPDF, если есть языковые данные
+    (ocr_languages); иначе остаётся как есть и попадает в image. Сбой самого распознавания — OcrError."""
     suffix = file.suffix.lower()
     if suffix in (".md", ".txt"):
-        return [file.read_text(encoding="utf-8", errors="replace")]
+        return Extracted([file.read_text(encoding="utf-8", errors="replace")])
     if suffix in (".xlsx", ".xlsm"):
-        return extract.xlsx_pages(file)
+        return Extracted(extract.xlsx_pages(file))
     if suffix == ".docx":
-        return extract.docx_pages(file)
+        return Extracted(extract.docx_pages(file))
     if suffix != ".pdf":
-        return None
+        return Extracted(None)
     import pymupdf
 
     try:
         with pymupdf.open(file) as doc:
             pages = [p.get_text() for p in doc]
+            scans = [i for i, p in enumerate(doc) if len(pages[i].strip()) < MIN_CHARS_PER_PAGE and p.get_images()]
+            ocr, image = _ocr(doc, pages, scans) if scans else (set(), set())
     except pymupdf.FileNotFoundError as e:      # подкласс RuntimeError, но файл исчез — это не «нет текста»
         raise FileNotFoundError(str(file)) from e
     except (RuntimeError, ValueError, pymupdf.mupdf.FzErrorBase):  # битый, пустой или зашифрованный PDF
-        return None                     # (FzErrorBase в PyMuPDF 1.28 — подкласс Exception, не RuntimeError)
+        return Extracted(None)          # (FzErrorBase в PyMuPDF 1.28 — подкласс Exception, не RuntimeError)
     if not pages or sum(len(t.strip()) for t in pages) / len(pages) < MIN_CHARS_PER_PAGE:
+        return Extracted(None, ocr_unavailable=bool(image))
+    return Extracted(pages, frozenset(ocr), frozenset(image), bool(image))
+
+
+def _ocr(doc, pages: list[str], scans: list[int]) -> tuple[set[int], set[int]]:
+    """Распознать страницы-сканы (индексы с 0) на месте в pages: (распознанные, нераспознанные), номера с 1.
+    Распознаются только картинки страницы (full=False) — в их собственном разрешении; текст слоя остаётся."""
+    import pymupdf
+
+    languages = ocr_languages()
+    if not languages:
+        return set(), {i + 1 for i in scans}
+    ocr: set[int] = set()
+    for i in scans:
+        page = doc[i]                    # одна и та же Page: её TextPage живёт, пока жива страница (weakref)
+        try:
+            text = page.get_text(textpage=page.get_textpage_ocr(language=languages, full=False))
+        except pymupdf.mupdf.FzErrorBase as e:
+            raise OcrError(f"страница {i + 1}: {e}") from e
+        if len(text.strip()) > len(pages[i].strip()):
+            pages[i] = text
+            ocr.add(i + 1)
+    return ocr, set()
+
+
+def ocr_languages() -> str | None:
+    """Языки OCR, данные которых есть у tesseract (как «rus+eng»); None — OCR недоступен: языковых данных нет
+    (их ищет pymupdf.get_tessdata: TESSDATA_PREFIX или установленный tesseract). Языки — AMEM_OCR_LANGUAGES,
+    по умолчанию OCR_LANGUAGES; берутся те из них, чей .traineddata есть."""
+    import pymupdf
+
+    try:
+        tessdata = Path(pymupdf.get_tessdata())
+    except Exception as e:              # RuntimeError «tesseract не найден» и что угодно из whereis
+        log.debug("OCR недоступен: %s", e)
         return None
-    return pages
+    wanted = [x.strip() for x in os.environ.get("AMEM_OCR_LANGUAGES", OCR_LANGUAGES).split("+") if x.strip()]
+    return "+".join(x for x in wanted if (tessdata / f"{x}.traineddata").is_file()) or None
 
 
 def _invisible(ch: str) -> bool:
@@ -206,19 +270,23 @@ def clean_anchor(raw: str) -> str:
 
 @dataclass
 class DocText:
-    """Текст документа по страницам и его нормализованная форма (считается один раз на документ)."""
+    """Текст документа по страницам и его нормализованная форма (считается один раз на документ);
+    ocr и image — как у Extracted: страницы, распознанные OCR, и сканы, которые нечем было распознать."""
     pages: list[str]
     norm: list[tuple[str, list[int]]]
+    ocr: frozenset[int] = frozenset()
+    image: frozenset[int] = frozenset()
 
     @classmethod
-    def of(cls, pages: list[str]) -> DocText:
-        return cls(pages, [normalize(t) for t in pages])
+    def of(cls, pages: list[str], ocr: frozenset[int] = frozenset(), image: frozenset[int] = frozenset()) -> DocText:
+        return cls(pages, [normalize(t) for t in pages], ocr, image)
 
 
 def find_quote(doc: DocText, quote: str, page: int | None = None) -> Verdict:
     """Цитата: на указанной странице → ok; на другой (ближайшей к указанной) → moved;
-    нечётко (для цитат от FUZZY_MIN_LEN символов) → fuzzy; иначе not_found.
-    Цитата ищется в пределах одной страницы: цитата через разрыв страницы не находится."""
+    нечётко (для цитат от FUZZY_MIN_LEN символов) → fuzzy; иначе not_found. На страницах, распознанных OCR,
+    порог нечёткого совпадения ниже (FUZZY_SCORE_OCR). Цитата ищется в пределах одной страницы: цитата через
+    разрыв страницы не находится."""
     q, _ = normalize(quote)
     if not q:
         return Verdict("not_found")
@@ -236,7 +304,8 @@ def find_quote(doc: DocText, quote: str, page: int | None = None) -> Verdict:
         for i, (t, _) in enumerate(doc.norm):
             if len(t) < len(q):
                 continue
-            al = fuzz.partial_ratio_alignment(q, t, score_cutoff=FUZZY_SCORE)
+            cutoff = FUZZY_SCORE_OCR if i + 1 in doc.ocr else FUZZY_SCORE
+            al = fuzz.partial_ratio_alignment(q, t, score_cutoff=cutoff)
             if al is not None and (best is None or (al.score, i == want) > (best.score, best_i == want)):
                 best_i, best = i, al
         if best is not None:

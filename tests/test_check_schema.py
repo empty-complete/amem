@@ -11,7 +11,7 @@ CHECK_CODES = {
     "schema", "unknown_code", "ref_unknown", "template", "ucum", "unit_required", "bounds_order",
     "link_not_allowed", "link_required", "link_pair", "retired_record", "record_error",
     "source_unresolved", "version_missing", "digest_mismatch", "pdf_page_required", "pdf_quote_required",
-    "quote_not_found", "quote_fuzzy", "number_not_found", "page_moved", "place_unresolved", "no_text",
+    "quote_not_found", "quote_fuzzy", "quote_ocr", "number_not_found", "page_moved", "place_unresolved", "no_text",
     "external_source", "source_error", "numbers_unchecked", "edition_filled",
     "unknown_property", "out_of_range", "unit_mismatch", "conflict",
     "duplicate", "related",

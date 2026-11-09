@@ -1,7 +1,11 @@
-"""Тестовые документы: условный норматив (PDF) и заметка (.md)."""
+"""Тестовые документы: условный норматив (PDF), «скан» протокола (PDF из картинок) и заметка (.md)."""
+import os
 from pathlib import Path
 
 import pymupdf
+import pytest
+
+from amem import sources
 
 # Страницы норматива: оглавление; пункт, таблица вразрядку с переносом, формула; приложение.
 SP_PAGES = [
@@ -17,6 +21,19 @@ SP_PAGES = [
     "<p>1.4 соответственно для промежуточных значений.</p>",
 ]
 
+# Страницы «скана» протокола испытаний: крупный шрифт, чтобы OCR читал уверенно.
+SCAN_PAGES = [
+    "<p style='font-size:18pt'>ПРОТОКОЛ ИСПЫТАНИЙ № 12</p>"
+    "<p style='font-size:18pt'>Образец: стеклопакет двухкамерный, формула 4-16-4-16-4.</p>",
+    "<p style='font-size:18pt'>Результаты испытаний</p>"
+    "<p style='font-size:18pt'>Сопротивление теплопередаче образца составило 0,72 единицы.</p>"
+    "<p style='font-size:18pt'>Температура наружного воздуха минус 20 градусов.</p>",
+]
+SCAN_QUOTE = "Сопротивление теплопередаче образца составило 0,72"
+# OCR в тестах: без языковых данных tesseract (rus, eng) тесты пропускаются — но не в CI, где они должны быть
+needs_ocr = pytest.mark.skipif(sources.ocr_languages() is None and not os.environ.get("CI"),
+                               reason="нет языковых данных tesseract (rus, eng)")
+
 NOTE_MD = "# Узел крепления\n\n## Кронштейн\n\nКронштейн КБ-14 крепится к закладной анкером М10.\n"
 # Заметка с величинами для тестов basis и confidence: по фразе на строку, раздел — тот же «Кронштейн».
 VALUES_MD = "# Величины\n\n## Кронштейн\n\nМасса 3 кг.\n\nМасса 4 кг.\n\nТемпература 20 °C.\n"
@@ -29,6 +46,23 @@ def make_pdf(path: Path, pages: list[str]) -> Path:
         page = doc.new_page()
         if html:
             page.insert_htmlbox(pymupdf.Rect(40, 40, 560, 800), html)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(path)
+    return path
+
+
+def make_scanned_pdf(path: Path, pages: list[str], *, text_pages: tuple[int, ...] = (), dpi: int = 200) -> Path:
+    """«Скан»: каждая страница — картинка с отрисованным HTML, без текстового слоя; страницы с номерами (с 0)
+    из text_pages — обычные, с текстовым слоем; пустая строка — пустая страница без картинки."""
+    doc, draft = pymupdf.open(), pymupdf.open()
+    for i, html in enumerate(pages):
+        page = doc.new_page()
+        if html and i in text_pages:
+            page.insert_htmlbox(pymupdf.Rect(40, 40, 560, 800), html)
+        elif html:
+            render = draft.new_page()
+            render.insert_htmlbox(pymupdf.Rect(40, 40, 560, 800), html)
+            page.insert_image(page.rect, pixmap=render.get_pixmap(dpi=dpi))
     path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(path)
     return path

@@ -237,6 +237,8 @@ enums:
         annotations: {label_ru: "цитата не найдена", label_en: "quote not found", definition_ru: "Цитата задана, но в тексте её нет."}
       quote_fuzzy:
         annotations: {label_ru: "цитата приблизительно", label_en: "quote fuzzy", definition_ru: "Цитата найдена только нечётким поиском."}
+      quote_ocr:
+        annotations: {label_ru: "сверено с OCR", label_en: "quote matched OCR text", definition_ru: "Место найдено в тексте, распознанном OCR, а не в текстовом слое."}
       number_not_found:
         annotations: {label_ru: "числа нет во фрагменте", label_en: "number not found", definition_ru: "Числа атома нет во фрагменте источника."}
       page_moved:

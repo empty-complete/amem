@@ -9,6 +9,9 @@
   adopt(conn, store, record, files=…, agent=…) — объект из подборки с тем же id, его версии и файлы, какие пришли.
   resolve_sources(conn, store, docs, payload, agent=…) — path источников тела → object, object_version, digest.
   text(conn, store, object_id, n) — текст версии по страницам, в NFC; кэш object_text по digest.
+  extraction(conn, store, object_id, n) — то же с отметками OCR (sources.Extracted): какие страницы распознаны,
+    какие — сканы без текстового слоя, которые нечем было распознать (text_source image); такой кэш не вечен —
+    когда OCR появляется, текст извлекается заново.
   mark(conn, object_id, status, agent=…) — отметка, что из объекта атомизировано (читает lookup.object_status).
   sheet(conn, store, object_id, n, name, cell_range) — окно листа xlsx: ячейки как в тексте для сверки,
     до SHEET_MAX_CELLS за вызов, без диапазона — A1:L40; ObjectError.code: not_found, invalid, too_large
@@ -391,6 +394,14 @@ def resolve_sources(conn: psycopg.Connection, store: ObjectStore, docs: Path, pa
 def text(conn: psycopg.Connection, store: ObjectStore, object_id: uuid.UUID | str, n: int) -> list[str] | None:
     """Текст версии по страницам (у .md и .txt — одна страница), в NFC; None — у файла нет текста или объект
     без файла. Извлекается один раз на содержимое: кэш object_text по digest."""
+    return extraction(conn, store, object_id, n).pages
+
+
+def extraction(conn: psycopg.Connection, store: ObjectStore, object_id: uuid.UUID | str, n: int) -> sources.Extracted:
+    """Текст версии с отметками OCR (sources.Extracted; pages None — текста нет или объект без файла), в NFC.
+    Кэш object_text по digest хранит и происхождение страницы (text_source): layer — текстовый слой, ocr —
+    распознано, image — скан, который нечем было распознать, none — текста нет (только page 0). Кэш со страницами
+    image строится заново, как только OCR становится доступен (sources.ocr_languages)."""
     _require_autocommit(conn)
     object_id = object_uuid(object_id)
     row = conn.execute("SELECT digest FROM object_version WHERE object_id = %s AND n = %s", (object_id, n)).fetchone()
@@ -398,17 +409,28 @@ def text(conn: psycopg.Connection, store: ObjectStore, object_id: uuid.UUID | st
         raise ObjectError(f"obj:{object_id}: нет версии {n}", code="not_found")
     digest = row[0]
     if digest is None:
-        return None
-    cached = conn.execute("SELECT page, text FROM object_text WHERE digest = %s ORDER BY page", (digest,)).fetchall()
-    if cached:
-        return None if cached[0][0] == 0 else [t for _, t in cached]
-    pages = sources.extract_pages(store.content(object_id, n))
-    if pages is not None:
-        pages = [_nfc(p.replace("\x00", "")) for p in pages]      # NUL в тексте PostgreSQL не хранит; NFC — после
-    rows = [(digest, i + 1, t) for i, t in enumerate(pages)] if pages else [(digest, 0, "")]
+        return sources.Extracted(None)
+    cached = conn.execute("SELECT page, text, text_source FROM object_text WHERE digest = %s ORDER BY page",
+                          (digest,)).fetchall()
+    if cached and not (any(src == "image" for _, _, src in cached) and sources.ocr_languages()):
+        if cached[0][0] == 0:
+            return sources.Extracted(None, ocr_unavailable=cached[0][2] == "image")
+        image = frozenset(page for page, _, src in cached if src == "image")
+        return sources.Extracted([t for _, t, _ in cached], frozenset(page for page, _, src in cached if src == "ocr"),
+                                 image, bool(image))
+    got = sources.extract_text(store.content(object_id, n))
+    if got.pages is not None:
+        got.pages = [_nfc(p.replace("\x00", "")) for p in got.pages]   # NUL в тексте PostgreSQL не хранит; NFC — после
+        rows = [(digest, i + 1, t, "ocr" if i + 1 in got.ocr else "image" if i + 1 in got.image else "layer")
+                for i, t in enumerate(got.pages)]
+    else:
+        rows = [(digest, 0, "", "image" if got.ocr_unavailable else "none")]
     with conn.transaction(), conn.cursor() as cur:
-        cur.executemany("INSERT INTO object_text (digest, page, text) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING", rows)
-    return pages
+        if cached:                                                 # сканы без OCR — теперь с ним
+            cur.execute("DELETE FROM object_text WHERE digest = %s", (digest,))
+        cur.executemany("INSERT INTO object_text (digest, page, text, text_source) VALUES (%s, %s, %s, %s) "
+                        "ON CONFLICT DO NOTHING", rows)
+    return got
 
 
 def mark(conn: psycopg.Connection, object_id: uuid.UUID | str, status: str, *, agent: str,
