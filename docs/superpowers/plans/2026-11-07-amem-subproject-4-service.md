@@ -312,7 +312,7 @@ env -u PYTHONPATH .venv/bin/pytest -q -p no:cacheprovider; echo "exit=$?"
 
 **Files:** `amem/agents/hooks.py`, `amem hook` в CLI, `tests/test_hooks.py`.
 
-- [ ] Падающие тесты (образцы JSON событий):
+- [x] Падающие тесты (образцы JSON событий):
   - **`SessionStart`:**
     - `cwd` с git-корнем `alpha` и сущностью-проектом `ent:alpha` — `additionalContext` с 3–5 атомами и строками-напоминаниями;
     - проекта нет — только напоминание.
@@ -324,8 +324,8 @@ env -u PYTHONPATH .venv/bin/pytest -q -p no:cacheprovider; echo "exit=$?"
   - **Бюджет и сбои:**
     - «зависшая» база (`pg_sleep` через подмену запроса или `statement_timeout`) — пустой ответ за ≤ 1,5 с, код 0;
     - нет `AMEM_DSN` — пустой ответ, код 0, строка в `hooks.log`.
-- [ ] Реализация по протоколу хуков Claude Code: вход — stdin JSON, выход — `hookSpecificOutput.additionalContext`. Формат проверить по документации (context7) при реализации.
-- [ ] Focused, полный прогон, коммит.
+- [x] Реализация по протоколу хуков Claude Code: вход — stdin JSON, выход — `hookSpecificOutput.additionalContext`. Формат сверен по документации (context7 и code.claude.com/docs/en/hooks) — спецификация, разд. 6.1; `PreCompact` принят (stdout идёт в указания к сжатию).
+- [x] Focused, полный прогон, коммит.
 
 ### Task 14: Установщик и навыки
 
