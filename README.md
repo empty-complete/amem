@@ -34,16 +34,15 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/sky-dark.png">
-    <img alt="The sky: the whole memory as a constellation of atoms and objects" src="docs/assets/readme/en/sky-light.png" width="100%">
+    <img alt="The sky: the whole sample base as a constellation of records and objects, with folders and family filters" src="docs/assets/readme/en/sky-light.png" width="100%">
   </picture>
 </p>
 
 > [!IMPORTANT]
-> **amem is in early development.** The core library works today: storage with revisions, hybrid search,
-> automatic checks, the review queue, entity cards, bundles and backups, tested in CI on PostgreSQL 18
-> and 16. The HTTP service and the web UI run on it; the screenshots of the sky, a record and the review
-> queue are taken from the service. The CLI, the MCP server and agent memory are being built now; the card
-> and agent pictures are placeholders until then.
+> **amem is young.** The core, the HTTP service with the web UI, the CLI, the MCP server and agent memory for
+> Claude Code and Codex work today and are tested in CI on PostgreSQL 18 and 16. The schema and the HTTP
+> contract may still change. The screenshots on this page come from the real service on a sample base
+> (`tools/seed_sample_en.py`, a fictional network of weather stations).
 
 ## Why amem
 
@@ -107,8 +106,8 @@ file it came from, the full history of its changes, and the decision of a person
   <tr>
     <td width="50%" valign="top">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/card-dark.svg">
-        <img alt="An entity card with completeness and grouped parameters (placeholder)" src="docs/assets/readme/en/card-light.svg">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/card-dark.png">
+        <img alt="An entity card: completeness, grouped parameters with known, missing and conflicting values" src="docs/assets/readme/en/card-light.png">
       </picture>
       <h3>Entity cards</h3>
       A profile says which parameters an object needs. The card shows what is known, missing or in
@@ -116,12 +115,12 @@ file it came from, the full history of its changes, and the decision of a person
     </td>
     <td width="50%" valign="top">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/agent-dark.svg">
-        <img alt="An agent session that searches amem, fetches records and marks what helped (placeholder)" src="docs/assets/readme/en/agent-light.svg">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/agent-dark.png">
+        <img alt="An agent session over MCP: amem_search, amem_get with the source quote, amem_helpful" src="docs/assets/readme/en/agent-light.png">
       </picture>
       <h3>Memory for agents</h3>
       Claude Code and Codex ask amem first. They read short cards, fetch only the records they need, and
-      mark what helped, which costs fewer tokens than reading raw files. <i>Arrives with the MCP server.</i>
+      mark what helped, which costs fewer tokens than reading raw files.
     </td>
   </tr>
 </table>
@@ -597,8 +596,9 @@ ranking. They never change a status or skip a check.
 
 **Good to know**
 
-- Schema v1 requires a Russian label (`ru`); other languages are optional. Full-text search is tuned
-  for Russian, and the optional local vector model is multilingual.
+- Schema v1 requires the `ru` slot of every label; other languages are optional. A base kept in English
+  writes its English text there, as the sample does. Full-text search is tuned for Russian, and the optional
+  local vector model is multilingual.
 - Vectors are local and optional: `pip install -e ".[embed]"` adds fastembed, and a model is downloaded
   only with explicit permission. `AMEM_BACKEND=none` turns the semantic channel off, and lexical search
   keeps working.

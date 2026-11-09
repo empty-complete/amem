@@ -1,0 +1,101 @@
+name: readme-shots
+# Снимки экрана README с настоящей службы на образцах: en — tools/seed_sample_en.py, ru — tools/seed_sample.py.
+# Результат — артефакт readme-shots-<язык>; в репозиторий снимки кладут руками (docs/assets/readme/<язык>/).
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/seed_sample*.py"
+      - "tools/sample_en/**"
+      - "web/tools/readme-shots.mjs"
+      - "tools/readme_agent_session.py"
+      - ".github/workflows/readme-shots.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lang: en
+            seed: tools/seed_sample_en.py
+            packs: tools/sample_en/pack
+            query: TH-20 humidity accuracy
+            prompt: How accurate is the TH-20 humidity reading near saturation? Cite the source.
+          - lang: ru
+            seed: tools/seed_sample.py
+            packs: ""
+            query: Погрешность влажности В-2
+            prompt: Какая погрешность у В-2 у верхнего края шкалы? Со ссылкой на источник.
+    services:
+      db:
+        image: pgvector/pgvector:0.8.1-pg18
+        env: {POSTGRES_DB: test, POSTGRES_USER: test, POSTGRES_PASSWORD: test}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U test -d test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      AMEM_DSN: postgresql://test:test@127.0.0.1:5432/test
+      AMEM_DATA: /tmp/sample/objects
+      AMEM_DOCS: /tmp/sample/docs
+      AMEM_STATE: /tmp/sample/state
+      AMEM_AGENT: person:sample
+      AMEM_PORT: "8770"
+      AMEM_BACKEND: none
+      SHOT_LANG: ${{ matrix.lang }}
+      SHOT_SEED: ${{ matrix.seed }}
+      SHOT_PACKS: ${{ matrix.packs }}
+      SHOT_QUERY: ${{ matrix.query }}
+      SHOT_PROMPT: ${{ matrix.prompt }}
+      AGENT_TRANSCRIPT: /tmp/agent.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: amem and amem-web wheels in a clean venv
+        run: |
+          pip install -q build
+          python -m build -q --wheel -o wheels .
+          python -m build -q --wheel -o wheels web/python
+          python -m venv /tmp/amem
+          /tmp/amem/bin/pip install -q wheels/amem-*.whl wheels/amem_web-*.whl
+      - name: Seed the sample
+        run: |
+          mkdir -p "$AMEM_DOCS" "$AMEM_DATA" "$AMEM_STATE"
+          if [ -n "$SHOT_PACKS" ]; then echo "AMEM_PACKS=$GITHUB_WORKSPACE/$SHOT_PACKS" >> "$GITHUB_ENV"; fi
+          if [ -n "$SHOT_PACKS" ]; then export AMEM_PACKS="$GITHUB_WORKSPACE/$SHOT_PACKS"; fi
+          /tmp/amem/bin/python "$SHOT_SEED"
+      - name: Start the service
+        run: |
+          nohup /tmp/amem/bin/python -m amem.service > /tmp/service.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8770/api/v1/base >/dev/null && exit 0; sleep 1; done
+          cat /tmp/service.log; exit 1
+      - name: Agent session over MCP (amem mcp, stdio)
+        run: /tmp/amem/bin/python tools/readme_agent_session.py "$AGENT_TRANSCRIPT" --query "$SHOT_QUERY" --prompt "$SHOT_PROMPT"
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      - name: Screens
+        working-directory: web
+        run: node tools/readme-shots.mjs http://127.0.0.1:8770 "$SHOT_LANG"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: readme-shots-${{ matrix.lang }}
+          path: docs/assets/readme/${{ matrix.lang }}/*.png
+          retention-days: 14
+      - if: failure()
+        run: cat /tmp/service.log || true
