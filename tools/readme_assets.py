@@ -576,8 +576,9 @@ def screen_agent(theme, lang):
     return frame(theme, lang, "agent", "\n".join(c), label_at=(1080, 300))
 
 
-SCREENS = {"sky": screen_sky, "record": screen_record, "review": screen_queue, "card": screen_card,
-           "agent": screen_agent}
+# заглушки — только экранов, которых ещё нет на настоящих снимках (sky, record, review снимает
+# web/tools/readme-shots.mjs со службы); остальные функции остаются для сравнения и черновиков
+SCREENS = {"card": screen_card, "agent": screen_agent}
 
 
 def main(root: Path):

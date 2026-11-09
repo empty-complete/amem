@@ -90,6 +90,10 @@ test("проверка: Y — решено в службе после окна; 
   await expect(list.getByRole("option")).toHaveCount(2);
   await list.getByRole("option").first().click();
   const id = new URL(page.url()).pathname.split("/").pop() as string;
+  // похожие записи — ссылками на записи, а не @именами пачки (ядро: check._details)
+  const issues = page.getByRole("region", { name: "Замечания проверки" });
+  await expect(issues.getByRole("link").first()).toBeVisible();
+  await expect(issues).not.toContainText("@");
   await page.keyboard.press("y");
   await expect(page.getByText("Подтверждено", { exact: true })).toBeVisible();
   await page.waitForTimeout(WINDOW);

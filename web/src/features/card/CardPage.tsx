@@ -12,7 +12,7 @@ import { HistoryList } from "../record/Widgets";
 import { kindLabel, RecordRow, recordPath } from "../records/RecordList";
 import { Sky } from "../sky/Sky";
 import { useSubmit } from "../write/useSubmit";
-import { CardTable, type Fill } from "./CardTable";
+import { CardTable, ExtraValues, type Fill } from "./CardTable";
 import { type Card, ORDER, summarize } from "./card";
 import { Notes } from "./Notes";
 import "../record/record.css";
@@ -138,7 +138,11 @@ export function CardPage({ entityRef }: { entityRef: string }) {
     },
   };
   if (rec.isPending || card.isPending) return <RegionState state="loading" />;
-  const noCard = card.isError && card.error instanceof ApiError && card.error.status === 404;
+  // без профиля служба отдаёт карточку с пустыми fields (значения записей — в extra); 404 — сущности нет в карточках
+  const profiled = !!card.data?.fields.length;
+  const noCard =
+    (card.isError && card.error instanceof ApiError && card.error.status === 404) ||
+    (!!card.data && !profiled);
   if (rec.isError && (card.isError || !card.data)) {
     return (
       <RegionState
@@ -181,7 +185,7 @@ export function CardPage({ entityRef }: { entityRef: string }) {
           )}
         </div>
         {desc && <p className="lede">{desc}</p>}
-        {card.data && <Summary card={card.data} />}
+        {card.data && profiled && <Summary card={card.data} />}
         {card.isError && !noCard && (
           <RegionState
             state="error"
@@ -212,7 +216,8 @@ export function CardPage({ entityRef }: { entityRef: string }) {
           </Tabs.ListContainer>
           {card.data && (
             <Tabs.Panel id="card">
-              <CardTable groups={summarize(card.data).groups} fill={fill} />
+              {profiled && <CardTable groups={summarize(card.data).groups} fill={fill} />}
+              <ExtraValues items={card.data.extra ?? []} />
               <Notes entityRef={entityRef} />
             </Tabs.Panel>
           )}
