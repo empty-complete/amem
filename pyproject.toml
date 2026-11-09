@@ -25,7 +25,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "linkml==1.12.1", "linkml-runtime==1.12.1", "jsonschema>=4.20", "ocfl-py==2.1.0",
+dev = ["pytest>=8", "ruff>=0.14", "linkml==1.12.1", "linkml-runtime==1.12.1", "jsonschema>=4.20", "ocfl-py==2.1.0",
        "httpx2>=2.0",                    # клиент starlette.testclient
        "openapi-spec-validator>=0.8.4"]  # тест: контракт HTTP v1 — верный OpenAPI 3.1 (его ставит и linkml)
 embed = ["fastembed>=0.9.1,<0.10"]
@@ -44,3 +44,12 @@ include = ["amem*"]
 [tool.setuptools.package-data]
 amem = ["schema/*.yaml", "schema/*.json", "sql/*.sql", "packs/core/pack.yaml", "packs/core/vocab/*.yaml", "packs/core/templates/*.yaml",
         "service/*.yaml"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["amem/model_v1.py"]   # генерируется tools/gen_schema.py
+
+[tool.ruff.lint]
+# F — pyflakes (неиспользуемое, неопределённое), E9 — синтаксис. Следующие ступени — docs/superpowers/specs/2026-11-09-amem-hardening-design.md
+select = ["F", "E9"]
