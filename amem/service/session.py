@@ -8,7 +8,8 @@
   Origin не прислал (<img>, <script>, переход по форме), — 403 у любой записи и у любого запроса к /api/v1, кроме
   /health: иначе чужая страница картинкой с /api/v1/search писала бы строки в журнал выдачи и засоряла полезность;
 - запись (POST, PUT, PATCH, DELETE) с телом — только application/json, иначе 415. Запись без тела (DELETE папки)
-  проверять нечего: межсайтовый запрос без тела всё равно несёт Origin и упирается в проверку выше.
+  проверять нечего: межсайтовый запрос без тела всё равно несёт Origin и упирается в проверку выше. /mcp защищён так
+  же (и Sec-Fetch-Site — у любого метода, как /api/v1).
   Исключение — /bundles/inspect: multipart/form-data, и Origin для него обязателен.
 
 Кто пишет — request.state.agent и request.state.can_write:
@@ -47,6 +48,9 @@ UI_PUBLIC = ("/", "/ui")                 # статика интерфейса �
 # подборки по токену только для чтения: экспорт и проверка загрузки ничего не пишут в базу, импорт — пробный
 # (dry_run: true; настоящий импорт такой токен не сделает — обработчик ответит 403 read_only)
 READ_ONLY_POSTS = frozenset({"/api/v1/bundles/export", "/api/v1/bundles/inspect", "/api/v1/bundles/import"})
+# /mcp: протокол MCP — запросы POST (и DELETE сессии) даже для чтения; токен только для чтения туда пускается,
+# а инструменты записи сами отвечают ему read_only (amem/service/mcp.py)
+MCP = "/mcp"
 
 
 def _bracketed(host: str) -> str:
@@ -136,7 +140,7 @@ class Guard:
                                      f"источник и AMEM_UI_ORIGINS")
         site = headers.get("sec-fetch-site", "").strip().lower()
         if origin is None and site in FOREIGN_SITES and path not in PUBLIC \
-                and (method in WRITE_METHODS or path.startswith(API_PREFIX)):
+                and (method in WRITE_METHODS or path.startswith(API_PREFIX) or path == MCP):
             return problems.response(403, "bad_origin", f"запрос с чужой страницы (Sec-Fetch-Site: {site}) без Origin: "
                                      "служба отвечает только своей странице и AMEM_UI_ORIGINS")
         if method in WRITE_METHODS:
@@ -161,7 +165,7 @@ class Guard:
             if entry is None:
                 detail = "нужен вход: заголовок Authorization: Bearer <токен>" if not token else "токен не подошёл"
                 return problems.response(401, "auth_required", detail, headers={"WWW-Authenticate": "Bearer"})
-            if method in WRITE_METHODS and not entry.write and path not in READ_ONLY_POSTS:
+            if method in WRITE_METHODS and not entry.write and path not in READ_ONLY_POSTS and path != MCP:
                 return problems.response(403, "read_only", f"токен {entry.agent} — только для чтения")
             state.update(agent=entry.agent, can_write=entry.write, grant_agent=None, token=entry.hash)
             return None

@@ -22,7 +22,15 @@ dependencies = [
   "uvicorn>=0.30",
   "psycopg-pool>=3.2,<4",
   "python-multipart>=0.0.20",
+  # MCP (подпроект 4b): /mcp службы (Streamable HTTP) и amem mcp (stdio) — официальный SDK. Только 2.3.x:
+  # amem/service/mcp.py опирается на приватный MCPServer._tool_manager и на session_manager, который создаёт
+  # streamable_http_app(), — в следующей минорной версии они могут поменяться без объявления
+  "mcp>=2.3,<2.4",
+  "mcp-types>=2.3,<2.4",             # mcp_types импортируется напрямую; mcp 2.3 сам требует ту же версию
 ]
+
+[project.scripts]
+amem = "amem.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.14", "linkml==1.12.1", "linkml-runtime==1.12.1", "jsonschema>=4.20", "ocfl-py==2.1.0",

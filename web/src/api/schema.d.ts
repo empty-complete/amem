@@ -465,7 +465,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** check.submit от агента сессии (поле агента в теле не читается); отказ проверки — 422 check_rejected с issues; <private> вырезается до проверки (предупреждение private_removed в warnings); тело больше 1 МиБ — 413 too_large */
+        /** check.submit от агента сессии (поле агента в теле не читается); отказ проверки — 422 check_rejected с issues; <private> вырезается до проверки (предупреждение private_removed в warnings); строка, похожая на секрет (ключ API, токен, PEM, пароль в строке подключения), записывается с предупреждением secret_like без значения; тело больше 1 МиБ — 413 too_large */
         post: operations["submit"];
         delete?: never;
         options?: never;
@@ -624,7 +624,7 @@ export interface components {
             issues?: components["schemas"]["CheckIssue"][];
             /** @description у check_rejected — отклонённый пакет (записан с отчётом) */
             changeset_id?: string;
-            /** @description у check_rejected — предупреждения службы (private_removed) */
+            /** @description у check_rejected — предупреждения службы (private_removed, secret_like) */
             warnings?: components["schemas"]["CheckIssue"][];
         } & {
             [key: string]: unknown;
@@ -1061,7 +1061,7 @@ export interface components {
             queued: Record<string, never>[];
             /** @description Отчёт amem.check/1 */
             report: Record<string, never>;
-            /** @description Предупреждения службы: private_removed — скрытое в <private> вырезано из поля */
+            /** @description Предупреждения службы: private_removed — скрытое в <private> вырезано из поля; secret_like — строка поля похожа на секрет (запись не отклоняется, значения в предупреждении нет) */
             warnings?: components["schemas"]["CheckIssue"][];
         };
         VocabEntry: {

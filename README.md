@@ -250,25 +250,25 @@ cd web && npm ci && npm run dev:mock              # then open http://127.0.0.1:5
 
 ### Coming next: one-command install
 
+`amem init`, `amem serve`, the [CLI](#cli) and the [MCP server](#mcp) already work from a clone.
+
 > [!NOTE]
-> **Not available yet.** This is the planned interface of the service, CLI and agent memory
+> **Not available yet:** the package on PyPI and `amem install` for agent memory (hooks and skills)
 > ([subproject 4](docs/superpowers/specs/2026-11-07-amem-subproject-4-service-design.md)).
 
 ```bash
 pipx install amem
-amem init                     # database and object store
 amem install claude-code      # MCP server, hooks and skills; `amem install codex` for Codex CLI
-amem serve                    # HTTP API, /mcp and the web UI at http://127.0.0.1:8767/ui
 ```
 
 ## Service
 
 The HTTP service serves the [v1 contract](docs/api/http-v1.openapi.yaml) at `/api/v1` and the web UI at `/ui`.
-Until `amem serve` arrives with the CLI, start it as a module:
+Start it with `amem serve` (or `python -m amem.service`):
 
 ```bash
 export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
-.venv/bin/python -m amem.service      # http://127.0.0.1:8767; --host and --port change the address
+.venv/bin/amem serve      # http://127.0.0.1:8767; --host and --port change the address
 ```
 
 - **Local trust.** By default the service listens on `127.0.0.1` only. It answers only to its own name in `Host`
@@ -288,6 +288,117 @@ export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
   it off. The service writes its own log to stderr.
 - **Web UI.** `/ui` needs the web package: `pip install 'amem[web]'`. Without it `/ui` answers 404 with a hint,
   and the API works as usual.
+
+## CLI
+
+`pip install -e .` puts the `amem` command in the venv. It talks to the database directly (`AMEM_DSN` or
+`amem init --dsn …`, which remembers the DSN in `~/.config/amem/amem.toml`) and does not need the service.
+
+```
+amem init [--dsn DSN]                 database and object store
+amem serve [--host --port --no-auth]  HTTP API, /mcp and the web UI
+amem mcp [--agent model:NAME]         MCP server on stdio, for an agent
+amem search QUERY [--kind --limit]    search, step 1
+amem timeline REF                     what is around a record, step 2
+amem get REF...                       full records, step 3
+amem card REF                         entity card
+amem submit FILE.json                 write a batch (same body as POST /submit; "-" reads stdin)
+amem review list|claim|release|resolve|stats
+amem folders tree|create|delete|rename|move
+amem export|inspect|import FILE.zip   bundles (import is a dry run without --apply)
+amem backup create|list|restore|verify
+amem token create|list|revoke         tokens of a shared service
+amem base [name [NAME]]               database summary and name
+amem doctor                           database, migrations, store, semantic search
+```
+
+- **Output.** Text for people, or `--json` with the same object the HTTP API returns for that operation.
+  An error names what to do next: «set AMEM_DSN or run amem init».
+- **Exit codes.** `0` success, `1` environment (no database, no store), `2` wrong call, `3` ambiguous text
+  instead of a reference (the candidates are printed), `4` not found, `5` the check rejected the batch (the
+  report is printed), `6` conflict (item already resolved, folder taken, bundle collision).
+- **Who writes.** In a plain terminal it is the person `AMEM_AGENT` (by default `person:` and your OS user name).
+  When the environment belongs to an agent, the command runs as a model: `CLAUDECODE=1` — `model:claude-code`,
+  the Codex sandbox variables — `model:codex`, `AMEM_AS_MODEL=name` — `model:name`. `--agent` sets the agent
+  explicitly, but never `person:` inside an agent's environment.
+- **Tokens.** `amem token create person:ann` (or `model:…`, `--read-only`) prints the token once and stores only
+  its hash in `AMEM_TOKENS`. Only a person issues and revokes tokens.
+- **Backups.** A model may run `amem backup create`, but without rotation: `--keep` and `restore` are for people.
+- **Debugging.** `AMEM_DEBUG=1` adds the traceback of an internal error to stderr.
+
+## MCP
+
+The MCP server gives an agent 14 tools over the same operations as the HTTP API:
+
+| Tool | What it does |
+|---|---|
+| `amem_search(query, kind?, limit?)` | Step 1: short hits `{ref, label, kind, status, snippet}` and a `retrieval_id` |
+| `amem_similar(query \| ref, limit?)` | Similar records, in the same form |
+| `amem_timeline(ref)` | Step 2: recent events of the record and its neighbors |
+| `amem_get(refs)` | Step 3: full records with body, sources, status and open items |
+| `amem_card(ref)` | Entity card `amem.card/1` |
+| `amem_submit(proposals, links?, reason?)` | Write a batch through `check.submit` |
+| `amem_helpful(retrieval_id, refs)` | Mark the atoms that helped |
+| `amem_move(ref, folder)` | Move a record to an existing folder |
+| `amem_object_status(path)`, `amem_mark_object(path, status, note?)` | What has been atomized from a document |
+| `amem_review_claim`, `amem_review_release`, `amem_review_resolve` | For the semantic reviewer |
+| `amem_vocab(scheme)` | Vocabulary codes with labels |
+
+Search goes in three steps so the agent reads only what it needs: `amem_search` gives short cards,
+`amem_timeline` shows what is around a hit, and `amem_get` returns the full records it picked. Text that matches
+several records without a clear leader comes back as `ambiguous: true` with candidates, not as the first match.
+
+**Over stdio.** `amem mcp` runs one session per process with its own small connection pool. Claude Code:
+
+```bash
+claude mcp add amem --env AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem -- amem mcp --agent model:claude-code
+```
+
+or in the project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "amem": {
+      "command": "amem",
+      "args": ["mcp", "--agent", "model:claude-code"],
+      "env": { "AMEM_DSN": "postgresql://amem:amem@127.0.0.1:5435/amem" }
+    }
+  }
+}
+```
+
+Codex CLI, in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.amem]
+command = "amem"
+args = ["mcp", "--agent", "model:codex"]
+env = { AMEM_DSN = "postgresql://amem:amem@127.0.0.1:5435/amem" }
+```
+
+**Over HTTP.** A running service serves the same tools at `/mcp` (Streamable HTTP):
+
+```bash
+claude mcp add --transport http amem http://127.0.0.1:8767/mcp --header "X-Amem-Agent: model:claude-code"
+```
+
+```toml
+[mcp_servers.amem]
+url = "http://127.0.0.1:8767/mcp"
+http_headers = { "X-Amem-Agent" = "model:codex" }
+```
+
+- **Always a model.** An MCP client writes as `model:…`, and its writes go through the checks. Over stdio the
+  agent comes from `--agent model:…` or the agent's environment; over `/mcp` from the `X-Amem-Agent` header,
+  otherwise from the token's model agent, otherwise `AMEM_MODEL_AGENT` (`model:local`). `person:` is refused.
+- **Shared service.** With `AMEM_TOKENS`, `/mcp` needs `Authorization: Bearer <token>` like the API; a read-only
+  token can search, and write tools answer `read_only`. A header that disagrees with the token's model agent is
+  refused.
+- **Usefulness.** `amem_helpful` marks atoms only from a search of the same session (or, for clients without
+  sessions, of the same agent and login); someone else's `retrieval_id` answers `forbidden`.
+- **Query log.** Explicit searches (`amem search`, `amem_search`, `amem_similar`) add a line to
+  `AMEM_STATE/queries.jsonl`, like the service's `/search`; reading steps do not.
 
 ## How it works
 
@@ -378,8 +489,8 @@ ranking. They never change a status or skip a check.
 - [x] **Automatic checks** (levels 1–4) and a **review queue** with leases, audit and metrics
 - [x] **Ontology:** entity profiles, live cards, portable bundles
 - [x] **Library for the service:** folders, record lists, references by key, object view
-- [ ] **HTTP service:** `amem serve` with the [v1 contract](docs/api/http-v1.openapi.yaml) *(in progress)*
-- [ ] **CLI and MCP server:** three-step retrieval, usefulness marks, `<private>` stripping
+- [x] **HTTP service:** `amem serve` with the [v1 contract](docs/api/http-v1.openapi.yaml)
+- [x] **CLI and MCP server:** three-step retrieval, usefulness marks, `<private>` stripping
 - [ ] **Agent memory:** Claude Code hooks, Codex CLI, `amem install`, core skills
 - [x] **Web UI:** all screens, on the service and on mock data; checked end to end against the service
 - [ ] **asearch:** file search as an amem plugin
