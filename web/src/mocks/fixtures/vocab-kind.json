@@ -6,7 +6,8 @@
       "en": "fact"
     },
     "pack": "core",
-    "broader": null
+    "broader": null,
+    "family": "source"
   },
   {
     "code": "term",
@@ -15,7 +16,8 @@
       "en": "term"
     },
     "pack": "core",
-    "broader": null
+    "broader": null,
+    "family": "source"
   },
   {
     "code": "method",
@@ -24,7 +26,8 @@
       "en": "method"
     },
     "pack": "core",
-    "broader": null
+    "broader": null,
+    "family": "work"
   },
   {
     "code": "decision",
@@ -33,7 +36,8 @@
       "en": "decision"
     },
     "pack": "core",
-    "broader": null
+    "broader": null,
+    "family": "work"
   },
   {
     "code": "question",
@@ -42,7 +46,8 @@
       "en": "question"
     },
     "pack": "core",
-    "broader": null
+    "broader": null,
+    "family": "work"
   },
   {
     "code": "lesson",
@@ -51,7 +56,8 @@
       "en": "lesson"
     },
     "pack": "core",
-    "broader": null
+    "broader": null,
+    "family": "work"
   },
   {
     "code": "requirement",
@@ -60,7 +66,8 @@
       "en": "requirement"
     },
     "pack": "core",
-    "broader": null
+    "broader": null,
+    "family": "source"
   },
   {
     "code": "parameter",
@@ -69,7 +76,8 @@
       "en": "parameter"
     },
     "pack": "core",
-    "broader": null
+    "broader": null,
+    "family": "source"
   },
   {
     "code": "note",
@@ -78,6 +86,17 @@
       "en": "note"
     },
     "pack": "core",
-    "broader": null
+    "broader": null,
+    "family": "work"
+  },
+  {
+    "code": "norm",
+    "label": {
+      "ru": "норма",
+      "en": "norm"
+    },
+    "pack": "meteo",
+    "broader": null,
+    "family": "source"
   }
 ]
