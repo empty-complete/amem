@@ -1,9 +1,12 @@
 # Картинки README
 
 - `banner-light.svg`, `banner-dark.svg` — баннер в шапке `README.md` и `README.ru.md`. Не заглушка.
-- `en/*.svg`, `ru/*.svg` — **заглушки** снимков экрана: каркас экрана в цветах веб-UI и табличка
-  «Placeholder · screenshot coming soon». Английские — для `README.md`, русские — для `README.ru.md`;
-  у каждой светлый (`-light`) и тёмный (`-dark`) вариант, README выбирает по теме GitHub через `<picture>`.
+- `en/*.png`, `ru/*.png` — **настоящие снимки** `sky`, `record`, `review`: веб-UI на службе с образцом
+  `tools/seed_sample.py`, окно 1600×900, светлая и тёмная тема. Снимает их `web/tools/readme-shots.mjs`.
+- `en/*.svg`, `ru/*.svg` — **заглушки** `card` и `agent`: каркас экрана в цветах веб-UI и табличка
+  «Placeholder · screenshot coming soon».
+- Английские — для `README.md`, русские — для `README.ru.md`; у каждой картинки светлый (`-light`) и тёмный
+  (`-dark`) вариант, README выбирает по теме GitHub через `<picture>`.
 
 Всё здесь генерирует `tools/readme_assets.py` (запуск из корня: `python3 tools/readme_assets.py .`).
 Цвета — токены веб-UI из спецификации подпроекта 5, разд. 4.2.
@@ -18,7 +21,18 @@
 | `card` | `/entity/:ref?tab=card` — объект | Полоса полноты, параметры по группам с состояниями (известно, нет, расхождение), справа небо объекта |
 | `agent` | терминал агента | Вопрос → `amem_search` → `amem_get` → ответ со ссылкой на источник → `amem_helpful`. Запись asciinema или GIF — после подпроекта 4b (CLI и MCP) |
 
-## Как снять
+## Как переснять снимки со службы
+
+```bash
+export AMEM_DSN=postgresql://…/пустая_база AMEM_DOCS=/tmp/amem-sample/docs
+.venv/bin/python tools/seed_sample.py && .venv/bin/python -m amem.service --port 8770 &
+cd web && npm run build && node tools/readme-shots.mjs http://127.0.0.1:8770
+```
+
+Карточку (`card`) снимать, когда в образце появится пакет области с профилем сущности; агента (`agent`) —
+после подпроекта 4b.
+
+## Как снять (старый способ, на моках)
 
 1. Веб-UI на образцах: `cd web && npm ci && npm run dev:mock`, затем `http://127.0.0.1:5173/ui/`.
 2. Окно 1600×900 (или 3200×1800 для чёткости на Retina), тема — светлая и тёмная, язык — английский

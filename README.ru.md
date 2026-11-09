@@ -33,16 +33,16 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/ru/sky-dark.svg">
-    <img alt="Небо: вся память как созвездие атомов и объектов (заглушка)" src="docs/assets/readme/ru/sky-light.svg" width="100%">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/ru/sky-dark.png">
+    <img alt="Небо: вся память как созвездие атомов и объектов" src="docs/assets/readme/ru/sky-light.png" width="100%">
   </picture>
 </p>
 
 > [!IMPORTANT]
 > **amem в ранней разработке.** Библиотека ядра уже работает: хранилище с ревизиями, гибридный поиск,
 > автопроверка, очередь проверки, карточки сущностей, подборки и бэкапы. Всё это проверяется в CI
-> на PostgreSQL 18 и 16. Служба, CLI, сервер MCP и веб-UI сейчас в работе. Пока они не вышли,
-> картинки на этой странице — заглушки.
+> на PostgreSQL 18 и 16. HTTP-служба и веб-UI на ней работают: снимки неба, записи и очереди проверки сняты
+> со службы. CLI, сервер MCP и память агентов сейчас в работе; до них картинки карточки и агента — заглушки.
 
 ## Зачем amem
 
@@ -85,8 +85,8 @@ amem хранит единицу поменьше и понадёжнее — **
   <tr>
     <td width="50%" valign="top">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/ru/record-dark.svg">
-        <img alt="Страница записи с цитатой, подсвеченной на странице источника (заглушка)" src="docs/assets/readme/ru/record-light.svg">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/ru/record-dark.png">
+        <img alt="Страница записи с цитатой, подсвеченной на странице источника" src="docs/assets/readme/ru/record-light.png">
       </picture>
       <h3>Утверждение рядом с источником</h3>
       Запись читается как заметка: свойства, тело в Markdown и цитата, подсвеченная на настоящей странице
@@ -94,8 +94,8 @@ amem хранит единицу поменьше и понадёжнее — **
     </td>
     <td width="50%" valign="top">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/ru/review-dark.svg">
-        <img alt="Очередь проверки: утверждение, цитата и кнопки решения (заглушка)" src="docs/assets/readme/ru/review-light.svg">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/ru/review-dark.png">
+        <img alt="Очередь проверки: утверждение, цитата и кнопки решения" src="docs/assets/readme/ru/review-light.png">
       </picture>
       <h3>Проверка одним нажатием</h3>
       Всё сомнительное, рискованное или изменившееся попадает в очередь. В пункте — утверждение, цитата
@@ -214,7 +214,7 @@ print(hits["items"][0]["label"]["ru"])  # pgvector: индекс HNSW по vecto
 
 ### Веб-UI на образцах данных
 
-Веб-UI собран по HTTP-контракту и до выхода службы работает на моках. Что в нём есть:
+Веб-UI работает на службе или на моках того же HTTP-контракта. Что в нём есть:
 
 - **Небо.** Главная — созвездие записей в цветах семей (источник, работа, объект); новая запись вспыхивает
   на своём месте. 3D-вид грузится по запросу.
@@ -230,10 +230,21 @@ print(hits["items"][0]["label"]["ru"])  # pgvector: индекс HNSW по vecto
 Светлая и тёмная темы, русский и английский, раскладка для телефона. Дизайн-система описана в
 [`web/DESIGN.md`](web/DESIGN.md).
 
+На службе с образцом базы (метеостанция: датчики, руководство PDF с цитатами, заметки и открытая очередь
+проверки), в пустой базе:
+
 ```bash
-cd web
-npm ci
-npm run dev:mock      # Node 24+; затем откройте http://127.0.0.1:5173/ui/
+.venv/bin/pip install -e . -e web/python          # служба и пакет веб-UI
+(cd web && npm ci && npm run build)               # Node 24+; сборка ложится в пакет amem-web
+export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem AMEM_DOCS=~/amem-sample/docs
+.venv/bin/python tools/seed_sample.py             # образец: 20 записей, 2 открытых пункта проверки
+.venv/bin/python -m amem.service                  # затем откройте http://127.0.0.1:8767/ui/
+```
+
+На моках, без базы:
+
+```bash
+cd web && npm ci && npm run dev:mock              # затем откройте http://127.0.0.1:5173/ui/
 ```
 
 ### Дальше: установка одной командой
@@ -480,7 +491,7 @@ sources:
 - [x] **Служба HTTP:** `amem serve` по [контракту v1](docs/api/http-v1.openapi.yaml)
 - [x] **CLI и сервер MCP:** поиск в три шага, отметки полезности, вырезание `<private>`
 - [ ] **Память агентов:** хуки Claude Code, Codex CLI, `amem install`, навыки ядра
-- [ ] **Веб-UI:** все экраны готовы на моках; дальше — подключение к службе
+- [x] **Веб-UI:** все экраны — на службе и на моках; сквозные проверки против службы
 - [ ] **asearch:** поиск по файлам как плагин amem
 
 ## Документация
@@ -525,6 +536,8 @@ docker compose --profile test up -d --wait db-test db-test-pg16
 .venv/bin/python tools/gen_schema.py          # пишет amem/model_v1.py и JSON Schema
 .venv/bin/python tools/gen_schema.py --check  # проверка в CI: сгенерированное актуально
 ```
+Перед push — проверка на приватное: `git config core.hooksPath tools/hooks`; список образцов хук читает из `~/.config/amem/private-patterns.txt` (вне репозитория).
+
 
 Веб-UI лежит в [`web/`](web/) (React 19, HeroUI v3, TanStack). Там же — `npm run lint`, `npm test`
 и `npm run e2e`.

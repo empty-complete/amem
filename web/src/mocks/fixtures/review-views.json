@@ -323,20 +323,9 @@
       "reason": "warning",
       "state": "queued",
       "details": {
-        "issues": [
-          {
-            "code": "unit_suspect",
-            "severity": "warning",
-            "message": "Единица гПа, а в источнике — мм рт. ст.: проверьте пересчёт",
-            "path": "content.values[0].unit"
-          },
-          {
-            "code": "range_wide",
-            "severity": "info",
-            "message": "Диапазон шире, чем у похожих датчиков",
-            "path": "content.values[0]"
-          }
-        ]
+        "issues": ["unit_suspect", "range_wide"],
+        "risk": [],
+        "candidates": []
       },
       "created_at": "2026-11-06T09:00:00Z",
       "created_by": "model:checker",
@@ -598,14 +587,9 @@
       "reason": "warning",
       "state": "done",
       "details": {
-        "issues": [
-          {
-            "code": "superseded",
-            "severity": "warning",
-            "message": "Есть более новая запись",
-            "path": "status"
-          }
-        ]
+        "issues": ["superseded"],
+        "risk": [],
+        "candidates": []
       },
       "created_at": "2026-11-02T10:00:00Z",
       "created_by": "model:checker",

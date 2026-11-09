@@ -23,3 +23,22 @@ test("ответ без тела становится ApiError по статус
   expect(err.status).toBe(503);
   expect(err.title).toBe("Служба недоступна");
 });
+
+test("check_rejected: замечания и предупреждения вместе; 413 — словами", async () => {
+  const body = {
+    title: "Отклонено проверкой",
+    status: 422,
+    code: "check_rejected",
+    issues: [{ code: "schema", severity: "violation", message: "Не по схеме", ref: "@n0", path: "label" }],
+    warnings: [
+      { code: "private_removed", severity: "warning", message: "Вырезано скрытое", ref: "@n0", path: "body" },
+    ],
+  };
+  const res = new Response(JSON.stringify(body), {
+    status: 422,
+    headers: { "content-type": "application/problem+json" },
+  });
+  const err = await problemFromResponse(res);
+  expect(err.issues.map((i) => i.code)).toEqual(["schema", "private_removed"]);
+  expect((await problemFromResponse(new Response("", { status: 413 }))).title).toBe("Слишком большой запрос");
+});

@@ -20,7 +20,8 @@ export const handlersE = [
     const reason = u.searchParams.get("reason");
     const record = u.searchParams.get("record");
     const items = db.reviewItems
-      .filter((i) => (!state ? i.state === "queued" || i.state === "claimed" : i.state === state))
+      // как контракт: без state — пункты в любом состоянии
+      .filter((i) => !state || i.state === state)
       .filter((i) => !reason || i.reason === reason)
       .filter((i) => !record || i.ref === record)
       .sort((a, b) => b.created_at.localeCompare(a.created_at));

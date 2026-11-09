@@ -25,7 +25,7 @@ import time
 import unicodedata
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 import psycopg

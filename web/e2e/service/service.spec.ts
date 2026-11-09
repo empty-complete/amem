@@ -1,0 +1,166 @@
+import AxeBuilder from "@axe-core/playwright";
+import { expect, type Page, test } from "@playwright/test";
+
+// e2e против настоящей службы на образце tools/seed_sample.py (метеостанция МС-1). Ссылки на записи — через
+// поиск службы: идентификаторы у каждого запуска свои. Тесты идут по порядку и меняют базу.
+const WINDOW = 6500;
+// служба ещё не отдаёт шаблоны видов — это часть 4d; интерфейс живёт без них (виды из словаря ядра)
+const KNOWN_4D = /\/api\/v1\/templates/;
+
+function watch(page: Page) {
+  const problems: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() !== "error") return;
+    const where = m.location().url;
+    if (KNOWN_4D.test(where) || /favicon/.test(where)) return;
+    problems.push(`${m.text()} @ ${where}`);
+  });
+  page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
+  return problems;
+}
+
+async function refOf(page: Page, q: string) {
+  const r = await page.request.get(`/api/v1/search?q=${encodeURIComponent(q)}`);
+  const items = ((await r.json()) as { items: { ref: string; label: string }[] }).items;
+  const hit = items.find((x) => x.label.startsWith(q));
+  if (!hit) throw new Error(`в образце нет записи «${q}»`);
+  return hit.ref;
+}
+
+async function axe(page: Page) {
+  const r = await new AxeBuilder({ page }).analyze();
+  expect(r.violations.map((v) => `${v.id}: ${v.nodes.length}`)).toEqual([]);
+}
+
+test("главная: небо и поиск по базе", async ({ page }) => {
+  const problems = watch(page);
+  await page.goto("./");
+  await expect(page.locator("canvas").first()).toBeVisible();
+  await expect(page.getByRole("banner").getByRole("link", { name: /Проверка/ })).toContainText("2");
+  await page.getByRole("combobox", { name: "Поиск по базе" }).fill("погрешность влажности");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("link", { name: /Погрешность влажности В-2: ±2 %/ }).first()).toBeVisible();
+  await axe(page);
+  expect(problems).toEqual([]);
+});
+
+test("запись: свойства, путь по part_of, цитата подсвечена на странице PDF, формула", async ({ page }) => {
+  const problems = watch(page);
+  await page.goto(`./atom/${await refOf(page, "Погрешность влажности В-2")}`);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Погрешность влажности В-2: ±2 %" }),
+  ).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "О чём" })).toContainText("Метеостанция МС-1");
+  await expect(page.locator(".textLayer mark, mark.q").first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Цитата найдена").first()).toBeVisible();
+  await expect(page.locator(".katex").first()).toBeVisible();
+  await expect(page.getByText("Параметр", { exact: true }).first()).toBeVisible();
+  await axe(page);
+  expect(problems).toEqual([]);
+});
+
+test("быстрая запись по N: «Отменить» — ничего нет; без отмены — запись в «Изменениях»", async ({ page }) => {
+  const problems = watch(page);
+  await page.goto("./records");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const dlg = page.getByRole("dialog", { name: "Новая запись" });
+
+  await page.keyboard.press("n");
+  await dlg.getByRole("textbox", { name: "Текст записи" }).fill("Отменённая мысль о мачте");
+  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Отменить" }).click();
+  await page.waitForTimeout(WINDOW);
+  const none = await page.request.get(`/api/v1/search?q=${encodeURIComponent("Отменённая мысль")}`);
+  expect(((await none.json()) as { items: unknown[] }).items).toEqual([]);
+
+  await page.keyboard.press("n");
+  await dlg.getByRole("textbox", { name: "Текст записи" }).fill("Проверить растяжки мачты после ветра");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(/^Записано/)).toBeVisible();
+  await page.waitForTimeout(WINDOW);
+  await page.goto("./changes");
+  await expect(page.getByText("Проверить растяжки мачты после ветра").first()).toBeVisible();
+  expect(problems).toEqual([]);
+});
+
+test("проверка: Y — решено в службе после окна; второй раз — «Уже решено»", async ({ page }) => {
+  const problems = watch(page);
+  await page.goto("./review");
+  const list = page.getByRole("listbox", { name: "Очередь проверки" });
+  await expect(list.getByRole("option")).toHaveCount(2);
+  await list.getByRole("option").first().click();
+  const id = new URL(page.url()).pathname.split("/").pop() as string;
+  // похожие записи — ссылками на записи, а не @именами пачки (ядро: check._details)
+  const issues = page.getByRole("region", { name: "Замечания проверки" });
+  await expect(issues.getByRole("link").first()).toBeVisible();
+  await expect(issues).not.toContainText("@");
+  await page.keyboard.press("y");
+  await expect(page.getByText("Подтверждено", { exact: true })).toBeVisible();
+  await page.waitForTimeout(WINDOW);
+  const item = await page.request.get(`/api/v1/review/items/${id}`);
+  expect(((await item.json()) as { item: { state: string } }).item.state).toBe("done");
+  await expect(page.getByRole("banner").getByRole("link", { name: /Проверка/ })).toContainText("1");
+  const again = await page.request.post(`/api/v1/review/items/${id}/resolve`, {
+    data: { outcome: "confirmed" },
+    headers: { origin: new URL(page.url()).origin },
+  });
+  expect(again.status()).toBe(409);
+  await axe(page);
+  expect(problems).toEqual([]);
+});
+
+test("папки: создать, перенести запись из меню, переименовать, удалить пустую", async ({ page }) => {
+  const problems = watch(page);
+  const ref = await refOf(page, "Проверить растяжки мачты после ветра");
+  await page.goto("./records");
+  const nav = page.getByRole("navigation", { name: "Папки" });
+  await nav.getByRole("button", { name: "Папка", exact: true }).click();
+  await page.getByRole("textbox", { name: "Имя новой папки" }).fill("Обходы");
+  await page.keyboard.press("Enter");
+  await expect(nav.getByRole("link", { name: /^Обходы/ })).toBeVisible();
+
+  await page.goto(`./atom/${ref}`);
+  await page.getByRole("button", { name: "Ещё" }).click();
+  await page.getByRole("menuitem", { name: "Переместить в папку" }).click();
+  await page.getByRole("radio", { name: "Обходы" }).check({ force: true });
+  await page.getByRole("dialog").getByRole("button", { name: "Переместить в папку" }).click();
+  await page.waitForTimeout(WINDOW);
+  await page.goto(`./records?folder=${encodeURIComponent("Обходы")}`);
+  await expect(page.getByRole("link", { name: /Проверить растяжки мачты/ })).toBeVisible();
+
+  await nav.getByRole("button", { name: "Папка «Обходы»: действия" }).click();
+  await page.getByRole("menuitem", { name: "Переименовать" }).click();
+  await page.getByRole("textbox").filter({ hasText: "" }).last().fill("Обходы площадки");
+  await page.keyboard.press("Enter");
+  await expect(nav.getByRole("link", { name: /^Обходы площадки/ })).toBeVisible();
+  const moved = await page.request.get(`/api/v1/records/${ref}`);
+  expect(((await moved.json()) as { folder: string }).folder).toBe("Обходы площадки");
+
+  await page.request.patch(`/api/v1/records/${ref}/folder`, {
+    data: { folder: null },
+    headers: { origin: new URL(page.url()).origin },
+  });
+  await page.reload();
+  await nav.getByRole("button", { name: "Папка «Обходы площадки»: действия" }).click();
+  await page.getByRole("menuitem", { name: "Удалить" }).click();
+  await expect(nav.getByRole("link", { name: /^Обходы площадки/ })).toHaveCount(0);
+  expect(problems).toEqual([]);
+});
+
+test("подборка: антология — zip и HTML-отчёт", async ({ page }) => {
+  const problems = watch(page);
+  await page.goto("./bundles");
+  await page.getByRole("checkbox", { name: /Антология: проверенное и предпочтительное/ }).check();
+  await page.getByRole("textbox", { name: "Заголовок отчёта" }).fill("Метеостанция");
+  await page.getByRole("button", { name: "Собрать подборку" }).click();
+  await expect(page.getByRole("heading", { name: /Подборка собрана/ })).toBeVisible();
+  const report = await page.getByRole("link", { name: "Открыть отчёт" }).getAttribute("href");
+  const zip = await page
+    .getByRole("link", { name: /zip|Скачать/ })
+    .first()
+    .getAttribute("href");
+  const html = await page.request.get(report as string);
+  expect(await html.text()).toContain("Метеостанция");
+  expect((await page.request.get(zip as string)).headers()["content-type"]).toContain("zip");
+  expect(problems).toEqual([]);
+});

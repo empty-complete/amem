@@ -63,7 +63,8 @@ export function ExportForm() {
             since: since ? new Date(since).toISOString() : null,
           },
           with_files: withFiles,
-          with_packs: withPacks,
+          // антология пакеты не копирует (служба отвечает 400): у получателя нужны те же пакеты
+          with_packs: withPacks && !anthology,
           anthology,
           ...(anthology && title.trim() ? { title: title.trim() } : {}),
         },
@@ -207,9 +208,20 @@ export function ExportForm() {
         {t("bundles.with_files")}
       </label>
       <label className="chk">
-        <input type="checkbox" checked={withPacks} onChange={(e) => setWithPacks(e.target.checked)} />
+        <input
+          type="checkbox"
+          checked={withPacks && !anthology}
+          disabled={anthology}
+          aria-describedby={anthology ? "packs-note" : undefined}
+          onChange={(e) => setWithPacks(e.target.checked)}
+        />
         {t("bundles.with_packs")}
       </label>
+      {anthology && (
+        <p className="muted" id="packs-note">
+          {t("bundles.with_packs_anthology")}
+        </p>
+      )}
       {err && (
         <p className="fielderr" role="alert">
           {err}

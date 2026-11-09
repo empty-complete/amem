@@ -227,7 +227,7 @@ def banner(theme):
     rng = random.Random(7)
     BW, BH = 1600, 400
     defs, sky = sky_window(700, 28, 872, 344, t, 22, "bsky")
-    defs += f'<clipPath id="bclip"><rect x="700" y="28" width="872" height="344" rx="22"/></clipPath>'
+    defs += '<clipPath id="bclip"><rect x="700" y="28" width="872" height="344" rx="22"/></clipPath>'
     stars, nodes = constellation(rng, (720, 40, 832, 320), t, n_obj=8, n_atoms=64, selected=True, dust=120,
                                  twinkle=18, flash=23, bright=True, labels=False)
     paper = t["paper"] if theme == "light" else t["surface"]
@@ -280,7 +280,8 @@ def label_card(t, L, key, cx=800, cy=470):
     ch = 236
     x, y = cx - cw / 2, cy - ch / 2
     chip_w = tw(chip_label, 24) + 52
-    s = [f'<g filter="url(#shadow)">{rect(x, y, cw, ch, t["surface"], r=24, extra=f"stroke=\"{t["sep"]}\"")}</g>',
+    sep_stroke = f'stroke="{t["sep"]}"'
+    s = [f'<g filter="url(#shadow)">{rect(x, y, cw, ch, t["surface"], r=24, extra=sep_stroke)}</g>',
          rect(cx - chip_w / 2, y + 36, chip_w, 48, "none", r=24,
               extra=f'stroke="{t["muted"]}" stroke-width="2" stroke-dasharray="8 6"'),
          text(cx, y + 68, chip_label, 24, t["muted"], anchor="middle"),
@@ -576,8 +577,9 @@ def screen_agent(theme, lang):
     return frame(theme, lang, "agent", "\n".join(c), label_at=(1080, 300))
 
 
-SCREENS = {"sky": screen_sky, "record": screen_record, "review": screen_queue, "card": screen_card,
-           "agent": screen_agent}
+# заглушки — только экранов, которых ещё нет на настоящих снимках (sky, record, review снимает
+# web/tools/readme-shots.mjs со службы); остальные функции остаются для сравнения и черновиков
+SCREENS = {"card": screen_card, "agent": screen_agent}
 
 
 def main(root: Path):

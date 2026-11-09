@@ -8,6 +8,7 @@ const TITLES: Record<number, string> = {
   403: "Только чтение",
   404: "Не найдено",
   409: "Уже решено",
+  413: "Слишком большой запрос",
   422: "Отклонено проверкой",
   503: "Служба недоступна",
 };
@@ -36,7 +37,8 @@ export async function problemFromResponse(res: Response): Promise<ApiError> {
         p.title ?? TITLES[res.status] ?? "Ошибка",
         p.detail,
         p.code,
-        p.issues ?? [],
+        // у check_rejected рядом с ошибками — предупреждения (private_removed и др.): человек видит всё сразу
+        [...(p.issues ?? []), ...(p.warnings ?? [])],
       );
     } catch {
       // тело не JSON: остаётся ошибка по статусу
