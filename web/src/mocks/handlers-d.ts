@@ -482,10 +482,16 @@ export const handlersD = [
     if (!db.folders.includes(from)) return problem(404, "Папки нет");
     if (db.folders.includes(to)) return problem(409, "Такая папка уже есть");
     const move = (p: string) => (p === from ? to : p.startsWith(`${from}/`) ? to + p.slice(from.length) : p);
+    const folders = db.folders.filter((p) => move(p) !== p).length;
     db.folders = db.folders.map(move);
-    for (const r of db.records) if (r.folder) r.folder = move(r.folder);
+    let records = 0;
+    for (const r of db.records)
+      if (r.folder && move(r.folder) !== r.folder) {
+        r.folder = move(r.folder);
+        records += 1;
+      }
     db.save();
-    return HttpResponse.json({ path: to, name: to.split("/").pop(), count: 0, children: [] });
+    return HttpResponse.json({ from, to, folders, records });
   }),
   http.delete("/api/v1/folders/*", ({ params }) => {
     const p = decodeURIComponent(String(params[0]));
