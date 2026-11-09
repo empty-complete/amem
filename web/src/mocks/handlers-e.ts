@@ -24,7 +24,22 @@ export const handlersE = [
       .filter((i) => !state || i.state === state)
       .filter((i) => !reason || i.reason === reason)
       .filter((i) => !record || i.ref === record)
-      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      // как служба: документ (первый источник записи) и о ком запись — из самой записи
+      .map((i) => {
+        const v = (db.views[i.ref] ?? db.reviewViews[i.id]?.record) as
+          | {
+              sources?: { object?: string; object_name?: string }[];
+              about?: { ref: string; label: string }[];
+            }
+          | undefined;
+        const src = v?.sources?.[0];
+        return {
+          ...i,
+          source: src?.object ? { object: src.object, object_name: src.object_name ?? src.object } : null,
+          about: i.ref.startsWith("ent:") ? [] : (v?.about ?? []),
+        };
+      });
     return HttpResponse.json(items);
   }),
   http.get("/api/v1/review/items/:id", ({ params }) => {
