@@ -369,10 +369,12 @@ amem doctor                          проверка установки
 
 | Платформа | MCP | Хуки | Навыки и инструкции |
 |---|---|---|---|
-| Claude Code, глобально | `claude mcp add --scope user amem -- amem mcp --agent model:claude-code`, если команда `claude` есть; иначе — правка `~/.claude.json` с предупреждением, что Claude Code может переписать файл при работе | `hooks` в `~/.claude/settings.json`: два события → `amem hook …` | `~/.claude/skills/amem-*/SKILL.md` |
+| Claude Code, глобально | `claude mcp add --scope user amem -- amem mcp --agent model:claude-code`, если команда `claude` есть; иначе — правка `~/.claude.json` с предупреждением, что Claude Code может переписать файл при работе | `hooks` в `~/.claude/settings.json`: три события (SessionStart, UserPromptSubmit, PreCompact) → `AMEM_AS_MODEL=claude-code amem hook …`, timeout 5 с | `~/.claude/skills/amem-*/SKILL.md` |
 | Claude Code, `--project` | `.mcp.json` проекта | `.claude/settings.json` проекта | `.claude/skills/` |
-| Codex CLI, глобально | таблица `[mcp_servers.amem]` в `~/.codex/config.toml` | хуков нет | блок в `~/.codex/AGENTS.md`; навыки — в папке навыков Codex, если версия их поддерживает |
-| Codex CLI, `--project` | `.codex/config.toml` проекта, если версия Codex его читает (проверяется по документации при реализации), иначе — глобально с предупреждением | — | блок в `AGENTS.md` проекта |
+| Codex CLI, глобально | таблица `[mcp_servers.amem]` в `$CODEX_HOME/config.toml` (`~/.codex`), `env = { AMEM_AS_MODEL = "codex" }` | `$CODEX_HOME/hooks.json` (формат Claude Code): SessionStart и UserPromptSubmit; PreCompact у Codex stdout в сжатие не отдаёт — не ставится | блок в `$CODEX_HOME/AGENTS.md`; навыки — `~/.agents/skills/` |
+| Codex CLI, `--project` | `.codex/config.toml` проекта — Codex читает его только у доверенного проекта (предупреждение) | `.codex/hooks.json` проекта | блок в `AGENTS.md` проекта; навыки — `.agents/skills/` |
+
+Форматы сверены 09.11.2026 (`CLAUDE_FORMAT = "claude-code/2026-11-09"`, `CODEX_FORMAT = "codex-cli/2026-11-09"`, Codex rust-v0.165.0), источники — в `amem/agents/platforms.py`. Сервер MCP и хуки обоих агентов получают `AMEM_AS_MODEL` (`claude-code` / `codex`): иначе модель в обычном терминале писала бы от имени человека. Команда amem — полный путь из `PATH`, без неё — текущий интерпретатор с `-m amem.cli` (объявляется).
 
 Правила:
 - **Пометки.** Установщик правит только своё:

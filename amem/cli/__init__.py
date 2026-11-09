@@ -7,7 +7,8 @@
 
 main(argv) возвращает код выхода и не вызывает sys.exit: так его зовут тесты и скрипт `amem` (pyproject).
 `amem mcp` — сервер MCP на stdio (amem/service/mcp.py). `amem hook СОБЫТИЕ` — хук Claude Code (amem/agents/hooks.py):
-он идёт мимо разбора опций и всегда выходит с кодом 0. Команды install и uninstall части 4c появятся вместе с ней.
+он идёт мимо разбора опций и всегда выходит с кодом 0. `amem install|uninstall АГЕНТ` — установщик
+(amem/agents/install.py).
 """
 from __future__ import annotations
 
