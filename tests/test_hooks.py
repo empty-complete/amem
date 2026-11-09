@@ -260,7 +260,8 @@ def test_any_failure_gives_code_0_and_an_empty_answer(env, tmp_path, monkeypatch
     bad = {**env, "AMEM_DSN": "postgresql://nobody@127.0.0.1:1/none"}
     cases = [(["hook", "SessionStart"], "{не json", env), (["hook", "UserPromptSubmit"], "[1, 2]", env),
              (["hook", "Stop"], event("Stop"), env), (["hook", "SessionStart"], event("SessionStart"), bad),
-             (["hook", "SessionStart"], event("SessionStart"), {**env, "AMEM_AS_MODEL": "Не Так"})]
+             (["hook", "UserPromptSubmit"], event("UserPromptSubmit", prompt="ВН-45"),
+              {**env, "AMEM_AS_MODEL": "Не Так"})]
     for argv, stdin, environ in cases:
         monkeypatch.setattr(sys, "stdin", io.StringIO(stdin))
         assert cli.main(argv, env=environ) == 0, argv
