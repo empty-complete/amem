@@ -9,5 +9,9 @@ test("полоса полноты и обязательные без значе�
 });
 
 test("группы — в порядке полей профиля", () => {
-  expect(summarize(card as never).groups.map((g) => g.name)).toEqual(["Измерение", "Условия", "Опрос"]);
+  expect(summarize(card as never).groups.map((g) => g.name)).toEqual([
+    "measurement",
+    "environment",
+    "polling",
+  ]);
 });

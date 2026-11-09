@@ -69,6 +69,12 @@ function FillForm({ f, fill, onDone }: { f: CardField; fill: Fill; onDone: () =>
   );
 }
 
+/** Название поля: подписи словаря величин строчные («рабочая температура») — с заглавной, как подписи видов. */
+const fieldName = (f: CardField) => {
+  const s = f.label ?? f.property;
+  return s.charAt(0).toLocaleUpperCase() + s.slice(1);
+};
+
 type Candidate = { value?: ValueLike; atom?: string; quote?: string; source?: string };
 type Src = { label?: string };
 
@@ -187,11 +193,7 @@ function Row({ f, fill }: { f: CardField; fill?: Fill }) {
   return (
     <li className="crow" data-state={f.state}>
       <span className="crow__name" title={f.rule ? t("card.rule", { rule: f.rule }) : undefined}>
-        {atom && f.state !== "asked" ? (
-          <Link {...recordPath(atom)}>{f.label ?? f.property}</Link>
-        ) : (
-          (f.label ?? f.property)
-        )}
+        {atom && f.state !== "asked" ? <Link {...recordPath(atom)}>{fieldName(f)}</Link> : fieldName(f)}
         <span className="crow__sub">
           <Sub f={f} />
         </span>
