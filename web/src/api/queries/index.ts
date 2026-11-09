@@ -127,17 +127,20 @@ export const q = {
   reviewItems: (p: { state: "open" | "done"; reason?: string }) =>
     queryOptions({
       queryKey: ["review-items", p],
-      queryFn: async () =>
-        data(
-          await api.GET("/review/items", {
-            params: {
-              query: {
-                state: p.state === "done" ? "done" : undefined,
-                reason: (p.reason || undefined) as never,
-              },
-            },
-          }),
-        ),
+      // без state служба отдаёт пункты в любом состоянии (контракт); открытые для человека — queued и claimed
+      queryFn: async () => {
+        const states = p.state === "done" ? (["done"] as const) : (["queued", "claimed"] as const);
+        const lists = await Promise.all(
+          states.map(async (state) =>
+            data(
+              await api.GET("/review/items", {
+                params: { query: { state, reason: (p.reason || undefined) as never } },
+              }),
+            ),
+          ),
+        );
+        return lists.flat().sort((a, b) => b.created_at.localeCompare(a.created_at));
+      },
       refetchOnWindowFocus: true,
     }),
   reviewItem: (id: string) =>

@@ -88,7 +88,18 @@ export const handlersB = (pdf: () => Promise<ArrayBuffer>) => [
   http.get("/api/v1/entities/:ref/card", ({ params }) =>
     params.ref === db.card.entity.ref
       ? HttpResponse.json(db.card)
-      : problem(404, "У этой сущности нет профиля"),
+      : !db.views[String(params.ref)]
+        ? problem(404, `Сущности ${params.ref} нет`)
+        : // как служба: у сущности без профиля — карточка с пустыми fields
+          HttpResponse.json({
+            format: "amem.card/1",
+            entity: { ref: String(params.ref), label: String(params.ref), entity_class: "artifact" },
+            profile: null,
+            templates: [],
+            fields: [],
+            extra: [],
+            summary: { states: {}, blockers_open: 0, with_basis: [] },
+          }),
   ),
   http.get("/api/v1/objects/:id", ({ params }) => {
     const o = db.objects[String(params.id)];
