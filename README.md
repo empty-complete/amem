@@ -33,16 +33,17 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/sky-dark.svg">
-    <img alt="The sky: the whole memory as a constellation of atoms and objects (placeholder)" src="docs/assets/readme/en/sky-light.svg" width="100%">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/sky-dark.png">
+    <img alt="The sky: the whole memory as a constellation of atoms and objects" src="docs/assets/readme/en/sky-light.png" width="100%">
   </picture>
 </p>
 
 > [!IMPORTANT]
 > **amem is in early development.** The core library works today: storage with revisions, hybrid search,
 > automatic checks, the review queue, entity cards, bundles and backups, tested in CI on PostgreSQL 18
-> and 16. The service, CLI, MCP server and web UI are being built now. Until they ship, the pictures
-> on this page are placeholders.
+> and 16. The HTTP service and the web UI run on it; the screenshots of the sky, a record and the review
+> queue are taken from the service. The CLI, the MCP server and agent memory are being built now; the card
+> and agent pictures are placeholders until then.
 
 ## Why amem
 
@@ -85,8 +86,8 @@ file it came from, the full history of its changes, and the decision of a person
   <tr>
     <td width="50%" valign="top">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/record-dark.svg">
-        <img alt="A record page with the quote highlighted on the source page (placeholder)" src="docs/assets/readme/en/record-light.svg">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/record-dark.png">
+        <img alt="A record page with the quote highlighted on the source page" src="docs/assets/readme/en/record-light.png">
       </picture>
       <h3>A claim next to its proof</h3>
       A record reads like a note: properties, a Markdown body and the quote highlighted on the real page
@@ -94,8 +95,8 @@ file it came from, the full history of its changes, and the decision of a person
     </td>
     <td width="50%" valign="top">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/review-dark.svg">
-        <img alt="The review queue with the claim, the quote and the decision buttons (placeholder)" src="docs/assets/readme/en/review-light.svg">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/review-dark.png">
+        <img alt="The review queue with the claim, the quote and the decision buttons" src="docs/assets/readme/en/review-light.png">
       </picture>
       <h3>Review in one keystroke</h3>
       Anything doubtful, risky or changed lands in a queue. Each item shows the claim, the quote and
@@ -214,8 +215,7 @@ folders and backups.
 
 ### Try the web UI on sample data
 
-The web UI is built against the HTTP contract and runs on mock data until the service ships. What is
-there:
+The web UI runs on the service, or on mock data of the same HTTP contract. What is there:
 
 - **Sky.** The home page is a constellation of records, colored by family (source, work, object); a new
   record flashes as it lands. A 3D view loads on request.
@@ -231,10 +231,21 @@ there:
 Light and dark themes, Russian and English, phone layouts. The design system is described in
 [`web/DESIGN.md`](web/DESIGN.md).
 
+On the service, with a sample base (a weather station: sensors, a PDF manual with quotes, notes and an
+open review queue), in an empty database:
+
 ```bash
-cd web
-npm ci
-npm run dev:mock      # Node 24+; then open http://127.0.0.1:5173/ui/
+.venv/bin/pip install -e . -e web/python          # the service and the web UI package
+(cd web && npm ci && npm run build)               # Node 24+; the build goes into the amem-web package
+export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem AMEM_DOCS=~/amem-sample/docs
+.venv/bin/python tools/seed_sample.py             # the sample: 20 records, 2 open review items
+.venv/bin/python -m amem.service                  # then open http://127.0.0.1:8767/ui/
+```
+
+On mock data, without a database:
+
+```bash
+cd web && npm ci && npm run dev:mock              # then open http://127.0.0.1:5173/ui/
 ```
 
 ### Coming next: one-command install
@@ -481,7 +492,7 @@ ranking. They never change a status or skip a check.
 - [x] **HTTP service:** `amem serve` with the [v1 contract](docs/api/http-v1.openapi.yaml)
 - [x] **CLI and MCP server:** three-step retrieval, usefulness marks, `<private>` stripping
 - [ ] **Agent memory:** Claude Code hooks, Codex CLI, `amem install`, core skills
-- [ ] **Web UI:** all screens are built on mock data; connecting to the service comes next
+- [x] **Web UI:** all screens, on the service and on mock data; checked end to end against the service
 - [ ] **asearch:** file search as an amem plugin
 
 ## Documentation
@@ -525,6 +536,8 @@ After editing `amem/schema/amem_v1.yaml`, regenerate the models:
 .venv/bin/python tools/gen_schema.py          # writes amem/model_v1.py and the JSON Schema
 .venv/bin/python tools/gen_schema.py --check  # CI check: generated files are up to date
 ```
+Before pushing, enable the privacy check: `git config core.hooksPath tools/hooks`; the hook reads its patterns from `~/.config/amem/private-patterns.txt` (outside the repository).
+
 
 The web UI lives in [`web/`](web/) (React 19, HeroUI v3, TanStack). Run `npm run lint`, `npm test` and
 `npm run e2e` there.

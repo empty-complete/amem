@@ -2,8 +2,8 @@
   {
     "code": "project",
     "label": {
-      "ru": "Проект",
-      "en": "Project"
+      "ru": "проект",
+      "en": "project"
     },
     "pack": "core",
     "broader": null
@@ -11,8 +11,8 @@
   {
     "code": "document",
     "label": {
-      "ru": "Документ",
-      "en": "Document"
+      "ru": "документ",
+      "en": "document"
     },
     "pack": "core",
     "broader": null
@@ -20,8 +20,8 @@
   {
     "code": "edition",
     "label": {
-      "ru": "Редакция",
-      "en": "Edition"
+      "ru": "редакция",
+      "en": "edition"
     },
     "pack": "core",
     "broader": null
@@ -29,8 +29,8 @@
   {
     "code": "organization",
     "label": {
-      "ru": "Организация",
-      "en": "Organization"
+      "ru": "организация",
+      "en": "organization"
     },
     "pack": "core",
     "broader": null
@@ -38,8 +38,8 @@
   {
     "code": "person",
     "label": {
-      "ru": "Человек",
-      "en": "Person"
+      "ru": "человек",
+      "en": "person"
     },
     "pack": "core",
     "broader": null
@@ -47,8 +47,8 @@
   {
     "code": "place",
     "label": {
-      "ru": "Место",
-      "en": "Place"
+      "ru": "место",
+      "en": "place"
     },
     "pack": "core",
     "broader": null
@@ -56,8 +56,8 @@
   {
     "code": "software",
     "label": {
-      "ru": "Программа",
-      "en": "Software"
+      "ru": "программа",
+      "en": "software"
     },
     "pack": "core",
     "broader": null
@@ -65,8 +65,8 @@
   {
     "code": "topic",
     "label": {
-      "ru": "Тема",
-      "en": "Topic"
+      "ru": "тема",
+      "en": "topic"
     },
     "pack": "core",
     "broader": null
@@ -74,8 +74,8 @@
   {
     "code": "artifact",
     "label": {
-      "ru": "Изделие",
-      "en": "Artifact"
+      "ru": "изделие",
+      "en": "artifact"
     },
     "pack": "core",
     "broader": null

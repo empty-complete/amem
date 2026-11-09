@@ -237,6 +237,7 @@
     "waits": "Awaiting a decision",
     "candidates": "Candidates",
     "no_profile": "This entity has no profile, so here are the records about it.",
+    "extra": "Values outside the profile",
     "no_atoms": "No records about this object yet.",
     "other": "Other",
     "asked_n_one": "{{count}} open question",
@@ -536,7 +537,21 @@
     "keys": "J K move · Y confirm · N reject · S skip",
     "sky": "Neighbourhood",
     "toast_confirmed": "Confirmed",
-    "toast_refuted": "Rejected"
+    "toast_refuted": "Rejected",
+    "code": {
+      "related": "Similar record",
+      "duplicate": "Possible duplicate",
+      "conflict": "Disagrees with a record",
+      "low_confidence": "Low model confidence",
+      "quote_not_found": "Quote not in the source",
+      "source_unresolved": "Source not found",
+      "unit_suspect": "Suspicious unit",
+      "range_wide": "Range too wide",
+      "superseded": "A newer record exists",
+      "always": "a person always decides",
+      "private_removed": "Private text removed"
+    },
+    "risk": "High risk: {{what}}"
   },
   "basepage": {
     "title": "Base",
@@ -586,6 +601,7 @@
     "since": "Changed since",
     "with_files": "With source files",
     "with_packs": "With packs and my kinds",
+    "with_packs_anthology": "An anthology ships without packs: the recipient needs the same packs.",
     "build": "Build bundle",
     "building": "Building",
     "done": "Bundle built",

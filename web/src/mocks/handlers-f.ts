@@ -46,6 +46,12 @@ export const handlersF = (zip: () => Promise<ArrayBuffer>) => [
       anthology?: boolean;
       title?: string;
     };
+    if (b.anthology && b.with_packs)
+      return problem(
+        400,
+        "Неверный запрос",
+        "with_packs: антология пакеты не копирует — у получателя нужны те же пакеты",
+      );
     const rows = pick(b.selection ?? {}, !!b.anthology);
     const atoms = rows.filter((r) => r.target === "atom").length;
     if (b.anthology && !atoms) return problem(422, "Антология пуста", "В отборе нет проверенных записей");

@@ -11,7 +11,7 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from amem import check, db, embed, model_v1, objects, records, review
 from amem.check import Proposal, level4
 from amem.ocfl_store import StoreError
-from check_support import CHECK_PACK, PDF, atom, entity, pack, source_md, source_pdf, value
+from check_support import CHECK_PACK, PDF, atom, entity, pack, source_pdf, value
 from conftest import FakeProvider
 
 AGENT = "model:tester"
@@ -504,3 +504,14 @@ def test_active_model_and_provider_give_no_degraded(kb, store, docs, monkeypatch
     assert result.state == "approved"
     assert result.report["degraded"] == []
     assert fake.calls                                              # вектор действительно считался
+
+
+def test_candidates_inside_batch_become_record_refs(kb, store, docs):
+    """Кандидат из той же пачки в пункте очереди — ссылка на записанную запись, а не @имя пачки: человек её откроет."""
+    twin = atom("@a2", label=lab("Нормативное ветровое давление для района II"), sources=[source_pdf(PDF, 2, PAGE2)])
+    result = send(kb, store, docs, wind("@a1"), twin)
+    ids = {r["label"]: r["record_id"] for r in result.records}
+    rows = kb.execute("SELECT details FROM review_item WHERE record_id = %s", (ids["@a2"],)).fetchall()
+    refs = [c["ref"] for (details,) in rows for c in details.get("candidates", [])]
+    assert refs and set(refs) == {f"atm:{ids['@a1']}"}
+

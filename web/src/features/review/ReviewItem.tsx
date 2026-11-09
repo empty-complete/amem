@@ -19,12 +19,43 @@ import { fieldDiff, wordDiff } from "./diff";
 import { REASON_ICON } from "./reasons";
 
 type View = components["schemas"]["ReviewItemView"];
-type Issue = { severity: "violation" | "warning" | "info"; message: string; path?: string };
-const SEV: Record<Issue["severity"], "bad" | "wait" | "quiet"> = {
+// details пункта в форме ядра (check._details): issues — коды замечаний, risk — коды риска, candidates —
+// похожие записи уровней 3–4. Замечание объектом с текстом тоже понимаем (пункт, поставленный вручную).
+type IssueObj = {
+  code?: string;
+  severity?: "violation" | "warning" | "info";
+  message?: string;
+  path?: string;
+};
+type Issue = string | IssueObj;
+type Candidate = { code: string; ref: string; score?: number };
+const SEV: Record<NonNullable<IssueObj["severity"]>, "bad" | "wait" | "quiet"> = {
   violation: "bad",
   warning: "wait",
   info: "quiet",
 };
+const REF = /^(atm|ent):/;
+
+/** Код ядра словами: известные — из перевода, прочие — сам код без подчёркиваний. */
+function useCodeText() {
+  const { t } = useTranslation();
+  return (code: string) => t(`review.code.${code}`, { defaultValue: code.replaceAll("_", " ") });
+}
+
+/** Похожая запись: ссылка с подписью; имя из той же пачки (@имя) — текстом, его не открыть. */
+function CandidateRow({ c }: { c: Candidate }) {
+  const word = useCodeText();
+  const rec = useQuery({ ...q.record(c.ref), enabled: REF.test(c.ref) });
+  const label = (rec.data?.payload as { label?: { ru: string } } | undefined)?.label?.ru ?? c.ref;
+  return (
+    <li>
+      <span className="status" data-tone={c.code === "related" ? "quiet" : "wait"}>
+        <Icon name={c.code === "related" ? "link" : "warn"} />
+      </span>
+      {word(c.code)}: {REF.test(c.ref) ? <Link {...recordPath(c.ref)}>{label}</Link> : label}
+    </li>
+  );
+}
 
 function Diff({ v }: { v: View }) {
   const { t, i18n } = useTranslation();
@@ -130,6 +161,7 @@ function Versions({ v }: { v: View }) {
 /** Пункт проверки (разд. 5.7): что спрошено, утверждение с источником, замечания, сравнение, версии, вердикт модели. */
 export function ReviewItemPane({ id, onBack }: { id: string; onBack?: () => void }) {
   const { t, i18n } = useTranslation();
+  const word = useCodeText();
   const v = useQuery(q.reviewItem(id));
   const vocab = useQuery(q.vocab("kind"));
   const [active, setActive] = useState(0);
@@ -145,6 +177,8 @@ export function ReviewItemPane({ id, onBack }: { id: string; onBack?: () => void
   const { item, record } = v.data;
   const d = (item.details ?? {}) as {
     issues?: Issue[];
+    risk?: string[];
+    candidates?: Candidate[];
     verdict?: string;
     confidence?: number;
     note?: string;
@@ -198,17 +232,35 @@ export function ReviewItemPane({ id, onBack }: { id: string; onBack?: () => void
           {d.note && <p>{d.note}</p>}
         </section>
       )}
-      {!!d.issues?.length && (
+      {!!(d.issues?.length || d.risk?.length || d.candidates?.length) && (
         <section className="widget" aria-label={t("review.issues")}>
           <h2>{t("review.issues")}</h2>
           <ul className="issues">
-            {d.issues.map((i) => (
-              <li key={`${i.path}-${i.message}`}>
-                <span className="status" data-tone={SEV[i.severity]}>
-                  <Icon name={i.severity === "info" ? "dash" : "warn"} />
+            {(d.risk ?? []).map((r) => (
+              <li key={`risk-${r}`}>
+                <span className="status" data-tone="wait">
+                  <Icon name="shield" />
                 </span>
-                {i.message}
+                {t("review.risk", { what: word(r) })}
               </li>
+            ))}
+            {(d.issues ?? [])
+              // код кандидата показывает строка кандидата ниже — с самой похожей записью
+              .filter((i) => typeof i !== "string" || !d.candidates?.some((c) => c.code === i))
+              .map((i) => {
+                const o: IssueObj = typeof i === "string" ? { code: i } : i;
+                const sev = o.severity ?? "warning";
+                return (
+                  <li key={`${o.code}-${o.path}-${o.message}`}>
+                    <span className="status" data-tone={SEV[sev]}>
+                      <Icon name={sev === "info" ? "dash" : "warn"} />
+                    </span>
+                    {o.message ?? word(o.code ?? "")}
+                  </li>
+                );
+              })}
+            {(d.candidates ?? []).map((c) => (
+              <CandidateRow key={`${c.code}-${c.ref}`} c={c} />
             ))}
           </ul>
         </section>

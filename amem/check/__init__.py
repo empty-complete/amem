@@ -220,6 +220,10 @@ def _write(conn, batch: Batch, plans: list[_Plan], checks: dict[str, list[Source
     at = conn.execute("SELECT created_at FROM changeset WHERE id = %s", (cs,)).fetchone()[0]
     queued: list[dict] = []
     out: list[dict] = []
+    # @имя записи пачки → её ссылка: кандидаты уровней 3–4 внутри пачки названы по имени, а в пункте очереди
+    # человеку нужна запись, которую можно открыть
+    named = {p.item.label: f"{records.PREFIX[rev.target]}:{rev.record_id}" for p, rev in zip(plans, result.revisions)
+             if p.item.label.startswith("@")}
     for p, rev in zip(plans, result.revisions):
         t, label = rev.target, p.item.label
         if rev.created and p.item.record_id is not None and not p.pending:
@@ -229,7 +233,7 @@ def _write(conn, batch: Batch, plans: list[_Plan], checks: dict[str, list[Source
             reasons = _reasons(conn, p, rev)
             if p.item.record_id is not None:
                 review.close_stale(conn, t, rev.record_id, at=at)
-            details = _details(p, report)
+            details = _details(p, report, named)
             for why, extra in reasons:
                 # у source_changed свой вопрос — изменившийся файл: замечаний и кандидатов пакета в нём нет
                 item_details = extra if why == "source_changed" else {**details, **extra}
@@ -289,9 +293,9 @@ def _reasons(conn, plan: _Plan, rev: records.Revision) -> list[tuple[str, dict]]
     return out
 
 
-def _details(plan: _Plan, report: Report) -> dict:
-    """details пункта: коды замечаний записи, риск, кандидаты уровней 3 и 4."""
+def _details(plan: _Plan, report: Report, named: dict[str, str]) -> dict:
+    """details пункта: коды замечаний записи, риск, кандидаты уровней 3 и 4 (кандидат из пачки — ссылкой на запись)."""
     issues = report.for_label(plan.item.label)
     return {"issues": list(dict.fromkeys(i.code for i in issues)), "risk": list(plan.risk),
-            "candidates": [{"code": i.code, **c} for i in issues if i.code in CANDIDATE_CODES
-                           for c in i.details.get("candidates", [])]}
+            "candidates": [{"code": i.code, **c, "ref": named.get(c.get("ref"), c.get("ref"))}
+                           for i in issues if i.code in CANDIDATE_CODES for c in i.details.get("candidates", [])]}

@@ -24,10 +24,10 @@ export default defineConfig({
   projects: [
     {
       name: "desktop",
-      testIgnore: /csp\.spec/,
+      testIgnore: [/csp\.spec/, /service\//],
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
     },
-    { name: "phone", testIgnore: /csp\.spec/, use: { ...devices["Pixel 7"] } },
+    { name: "phone", testIgnore: [/csp\.spec/, /service\//], use: { ...devices["Pixel 7"] } },
     {
       name: "csp",
       testMatch: /csp\.spec/,

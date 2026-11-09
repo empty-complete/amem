@@ -17,6 +17,15 @@ npm ci
 | `npm run dev`      | The app against a running `amem serve`; `/api` is proxied to http://127.0.0.1:8767 (override with `AMEM_URL`)       |
 | `npm run build`    | Production build into `python/amem_web/dist`; `pip install "amem[web]"` ships it and the service serves it at `/ui` |
 
+For `npm run dev`, start the service with the dev server's origin allowed, so the page gets the person's session
+and may write:
+
+```bash
+AMEM_UI_ORIGINS=http://127.0.0.1:5173 python -m amem.service   # `amem serve` once the CLI ships
+```
+
+The proxy never rewrites `Origin`: that would let any page write to the base through the dev server.
+
 `npm run build:mock` builds the app with mocks into `dist-mock`; `vite preview` serves it with the same
 Content-Security-Policy as the service.
 
