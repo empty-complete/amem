@@ -1,9 +1,22 @@
 [project]
 name = "amem"
-version = "0.1.0.dev0"
-license = {text = "MIT"}
-description = "База знаний из атомов: схема, хранилище с ревизиями, объекты и автопроверка"
+dynamic = ["version"]                # amem.__version__; tools/release.py сверяет его с amem-web и меткой релиза
+description = "Verifiable shared memory for AI agents and people: atoms with checked source quotes, revisions and review on PostgreSQL + pgvector"
+readme = "README.md"
+license = "MIT"
+license-files = []                   # текст лицензии с именем автора в пакет не кладём: он в LICENSE.txt репозитория
+authors = [{name = "empty-complete"}]
 requires-python = ">=3.11"
+keywords = ["agent-memory", "claude-memory", "knowledge-base", "mcp-server", "pgvector", "postgresql"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Database",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
   "pymupdf>=1.24",
   "rapidfuzz>=3.0",
@@ -29,6 +42,11 @@ dependencies = [
   "mcp-types>=2.3,<2.4",             # mcp_types импортируется напрямую; mcp 2.3 сам требует ту же версию
 ]
 
+[project.urls]
+Homepage = "https://github.com/empty-complete/amem"
+Source = "https://github.com/empty-complete/amem"
+Issues = "https://github.com/empty-complete/amem/issues"
+
 [project.scripts]
 amem = "amem.cli:main"
 
@@ -37,14 +55,17 @@ dev = ["pytest>=8", "ruff>=0.14", "linkml==1.12.1", "linkml-runtime==1.12.1", "j
        "httpx2>=2.0",                    # клиент starlette.testclient
        "openapi-spec-validator>=0.8.4"]  # тест: контракт HTTP v1 — верный OpenAPI 3.1 (его ставит и linkml)
 embed = ["fastembed>=0.9.1,<0.10"]
-web = ["amem-web==0.1.0.dev0"]   # статика веб-UI, web/python; служба отдаёт по /ui
+web = ["amem-web==0.1.0a1"]      # статика веб-UI, web/python; служба отдаёт по /ui. Версия — та же, что у amem
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]        # license как выражение SPDX и license-files (PEP 639)
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = {attr = "amem.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["amem*"]

@@ -250,7 +250,7 @@ cd web && npm ci && npm run dev:mock              # затем откройте 
 ### Установка одной командой
 
 ```bash
-pip install amem              # или pipx / uv tool install; до выхода на PyPI — pip install -e . из клона
+pipx install 'amem[web]'      # или pip install / uv tool install; [web] добавляет веб-UI по /ui
 amem init --dsn postgresql://amem:amem@127.0.0.1:5435/amem   # база и хранилище; DSN запоминается в amem.toml
 amem install claude-code      # сервер MCP, хуки и навыки; `amem install codex` — для Codex CLI
 amem doctor                   # что работает и что поправить
