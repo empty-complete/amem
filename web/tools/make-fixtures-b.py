@@ -101,6 +101,35 @@ records = {
 }
 records[A(0x20)] = records.pop(f"note-{MANUAL}")
 
+# содержание сверх значений (часть I): формула с обозначениями и таблица — как у записей пакетов области
+records[A(0x21)] = view(A(0x21), {
+    "kind": "method", "label": ru("Точка росы по формуле Магнуса"),
+    "summary_plain": ru("Точка росы считается по температуре и относительной влажности воздуха."),
+    "about": [E(3)], "basis": "author",
+    "content": {"formula": {
+        "latex": "T_d = \\frac{b\\,\\gamma}{a - \\gamma}, \\quad \\gamma = \\ln\\frac{RH}{100} + \\frac{aT}{b+T}",
+        "plain": "Td = b·γ / (a − γ), γ = ln(RH/100) + a·T / (b + T)",
+        "symbols": [
+            {"symbol": "T_d", "label": ru("точка росы"), "unit": "Cel"},
+            {"symbol": "T", "label": ru("температура воздуха"), "unit": "Cel"},
+            {"symbol": "RH", "label": ru("относительная влажность"), "unit": "%"},
+            {"symbol": "a", "label": ru("коэффициент, 17,62")},
+            {"symbol": "b", "label": ru("коэффициент, 243,12"), "unit": "Cel"},
+        ]}},
+}, folder="Ресурсы/Методики и термины", agent="person:anna", about=[B2])
+records[A(0x22)] = view(A(0x22), {
+    "kind": "fact", "label": ru("В-2 и психрометр: наблюдения 1–9 ноября"),
+    "summary_plain": ru("При инее В-2 показывает на 10–11 % больше психрометра."),
+    "about": [E(3)], "basis": "author",
+    "content": {"table": {
+        "columns": [{"code": "date", "label": ru("Дата")}, {"code": "v2", "label": ru("В-2"), "unit": "%"},
+                    {"code": "psy", "label": ru("Психрометр"), "unit": "%"}, {"code": "t", "label": ru("T"), "unit": "Cel"},
+                    {"code": "frost", "label": ru("Иней")}],
+        "rows": [["01.11", 71, 70, 3.2, None], ["03.11", 99, 88, -2.4, "да"], ["04.11", 100, 89, -4.0, "да"],
+                 {"date": "08.11", "v2": 87, "psy": 85, "t": 0.4}],
+    }},
+}, folder="Области/Приборы", agent="person:anna", about=[B2])
+
 card = {
     "format": "amem.card/1", "entity": B2, "profile": "sensor", "templates": ["sensor"],
     "ancestors": [SITE, ST],

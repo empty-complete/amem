@@ -115,7 +115,18 @@ const MATHML = [
 /** Markdown → очищенный DocumentFragment. KaTeX грузится, только если в тексте есть «$». */
 export async function renderMarkdown(src: string, resolve: Resolve = (l) => `#${encodeURIComponent(l)}`) {
   const katex = src.includes("$") ? await loadKatex() : null;
-  const html = build(resolve, katex).render(src);
+  return clean(build(resolve, katex).render(src));
+}
+
+/** Формула LaTeX отдельно от текста (content.formula, обозначения): очищенный фрагмент, KaTeX — лениво. */
+export async function renderMath(latex: string, display: boolean) {
+  const katex = await loadKatex();
+  return clean(
+    katex.renderToString(latex, { displayMode: display, throwOnError: false, output: "htmlAndMathml" }),
+  );
+}
+
+function clean(html: string) {
   return DOMPurify.sanitize(html, {
     RETURN_DOM_FRAGMENT: true,
     ADD_TAGS: MATHML,

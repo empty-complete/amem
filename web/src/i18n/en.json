@@ -633,5 +633,12 @@
     "step2": "2. Inspect",
     "step3": "3. Dry run",
     "step4": "4. Merge"
+  },
+  "content": {
+    "formula": "Formula",
+    "where": "Symbols",
+    "table": "Table",
+    "table_scroll": "Table, scrollable",
+    "table_empty": "No rows."
   }
 }
