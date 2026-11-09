@@ -434,7 +434,9 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--force", action="store_true", help="write into a base that already has records")
     args = ap.parse_args(argv)
-    os.environ["AMEM_PACKS"] = os.pathsep.join(p for p in (os.environ.get("AMEM_PACKS", ""), str(PACK)) if p)
+    packs = [p for p in os.environ.get("AMEM_PACKS", "").split(os.pathsep) if p]
+    if PACK.resolve() not in {Path(p).resolve() for p in packs}:
+        os.environ["AMEM_PACKS"] = os.pathsep.join([*packs, str(PACK)])
 
     from amem import api, db, settings
     from amem.ocfl_store import ObjectStore

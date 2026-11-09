@@ -8,6 +8,7 @@ on:
       - "tools/seed_sample*.py"
       - "tools/sample_en/**"
       - "web/tools/readme-shots.mjs"
+      - "tools/readme_agent_session.py"
       - ".github/workflows/readme-shots.yml"
 
 permissions:
@@ -20,8 +21,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {lang: en, seed: tools/seed_sample_en.py, packs: tools/sample_en/pack}
-          - {lang: ru, seed: tools/seed_sample.py, packs: ""}
+          - lang: en
+            seed: tools/seed_sample_en.py
+            packs: tools/sample_en/pack
+            query: TH-20 humidity accuracy
+            prompt: How accurate is the TH-20 humidity reading near saturation? Cite the source.
+          - lang: ru
+            seed: tools/seed_sample.py
+            packs: ""
+            query: Погрешность влажности В-2
+            prompt: Какая погрешность у В-2 у верхнего края шкалы? Со ссылкой на источник.
     services:
       db:
         image: pgvector/pgvector:0.8.1-pg18
@@ -41,6 +50,9 @@ jobs:
       SHOT_LANG: ${{ matrix.lang }}
       SHOT_SEED: ${{ matrix.seed }}
       SHOT_PACKS: ${{ matrix.packs }}
+      SHOT_QUERY: ${{ matrix.query }}
+      SHOT_PROMPT: ${{ matrix.prompt }}
+      AGENT_TRANSCRIPT: /tmp/agent.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -73,6 +85,8 @@ jobs:
           nohup /tmp/amem/bin/python -m amem.service > /tmp/service.log 2>&1 &
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:8770/api/v1/base >/dev/null && exit 0; sleep 1; done
           cat /tmp/service.log; exit 1
+      - name: Agent session over MCP (amem mcp, stdio)
+        run: /tmp/amem/bin/python tools/readme_agent_session.py "$AGENT_TRANSCRIPT" --query "$SHOT_QUERY" --prompt "$SHOT_PROMPT"
       - run: npx playwright install --with-deps chromium
         working-directory: web
       - name: Screens
