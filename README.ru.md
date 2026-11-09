@@ -538,6 +538,11 @@ docker compose --profile test up -d --wait db-test db-test-pg16
 ```
 Перед push — проверка на приватное: `git config core.hooksPath tools/hooks`; список образцов хук читает из `~/.config/amem/private-patterns.txt` (вне репозитория).
 
+Сообщения коммитов — по [Conventional Commits](https://www.conventionalcommits.org/) и на английском:
+`type(scope): subject`, не длиннее 100 знаков, например `fix(service): reject NUL in parameters`. Тот же
+`core.hooksPath` включает хук `commit-msg`, который проверяет это при коммите;
+`python3 tools/check_commits.py --revs origin/main..HEAD` проверяет диапазон вручную.
+
 
 Веб-UI лежит в [`web/`](web/) (React 19, HeroUI v3, TanStack). Там же — `npm run lint`, `npm test`
 и `npm run e2e`.
@@ -545,8 +550,8 @@ docker compose --profile test up -d --wait db-test db-test-pg16
 ## Участие
 
 amem делается открыто. Вопросы и обсуждения приветствуются. Перед большой правкой откройте, пожалуйста,
-issue, чтобы договориться о подходе. Каждый pull request проходит workflow `ci` (тесты на PostgreSQL 18 и 16),
-а правки в `web/` — ещё и workflow `web`.
+issue, чтобы договориться о подходе. Каждый pull request проходит workflow `ci` (тесты на PostgreSQL 18 и 16)
+и workflow `commits` (Conventional Commits на английском), а правки в `web/` — ещё и workflow `web`.
 
 ## На чём построен
 

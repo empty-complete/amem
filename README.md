@@ -538,6 +538,11 @@ After editing `amem/schema/amem_v1.yaml`, regenerate the models:
 ```
 Before pushing, enable the privacy check: `git config core.hooksPath tools/hooks`; the hook reads its patterns from `~/.config/amem/private-patterns.txt` (outside the repository).
 
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) in English:
+`type(scope): subject`, at most 100 characters, e.g. `fix(service): reject NUL in parameters`. The same
+`core.hooksPath` enables a `commit-msg` hook that checks this when you commit;
+`python3 tools/check_commits.py --revs origin/main..HEAD` checks a range by hand.
+
 
 The web UI lives in [`web/`](web/) (React 19, HeroUI v3, TanStack). Run `npm run lint`, `npm test` and
 `npm run e2e` there.
@@ -545,8 +550,8 @@ The web UI lives in [`web/`](web/) (React 19, HeroUI v3, TanStack). Run `npm run
 ## Contributing
 
 amem is built in the open. Issues and discussions are welcome. For a larger change, please open an issue
-first so we can agree on the approach. Every pull request runs the `ci` workflow (tests on PostgreSQL 18 and 16),
-and changes to `web/` also run the `web` workflow.
+first so we can agree on the approach. Every pull request runs the `ci` workflow (tests on PostgreSQL 18 and 16)
+and the `commits` workflow (Conventional Commits in English); changes to `web/` also run the `web` workflow.
 
 ## Built with
 
