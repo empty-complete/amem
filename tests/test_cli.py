@@ -213,6 +213,18 @@ def test_search_without_journal_when_off(run, base, tmp_path):
     assert not (tmp_path / "state" / "queries.jsonl").exists()
 
 
+def test_journal_only_for_explicit_search(run, base, tmp_path):
+    """Шаги 2 и 3 и карточка журнал не пишут; поиск из окружения агента пишется от модели."""
+    path = tmp_path / "state" / "queries.jsonl"
+    assert run("timeline", base["@bracket"])[0] == 0
+    assert run("get", base["@bracket"], base["@node"])[0] == 0
+    assert run("card", base["@node"])[0] == 0
+    assert not path.exists()
+    assert run("search", "кронштейн", extra={"CLAUDECODE": "1"})[0] == 0
+    lines = [json.loads(line) for line in path.read_text().splitlines()]
+    assert [(l["recipe"], l["agent"], l["query"]) for l in lines] == [("exact_fact", "model:claude-code", "кронштейн")]
+
+
 def test_get_timeline_card(run, base, start):
     code, out, _ = run("get", base["@bracket"], "--json")
     assert code == 0
