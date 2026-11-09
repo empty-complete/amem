@@ -4,7 +4,9 @@ import pytest
 
 import contract
 from amem import private
-from test_service_write import V1, batch, fact, kb, post_submit, start  # noqa: F401 — фикстуры
+from test_service_write import batch, fact, post_submit
+
+pytest_plugins = ["test_service_write"]     # фикстуры kb и start
 
 AWS = "AKIA" + "IOSFODNN7EXAMPLE"                 # собирается по частям: в исходнике нет готового ключа
 
