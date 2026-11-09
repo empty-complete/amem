@@ -551,7 +551,17 @@
       "always": "a person always decides",
       "private_removed": "Private text removed"
     },
-    "risk": "High risk: {{what}}"
+    "risk": "High risk: {{what}}",
+    "by_time": "By time",
+    "by_source": "By document",
+    "grouping": "Queue order",
+    "doc": "Document",
+    "about_f": "Object",
+    "all_docs": "All documents",
+    "all_about": "All objects",
+    "no_source": "No source",
+    "entities": "Entities",
+    "first_n": "Showing the first {{n}} items — narrow the queue by reason or document."
   },
   "basepage": {
     "title": "Base",

@@ -294,7 +294,25 @@
         }
       ],
       "ancestors": [],
-      "sources": [],
+      "sources": [
+        {
+          "object": "0193b7c2-5e1a-7d40-9f2e-0000000000a1",
+          "object_name": "Руководство_МС-1.pdf",
+          "object_kind": "file",
+          "media_type": "application/pdf",
+          "object_version": 2,
+          "selectors": [
+            {
+              "type": "page",
+              "value": "2",
+              "label": "12"
+            }
+          ],
+          "role": "primary",
+          "verdict": "ok",
+          "quote": "в диапазоне от −40 до +60 °C"
+        }
+      ],
       "open_items": [],
       "usefulness": null
     },
@@ -360,7 +378,18 @@
         }
       ],
       "ancestors": [],
-      "sources": [],
+      "sources": [
+        {
+          "object": "0193b7c2-5e1a-7d40-9f2e-0000000000a1",
+          "object_name": "Руководство_МС-1.pdf",
+          "object_kind": "file",
+          "media_type": "application/pdf",
+          "object_version": 2,
+          "selectors": [],
+          "role": "primary",
+          "verdict": "external"
+        }
+      ],
       "open_items": [],
       "usefulness": null
     },

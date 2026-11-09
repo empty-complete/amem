@@ -281,3 +281,41 @@
     height: calc(100dvh - var(--bar-h));
   }
 }
+
+/* очередь по документам (часть J) */
+.qhead {
+  display: flex;
+  align-items: center;
+  gap: var(--s-xs);
+  padding: 0 var(--s-md);
+  background: var(--background);
+  border-bottom: 1px solid var(--separator);
+  font-size: var(--t-meta);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.qhead__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qrow__doubt,
+.qrow__doc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-meta);
+  color: var(--ink-2);
+}
+.qrow__doc {
+  max-width: 14rem;
+}
+.rfilters--more {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--s-xs);
+}
+.review__cap {
+  margin: 0 var(--s-md) var(--s-xs);
+  font-size: var(--t-meta);
+}

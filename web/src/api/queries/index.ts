@@ -2,6 +2,9 @@ import { queryOptions } from "@tanstack/react-query";
 import { api, data } from "../client";
 
 /** Фабрики запросов: компоненты не знают путей API, только эти функции. */
+/** Пунктов очереди в одном запросе — предел контракта (/review/items, limit до 500). */
+export const REVIEW_LIMIT = 500;
+
 export const q = {
   session: () =>
     queryOptions({
@@ -134,7 +137,8 @@ export const q = {
           states.map(async (state) =>
             data(
               await api.GET("/review/items", {
-                params: { query: { state, reason: (p.reason || undefined) as never } },
+                // предел контракта: без limit служба отдаёт 100, и длинная очередь молча обрезалась бы
+                params: { query: { state, reason: (p.reason || undefined) as never, limit: REVIEW_LIMIT } },
               }),
             ),
           ),

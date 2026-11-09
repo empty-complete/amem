@@ -4,8 +4,9 @@ import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { errorText } from "../../api/errors";
-import { q } from "../../api/queries";
+import { q, REVIEW_LIMIT } from "../../api/queries";
 import { RegionState } from "../../ui/RegionState";
+import { arrange, facets, filterItems, type Grouping, nextAfter } from "./groups";
 import { QueueList } from "./QueueList";
 import { ReviewItemPane } from "./ReviewItem";
 import { REASONS } from "./reasons";
@@ -23,10 +24,16 @@ export function ReviewPage({
   itemId,
   reason,
   state = "open",
+  group,
+  object,
+  about,
 }: {
   itemId?: string;
   reason?: string;
   state?: "open" | "done";
+  group?: "source";
+  object?: string;
+  about?: string;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -35,11 +42,19 @@ export function ReviewPage({
   const [note, setNote] = useState("");
   const [already, setAlready] = useState<string | null>(null);
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
-  const items = useMemo(() => (list.data ?? []).filter((i) => !pending.has(i.id)), [list.data, pending]);
-  const ordered = useMemo(
-    () => [...items.filter((i) => !skipped.has(i.id)), ...items.filter((i) => skipped.has(i.id))],
-    [items, skipped],
-  );
+  const grouping: Grouping = group === "source" ? "source" : "time";
+  const names = useMemo(() => ({ none: t("review.no_source"), entities: t("review.entities") }), [t]);
+  const loaded = list.data ?? [];
+  // ровно предел — значит, пункты есть и дальше: честная строка вместо молча обрезанной очереди
+  const capped = loaded.length >= REVIEW_LIMIT;
+  const all = useMemo(() => loaded.filter((i) => !pending.has(i.id)), [loaded, pending]);
+  const facet = useMemo(() => facets(all, names), [all, names]);
+  const items = useMemo(() => filterItems(all, { object, about }), [all, object, about]);
+  const { ordered, rows } = useMemo(() => {
+    // пропущенные — в конец, как раньше; группы и порядок — по выбору
+    const rest = [...items.filter((i) => !skipped.has(i.id)), ...items.filter((i) => skipped.has(i.id))];
+    return arrange(rest, grouping, names);
+  }, [items, skipped, grouping, names]);
   const current = ordered.find((i) => i.id === itemId) ?? null;
   const go = useCallback(
     (id: string | null, replace = false) =>
@@ -47,11 +62,11 @@ export function ReviewPage({
         ? navigate({
             to: "/review/$itemId",
             params: { itemId: id },
-            search: { reason, state } as never,
+            search: { reason, state, group, object, about } as never,
             replace,
           })
-        : navigate({ to: "/review", search: { reason, state } as never, replace }),
-    [navigate, reason, state],
+        : navigate({ to: "/review", search: { reason, state, group, object, about } as never, replace }),
+    [navigate, reason, state, group, object, about],
   );
   const onAlready = useCallback((who: string) => setAlready(t("review.already", { who })), [t]);
   const decide = useDecision(onAlready);
@@ -65,11 +80,11 @@ export function ReviewPage({
   useEffect(() => setNote(""), [itemId]);
 
   const idx = current ? ordered.indexOf(current) : -1;
-  const next = () => ordered[idx + 1]?.id ?? ordered[idx - 1]?.id ?? null;
   const act = (outcome: Outcome) => {
     if (!current || state === "done") return;
     setAlready(null);
-    const n = next();
+    // после решения — следующий пункт той же группы: документ разбирается подряд
+    const n = nextAfter(ordered, current, grouping)?.id ?? null;
     decide(
       current.id,
       outcome,
@@ -109,6 +124,53 @@ export function ReviewPage({
     return () => window.removeEventListener("keydown", onKey, true);
   });
 
+  const search = (patch: Record<string, string | undefined>) =>
+    navigate({ to: "/review", search: { reason, state, group, object, about, ...patch } as never });
+  const more = (
+    <div className="rfilters rfilters--more">
+      <select
+        className="fld"
+        aria-label={t("review.doc")}
+        value={object ?? ""}
+        onChange={(e) => search({ object: e.target.value || undefined })}
+      >
+        <option value="">{t("review.all_docs")}</option>
+        {facet.docs.map((d) => (
+          <option key={d.key} value={d.key}>
+            {d.name} · {d.count}
+          </option>
+        ))}
+      </select>
+      <select
+        className="fld"
+        aria-label={t("review.about_f")}
+        value={about ?? ""}
+        onChange={(e) => search({ about: e.target.value || undefined })}
+      >
+        <option value="">{t("review.all_about")}</option>
+        {facet.about.map((d) => (
+          <option key={d.key} value={d.key}>
+            {d.name} · {d.count}
+          </option>
+        ))}
+      </select>
+      <ToggleButtonGroup
+        size="sm"
+        selectionMode="single"
+        disallowEmptySelection
+        selectedKeys={new Set([grouping])}
+        onSelectionChange={(k) => search({ group: [...k][0] === "source" ? "source" : undefined })}
+        aria-label={t("review.grouping")}
+      >
+        {(["time", "source"] as const).map((g, i) => (
+          <ToggleButton key={g} id={g}>
+            {i > 0 && <ToggleButtonGroup.Separator />}
+            {t(g === "time" ? "review.by_time" : "review.by_source")}
+          </ToggleButton>
+        ))}
+      </ToggleButtonGroup>
+    </div>
+  );
   const filters = (
     <div className="rfilters">
       <select
@@ -116,7 +178,10 @@ export function ReviewPage({
         aria-label={t("review.reason")}
         value={reason ?? ""}
         onChange={(e) =>
-          navigate({ to: "/review", search: { reason: e.target.value || undefined, state } as never })
+          navigate({
+            to: "/review",
+            search: { reason: e.target.value || undefined, state, group, object, about } as never,
+          })
         }
       >
         <option value="">{t("review.any")}</option>
@@ -133,7 +198,7 @@ export function ReviewPage({
         selectedKeys={new Set([state])}
         onSelectionChange={(k) => {
           const s2 = [...k][0] === "done" ? "done" : undefined;
-          navigate({ to: "/review", search: { reason, state: s2 } as never });
+          navigate({ to: "/review", search: { reason, state: s2, group, object, about } as never });
         }}
         aria-label={t("review.state")}
       >
@@ -155,6 +220,8 @@ export function ReviewPage({
           {list.data && <span className="count">{items.length}</span>}
         </h1>
         {filters}
+        {more}
+        {capped && <p className="muted review__cap">{t("review.first_n", { n: REVIEW_LIMIT })}</p>}
         {list.isPending ? (
           <RegionState state="loading" />
         ) : list.isError ? (
@@ -166,7 +233,7 @@ export function ReviewPage({
         ) : ordered.length === 0 ? (
           <RegionState state="empty" text={state === "done" ? t("review.empty_done") : t("review.empty")} />
         ) : (
-          <QueueList items={ordered} selected={itemId ?? null} onSelect={(id) => go(id)} />
+          <QueueList rows={rows} grouping={grouping} selected={itemId ?? null} onSelect={(id) => go(id)} />
         )}
         <p className="muted review__keys">{t("review.keys")}</p>
       </section>
