@@ -45,6 +45,10 @@ def test_known_secret_forms(text, kind):
     "password=%(pw)s", "пароль: xxxxxx", "risk-assessment-procedure-document", "disk-" + "a" * 30, "sk-14",
     "AKIA в тексте", "ключ API лежит в хранилище секретов", "M10x1.25", "СП 20.13330.2016, табл. 11.2",
     "eyJ без продолжения", "-----BEGIN CERTIFICATE-----", "токен — 32 случайных байта",
+    # значение после «пароль:» — слово, путь, обращение к окружению или переменной (ревью задачи 10)
+    "Пароль: обязателен", "пароль: настраивается", "secret: стеклопакет", "pwd: /var/lib/app", "pwd: ~/projects",
+    "api_key = os.environ['X']", 'api_key = os.getenv("API_KEY")', "secret=settings.SECRET_KEY",
+    "password: process.env.DB_PASSWORD", "password=${DB_PASSWORD}", "password: required",
 ])
 def test_ordinary_text_is_not_secret(text):
     assert private.secret_like(text) == []

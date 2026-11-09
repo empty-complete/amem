@@ -66,14 +66,34 @@ SECRETS: dict[str, re.Pattern] = {
     # строка подключения с паролем: схема://пользователь:пароль@хост
     "url_password": re.compile(r"(?<![A-Za-z0-9+.-])[A-Za-z][A-Za-z0-9+.-]{1,20}://"
                                r"[^\s:/@<>\"']+:[^\s/@<>\"']+@[^\s/@]"),
-    # пароль присвоением: password=…, пароль: …; значение — без пробелов, от 6 знаков, не заглушка
+    # пароль присвоением: password=…, пароль: …; значение проверяет _password_value
     "password": re.compile(r"(?i)(?<![\w-])(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?key|пароль)"
-                           r"[\"']?\s*[:=]\s*[\"']?(?![$%{<])(?![*xх.•_-]+(?:[\"'\s,;]|$))[^\s\"'<>,;]{6,}"),
+                           r"[\"']?\s*[:=]\s*[\"']?(?P<value>[^\s\"'<>,;]{6,})"),
 }
+# значение после password=/пароль: — не секрет, если это заглушка (***, xxx, ${…}, <…>, %(…)s), путь (/…, ~/…, ./…),
+# обращение к окружению или переменной (os.environ, getenv, process.env, ENV[…]) или обычное слово: без цифр
+# и знаков пароля («обязателен», «настраивается», «стеклопакет»)
+_PLACEHOLDER = re.compile(r"[*xх.•_-]+|[$%{<].*", re.IGNORECASE)
+_CODE_REF = re.compile(r"environ|getenv|process\.env|env\[|secrets?\.|settings\.|config\.|\(", re.IGNORECASE)
+_PASSWORD_MARK = re.compile(r"[0-9!@#^&*+=?|]")
+
+
+def _password_value(value: str) -> bool:
+    if _PLACEHOLDER.fullmatch(value) or value.startswith(("/", "~", "./", "../")) or _CODE_REF.search(value):
+        return False
+    return _PASSWORD_MARK.search(value) is not None
 
 
 def secret_like(text: str) -> list[str]:
     """Виды секретов, похожих на найденные в тексте (по порядку SECRETS, без повторов); пусто — ничего похожего."""
     if not isinstance(text, str):
         raise TypeError(f"private.secret_like: нужна строка, получено {type(text).__name__}")
-    return [name for name, pattern in SECRETS.items() if pattern.search(text)]
+    found = []
+    for name, pattern in SECRETS.items():
+        if name == "password":
+            hit = any(_password_value(m["value"]) for m in pattern.finditer(text))
+        else:
+            hit = pattern.search(text) is not None
+        if hit:
+            found.append(name)
+    return found

@@ -59,6 +59,8 @@ def run_export(ctx, args) -> int:
 
     out = Path(args.out)
     report_out = out.with_suffix(".html")
+    if report_out == out:                 # export x.html --anthology: отчёт не ложится поверх zip
+        report_out = out.with_name(f"{out.stem}.report.html")
     for path in (out, report_out) if args.anthology else (out,):
         if path.exists() or path.is_symlink():
             raise CliError(f"{path}: файл уже есть — подборка не перезаписывает файлы", exit=USAGE, code="file")

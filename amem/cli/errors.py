@@ -28,6 +28,7 @@ BY_STATUS = {400: USAGE, 401: USAGE, 403: USAGE, 404: NOT_FOUND, 408: ENV, 409: 
 
 HINTS = {
     "db_unavailable": "задайте AMEM_DSN или выполните amem init",
+    "db_auth": "проверьте пользователя и пароль в AMEM_DSN",
     "no_dsn": "задайте AMEM_DSN или выполните amem init --dsn postgresql://…",
     "not_ready": "выполните amem init",
     "store_unavailable": "проверьте AMEM_DATA и что том с данными подключён (amem doctor)",

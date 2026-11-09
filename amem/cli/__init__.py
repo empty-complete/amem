@@ -11,6 +11,7 @@ main(argv) возвращает код выхода и не вызывает sys
 from __future__ import annotations
 
 import argparse
+import io
 import sys
 from collections.abc import Mapping, Sequence
 
@@ -66,39 +67,81 @@ def main(argv: Sequence[str] | None = None, *, env: Mapping[str, str] | None = N
     """Вход `amem`: код выхода по разд. 5.1. env — окружение (по умолчанию os.environ); runner — замена uvicorn.run
     у `amem serve` (тесты)."""
     argv = list(sys.argv[1:] if argv is None else argv)
-    ctx = None
-    as_json = "--json" in argv
+    environment = environ(env)
+    made: list[Context] = []              # Context вызова: report берёт из него вывод и --json; close — в конце
     try:
         try:
-            args = parser().parse_args(argv)
-        except _Done as done:
-            return done.status
-        if getattr(args, "run", None) is None:
-            parser().print_help(sys.stderr)
-            return USAGE
-        ctx = Context(args, environ(env), runner=runner)
-        as_json = ctx.json
-        if getattr(args, "agent", None) is not None or ctx.env.get("AMEM_AS_MODEL", "").strip():
-            ctx.agent                     # явный агент проверяется сразу, у любой команды, а не при первой записи
-        return args.run(ctx, args) or OK
-    except KeyboardInterrupt:
-        print("amem: прервано", file=sys.stderr)
-        return 130
-    except BaseException as exc:          # noqa: BLE001 — перевод любой ошибки в код выхода и сообщение
-        if isinstance(exc, SystemExit):
+            code = _run(argv, environment, runner, made)
+        except KeyboardInterrupt:
+            print("amem: прервано", file=sys.stderr)
+            code = 130
+        except BrokenPipeError:
             raise
-        return report(exc, as_json=as_json, out=ctx.out if ctx else sys.stdout, err=ctx.err if ctx else sys.stderr)
+        except BaseException as exc:      # noqa: BLE001 — перевод любой ошибки в код выхода и сообщение
+            if isinstance(exc, SystemExit):
+                raise
+            ctx = made[0] if made else None
+            code = report(exc, as_json=ctx.json if ctx is not None else "--json" in argv,
+                          out=ctx.out if ctx else sys.stdout, err=ctx.err if ctx else sys.stderr, env=environment)
+        sys.stdout.flush()                # здесь, а не при выходе: закрытый конвейер (| head) ловится ниже
+        return code
+    except BrokenPipeError:
+        # читатель конвейера закрылся (amem … | head): вывод больше не нужен — это не ошибка; дальнейшие записи
+        # и сброс буфера при выходе интерпретатора уходят в /dev/null, а не в «Exception ignored … BrokenPipe»
+        _silence_stdout()
+        return OK
     finally:
-        if ctx is not None:
+        for ctx in made:
             ctx.close()
 
 
-def report(exc: BaseException, *, as_json: bool, out, err) -> int:
-    """Сообщение об ошибке и код выхода: CliError — как есть, прочее — через таблицу службы (problems.to_problem)."""
+def _run(argv, environment, runner, made: list) -> int:
+    try:
+        args = parser().parse_args(argv)
+    except _Done as done:
+        return done.status
+    if getattr(args, "run", None) is None:
+        parser().print_help(sys.stderr)
+        return USAGE
+    ctx = Context(args, environment, runner=runner)
+    made.append(ctx)
+    if getattr(args, "agent", None) is not None or ctx.env.get("AMEM_AS_MODEL", "").strip():
+        ctx.agent                         # явный агент проверяется сразу, у любой команды, а не при первой записи
+    return args.run(ctx, args) or OK
+
+
+def _silence_stdout() -> None:
+    import os
+
+    try:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        os.close(devnull)
+    except (OSError, ValueError, AttributeError, io.UnsupportedOperation):
+        pass                              # stdout без дескриптора (перехват в тестах) — подменяется ниже
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+
+
+def _auth_failed(exc: BaseException) -> bool:
+    """Отказ входа (пользователь, пароль) — не «база не запущена»: подсказка другая. Текст libpq — по-английски
+    при любой локали клиента; сам текст наружу не идёт (в нём адрес сервера)."""
+    import psycopg
+
+    text = str(exc).lower()
+    return isinstance(exc, psycopg.OperationalError) and not isinstance(exc, psycopg.errors.QueryCanceled) and (
+        "authentication failed" in text or "password authentication" in text or "no password supplied" in text
+        or ("role" in text and "does not exist" in text))
+
+
+def report(exc: BaseException, *, as_json: bool, out, err, env: Mapping[str, str] | None = None) -> int:
+    """Сообщение об ошибке и код выхода: CliError — как есть, прочее — через таблицу службы (problems.to_problem).
+    AMEM_DEBUG=1 — ещё и traceback внутренней ошибки в stderr."""
     from .. import backup, db, settings
     from ..service import problems
 
-    if isinstance(exc, settings.SettingsError):
+    if _auth_failed(exc):
+        exc = CliError("вход в базу не удался: сервер отверг пользователя или пароль", exit=ENV, code="db_auth")
+    elif isinstance(exc, settings.SettingsError):
         exc = CliError(str(exc), exit=USAGE, code="settings")
     elif isinstance(exc, backup.BackupError):
         exc = CliError(str(exc), exit=ENV, code="backup")
@@ -115,8 +158,16 @@ def report(exc: BaseException, *, as_json: bool, out, err) -> int:
         code_out, hint = exit_code(status, code), problems_hint(code)
         if code == "internal":
             detail = f"внутренняя ошибка: {type(exc).__name__}: {exc}"
+            if (env or {}).get("AMEM_DEBUG", "").strip() not in ("", "0"):
+                import traceback
+
+                traceback.print_exception(exc, file=err)
     if as_json:
-        print(dumps(problems.body(status or 0, code, detail, extra=extra)), file=out)
+        body = problems.body(status or 0, code, detail, extra=extra)
+        if status is None:                # у ошибки CLI нет HTTP-аналога: статуса нет, а не «0»
+            del body["status"]
+            body["title"] = "Ошибка"
+        print(dumps(body), file=out)
     else:
         print(f"amem: {detail or code}", file=err)
         _details(code, extra, out)
