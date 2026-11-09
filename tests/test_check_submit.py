@@ -11,7 +11,7 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from amem import check, db, embed, model_v1, objects, records, review
 from amem.check import Proposal, level4
 from amem.ocfl_store import StoreError
-from check_support import CHECK_PACK, PDF, atom, entity, pack, source_md, source_pdf, value
+from check_support import CHECK_PACK, PDF, atom, entity, pack, source_pdf, value
 from conftest import FakeProvider
 
 AGENT = "model:tester"
