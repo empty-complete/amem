@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
 import { unitLabel } from "../../ui/format";
 import { Icon, type IconName } from "../../ui/icons";
+import { langOf, pickText, useText } from "../../ui/lang";
 import type { Draft, FieldValue, FormField, Quantity, Template } from "./proposal";
 import "../record/record.css";
 import "./write.css";
@@ -42,6 +43,7 @@ function RefField({
   onChange: (v: string[], labels: Record<string, string>) => void;
 }) {
   const { t } = useTranslation();
+  const { lang } = useText();
   const [text, setText] = useState("");
   const query = useDebounced(text);
   const target = f.type === "object" ? "entity" : "atom";
@@ -74,7 +76,7 @@ function RefField({
         </span>
       ))}
       <ComboBox
-        aria-label={f.label.ru}
+        aria-label={pickText(f.label, lang)}
         inputValue={text}
         onInputChange={setText}
         items={items}
@@ -137,7 +139,7 @@ function QuantityField({
           <option value="">{t("edit.quantity")}</option>
           {props.data?.map((p) => (
             <option key={p.code} value={p.code}>
-              {i18n.language.startsWith("en") ? (p.label.en ?? p.label.ru) : p.label.ru}
+              {pickText(p.label, i18n.language)}
             </option>
           ))}
         </select>
@@ -146,7 +148,7 @@ function QuantityField({
         id={id}
         className="fld num"
         inputMode="decimal"
-        aria-label={f.label.ru}
+        aria-label={pickText(f.label, i18n.language)}
         value={raw}
         placeholder="___"
         onChange={(e) => {
@@ -184,6 +186,7 @@ function TagsField({
   onChange: (v: string[]) => void;
 }) {
   const { t } = useTranslation();
+  const { lang } = useText();
   const [text, setText] = useState("");
   const add = () => {
     const v = text.trim().replace(/^#/, "").toLowerCase();
@@ -212,7 +215,7 @@ function TagsField({
       ))}
       <input
         className="fld fld--inline"
-        aria-label={f.label.ru}
+        aria-label={pickText(f.label, lang)}
         value={text}
         placeholder={t("edit.add_tag")}
         onChange={(e) => setText(e.target.value)}
@@ -227,11 +230,16 @@ function ChoiceField({ f, value, onChange }: { f: FormField; value: string; onCh
   const { i18n } = useTranslation();
   const vocab = useQuery({ ...q.vocab(f.scheme ?? "kind"), enabled: !!f.scheme });
   return (
-    <select className="fld" aria-label={f.label.ru} value={value} onChange={(e) => onChange(e.target.value)}>
+    <select
+      className="fld"
+      aria-label={pickText(f.label, i18n.language)}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
       <option value="" />
       {vocab.data?.map((v) => (
         <option key={v.code} value={v.code}>
-          {i18n.language.startsWith("en") ? (v.label.en ?? v.label.ru) : v.label.ru}
+          {pickText(v.label, i18n.language)}
         </option>
       ))}
     </select>
@@ -253,7 +261,7 @@ export function PropertyEditor({
   onChange: (d: Draft, labels?: Record<string, string>) => void;
 }) {
   const { t, i18n } = useTranslation();
-  const lang = i18n.language.startsWith("en") ? "en" : "ru";
+  const lang = langOf(i18n.language);
   const set = (key: string, v: FieldValue, l?: Record<string, string>) =>
     onChange({ ...draft, values: { ...draft.values, [key]: v } }, l);
   const [adding, setAdding] = useState(false);
@@ -269,7 +277,7 @@ export function PropertyEditor({
           <div key={f.key} className="prop" data-invalid={err ? true : undefined}>
             <span className="k">
               <Icon name={ICON[f.type]} size={14} />
-              <span>{(lang === "en" ? f.label.en : f.label.ru) ?? f.label.ru}</span>
+              <span>{pickText(f.label, lang)}</span>
             </span>
             <span className="v">
               {f.type === "object" || f.type === "record" ? (
@@ -289,7 +297,7 @@ export function PropertyEditor({
                 <input
                   type="date"
                   className="fld"
-                  aria-label={f.label.ru}
+                  aria-label={pickText(f.label, lang)}
                   value={(v as string) ?? ""}
                   onChange={(e) => set(f.key, e.target.value)}
                 />
@@ -314,7 +322,7 @@ export function PropertyEditor({
               ) : (
                 <input
                   className="fld"
-                  aria-label={f.label.ru}
+                  aria-label={pickText(f.label, lang)}
                   value={(v as string) ?? ""}
                   onChange={(e) => set(f.key, e.target.value)}
                 />

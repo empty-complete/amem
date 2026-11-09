@@ -8,6 +8,7 @@ import type { ApiError } from "../../api/errors";
 import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
 import { Icon } from "../../ui/icons";
+import { LANGS, type LangString, pickText, withText } from "../../ui/lang";
 import { PropertyEditor } from "../write/fields";
 import { emptyDraft, type FormField, type Template } from "../write/proposal";
 import { slug } from "./slug";
@@ -30,7 +31,7 @@ const WIDGETS = ["sources", "links", "around", "values_table", "similar", "child
 const blankField = (i: number): FormField => ({
   key: `f${i}`,
   path: `qualifiers[property=f${i}]`,
-  label: { ru: "" },
+  label: {},
   type: "text",
   required: false,
   hint: null,
@@ -77,8 +78,7 @@ function FieldRow({
   const classes = useQuery(q.vocab("entity_class"));
   const kinds = useQuery(q.vocab("kind"));
   const props = useQuery(q.vocab("property"));
-  const lab = (l: { ru?: string; en?: string }) =>
-    (i18n.language.startsWith("en") ? (l.en ?? l.ru) : l.ru) ?? "";
+  const lab = (l: LangString) => pickText(l, i18n.language);
   const toggle = (list: string[] | undefined, v: string) =>
     list?.includes(v) ? list.filter((x) => x !== v) : [...(list ?? []), v];
   return (
@@ -89,11 +89,11 @@ function FieldRow({
           className="fld"
           aria-label={t("kinds.prop_name")}
           placeholder={t("kinds.prop_name")}
-          value={f.label.ru ?? ""}
+          value={pickText(f.label, i18n.language)}
           onChange={(e) =>
             onChange({
               ...f,
-              label: { ...f.label, ru: e.target.value },
+              label: withText(f.label, e.target.value, i18n.language),
               key: f.key.startsWith("f") ? slug(e.target.value) || f.key : f.key,
             })
           }
@@ -140,7 +140,9 @@ function FieldRow({
           <button
             type="button"
             className="iconbtn"
-            aria-label={t("edit.remove", { what: f.label.ru || t("kinds.prop_n", { n: i + 1 }) })}
+            aria-label={t("edit.remove", {
+              what: pickText(f.label, i18n.language) || t("kinds.prop_n", { n: i + 1 }),
+            })}
             onClick={onRemove}
           >
             <Icon name="cross" size={12} />
@@ -156,8 +158,10 @@ function FieldRow({
         className="fld"
         aria-label={t("kinds.hint")}
         placeholder={t("kinds.hint")}
-        value={f.hint?.ru ?? ""}
-        onChange={(e) => onChange({ ...f, hint: e.target.value ? { ru: e.target.value } : null })}
+        value={pickText(f.hint, i18n.language)}
+        onChange={(e) =>
+          onChange({ ...f, hint: e.target.value ? withText(f.hint, e.target.value, i18n.language) : null })
+        }
       />
       {f.type === "object" && (
         <fieldset className="chips">
@@ -239,7 +243,7 @@ function FieldRow({
 
 /** Конструктор вида (разд. 5.9): свои виды и свойства в пакете «Мои виды»; ничего не зашито. */
 export function KindDrawer() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const open = useKindsOpen();
   const editCode = useKindsEdit();
   const qc = useQueryClient();
@@ -249,13 +253,16 @@ export function KindDrawer() {
   const [codeTouched, setCodeTouched] = useState(false);
   const [d, setD] = useState<Draft | null>(null);
   const [issues, setIssues] = useState<Record<string, string>>({});
+  // замечание к подписи — по пути LangString целиком или его слота: label, label.ru, label.en
+  const issueAt = (path: string) => issues[path] ?? LANGS.map((l) => issues[`${path}.${l}`]).find(Boolean);
+  const labelIssue = issueAt("label");
   const [msg, setMsg] = useState<string | null>(null);
 
   const startNew = () => {
     setCode("");
     setCodeTouched(false);
     setD({
-      label: { ru: "" },
+      label: {},
       target: "atom",
       family: "work",
       form: [],
@@ -314,7 +321,7 @@ export function KindDrawer() {
       if (res.data) {
         await qc.invalidateQueries({ queryKey: ["templates"] });
         await qc.invalidateQueries({ queryKey: ["vocab", "kind"] });
-        setMsg(t("kinds.saved", { name: d.label.ru }));
+        setMsg(t("kinds.saved", { name: pickText(d.label, i18n.language) }));
       }
     } catch (e) {
       const err = e as ApiError;
@@ -364,7 +371,7 @@ export function KindDrawer() {
                   <li key={x.code}>
                     <button type="button" className="cite" onClick={() => startEdit(x)}>
                       <span className="cite__main">
-                        <span>{x.label.ru}</span>
+                        <span>{pickText(x.label, i18n.language)}</span>
                         <span className="muted">{t("kinds.records", { count: x.records ?? 0 })}</span>
                       </span>
                     </button>
@@ -382,17 +389,17 @@ export function KindDrawer() {
                 {t("kinds.name")}
                 <input
                   className="fld"
-                  value={d.label.ru}
-                  aria-invalid={issues["label.ru"] ? true : undefined}
+                  value={pickText(d.label, i18n.language)}
+                  aria-invalid={labelIssue ? true : undefined}
                   onChange={(e) => {
-                    setD({ ...d, label: { ...d.label, ru: e.target.value } });
+                    setD({ ...d, label: withText(d.label, e.target.value, i18n.language) });
                     if (!codeTouched) setCode(slug(e.target.value));
                   }}
                 />
               </label>
-              {issues["label.ru"] && (
+              {labelIssue && (
                 <p className="fielderr" role="alert">
-                  {issues["label.ru"]}
+                  {labelIssue}
                 </p>
               )}
               <label className="fl">
@@ -429,7 +436,7 @@ export function KindDrawer() {
                   f={f}
                   i={i}
                   n={d.form.length}
-                  err={issues[`form[${i}].label.ru`]}
+                  err={issueAt(`form[${i}].label`)}
                   onChange={(nf) => setForm(d.form.map((x, j) => (j === i ? nf : x)))}
                   onMove={(dir) => {
                     const a = [...d.form];

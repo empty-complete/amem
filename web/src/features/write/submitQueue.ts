@@ -1,5 +1,6 @@
 // Очередь записи с окном отмены (разд. 5.9): пакет уходит через 6 с, при уходе со страницы — сразу с keepalive.
 import { useSyncExternalStore } from "react";
+import { langHeaders } from "../../api/client";
 import { ApiError, problemFromResponse } from "../../api/errors";
 import type { components } from "../../api/schema";
 import { skyBus } from "../sky/bus";
@@ -52,7 +53,7 @@ async function send(p: Pending, keepalive = false) {
   try {
     const res = await globalThis.fetch(url(), {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...langHeaders() },
       body: JSON.stringify(withSummary(p.body)),
       keepalive,
       credentials: "same-origin",

@@ -1,7 +1,7 @@
 // Документ записи: шапка YAML (поля и свои ключи) + тело Markdown — правила разд. 5.4 спецификации.
 import { parse, stringify } from "yaml";
+import { type LangString, pickText } from "../../ui/lang";
 
-export type LangString = { ru: string; en?: string | null };
 type Qualifier = { property: string; label?: LangString; value_text?: string | null };
 export interface AtomPayload {
   kind?: string;
@@ -41,12 +41,6 @@ export interface DocRecord {
 const KNOWN = new Set(["kind", "about", "source", "page", "tags", "basis"]);
 const WIKI = /\[\[([^\]\n]+)\]\]/g;
 
-/** Строка на языке интерфейса, иначе русская. */
-export function text(s: LangString | null | undefined, lang = "ru"): string {
-  if (!s) return "";
-  return (lang.startsWith("en") ? s.en : null) ?? s.ru;
-}
-
 const wikiLabels = (s: string) => [...s.matchAll(WIKI)].map((m) => m[1] as string);
 
 export function recordToDocument(
@@ -68,10 +62,10 @@ export function recordToDocument(
   for (const q of p.qualifiers ?? []) if (q.value_text) head[q.property] = q.value_text;
   // [[…]] в YAML — строка в кавычках; в документе их не видно, как в Obsidian.
   const yaml = stringify(head, { lineWidth: 0 }).replace(/"(\[\[[^"]+\]\](?:, \[\[[^"]+\]\])*)"/g, "$1");
-  const summary = text(p.summary_plain ?? p.description, lang);
+  const summary = pickText(p.summary_plain ?? p.description, lang);
   const quote = s?.quote ? `\n## Цитата\n> ${s.quote}\n` : "";
-  const body = text(p.body, lang);
-  return `---\n${yaml}---\n# ${text(p.label, lang)}\n${summary ? `\n${summary}\n` : ""}${quote}${body ? `\n${body}\n` : ""}`;
+  const body = pickText(p.body, lang);
+  return `---\n${yaml}---\n# ${pickText(p.label, lang)}\n${summary ? `\n${summary}\n` : ""}${quote}${body ? `\n${body}\n` : ""}`;
 }
 
 export function documentToRecord(doc: string): DocRecord {

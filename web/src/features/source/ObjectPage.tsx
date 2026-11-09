@@ -10,10 +10,10 @@ import type { components } from "../../api/schema";
 import { formatDate, formatSize } from "../../ui/format";
 import { Icon } from "../../ui/icons";
 import { KindChip } from "../../ui/KindChip";
+import { type LangString, pickText } from "../../ui/lang";
 import { RegionState } from "../../ui/RegionState";
 import { useCopy } from "../../ui/useCopy";
 import { Body } from "../record/Body";
-import { text } from "../record/doc";
 import "../record/record.css";
 import { recordPath } from "../records/RecordList";
 import { type CitedRange, SheetPreview } from "./SheetPreview";
@@ -94,9 +94,11 @@ function Brief({ objectId }: { objectId: string }) {
   const first = notes.data?.items.find((r) => r.kind_or_class === "note");
   const rec = useQuery({ ...q.record(first?.ref ?? ""), enabled: !!first });
   const { t, i18n } = useTranslation();
-  const p = rec.data?.payload as { summary_plain?: { ru: string }; body?: { ru: string } } | undefined;
+  const p = rec.data?.payload as { summary_plain?: LangString; body?: LangString } | undefined;
   if (!p) return null;
-  const md = [text(p.summary_plain, i18n.language), text(p.body, i18n.language)].filter(Boolean).join("\n\n");
+  const md = [pickText(p.summary_plain, i18n.language), pickText(p.body, i18n.language)]
+    .filter(Boolean)
+    .join("\n\n");
   return (
     <section className="widget" aria-label={t("source.brief")}>
       <h2>{t("source.brief")}</h2>

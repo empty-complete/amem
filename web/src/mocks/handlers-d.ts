@@ -1,5 +1,6 @@
 import { HttpResponse, http } from "msw";
 import { normalize } from "../features/source/quote";
+import { hasText, type LangString, pickText } from "../ui/lang";
 import { db, newId } from "./db";
 import session from "./fixtures/session.json";
 import textManual from "./fixtures/text-manual.json";
@@ -7,7 +8,7 @@ import vocabKind from "./fixtures/vocab-kind.json";
 import vocabProperty from "./fixtures/vocab-property.json";
 import { problem } from "./handlers-b";
 
-type L = { ru: string; en?: string };
+type L = LangString;
 type Sel = { type: string; value?: unknown; label?: string };
 type Src = { object?: string; object_version?: number; selectors?: Sel[]; quote?: string | null };
 type Value = { property?: string; amount?: number; value_text?: string; unit?: string; value_state?: string };
@@ -36,7 +37,7 @@ const MANUAL = "0193b7c2-5e1a-7d40-9f2e-0000000000a1";
 const manualText = normalize(textManual.pages.join("\n"));
 const labelOf = (ref: string) =>
   db.records.find((r) => r.ref === ref)?.label ??
-  (db.views[ref]?.payload as Payload | undefined)?.label?.ru ??
+  (pickText((db.views[ref]?.payload as Payload | undefined)?.label) || undefined) ??
   ref;
 const familyOf = (kind: string, target: string) =>
   target === "entity"
@@ -49,7 +50,7 @@ function check(proposals: Proposal[]): Issue[] {
   const out: Issue[] = [];
   proposals.forEach((p, i) => {
     const ref = `proposals[${i}]`;
-    if (!p.payload.label?.ru?.trim())
+    if (!hasText(p.payload.label))
       out.push({
         code: "required",
         severity: "violation",
@@ -67,7 +68,7 @@ function check(proposals: Proposal[]): Issue[] {
         ref,
       });
     // как шаблон ядра has_label: у каждого атома есть пояснение «простыми словами»
-    if (p.target === "atom" && !p.payload.summary_plain?.ru?.trim())
+    if (p.target === "atom" && !hasText(p.payload.summary_plain))
       out.push({
         code: "required",
         severity: "violation",
@@ -89,7 +90,7 @@ function check(proposals: Proposal[]): Issue[] {
         out.push({
           code: "required",
           severity: "violation",
-          message: `Нужно: ${f.label.ru.toLowerCase()}`,
+          message: `Нужно: ${pickText(f.label).toLowerCase()}`,
           path: f.path,
           ref,
         });
@@ -139,7 +140,7 @@ function touchCard(p: Payload, ref: string) {
   const field = f as Record<string, unknown>;
   if (v.value_state === "unknown") {
     field.state = "asked";
-    field.ask = p.label?.ru ?? "";
+    field.ask = pickText(p.label);
   } else {
     field.state = "known";
     field.value = { amount: v.amount, value_text: v.value_text, unit: v.unit };
@@ -154,7 +155,7 @@ function write(proposals: Proposal[], links: LinkP[]) {
   const temp = new Map<string, string>();
   const records = proposals.map((p) => {
     const kind = p.payload.kind ?? p.payload.entity_class ?? "note";
-    const label = p.payload.label?.ru ?? "";
+    const label = pickText(p.payload.label);
     if (p.record_id) {
       const v = db.views[p.record_id];
       if (!v) throw new Error(`нет записи ${p.record_id}`);
@@ -345,7 +346,7 @@ export const handlersD = [
     const clash = db.templates.find((t) => t.code === code && !t.editable);
     if (clash) return problem(409, `Код «${code}» уже занят видом пакета ${clash.pack}`);
     const issues: Issue[] = [];
-    if (!d.label?.ru?.trim())
+    if (!hasText(d.label))
       issues.push({
         code: "required",
         severity: "violation",
@@ -354,7 +355,7 @@ export const handlersD = [
         ref: code,
       });
     d.form.forEach((f, i) => {
-      if (!f.label?.ru?.trim())
+      if (!hasText(f.label))
         issues.push({
           code: "required",
           severity: "violation",

@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { api, data } from "../../api/client";
 import { q } from "../../api/queries";
 import { Icon } from "../../ui/icons";
+import { langString, pickText } from "../../ui/lang";
 import { RegionState } from "../../ui/RegionState";
 import { documentToRecord, recordToDocument } from "../record/doc";
 import type { BodyEditorApi, Suggest } from "./BodyEditor";
@@ -95,14 +96,14 @@ export function RecordEditor(p: RecordEditorProps) {
       recordToDocument(
         {
           kind: d.kind,
-          label: { ru: d.label },
-          summary_plain: { ru: d.summary },
-          body: { ru: d.body },
+          label: langString(d.label, lang),
+          summary_plain: langString(d.summary, lang),
+          body: langString(d.body, lang),
           tags: (d.values.tags as string[]) ?? [],
           basis: d.basis,
           qualifiers: d.extra.map((x) => ({
             property: x.property,
-            label: { ru: x.label },
+            label: langString(x.label, lang),
             value_text: x.value,
           })),
         },
@@ -151,7 +152,7 @@ export function RecordEditor(p: RecordEditorProps) {
       { proposals: [proposal], links: [...links, ...(p.extraLinks ?? [])] },
       {
         label: d.label,
-        what: (tpl?.label.ru ?? d.kind).toLowerCase(),
+        what: (pickText(tpl?.label, lang) || d.kind).toLowerCase(),
         kind: d.kind,
         about,
         family: tpl?.family === "source" ? "source" : "work",

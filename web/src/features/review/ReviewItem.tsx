@@ -7,11 +7,11 @@ import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
 import { agentName } from "../../ui/format";
 import { Icon } from "../../ui/icons";
+import { type LangString, pickText, useText } from "../../ui/lang";
 import { RegionState } from "../../ui/RegionState";
 import { StatusText } from "../../ui/StatusText";
 import { Body } from "../record/Body";
 import { type Content, RecordContent } from "../record/Content";
-import { text } from "../record/doc";
 import { Properties } from "../record/Properties";
 import { kindLabel, recordPath } from "../records/RecordList";
 import { Sky } from "../sky/Sky";
@@ -46,8 +46,9 @@ function useCodeText() {
 /** Похожая запись: ссылка с подписью; имя из той же пачки (@имя) — текстом, его не открыть. */
 function CandidateRow({ c }: { c: Candidate }) {
   const word = useCodeText();
+  const { text } = useText();
   const rec = useQuery({ ...q.record(c.ref), enabled: REF.test(c.ref) });
-  const label = (rec.data?.payload as { label?: { ru: string } } | undefined)?.label?.ru ?? c.ref;
+  const label = text((rec.data?.payload as { label?: LangString } | undefined)?.label) || c.ref;
   return (
     <li>
       <span className="status" data-tone={c.code === "related" ? "quiet" : "wait"}>
@@ -187,9 +188,9 @@ export function ReviewItemPane({ id, onBack }: { id: string; onBack?: () => void
   };
   const p = record.payload as {
     kind?: string;
-    label?: { ru: string };
-    summary_plain?: { ru: string };
-    body?: { ru: string };
+    label?: LangString;
+    summary_plain?: LangString;
+    body?: LangString;
     basis?: string;
   };
   const kind = p.kind ?? "";
@@ -206,7 +207,7 @@ export function ReviewItemPane({ id, onBack }: { id: string; onBack?: () => void
       </p>
       <div className="ritem__head">
         <h1 id="ritem-title" className="title">
-          <Link {...recordPath(record.ref)}>{text(p.label, i18n.language) || item.label}</Link>
+          <Link {...recordPath(record.ref)}>{pickText(p.label, i18n.language) || item.label}</Link>
         </h1>
         <StatusText status={record.status} />
       </div>
@@ -270,10 +271,10 @@ export function ReviewItemPane({ id, onBack }: { id: string; onBack?: () => void
       {item.reason === "source_changed" && <Versions v={v.data} />}
 
       <Properties view={record} kindLabel={kindLabel(vocab.data, kind, i18n.language)} />
-      {p.summary_plain && <p className="lede">{text(p.summary_plain, i18n.language)}</p>}
+      {p.summary_plain && <p className="lede">{pickText(p.summary_plain, i18n.language)}</p>}
       <RecordContent content={(record.payload as { content?: Content }).content} />
       {p.body && (
-        <Body text={text(p.body, i18n.language)} target={(l) => ({ to: "/search", search: { q: l } })} />
+        <Body text={pickText(p.body, i18n.language)} target={(l) => ({ to: "/search", search: { q: l } })} />
       )}
       {(record.sources.length > 0 || p.basis) && (
         <div className="ritem__src">

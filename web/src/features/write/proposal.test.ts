@@ -55,6 +55,28 @@ test("ревизия: record_id, своё свойство в qualifiers, неи
   expect(links).toEqual([{ src: A3, dst: "atm:14", rel: "see_also" }]);
 });
 
+test("английский интерфейс: новое — в en, правка — в показанный слот, другой язык сохраняется", () => {
+  const d = { ...emptyDraft("note"), label: "Check the mast", body: "after the wind" };
+  expect(toProposal(d, T("note"), { lang: "en" }).proposal.payload).toMatchObject({
+    label: { en: "Check the mast" },
+    body: { en: "after the wind" },
+  });
+  const base = { kind: "note", label: { ru: "Проверить мачту" }, summary_plain: { ru: "Р", en: "S" } };
+  const e = fromPayload(base, T("note"), "atom", "en");
+  expect([e.label, e.summary]).toEqual(["Проверить мачту", "S"]);
+  e.label = "Проверить мачту после ветра";
+  e.summary = "";
+  const out = toProposal(e, T("note"), { recordId: "atm:x", base, lang: "en" }).proposal.payload;
+  expect(out.label).toEqual({ ru: "Проверить мачту после ветра" });
+  expect(out.summary_plain).toEqual({ ru: "Р" });
+  const en = withSummary({
+    proposals: [
+      { target: "atom" as const, record_id: null, payload: { kind: "note", label: { en: "Mast" } } },
+    ],
+  });
+  expect((en.proposals[0]?.payload as { summary_plain?: unknown }).summary_plain).toEqual({ en: "Mast" });
+});
+
 test("замечания проверки — к полям формы, источникам и заголовку", () => {
   const r = issuesToFields(
     [
