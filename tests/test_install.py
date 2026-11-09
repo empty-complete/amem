@@ -25,7 +25,8 @@ with open(os.environ["STUB_LOG"], "a", encoding="utf-8") as log:
     log.write(json.dumps(args) + "\\n")
 path = Path(os.environ["HOME"]) / ".claude.json"
 data = json.loads(path.read_text()) if path.exists() else {{}}
-if args[:2] == ["mcp", "add"] and os.environ.get("STUB_FAIL_ADD", "\0") in args:
+fail = os.environ.get("STUB_FAIL_ADD")
+if args[:2] == ["mcp", "add"] and fail and fail in args:
     print("add failed", file=sys.stderr)
     sys.exit(1)
 if args[:2] == ["mcp", "add"]:
