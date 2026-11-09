@@ -239,15 +239,15 @@ npm run dev:mock      # Node 24+; then open http://127.0.0.1:5173/ui/
 
 ### Coming next: one-command install
 
+`amem init`, `amem serve`, the [CLI](#cli) and the [MCP server](#mcp) already work from a clone.
+
 > [!NOTE]
-> **Not available yet.** This is the planned interface of the service, CLI and agent memory
+> **Not available yet:** the package on PyPI and `amem install` for agent memory (hooks and skills)
 > ([subproject 4](docs/superpowers/specs/2026-11-07-amem-subproject-4-service-design.md)).
 
 ```bash
 pipx install amem
-amem init                     # database and object store
 amem install claude-code      # MCP server, hooks and skills; `amem install codex` for Codex CLI
-amem serve                    # HTTP API, /mcp and the web UI at http://127.0.0.1:8767/ui
 ```
 
 ## Service
