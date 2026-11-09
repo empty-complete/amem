@@ -419,3 +419,64 @@ a.pill:hover {
     gap: 0;
   }
 }
+
+/* содержание записи: формула и таблица (content.formula, content.table) */
+.formula__math {
+  display: block;
+  overflow: auto hidden;
+  padding: var(--s-xs) 0;
+  text-align: center;
+}
+.formula__where {
+  display: grid;
+  gap: var(--s-2xs);
+  margin: var(--s-sm) 0 0;
+  font-size: var(--t-label);
+}
+.formula__where > div {
+  display: grid;
+  grid-template-columns: minmax(3rem, max-content) minmax(0, 1fr);
+  gap: var(--s-sm);
+  align-items: baseline;
+}
+.formula__where dt {
+  text-align: right;
+}
+.formula__where dd {
+  margin: 0;
+}
+.ctab {
+  overflow: auto;
+  max-height: 28rem;
+  border: 1px solid var(--separator);
+  border-radius: var(--radius);
+}
+.ctab:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.ctab table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-label);
+}
+.ctab th,
+.ctab td {
+  padding: var(--s-xs) var(--s-sm);
+  border-bottom: 1px solid var(--separator);
+  text-align: left;
+  white-space: nowrap;
+}
+.ctab th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-secondary);
+  font-weight: 500;
+}
+.ctab td[data-num] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ctab tbody tr:last-child td {
+  border-bottom: 0;
+}

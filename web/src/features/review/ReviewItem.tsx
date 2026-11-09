@@ -10,6 +10,7 @@ import { Icon } from "../../ui/icons";
 import { RegionState } from "../../ui/RegionState";
 import { StatusText } from "../../ui/StatusText";
 import { Body } from "../record/Body";
+import { type Content, RecordContent } from "../record/Content";
 import { text } from "../record/doc";
 import { Properties } from "../record/Properties";
 import { kindLabel, recordPath } from "../records/RecordList";
@@ -270,6 +271,7 @@ export function ReviewItemPane({ id, onBack }: { id: string; onBack?: () => void
 
       <Properties view={record} kindLabel={kindLabel(vocab.data, kind, i18n.language)} />
       {p.summary_plain && <p className="lede">{text(p.summary_plain, i18n.language)}</p>}
+      <RecordContent content={(record.payload as { content?: Content }).content} />
       {p.body && (
         <Body text={text(p.body, i18n.language)} target={(l) => ({ to: "/search", search: { q: l } })} />
       )}

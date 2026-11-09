@@ -59,6 +59,20 @@ test("запись: свойства, путь по part_of, цитата под
   expect(problems).toEqual([]);
 });
 
+test("содержание записи на службе: формула с обозначениями и таблица с единицами", async ({ page }) => {
+  const problems = watch(page);
+  await page.goto(`./atom/${await refOf(page, "Точка росы по формуле Магнуса")}`);
+  const formula = page.getByRole("region", { name: "Формула" });
+  await expect(formula.locator(".katex").first()).toBeVisible();
+  await expect(formula.getByRole("definition").first()).toContainText("точка росы");
+  await page.goto(`./atom/${await refOf(page, "В-2 и психрометр")}`);
+  const table = page.getByRole("region", { name: "Таблица", exact: true });
+  await expect(table.getByRole("columnheader", { name: "В-2, %" })).toBeVisible();
+  await expect(table.getByRole("row")).toHaveCount(4);
+  await axe(page);
+  expect(problems).toEqual([]);
+});
+
 test("быстрая запись по N: «Отменить» — ничего нет; без отмены — запись в «Изменениях»", async ({ page }) => {
   const problems = watch(page);
   await page.goto("./records");
