@@ -29,7 +29,7 @@ const t = (key, vars = {}) => {
 // что делать на каждом образце: текст быстрой записи, запрос, записи по подписи, значение для карточки
 const SAMPLES = {
   en: {
-    write: "WS-2 battery reads 11.8 V after the frost night",
+    write: "WS-2 battery after the frost night 11.8 V",
     query: "humidity accuracy",
     result: "TH-20 humidity accuracy",
     card: "WS-100 automatic weather station",
@@ -107,7 +107,7 @@ function overlay() {
     Object.assign(badge.style, {
       position: "fixed",
       left: "50%",
-      bottom: "28px",
+      bottom: "110px",
       transform: "translateX(-50%)",
       zIndex: "2147483647",
       pointerEvents: "none",
@@ -237,7 +237,8 @@ const scenes = {
     await page.keyboard.type(sample.value, { delay: 160 });
     await pause(page, 500);
     await key(page, "Enter", "Enter ↵");
-    await pause(page, 3200);
+    // значение уходит в базу после окна отмены (6 с) — тогда растёт полоса полноты и пропадает «Нужно»
+    await pause(page, 8000);
     return start;
   },
   // небо: укладка созвездия, стрелки выбирают звезду, Enter открывает, глубина окрестности 1 и 3
@@ -245,26 +246,28 @@ const scenes = {
     await page.goto(`${base}/ui/`);
     await page.waitForLoadState("domcontentloaded");
     const start = mark(page) + 0.4;
-    await pause(page, 4200);
+    await pause(page, 3400);
     await page.getByRole("application").first().focus();
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       await key(page, "ArrowRight", "→");
       await pause(page, 1000);
     }
     await key(page, "Enter", "Enter ↵");
     await page.waitForURL(/\/(atom|entity)\//);
     await page.waitForLoadState("networkidle");
-    await pause(page, 1800);
+    await pause(page, 1200);
     for (const n of [1, 3]) {
       const radio = page.getByRole("radio", { name: `${t("sky.depth")} ${n}` }).first();
       if (await radio.isVisible()) {
         await click(page, radio);
-        await pause(page, 1800);
+        await pause(page, 1500);
       }
     }
     return start;
   },
 };
+// небо — тёмный холст с движущимися точками: GIF сжимает его хуже всего, поэтому реже и уже
+const GIF_OF = { sky: { fps: 10, width: 1000, colors: 128 } };
 
 mkdirSync(out, { recursive: true });
 const videos = mkdtempSync(join(tmpdir(), "amemo-gifs-"));
@@ -304,7 +307,7 @@ for (const [name, scene] of Object.entries(scenes)) {
   await ctx.close();
   const webm = await video.path();
   const gif = join(out, `demo-${name}.gif`);
-  const { fps, width, colors } = GIF;
+  const { fps, width, colors } = { ...GIF, ...GIF_OF[name] };
   execFileSync("ffmpeg", [
     "-y",
     "-v",
