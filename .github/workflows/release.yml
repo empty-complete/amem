@@ -1,11 +1,11 @@
 name: release
-# amem и amem-web на PyPI. Выпуск — метка vX.Y.Z… на коммите из main (git tag v0.1.0a1 && git push origin v0.1.0a1).
+# amemo и amemo-web на PyPI. Выпуск — метка vX.Y.Z… на коммите из main (git tag v0.1.0a1 && git push origin v0.1.0a1).
 # На pull request с правками поставки — та же сборка и проверки, без загрузки.
 on:
   push:
     tags: ["v*"]
   pull_request:
-    paths: ["pyproject.toml", "amem/__init__.py", "web/python/**", "README.md", "tools/release.py",
+    paths: ["pyproject.toml", "amemo/__init__.py", "web/python/**", "README.md", "tools/release.py",
             ".github/workflows/release.yml"]
   workflow_dispatch:
 
@@ -35,7 +35,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - name: Web UI build (static files of amem-web)
+      - name: Web UI build (static files of amemo-web)
         working-directory: web
         run: npm ci && npm run build
       - uses: actions/setup-python@v5
@@ -61,14 +61,14 @@ jobs:
           for f in dist/*.whl; do if unzip -Z1 "$f" | grep -i -E 'LICEN[CS]E'; then exit 1; fi; done
           for f in dist/*.tar.gz; do if tar -tzf "$f" | grep -i -E 'LICEN[CS]E'; then exit 1; fi; done
       - run: twine check --strict dist/*
-      - name: amem[web] from the built wheels in a clean environment
+      - name: amemo[web] from the built wheels in a clean environment
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           python -m venv "$RUNNER_TEMP/clean"
-          "$RUNNER_TEMP/clean/bin/pip" install -q --find-links dist "amem[web]==$VERSION"
-          "$RUNNER_TEMP/clean/bin/amem" --version | grep -Fx "amem $VERSION"
-          "$RUNNER_TEMP/clean/bin/python" -c "import amem_web; assert (amem_web.static_dir() / 'index.html').is_file()"
+          "$RUNNER_TEMP/clean/bin/pip" install -q --find-links dist "amemo[web]==$VERSION"
+          "$RUNNER_TEMP/clean/bin/amemo" --version | grep -Fx "amemo $VERSION"
+          "$RUNNER_TEMP/clean/bin/python" -c "import amemo_web; assert (amemo_web.static_dir() / 'index.html').is_file()"
           for f in dist/*.whl; do unzip -l "$f" | tail -1; done
       - uses: actions/upload-artifact@v4
         with:
@@ -82,7 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi                       # секрет PYPI_API_TOKEN; окружение пускает только метки v*
-      url: https://pypi.org/project/amem/${{ needs.build.outputs.version }}/
+      url: https://pypi.org/project/amemo/${{ needs.build.outputs.version }}/
     permissions:
       contents: read
       id-token: write                  # для Trusted Publishing, когда токен сменится на него
@@ -103,12 +103,12 @@ jobs:
     env:
       VERSION: ${{ needs.build.outputs.version }}
     steps:
-      - name: pipx install 'amem[web]' from PyPI
+      - name: pipx install 'amemo[web]' from PyPI
         run: |
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            pipx install "amem[web]==$VERSION" && break
+            pipx install "amemo[web]==$VERSION" && break
             [ "$attempt" = 10 ] && exit 1
             echo "PyPI ещё не отдаёт $VERSION: попытка $attempt"; sleep 30
           done
-          amem --version | grep -Fx "amem $VERSION"
-          pipx runpip amem show amem-web | grep -Fx "Version: $VERSION"
+          amemo --version | grep -Fx "amemo $VERSION"
+          pipx runpip amemo show amemo-web | grep -Fx "Version: $VERSION"

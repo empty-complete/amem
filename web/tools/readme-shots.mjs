@@ -71,7 +71,7 @@ const WORDS = {
     review: "review",
     helpful: "marked as helpful",
     nothing: "nothing",
-    session: "agent session · MCP server: amem mcp",
+    session: "agent session · MCP server: amemo mcp",
     verdict: { ok: "quote found", fuzzy: "quote close", not_found: "quote not found" },
   },
   ru: {
@@ -86,7 +86,7 @@ const WORDS = {
     review: "проверка",
     helpful: "отмечено как полезное",
     nothing: "ничего",
-    session: "сессия агента · MCP-сервер: amem mcp",
+    session: "сессия агента · MCP-сервер: amemo mcp",
     verdict: { ok: "цитата найдена", fuzzy: "цитата приблизительно", not_found: "цитата не найдена" },
   },
 };
@@ -104,14 +104,14 @@ const args = (a) =>
 function agentHtml(t, theme) {
   const blocks = t.calls.map(({ tool, args: a, result: r }) => {
     let body = "";
-    if (tool === "amem_search") {
+    if (tool === "amemo_search") {
       body = `<div class="res">${W.hits(r.items.length)} · ${W.retrieval} ${esc(short(r.retrieval_id))}</div>${r.items
         .map(
           (i) =>
             `<div class="row"><span class="ref">${esc(short(i.ref))}</span><span class="lab">${esc(i.label)}</span><span class="meta">${esc(i.kind)} · ${status(i.status)}</span></div>`,
         )
         .join("")}`;
-    } else if (tool === "amem_get") {
+    } else if (tool === "amemo_get") {
       body = r.records
         .map((v) => {
           const p = v.payload ?? {};
@@ -130,12 +130,12 @@ function agentHtml(t, theme) {
           return `<div class="res"><b>${esc(text(p.label))}</b> <span class="meta">${esc(p.kind)} · ${status(v.status)}</span></div>${value}<div class="row"><span class="k2">${W.summary}</span><span>${esc(text(p.summary_plain))}</span></div>${sources}${open ? `<div class="row"><span class="k2">${W.review}</span><span>${open}</span></div>` : ""}`;
         })
         .join("");
-    } else if (tool === "amem_helpful") {
+    } else if (tool === "amemo_helpful") {
       body = `<div class="res">${W.helpful}: ${(r.marked ?? []).map((m) => esc(short(m))).join(", ") || W.nothing}</div>`;
     } else {
       body = `<div class="res">${esc(JSON.stringify(r))}</div>`;
     }
-    const dot = { amem_search: "src", amem_get: "obj", amem_helpful: "work" }[tool] ?? "src";
+    const dot = { amemo_search: "src", amemo_get: "obj", amemo_helpful: "work" }[tool] ?? "src";
     return `<div class="call"><div class="head"><i class="dot ${dot}"></i><b>${esc(tool)}</b>(${args(a)})</div><div class="body">${body}</div></div>`;
   });
   const dark = theme === "dark";
@@ -183,8 +183,8 @@ for (const theme of ["light", "dark"]) {
   });
   await ctx.addInitScript(
     ([l, t]) => {
-      localStorage.setItem("amem.locale", l);
-      localStorage.setItem("amem.theme", t);
+      localStorage.setItem("amemo.locale", l);
+      localStorage.setItem("amemo.theme", t);
     },
     [lang, theme],
   );

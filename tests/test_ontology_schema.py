@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from amem import model_v1
+from amemo import model_v1
 from v1_support import example, pydantic_errors, json_errors
 
 ATOM = "atom_fact.yaml"          # нейтральный пример атома из tests/v1_examples

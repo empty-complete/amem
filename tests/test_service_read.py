@@ -1,5 +1,5 @@
 """Пути чтения HTTP v1 (подпроект 4, часть 4a, задача 6): каждый ответ сверяется со схемой контракта
-docs/api/http-v1.openapi.yaml; операции amem/api.py — нормализация пустых фильтров и проверка параметров.
+docs/api/http-v1.openapi.yaml; операции amemo/api.py — нормализация пустых фильтров и проверка параметров.
 starlette.testclient на настоящей базе (PostgreSQL 18 и 16), порт не слушается."""
 import json
 import os
@@ -10,9 +10,9 @@ import pytest
 import yaml
 
 import contract
-from amem import api, db, embed, folders, objects, records, review
-from amem.ocfl_store import ObjectStore
-from amem.records import Item
+from amemo import api, db, embed, folders, objects, records, review
+from amemo.ocfl_store import ObjectStore
+from amemo.records import Item
 from conftest import FakeProvider
 from samples import make_xlsx
 
@@ -39,7 +39,7 @@ def world(pg, docs, tmp_path):
     """Небольшая база: площадка ← станция ← датчик (part_of), факт о датчике с источником в PDF, урок, связь,
     папка, статус, пункт аудита; объекты — PDF, заметка .md, книга xlsx, переписка и страница сайта."""
     db.prepare(pg)
-    store = ObjectStore(tmp_path / "objects")              # то же хранилище, что у службы (AMEM_DATA фикстуры serve)
+    store = ObjectStore(tmp_path / "objects")              # то же хранилище, что у службы (AMEMO_DATA фикстуры serve)
     make_xlsx(docs / XLSX, {"Нагрузки": [["Район", "w0, кПа"], ["II", 0.3], ["III", 0.38]]})
     pdf = objects.ingest(pg, store, docs, PDF, agent=PERSON)
     note = objects.ingest(pg, store, docs, NOTE, agent=PERSON)
@@ -90,14 +90,14 @@ def test_contract_is_valid_openapi_3_1():
 def test_package_copy_of_the_contract_is_byte_for_byte_the_same():
     package = Path(api.__file__).parent / "service" / "http-v1.openapi.yaml"
     assert package.read_bytes() == contract.PATH.read_bytes(), \
-        "копия контракта в пакете отстала: cp docs/api/http-v1.openapi.yaml amem/service/"
+        "копия контракта в пакете отстала: cp docs/api/http-v1.openapi.yaml amemo/service/"
 
 
 def test_contract_copy_is_package_data():
     import tomllib
 
     data = tomllib.loads((contract.ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    assert "service/*.yaml" in data["tool"]["setuptools"]["package-data"]["amem"]
+    assert "service/*.yaml" in data["tool"]["setuptools"]["package-data"]["amemo"]
 
 
 def test_openapi_json_is_the_contract(serve):
@@ -226,7 +226,7 @@ def test_search_and_similar_degrade_when_the_provider_does_not_fit(serve, world,
 
 
 def test_default_provider_is_made_once_per_service(serve, world, pg, monkeypatch):
-    """provider по AMEM_BACKEND создаётся при первом поиске один раз: модель fastembed не грузится на каждый запрос."""
+    """provider по AMEMO_BACKEND создаётся при первом поиске один раз: модель fastembed не грузится на каждый запрос."""
     made = []
 
     class Fastembed(FakeProvider):
@@ -429,7 +429,7 @@ def test_card(serve, world):
 
 def test_card_fields_have_property_labels_and_text_prompts(serve, pg, monkeypatch):
     """Поле карточки — с подписью величины из словаря; ask, hint, when (LangString библиотеки) — строкой ru."""
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(PACKS / "ontology")]))
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(PACKS / "ontology")]))
     db.prepare(pg)
     done = records.commit(pg, [Item("entity", {"entity_class": "device", "label": {"ru": "Насос"}})], agent=PERSON)
     ref = f"ent:{done.revisions[0].record_id}"
@@ -616,14 +616,14 @@ def test_object_content(serve, world, docs):
 
 
 def test_store_without_its_root_is_503(serve, world, tmp_path):
-    """AMEM_DATA без корня OCFL — том данных не подключён: это недоступность службы, а не «нет файла»."""
-    client = serve({"AMEM_DATA": str(tmp_path / "другое-хранилище")})
+    """AMEMO_DATA без корня OCFL — том данных не подключён: это недоступность службы, а не «нет файла»."""
+    client = serve({"AMEMO_DATA": str(tmp_path / "другое-хранилище")})
     url = f"{V1}/objects/{{}}/versions/1/{{}}"
     for tail, object_id, params in (("content", world.pdf, None), ("text", world.pdf, None),
                                     ("sheet", world.book, {"name": "Нагрузки"})):
         body = problem(client.get(url.format(oid(object_id), tail), params=params), 503, "store_unavailable",
                        f"/objects/{{id}}/versions/{{n}}/{tail}")
-        assert "AMEM_DATA" in body["detail"] and str(tmp_path) not in body["detail"]   # путь — только в журнал
+        assert "AMEMO_DATA" in body["detail"] and str(tmp_path) not in body["detail"]   # путь — только в журнал
 
 
 def test_copy_missing_from_the_store_is_404_and_logged(serve, world, caplog):
@@ -638,7 +638,7 @@ def test_copy_missing_from_the_store_is_404_and_logged(serve, world, caplog):
     note.symlink_to(outside)
     client = serve()
     url = f"{V1}/objects/{{}}/versions/1/{{}}"
-    with caplog.at_level("WARNING", logger="amem.service"):
+    with caplog.at_level("WARNING", logger="amemo.service"):
         for tail, object_id, params in (("content", world.pdf, None), ("text", world.pdf, None),
                                         ("content", world.book, None), ("sheet", world.book, {"name": "Нагрузки"}),
                                         ("content", world.note, None)):
@@ -712,7 +712,7 @@ def test_backups(serve, tmp_path):
     for name, size in (("2026-11-05T08-00-00Z", 7), ("2026-11-06T08-00-00Z", 3)):
         (backups / f"{name}.dump").write_bytes(b"x" * size)
         (backups / f"{name}.json").write_text(json.dumps(
-            {"kind": "amem.pg_dump", "format": 1, "file": f"{name}.dump", "size": size}), encoding="utf-8")
+            {"kind": "amemo.pg_dump", "format": 1, "file": f"{name}.dump", "size": size}), encoding="utf-8")
     body = contract.check(client.get(f"{V1}/backups"), "/backups")
     assert body == [{"name": "2026-11-05T08-00-00Z", "created_at": "2026-11-05T08:00:00+00:00", "size": 7},
                     {"name": "2026-11-06T08-00-00Z", "created_at": "2026-11-06T08:00:00+00:00", "size": 3}]

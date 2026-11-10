@@ -9,8 +9,8 @@ import pytest
 from pgvector import HalfVector
 from pgvector.psycopg import register_vector
 
-from amem import db, embed, ids, records
-from amem.records import Item
+from amemo import db, embed, ids, records
+from amemo.records import Item
 from conftest import FakeProvider
 
 AGENT = "model:test"
@@ -191,7 +191,7 @@ def test_backend_none_disables_provider_without_importing_fastembed(kb, provider
     put_atom(kb)
     model = embed.register_model(kb, provider)
     calls = len(provider.calls)
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
     monkeypatch.setitem(sys.modules, "fastembed", None)
     result = embed.sync_embeddings(kb, model["id"])
     assert result["embedded"] == 0 and result["missing"] == 1
@@ -201,13 +201,13 @@ def test_backend_none_disables_provider_without_importing_fastembed(kb, provider
 
 class ExplodingProvider(FakeProvider):
     def _embed(self, texts):
-        raise AssertionError("provider вызван при AMEM_BACKEND=none")
+        raise AssertionError("provider вызван при AMEMO_BACKEND=none")
 
 
 def test_backend_none_overrides_explicit_provider_in_sync(kb, provider, monkeypatch):
     put_atom(kb)
     model = embed.register_model(kb, provider)
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
     monkeypatch.setitem(sys.modules, "fastembed", None)
     result = embed.sync_embeddings(kb, model["id"], ExplodingProvider())
     assert result["embedded"] == 0 and result["missing"] == 1
@@ -217,7 +217,7 @@ def test_backend_none_overrides_explicit_provider_in_sync(kb, provider, monkeypa
 def test_backend_none_overrides_explicit_provider_in_embed_revision(kb, provider, monkeypatch):
     revision = put_atom(kb)
     model = embed.register_model(kb, provider)
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
     monkeypatch.setitem(sys.modules, "fastembed", None)
     result = embed.embed_revision(kb, "atom", revision.revision_id, model["id"], ExplodingProvider())
     assert result["embedded"] is False

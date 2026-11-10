@@ -1,0 +1,3076 @@
+{
+  "$defs": {
+    "Activity": {
+      "additionalProperties": false,
+      "description": "",
+      "properties": {
+        "ended_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ActivityKind"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "started_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "title": "Activity",
+      "type": "object"
+    },
+    "ActivityKind": {
+      "description": "",
+      "enum": [
+        "task",
+        "wave",
+        "session",
+        "migration"
+      ],
+      "title": "ActivityKind",
+      "type": "string"
+    },
+    "Agent": {
+      "additionalProperties": false,
+      "description": "",
+      "properties": {
+        "id": {
+          "pattern": "^(person|model):[a-z0-9_.-]+$",
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Agent",
+      "type": "object"
+    },
+    "Any": {
+      "additionalProperties": true,
+      "description": "Любое значение (ячейка таблицы, отчёт проверки).",
+      "title": "Any",
+      "type": [
+        "null",
+        "boolean",
+        "object",
+        "number",
+        "string",
+        "array"
+      ]
+    },
+    "Atom": {
+      "additionalProperties": false,
+      "description": "Атом в выдаче сервера — тело текущей ревизии + технические поля, которые ставит сервер.",
+      "properties": {
+        "about": {
+          "items": {
+            "pattern": "^(ent:([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "activity": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "agent": {
+          "pattern": "^(person|model):[a-z0-9_.-]+$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "aliases": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "basis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Basis"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Основание значения без документа; при заданном basis источник не обязателен (has_source 1.1.0)."
+        },
+        "body": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "changeset": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "codes": {
+          "description": "Марки, обозначения, символы целиком — m10, dn50, w0, 10.1.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "confidence": {
+          "description": "Уверенность агента-модели в утверждении (распознавание, извлечение). Человек поле не заполняет.",
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "content": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Content"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "content_hash": {
+          "description": "Хэш канонического тела ревизии; метка cN — версия правил канонизации (сейчас c1, amemo/canon.py).",
+          "pattern": "^sha256-c[1-9][0-9]*:[0-9a-f]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "derived_from": {
+          "items": {
+            "pattern": "^(atm:([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "folder": {
+          "description": "Папка записи — метаданные, не часть ревизии (amemo/folders.py); null — без папки.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "key": {
+          "description": "Необязательный читаемый ключ.",
+          "pattern": "^[a-z0-9][a-z0-9_.]*$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LangString"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Provenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Происхождение атома при переносе из другой базы; у своих атомов поля нет."
+        },
+        "qualifiers": {
+          "items": {
+            "$ref": "#/$defs/Qualifier"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rank"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recorded_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ref": {
+          "description": "Временное имя в пачке (@имя) для ссылок внутри неё. В ревизию не записывается.",
+          "pattern": "^@[a-z0-9_]+$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retrieval_context": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Фраза агента к контексту поиска; остальное сервер собирает сам."
+        },
+        "review_state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReviewState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "revision": {
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "schema_version": {
+          "pattern": "^amem\\.atom/[0-9]+$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scope"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Status"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary_plain": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tags": {
+          "description": "Свободные метки. Приставка вида «объект:…» запрещена — это about.",
+          "items": {
+            "pattern": "^(?![^\\s:]+:).+$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "valid_from": {
+          "format": "date",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "valid_to": {
+          "format": "date",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "label"
+      ],
+      "title": "Atom",
+      "type": "object"
+    },
+    "AtomPayload": {
+      "additionalProperties": false,
+      "description": "Тело атома — что предлагает агент. В ревизии хранится в канонической форме: без ref и path, ссылки — только по UUID, у источника object, object_version и digest (проверяет этап 2).",
+      "properties": {
+        "about": {
+          "items": {
+            "pattern": "^(ent:([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "aliases": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "basis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Basis"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Основание значения без документа; при заданном basis источник не обязателен (has_source 1.1.0)."
+        },
+        "body": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "codes": {
+          "description": "Марки, обозначения, символы целиком — m10, dn50, w0, 10.1.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "confidence": {
+          "description": "Уверенность агента-модели в утверждении (распознавание, извлечение). Человек поле не заполняет.",
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "content": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Content"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "derived_from": {
+          "items": {
+            "pattern": "^(atm:([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "key": {
+          "description": "Необязательный читаемый ключ.",
+          "pattern": "^[a-z0-9][a-z0-9_.]*$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LangString"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Provenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Происхождение атома при переносе из другой базы; у своих атомов поля нет."
+        },
+        "qualifiers": {
+          "items": {
+            "$ref": "#/$defs/Qualifier"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rank"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ref": {
+          "description": "Временное имя в пачке (@имя) для ссылок внутри неё. В ревизию не записывается.",
+          "pattern": "^@[a-z0-9_]+$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retrieval_context": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Фраза агента к контексту поиска; остальное сервер собирает сам."
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scope"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "summary_plain": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tags": {
+          "description": "Свободные метки. Приставка вида «объект:…» запрещена — это about.",
+          "items": {
+            "pattern": "^(?![^\\s:]+:).+$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "valid_from": {
+          "format": "date",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "valid_to": {
+          "format": "date",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "label"
+      ],
+      "title": "AtomPayload",
+      "type": "object"
+    },
+    "Basis": {
+      "description": "Основание значения, когда оно не взято из документа об объекте.",
+      "enum": [
+        "default",
+        "assumed",
+        "author"
+      ],
+      "title": "Basis",
+      "type": "string"
+    },
+    "Bundle": {
+      "additionalProperties": false,
+      "description": "Пачка предложений агента — один пакет изменений (kb_add, kb_import).",
+      "properties": {
+        "activity": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "atoms": {
+          "items": {
+            "$ref": "#/$defs/AtomPayload"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "entities": {
+          "items": {
+            "$ref": "#/$defs/EntityPayload"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/LinkPayload"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "Основание — что за документ или задача.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "title": "Bundle",
+      "type": "object"
+    },
+    "BundleManifest": {
+      "additionalProperties": false,
+      "description": "Манифест подборки amem.bundle/1 (bundle.export, файл manifest.json): откуда и что отобрано, пакеты, состав и sha256 каждого файла подборки (parts). Пишется последним; bundle.inspect сверяет части без базы.",
+      "properties": {
+        "agent": {
+          "pattern": "^(person|model):[a-z0-9_.-]+$",
+          "type": "string"
+        },
+        "amem_version": {
+          "type": "string"
+        },
+        "base_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "counts": {
+          "$ref": "#/$defs/Any"
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "format": {
+          "pattern": "^amem\\.bundle/1$",
+          "type": "string"
+        },
+        "packs": {
+          "description": "Пакеты, которым принадлежат коды записей, с зависимостями — name, version, digest, requires.",
+          "items": {
+            "$ref": "#/$defs/Any"
+          },
+          "type": "array"
+        },
+        "parts": {
+          "$ref": "#/$defs/Any",
+          "description": "Путь файла в подборке → sha256 (hex); все файлы, кроме самого манифеста."
+        },
+        "selection": {
+          "$ref": "#/$defs/Any"
+        },
+        "with_files": {
+          "type": "boolean"
+        },
+        "with_history": {
+          "type": "boolean"
+        },
+        "with_packs": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "format",
+        "created_at",
+        "base_id",
+        "agent",
+        "amem_version",
+        "selection",
+        "packs",
+        "counts",
+        "parts",
+        "with_files",
+        "with_history",
+        "with_packs"
+      ],
+      "title": "BundleManifest",
+      "type": "object"
+    },
+    "Card": {
+      "additionalProperties": false,
+      "description": "Карточка сущности amem.card/1 (profile.card): поля профиля её класса, величины вне профиля (extra), сводка и карточки предков по part_of. Вычисляется, не хранится.",
+      "properties": {
+        "ancestors": {
+          "items": {
+            "$ref": "#/$defs/Any"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "entity": {
+          "$ref": "#/$defs/Any"
+        },
+        "extra": {
+          "items": {
+            "$ref": "#/$defs/Any"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/CardField"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "format": {
+          "pattern": "^amem\\.card/1$",
+          "type": "string"
+        },
+        "profile": {
+          "description": "Шаблон класса с профилем (code@version) или пусто, если профиля нет.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "$ref": "#/$defs/Any"
+        },
+        "templates": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "format",
+        "entity",
+        "summary"
+      ],
+      "title": "Card",
+      "type": "object"
+    },
+    "CardField": {
+      "additionalProperties": false,
+      "description": "Поле карточки: правило профиля и выведенное по действующим атомам parameter состояние. У known — значение и признаки (status, by, basis, rank, confidence, source_role, sources) — у лучшего из атомов с этим значением (verified, затем человек, затем новее); candidates — остальные значения, кроме rank deprecated. Карточка не хранится — класс только описывает формат (JSON Schema).",
+      "properties": {
+        "ask": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "atoms": {
+          "items": {
+            "pattern": "^atm:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "basis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Basis"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "by": {
+          "pattern": "^(person|model)$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/Any"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Any"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "group": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "origin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "property": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rank"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "rule": {
+          "description": "Шаблон, чьё правило действует (code@version).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceRole"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Any"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/CardState"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Status"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Any"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "property",
+        "required",
+        "state"
+      ],
+      "title": "CardField",
+      "type": "object"
+    },
+    "CardState": {
+      "description": "Состояние поля карточки amem.card/1 (спецификация 3c, разд. 3.4).",
+      "enum": [
+        "known",
+        "missing",
+        "asked",
+        "na",
+        "conflict"
+      ],
+      "title": "CardState",
+      "type": "string"
+    },
+    "Changeset": {
+      "additionalProperties": false,
+      "description": "",
+      "properties": {
+        "activity": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "agent": {
+          "pattern": "^(person|model):[a-z0-9_.-]+$",
+          "type": "string"
+        },
+        "check_report": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Any"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/ChangesetState"
+        }
+      },
+      "required": [
+        "id",
+        "agent",
+        "state"
+      ],
+      "title": "Changeset",
+      "type": "object"
+    },
+    "ChangesetState": {
+      "description": "",
+      "enum": [
+        "approved",
+        "rejected"
+      ],
+      "title": "ChangesetState",
+      "type": "string"
+    },
+    "CheckCode": {
+      "description": "Код замечания автопроверки; уровень и важность — в спецификации.",
+      "enum": [
+        "schema",
+        "unknown_code",
+        "ref_unknown",
+        "template",
+        "ucum",
+        "unit_required",
+        "bounds_order",
+        "link_not_allowed",
+        "link_required",
+        "link_pair",
+        "retired_record",
+        "record_error",
+        "source_unresolved",
+        "version_missing",
+        "digest_mismatch",
+        "pdf_page_required",
+        "pdf_quote_required",
+        "quote_not_found",
+        "quote_fuzzy",
+        "quote_ocr",
+        "number_not_found",
+        "page_moved",
+        "place_unresolved",
+        "no_text",
+        "external_source",
+        "source_error",
+        "numbers_unchecked",
+        "edition_filled",
+        "unknown_property",
+        "out_of_range",
+        "unit_mismatch",
+        "conflict",
+        "duplicate",
+        "related",
+        "basis_author_model",
+        "basis_without_rule",
+        "confidence_person",
+        "bundle_pack_missing",
+        "bundle_key_collision",
+        "bundle_object_conflict"
+      ],
+      "title": "CheckCode",
+      "type": "string"
+    },
+    "CheckIssue": {
+      "additionalProperties": false,
+      "description": "Замечание автопроверки.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/CheckCode"
+        },
+        "details": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Any"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "level": {
+          "maximum": 4,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "where": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "level",
+        "severity",
+        "code",
+        "where",
+        "message"
+      ],
+      "title": "CheckIssue",
+      "type": "object"
+    },
+    "CheckReport": {
+      "additionalProperties": false,
+      "description": "Отчёт пакета; пишется в changeset.check_report до записи ревизий.",
+      "properties": {
+        "degraded": {
+          "items": {
+            "$ref": "#/$defs/Any"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "format": {
+          "pattern": "^amem\\.check/1$",
+          "type": "string"
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/CheckIssue"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "levels": {
+          "$ref": "#/$defs/Any"
+        },
+        "records": {
+          "items": {
+            "$ref": "#/$defs/Any"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "templates": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "format",
+        "levels"
+      ],
+      "title": "CheckReport",
+      "type": "object"
+    },
+    "Column": {
+      "additionalProperties": false,
+      "description": "",
+      "properties": {
+        "code": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LangString"
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "label"
+      ],
+      "title": "Column",
+      "type": "object"
+    },
+    "Concept": {
+      "additionalProperties": false,
+      "description": "Понятие словаря (SKOS).",
+      "properties": {
+        "broader": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "code": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "definition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "family": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KindFamily"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Семья вида атома — только у понятий scheme kind; без неё вид считается work."
+        },
+        "inverse_label": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label": {
+          "$ref": "#/$defs/LangString"
+        },
+        "pairs": {
+          "description": "Допустимые пары концов связи «от>к» — atom>entity.",
+          "items": {
+            "pattern": "^(atom|entity)>(atom|entity)$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "plausible_max": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "plausible_min": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "quantity_kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scheme": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Status"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "symmetric": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "via_field": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "scheme",
+        "code",
+        "label"
+      ],
+      "title": "Concept",
+      "type": "object"
+    },
+    "Content": {
+      "additionalProperties": false,
+      "description": "Форма записи — одна или несколько.",
+      "properties": {
+        "formula": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Formula"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "table": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Table"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "values": {
+          "items": {
+            "$ref": "#/$defs/Value"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "title": "Content",
+      "type": "object"
+    },
+    "Entity": {
+      "additionalProperties": false,
+      "description": "",
+      "properties": {
+        "activity": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "agent": {
+          "pattern": "^(person|model):[a-z0-9_.-]+$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "aliases": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "changeset": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "codes": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "content_hash": {
+          "description": "Хэш канонического тела ревизии; метка cN — версия правил канонизации (сейчас c1, amemo/canon.py).",
+          "pattern": "^sha256-c[1-9][0-9]*:[0-9a-f]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "edition_of": {
+          "description": "Только у класса edition — норматив или документ, редакцией которого она является.",
+          "pattern": "^(ent:([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entity_class": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "external_ids": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExternalIds"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "folder": {
+          "description": "Папка записи — метаданные, не часть ревизии (amemo/folders.py); null — без папки.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "key": {
+          "pattern": "^[a-z0-9][a-z0-9_.]*$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "$ref": "#/$defs/LangString"
+        },
+        "recorded_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ref": {
+          "pattern": "^@[a-z0-9_]+$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "review_state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReviewState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "revision": {
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "schema_version": {
+          "pattern": "^amem\\.entity/[0-9]+$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sources": {
+          "description": "Файлы, которыми представлена сущность (для документа и редакции), или откуда она известна.",
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Status"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "valid_from": {
+          "format": "date",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "valid_to": {
+          "format": "date",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "entity_class",
+        "label"
+      ],
+      "title": "Entity",
+      "type": "object"
+    },
+    "EntityPayload": {
+      "additionalProperties": false,
+      "description": "Вещь — объект, система, изделие, узел, материал, норматив, редакция, документ. В ревизии хранится в канонической форме: без ref и path, ссылки — только по UUID, у источника object, object_version и digest (проверяет этап 2).",
+      "properties": {
+        "aliases": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "codes": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "edition_of": {
+          "description": "Только у класса edition — норматив или документ, редакцией которого она является.",
+          "pattern": "^(ent:([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entity_class": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "external_ids": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExternalIds"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key": {
+          "pattern": "^[a-z0-9][a-z0-9_.]*$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "$ref": "#/$defs/LangString"
+        },
+        "ref": {
+          "pattern": "^@[a-z0-9_]+$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sources": {
+          "description": "Файлы, которыми представлена сущность (для документа и редакции), или откуда она известна.",
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "valid_from": {
+          "format": "date",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "valid_to": {
+          "format": "date",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "entity_class",
+        "label"
+      ],
+      "title": "EntityPayload",
+      "type": "object"
+    },
+    "ExternalIds": {
+      "additionalProperties": false,
+      "description": "",
+      "properties": {
+        "bsdd": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ifc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wikidata": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "title": "ExternalIds",
+      "type": "object"
+    },
+    "FieldRule": {
+      "additionalProperties": false,
+      "description": "Правило шаблона для поля. path — через точку; [] — каждый элемент списка, ставится у промежуточных списков (sources[].edition). Правило с [] относится к каждому элементу: у нормы каждый источник — сам документ. required — поле непустое: список — хотя бы один элемент, текст — непустой ru, объект — хотя бы одно непустое поле. min_count — не меньше N элементов (для N больше 1; для одного — required). selector_types — хотя бы один селектор из перечня, с учётом цепочки refined_by. entity_classes — класс сущности, на которую ведёт ссылка. ucum — значение — код UCUM. severity по умолчанию — violation.",
+      "properties": {
+        "entity_classes": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "message": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min_count": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "pattern": "^[a-z_][a-z0-9_]*(\\[\\])?(\\.[a-z_][a-z0-9_]*(\\[\\])?)*$",
+          "type": "string"
+        },
+        "required": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "selector_types": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "severity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Severity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skip_if_set": {
+          "description": "Путь до поля того же тела; если оно непусто, правило не применяется.",
+          "pattern": "^[a-z_][a-z0-9_]*(\\.[a-z_][a-z0-9_]*)*$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ucum": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "FieldRule",
+      "type": "object"
+    },
+    "Formula": {
+      "additionalProperties": false,
+      "description": "",
+      "properties": {
+        "latex": {
+          "type": "string"
+        },
+        "plain": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "symbols": {
+          "items": {
+            "$ref": "#/$defs/Symbol"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "latex"
+      ],
+      "title": "Formula",
+      "type": "object"
+    },
+    "HighRiskRule": {
+      "description": "Правило шаблона, по которому запись считается рискованной.",
+      "enum": [
+        "always",
+        "numeric",
+        "low_confidence"
+      ],
+      "title": "HighRiskRule",
+      "type": "string"
+    },
+    "KindFamily": {
+      "description": "Семья вида атома (Concept.family, спецификация подпроекта 4, разд. 1.2): откуда знание — из документа или из работы. По ней интерфейс группирует виды и раскрашивает граф. Вид без family считается work.",
+      "enum": [
+        "source",
+        "work"
+      ],
+      "title": "KindFamily",
+      "type": "string"
+    },
+    "LangString": {
+      "additionalProperties": false,
+      "description": "Текст на нескольких языках; русский обязателен.",
+      "properties": {
+        "en": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ru": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ru"
+      ],
+      "title": "LangString",
+      "type": "object"
+    },
+    "Link": {
+      "additionalProperties": false,
+      "description": "",
+      "properties": {
+        "agent": {
+          "pattern": "^(person|model):[a-z0-9_.-]+$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "changeset": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dst": {
+          "pattern": "^((atm|ent):([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "qualifiers": {
+          "items": {
+            "$ref": "#/$defs/Qualifier"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "rel": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "retired_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "src": {
+          "pattern": "^((atm|ent):([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "rel",
+        "src",
+        "dst"
+      ],
+      "title": "Link",
+      "type": "object"
+    },
+    "LinkPayload": {
+      "additionalProperties": false,
+      "description": "",
+      "properties": {
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "dst": {
+          "pattern": "^((atm|ent):([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "qualifiers": {
+          "items": {
+            "$ref": "#/$defs/Qualifier"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "rel": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "src": {
+          "pattern": "^((atm|ent):([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rel",
+        "src",
+        "dst"
+      ],
+      "title": "LinkPayload",
+      "type": "object"
+    },
+    "LinkRules": {
+      "additionalProperties": false,
+      "description": "Связи атома этого вида. allowed — какие исходящие связи разрешены (входящие не ограничиваются); исходящая связь другого вида — нарушение violation. required — хотя бы одна связь этого вида, а при to_classes — к сущности одного из этих классов; about и derived_from проверяются по полям атома. severity по умолчанию — violation.",
+      "properties": {
+        "allowed": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "required": {
+          "items": {
+            "$ref": "#/$defs/RequiredLink"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "title": "LinkRules",
+      "type": "object"
+    },
+    "ObjectKind": {
+      "description": "",
+      "enum": [
+        "file",
+        "web",
+        "message"
+      ],
+      "title": "ObjectKind",
+      "type": "string"
+    },
+    "ObjectRecord": {
+      "additionalProperties": false,
+      "description": "Объект — файл (копия по хэшу), страница сайта или переписка.",
+      "properties": {
+        "format_puid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ObjectKind"
+        },
+        "logical_paths": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "media_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "original_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retrieved_at": {
+          "format": "date",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "versions": {
+          "items": {
+            "$ref": "#/$defs/ObjectVersion"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "title": "ObjectRecord",
+      "type": "object"
+    },
+    "ObjectStatus": {
+      "description": "Что из объекта атомизировано (бывший реестр документов). Текущий статус — последняя отметка.",
+      "enum": [
+        "parsed",
+        "partial",
+        "skipped"
+      ],
+      "title": "ObjectStatus",
+      "type": "string"
+    },
+    "ObjectVersion": {
+      "additionalProperties": false,
+      "description": "",
+      "properties": {
+        "digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "n": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "recorded_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "n"
+      ],
+      "title": "ObjectVersion",
+      "type": "object"
+    },
+    "ParameterDefault": {
+      "additionalProperties": false,
+      "description": "",
+      "properties": {
+        "amount": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "title": "ParameterDefault",
+      "type": "object"
+    },
+    "ParameterRule": {
+      "additionalProperties": false,
+      "description": "Правило профиля сущности: какая величина нужна объекту этого класса. required — блокер; default — умолчание области (в карточке показывается, значением не считается); origin — код словаря parameter_origin.",
+      "properties": {
+        "ask": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParameterDefault"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "group": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "origin": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "property": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "required": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "property"
+      ],
+      "title": "ParameterRule",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "description": "Происхождение записи при переносе между базами (задел под хаб, разд. 5 спеки amemo).",
+      "properties": {
+        "origin_agent": {
+          "pattern": "^(person|model):[a-z0-9_.-]+$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "origin_base": {
+          "description": "base_id базы, из которой атом пришёл при разворачивании проекта в собственную базу. Заполняется только при импорте из другой базы; не ссылка — UUID-строка.",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "origin_revision_hash": {
+          "description": "content_hash ревизии в базе-источнике — по нему повторный импорт узнаёт то же содержание.",
+          "pattern": "^sha256-c[1-9][0-9]*:[0-9a-f]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "title": "Provenance",
+      "type": "object"
+    },
+    "Qualifier": {
+      "additionalProperties": false,
+      "description": "Условие применимости (уточнение в духе Wikidata).",
+      "properties": {
+        "amount": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "label": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lower_bound": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "property": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "upper_bound": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "value_state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "property"
+      ],
+      "title": "Qualifier",
+      "type": "object"
+    },
+    "Rank": {
+      "description": "",
+      "enum": [
+        "preferred",
+        "normal",
+        "deprecated"
+      ],
+      "title": "Rank",
+      "type": "string"
+    },
+    "RequiredLink": {
+      "additionalProperties": false,
+      "description": "",
+      "properties": {
+        "rel": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "severity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Severity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "to_classes": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "rel"
+      ],
+      "title": "RequiredLink",
+      "type": "object"
+    },
+    "ReviewItem": {
+      "additionalProperties": false,
+      "description": "Пункт очереди проверки. Ревизия — атома или сущности, по target.",
+      "properties": {
+        "changeset_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "claimed_by": {
+          "pattern": "^(person|model):[a-z0-9_.-]+$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "claimed_until": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "closed_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "created_by": {
+          "pattern": "^(person|model):[a-z0-9_.-]+$",
+          "type": "string"
+        },
+        "details": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Any"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/ReviewReason"
+        },
+        "record_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "revision_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/ReviewItemState"
+        },
+        "target": {
+          "pattern": "^(atom|entity)$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "target",
+        "record_id",
+        "revision_id",
+        "reason",
+        "state",
+        "created_at",
+        "created_by"
+      ],
+      "title": "ReviewItem",
+      "type": "object"
+    },
+    "ReviewItemState": {
+      "description": "",
+      "enum": [
+        "queued",
+        "claimed",
+        "done",
+        "obsolete"
+      ],
+      "title": "ReviewItemState",
+      "type": "string"
+    },
+    "ReviewReason": {
+      "description": "Почему запись попала в очередь проверки.",
+      "enum": [
+        "semantic",
+        "warning",
+        "high_risk",
+        "semantic_doubt",
+        "edit",
+        "source_changed",
+        "audit",
+        "calibration",
+        "imported"
+      ],
+      "title": "ReviewReason",
+      "type": "string"
+    },
+    "ReviewState": {
+      "description": "",
+      "enum": [
+        "none",
+        "pending",
+        "accepted",
+        "declined"
+      ],
+      "title": "ReviewState",
+      "type": "string"
+    },
+    "Scope": {
+      "additionalProperties": false,
+      "description": "",
+      "properties": {
+        "discipline": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "project": {
+          "pattern": "^(ent:([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Visibility"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "title": "Scope",
+      "type": "object"
+    },
+    "Selector": {
+      "additionalProperties": false,
+      "description": "Место внутри файла. refined_by уточняет его — лист → диапазон, страница → цитата.",
+      "properties": {
+        "label": {
+          "description": "Как место подписано в документе — «л. 24–25».",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refined_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Selector"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "title": "Selector",
+      "type": "object"
+    },
+    "Severity": {
+      "description": "",
+      "enum": [
+        "violation",
+        "warning",
+        "info"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "description": "Источник: объект + версия + селекторы + цитата. Во входных данных агент даёт path (путь в папке документов), сервер заменяет его на object, object_version и digest.",
+      "properties": {
+        "digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "edition": {
+          "description": "Редакция документа — сущность класса edition.",
+          "pattern": "^(ent:([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "object": {
+          "pattern": "^obj:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "object_version": {
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "Путь в папке документов или название письма / адрес сайта. Только во входных данных.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quote": {
+          "description": "Дословная цитата в пределах одной страницы — её сверяет с файлом проверка уровня 2. Для PDF обязательна.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceRole"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selectors": {
+          "items": {
+            "$ref": "#/$defs/Selector"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "title": "Source",
+      "type": "object"
+    },
+    "SourceRole": {
+      "description": "",
+      "enum": [
+        "primary",
+        "secondary",
+        "derived"
+      ],
+      "title": "SourceRole",
+      "type": "string"
+    },
+    "SourceVerdict": {
+      "description": "Итог сверки источника с текстом файла (уровень 2 автопроверки). Значок в выдаче — ✓, ≈ или ⚠; у no_text и external значка нет.",
+      "enum": [
+        "ok",
+        "moved",
+        "fuzzy",
+        "by_locator",
+        "unresolved",
+        "not_found",
+        "no_file",
+        "no_text",
+        "external",
+        "error"
+      ],
+      "title": "SourceVerdict",
+      "type": "string"
+    },
+    "Status": {
+      "description": "Статус атома, сущности или понятия словаря.",
+      "enum": [
+        "draft",
+        "needs_review",
+        "auto_verified",
+        "verified",
+        "rejected",
+        "deprecated",
+        "superseded"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "Symbol": {
+      "additionalProperties": false,
+      "description": "",
+      "properties": {
+        "label": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "symbol": {
+          "type": "string"
+        },
+        "term": {
+          "description": "Атом-термин с определением обозначения.",
+          "pattern": "^(atm:([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "symbol"
+      ],
+      "title": "Symbol",
+      "type": "object"
+    },
+    "Table": {
+      "additionalProperties": false,
+      "description": "Таблица целиком. rows — список строк, каждая строка — список значений по columns.",
+      "properties": {
+        "columns": {
+          "items": {
+            "$ref": "#/$defs/Column"
+          },
+          "type": "array"
+        },
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/Any"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "columns"
+      ],
+      "title": "Table",
+      "type": "object"
+    },
+    "Template": {
+      "additionalProperties": false,
+      "description": "Шаблон вида атома, класса сущности или вида связи (applies_to) — или интерфейс (applies_to пуст): интерфейс действует на все записи своего target, даже если у вида нет своего шаблона. extends — интерфейсы и шаблоны того же target, без циклов; применяются слева направо, затем свои правила. Правила сводятся по path: правило потомка заменяет правило предка с тем же path. Данные с версией (semver).",
+      "properties": {
+        "applies_to": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "code": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "extends": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/FieldRule"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "high_risk": {
+          "items": {
+            "$ref": "#/$defs/HighRiskRule"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "links": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LinkRules"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "parameters": {
+          "description": "Профиль параметров — только у target entity.",
+          "items": {
+            "$ref": "#/$defs/ParameterRule"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/TemplateTarget"
+        },
+        "version": {
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "version",
+        "target"
+      ],
+      "title": "Template",
+      "type": "object"
+    },
+    "TemplateTarget": {
+      "description": "",
+      "enum": [
+        "atom",
+        "entity",
+        "link"
+      ],
+      "title": "TemplateTarget",
+      "type": "string"
+    },
+    "Value": {
+      "additionalProperties": false,
+      "description": "Величина (Wikidata Quantity + UCUM). property — код из словаря property.",
+      "properties": {
+        "amount": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "label": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lower_bound": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "note": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "property": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "qualifiers": {
+          "items": {
+            "$ref": "#/$defs/Qualifier"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "quantity_kind": {
+          "description": "Род величины QUDT — Pressure, Length.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unit": {
+          "description": "Код UCUM с учётом регистра — kPa, mm, W/(m2.K), Cel, 1.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "upper_bound": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "value_state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value_text": {
+          "description": "Нечисловое значение — ветровой район «II».",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "property"
+      ],
+      "title": "Value",
+      "type": "object"
+    },
+    "ValueState": {
+      "description": "",
+      "enum": [
+        "known",
+        "unknown",
+        "none"
+      ],
+      "title": "ValueState",
+      "type": "string"
+    },
+    "Verification": {
+      "additionalProperties": false,
+      "description": "Вердикт по пункту очереди; неизменяемый.",
+      "properties": {
+        "agent": {
+          "pattern": "^(person|model):[a-z0-9_.-]+$",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "method": {
+          "$ref": "#/$defs/VerificationMethod"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outcome": {
+          "$ref": "#/$defs/VerificationOutcome"
+        },
+        "review_item_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "review_item_id",
+        "method",
+        "outcome",
+        "agent",
+        "created_at"
+      ],
+      "title": "Verification",
+      "type": "object"
+    },
+    "VerificationMethod": {
+      "description": "",
+      "enum": [
+        "llm_judge",
+        "human"
+      ],
+      "title": "VerificationMethod",
+      "type": "string"
+    },
+    "VerificationOutcome": {
+      "description": "",
+      "enum": [
+        "confirmed",
+        "partial",
+        "refuted",
+        "uncertain"
+      ],
+      "title": "VerificationOutcome",
+      "type": "string"
+    },
+    "Visibility": {
+      "description": "",
+      "enum": [
+        "private",
+        "department",
+        "company"
+      ],
+      "title": "Visibility",
+      "type": "string"
+    }
+  },
+  "$id": "amemo",
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "additionalProperties": false,
+  "description": "Пачка предложений агента — один пакет изменений (kb_add, kb_import).",
+  "metamodel_version": "1.12.0",
+  "properties": {
+    "activity": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "atoms": {
+      "items": {
+        "$ref": "#/$defs/AtomPayload"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "entities": {
+      "items": {
+        "$ref": "#/$defs/EntityPayload"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "links": {
+      "items": {
+        "$ref": "#/$defs/LinkPayload"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "reason": {
+      "description": "Основание — что за документ или задача.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "amemo_v1",
+  "type": "object",
+  "version": "1.0.0"
+}

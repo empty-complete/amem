@@ -9,9 +9,9 @@ import unicodedata
 
 import pytest
 
-from amem import ocfl_store
-from amem.ids import uuid7
-from amem.ocfl_store import ObjectStore, StoreError, layout_path, ocfl_id
+from amemo import ocfl_store
+from amemo.ids import uuid7
+from amemo.ocfl_store import ObjectStore, StoreError, layout_path, ocfl_id
 from ocfl_check import object_path, validate
 
 USER = "model:claude"

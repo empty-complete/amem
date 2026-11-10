@@ -7,7 +7,7 @@ import re
 
 import pytest
 
-from amem import db, packs
+from amemo import db, packs
 from v1_support import schema_attrs, schema_yaml
 
 ENUM_COLUMNS = [
@@ -151,10 +151,10 @@ def test_symmetric_links_in_unique_index_match_vocab(pg):
     assert [set(re.findall(LITERAL, part)) for part in whens] == [symmetric, symmetric]
 
 
-def test_trigger_functions_use_amem_names(pg):
-    """Триггерные функции — amem_*: старых имён atomdb_* в базе не остаётся."""
+def test_trigger_functions_use_amemo_names(pg):
+    """Триггерные функции — amemo_*: старых имён atomdb_* в базе не остаётся."""
     db.migrate(pg)
     names = {r[0] for r in pg.execute(
         "SELECT proname FROM pg_proc WHERE pronamespace = current_schema()::regnamespace")}
     assert {n for n in names if n.startswith("atomdb_")} == set()
-    assert {"amem_forbid_change", "amem_revision_review", "amem_link_retire", "amem_source_check"} <= names
+    assert {"amemo_forbid_change", "amemo_revision_review", "amemo_link_retire", "amemo_source_check"} <= names

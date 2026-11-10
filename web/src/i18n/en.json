@@ -1,6 +1,6 @@
 {
   "app": {
-    "home": "amem, home",
+    "home": "amemo, home",
     "sample": "Sample data"
   },
   "nav": {
@@ -71,7 +71,7 @@
   "region": {
     "loading": "Loading",
     "retry": "Retry",
-    "offline": "No connection to the amem service. Check that it is running and retry."
+    "offline": "No connection to the amemo service. Check that it is running and retry."
   },
   "settings": {
     "title": "Settings",
@@ -79,7 +79,7 @@
     "language": "Language",
     "who": "Signed in as",
     "service": "Service",
-    "version": "amem version"
+    "version": "amemo version"
   },
   "theme": {
     "system": "Match system",
@@ -584,7 +584,7 @@
     "when": "When",
     "size": "Size",
     "id": "Base id",
-    "amem": "amem version",
+    "amemo": "amemo version",
     "minutes_one": "{{count}} minute",
     "minutes_few": "{{count}} minutes",
     "minutes_many": "{{count}} minutes",

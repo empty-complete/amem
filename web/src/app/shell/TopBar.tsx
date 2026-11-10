@@ -35,7 +35,7 @@ export function TopBar() {
         <Icon name={menuOpen ? "cross" : "menu"} />
       </button>
       <Link to="/" className="wordmark" aria-label={t("app.home")}>
-        amem
+        amemo
       </Link>
       {/* biome-ignore lint/a11y/useSemanticElements: role=search — стандартный ориентир; <search> ещё не во всех чтецах */}
       <div role="search" className="bar__searchwrap">

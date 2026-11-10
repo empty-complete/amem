@@ -4,10 +4,10 @@
 (норматив PDF со страницами SP_PAGES, заметка .md, «скан» .docx без текста) и созданные в тесте xlsx и docx."""
 import pytest
 
-from amem import db, model_v1, objects, records, sources
-from amem.check import Proposal, level1, level2
-from amem.check.report import Report
-from amem.ocfl_store import StoreError
+from amemo import db, model_v1, objects, records, sources
+from amemo.check import Proposal, level1, level2
+from amemo.check.report import Report
+from amemo.ocfl_store import StoreError
 from check_support import CHECK_PACK, MD, PDF, atom, entity, source_md, source_pdf, value
 from samples import SCAN_PAGES, SCAN_QUOTE, SP_PAGES, make_docx, make_scanned_pdf, make_xlsx, needs_ocr
 
@@ -23,7 +23,7 @@ VERDICTS = {v.value for v in model_v1.SourceVerdict}
 
 @pytest.fixture
 def kb(pg, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", str(CHECK_PACK))
+    monkeypatch.setenv("AMEMO_PACKS", str(CHECK_PACK))
     db.prepare(pg)
     return pg
 

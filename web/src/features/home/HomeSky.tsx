@@ -79,7 +79,7 @@ export function HomeSky({
         onSummary={onSummary}
       />
       <div className="home__head">
-        <h1>{base.data?.name ?? "amem"}</h1>
+        <h1>{base.data?.name ?? "amemo"}</h1>
         {line && <p className="home__line">{line}</p>}
         <ToggleButtonGroup
           size="sm"

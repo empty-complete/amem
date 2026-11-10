@@ -5,7 +5,7 @@ from pathlib import Path
 import pymupdf
 import pytest
 
-from amem import sources
+from amemo import sources
 
 # Страницы норматива: оглавление; пункт, таблица вразрядку с переносом, формула; приложение.
 SP_PAGES = [

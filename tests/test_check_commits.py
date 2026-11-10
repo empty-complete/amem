@@ -14,7 +14,7 @@ spec.loader.exec_module(cc)
 @pytest.mark.parametrize("message", [
     "feat: add a thing",
     "fix(sources): handle broken PDFs",
-    "refactor(amem)!: rename the package",
+    "refactor(amemo)!: rename the package",
     "docs(migration): SP 50 done\n\nBody in English.\n\nCo-Authored-By: A <a@example.com>",
     "feat(migration): wave 1\n\nPaths stay as they are: `docs/перелив/опись.md`, «приложением Д».",
     "Merge branch 'main' into feature",

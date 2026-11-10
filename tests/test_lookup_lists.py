@@ -5,9 +5,9 @@ from datetime import datetime
 
 import pytest
 
-from amem import db, folders, ids, lookup, profile, recipes, records
-from amem.folders import FolderError
-from amem.records import Item, RecordError, RecordNotFound
+from amemo import db, folders, ids, lookup, profile, recipes, records
+from amemo.folders import FolderError
+from amemo.records import Item, RecordError, RecordNotFound
 from v1_support import schema_attrs
 
 MODEL = "model:test"
@@ -256,8 +256,8 @@ def test_list_records_about_unknown_is_empty(kb):
 
 def test_list_records_about_object(kb, tmp_path):
     """about=obj:<UUID> или голый UUID — записи (атомы и сущности), у текущей ревизии которых источник на объект."""
-    from amem import objects
-    from amem.ocfl_store import ObjectStore
+    from amemo import objects
+    from amemo.ocfl_store import ObjectStore
     from samples import make_docs
 
     docs, store = make_docs(tmp_path / "docs"), ObjectStore(tmp_path / "objects")

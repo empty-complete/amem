@@ -9,10 +9,10 @@ from urllib.parse import quote
 import pytest
 
 import contract
-from amem import api, check, db, folders, objects, records, review
-from amem.check import Proposal
-from amem.records import Item
-from amem.service import http_v1
+from amemo import api, check, db, folders, objects, records, review
+from amemo.check import Proposal
+from amemo.records import Item
+from amemo.service import http_v1
 from conftest import FakeProvider
 from test_service_core import tokens_file
 
@@ -53,7 +53,7 @@ def batch(*payloads, **extra) -> dict:
 
 @pytest.fixture
 def kb(pg, monkeypatch):
-    monkeypatch.setenv("AMEM_BACKEND", "none")          # уровень 4 — только текст; тест провайдера включает сам
+    monkeypatch.setenv("AMEMO_BACKEND", "none")          # уровень 4 — только текст; тест провайдера включает сам
     monkeypatch.setattr(review, "AUDIT_RATE", 0.0)      # выборка аудита случайна по id ревизии — здесь её нет
     db.prepare(pg)
     return pg
@@ -64,7 +64,7 @@ def start(serve, kb, docs):
     """Служба с папкой документов: start() — модель (без cookie), start(person=True) — человек (cookie своей
     страницы, как у интерфейса)."""
     def run(env=None, *, person=False, **kw):
-        client = serve({"AMEM_DOCS": str(docs), **(env or {})}, **kw)
+        client = serve({"AMEMO_DOCS": str(docs), **(env or {})}, **kw)
         if person:
             response = client.get(f"{V1}/session", headers={"Sec-Fetch-Site": "same-origin"})
             assert response.json()["agent"] == PERSON
@@ -308,16 +308,16 @@ def test_body_limit_counts_the_bytes_not_the_header(start):
 
 
 def test_submit_without_documents_folder_gives_source_unresolved(serve, kb):
-    client = serve()                                    # AMEM_DOCS не задан
+    client = serve()                                    # AMEMO_DOCS не задан
     body = problem(client.post(f"{V1}/submit", json=batch(fact())), 422, "check_rejected", "/submit", "post")
     issue = next(i for i in body["issues"] if i["code"] == "source_unresolved")
-    assert (issue["ref"], issue["path"]) == ("@a", "sources[0]") and "AMEM_DOCS" in issue["message"]
+    assert (issue["ref"], issue["path"]) == ("@a", "sources[0]") and "AMEMO_DOCS" in issue["message"]
 
 
 def test_submit_with_a_provider_of_another_model_degrades_level_4(start, kb, monkeypatch):
     """Активная модель базы — одна, provider службы — другой: дубли ищутся только текстом, запись идёт (не 503)."""
-    monkeypatch.delenv("AMEM_BACKEND")
-    from amem import embed
+    monkeypatch.delenv("AMEMO_BACKEND")
+    from amemo import embed
     fake = FakeProvider()
     model = embed.register_model(kb, fake)
     embed.activate_model(kb, model["id"])
@@ -708,7 +708,7 @@ def write_requests(client, queue):
 
 def test_read_only_token_cannot_write(start, queue, tmp_path, kb):
     path = tokens_file(tmp_path, ("t-read", "person:anna", False), ("t-write", "person:anna", True))
-    client = start({"AMEM_TOKENS": path})
+    client = start({"AMEMO_TOKENS": path})
     client.headers["Authorization"] = "Bearer t-read"
     for response, route, method in write_requests(client, queue):
         problem(response, 403, "read_only", route, method)
@@ -725,7 +725,7 @@ def test_read_only_token_cannot_write(start, queue, tmp_path, kb):
 
 def test_model_token_writes_through_the_check(start, queue, tmp_path):
     path = tokens_file(tmp_path, ("t-bot", "model:helper", True))
-    client = start({"AMEM_TOKENS": path})
+    client = start({"AMEMO_TOKENS": path})
     client.headers["Authorization"] = "Bearer t-bot"
     body = contract.check(client.post(f"{V1}/submit", json=batch(fact("@h", label="Шаг анкеров 300 мм"))),
                           "/submit", "post")
@@ -765,7 +765,7 @@ def test_other_methods_on_write_paths_are_405(start):
 # --- библиотека для путей записи ---
 
 def test_lookup_summary_is_a_row_of_the_record_list(kb, store, docs):
-    from amem import lookup
+    from amemo import lookup
     result = written(kb, store, docs, fact(key="bracket"), agent=PERSON)
     ref = ref_of(result)
     folders.move(kb, ref, "Проекты", agent=PERSON)
@@ -789,8 +789,8 @@ def test_review_item_by_id(kb, queue):
 
 def test_submit_on_semantic_error(kb, store, docs, monkeypatch):
     """check.submit: при skip отказ явного провайдера ослабляет уровень 4; при raise (по умолчанию) — наружу."""
-    from amem import embed
-    monkeypatch.delenv("AMEM_BACKEND")
+    from amemo import embed
+    monkeypatch.delenv("AMEMO_BACKEND")
     model = embed.register_model(kb, FakeProvider())
     embed.activate_model(kb, model["id"])
 
@@ -810,7 +810,7 @@ def test_submit_without_documents_folder(kb, store):
     result = check.submit(kb, store, None, [Proposal("atom", fact())], agent=BOT)
     assert result.state == "rejected"
     [issue] = [i for i in result.report["issues"] if i["code"] == "source_unresolved"]
-    assert issue["where"] == "@a: sources[0]" and "AMEM_DOCS" in issue["message"]
+    assert issue["where"] == "@a: sources[0]" and "AMEMO_DOCS" in issue["message"]
 
 
 # --- по ревью задачи 7 ---
@@ -889,6 +889,6 @@ def test_private_is_cut_from_review_notes(start, queue, kb):
 
 
 def test_private_marked():
-    from amem import private
+    from amemo import private
     assert private.marked("a <Private> b") and private.marked("</ private >") and not private.marked("privat")
     assert not private.marked(1)

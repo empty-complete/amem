@@ -1,0 +1,906 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>amemo, вариант 8: запись как в Obsidian</title>
+<meta name="description" content="Запись amemo как заметка: заголовок, свойства из шаблона вида, тело, виджеты связанных записей (источники, связи, небо). Карандаш включает правку, скобки показывают исходник, вид записи настраивается конструктором. Данные образца.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.19.1/katex.min.css" crossorigin="anonymous">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.19.1/katex.min.js" crossorigin="anonymous"></script>
+<style>
+/* Hallmark · v2.0.0 · shape: app screen · genre: modern-minimal · theme: custom (vibe: "calm apple grouped lists, a night sky of knowledge") · posture: full-palette (three knowledge families, validated) · modes: light+dark · signature: the knowledge constellation beside the claim and its source */
+/* critique: three structure variants of the amemo web UI for the subproject 5 spec; sample data only */
+
+:root {
+  color-scheme: light dark;
+  --bg: oklch(97.2% 0.004 265);
+  --panel: oklch(100% 0 0);
+  --panel-2: oklch(95.6% 0.005 265);
+  --panel-3: oklch(92.5% 0.007 265);
+  --ink: oklch(22% 0.012 265);
+  --ink-2: oklch(38% 0.012 265);
+  --muted: oklch(52% 0.012 265);
+  --rule: oklch(91% 0.006 265);
+  --edge: oklch(84% 0.008 265);
+  --press: oklch(22% 0.012 265);
+  --press-ink: oklch(98.5% 0.003 265);
+  --focus: oklch(56% 0.19 255);
+  --select: oklch(94% 0.035 255);
+  --mark: oklch(92% 0.09 95);
+  --mark-2: oklch(95% 0.05 95);
+  --ok: oklch(52% 0.14 150);
+  --wait: oklch(56% 0.13 70);
+  --bad: oklch(54% 0.19 27);
+  --fam-source: #2a78d6;
+  --fam-work: #eb6834;
+  --fam-object: #1baf7a;
+  --fam-source-wash: oklch(95% 0.03 255);
+  --fam-work-wash: oklch(95.5% 0.035 45);
+  --fam-object-wash: oklch(95.5% 0.035 165);
+  --sky: oklch(17% 0.022 266);
+  --sky-2: oklch(21% 0.024 266);
+  --sky-ink: oklch(92% 0.01 265);
+  --sky-muted: oklch(70% 0.02 265);
+  --sky-rule: oklch(30% 0.02 266);
+  --sky-glass: oklch(100% 0 0 / 0.08);
+  --sky-glass-on: oklch(100% 0 0 / 0.16);
+  --sky-tip: oklch(27% 0.026 266);
+  --sky-star: oklch(100% 0 0 / 0.18);
+  --sky-edge: oklch(80% 0.06 270 / 0.18);
+  --sky-edge-on: oklch(100% 0 0 / 0.5);
+  --sky-ring: oklch(100% 0 0 / 0.72);
+  --shadow: 0 1px 2px oklch(22% 0.012 265 / 0.06), 0 0 0 1px oklch(22% 0.012 265 / 0.05);
+  --shadow-float: 0 12px 32px oklch(22% 0.012 265 / 0.14), 0 0 0 1px oklch(22% 0.012 265 / 0.06);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  --t-meta: 0.8125rem; --t-label: 0.875rem; --t-body: 1rem; --t-section: 1.125rem; --t-title: 1.625rem; --t-figure: 2.25rem;
+  --s-3xs: 2px; --s-2xs: 4px; --s-xs: 8px; --s-sm: 12px; --s-md: 16px; --s-lg: 24px; --s-xl: 40px; --s-2xl: 64px;
+  --r-control: 8px; --r-panel: 14px; --r-pill: 999px;
+  --dur-micro: 120ms; --dur-short: 220ms; --ease: cubic-bezier(0.2, 0, 0, 1);
+  --bar-h: 56px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: oklch(14% 0.008 265); --panel: oklch(19% 0.009 265); --panel-2: oklch(22.5% 0.01 265); --panel-3: oklch(26% 0.011 265);
+    --ink: oklch(95% 0.005 265); --ink-2: oklch(84% 0.008 265); --muted: oklch(70% 0.012 265);
+    --rule: oklch(27% 0.01 265); --edge: oklch(35% 0.012 265);
+    --press: oklch(95% 0.005 265); --press-ink: oklch(16% 0.01 265);
+    --focus: oklch(72% 0.14 255); --select: oklch(28% 0.05 258);
+    --mark: oklch(45% 0.08 95); --mark-2: oklch(33% 0.05 95);
+    --ok: oklch(76% 0.14 150); --wait: oklch(80% 0.13 75); --bad: oklch(72% 0.15 25);
+    --fam-source: #3987e5; --fam-work: #d95926; --fam-object: #199e70;
+    --fam-source-wash: oklch(27% 0.05 258); --fam-work-wash: oklch(28% 0.05 45); --fam-object-wash: oklch(27% 0.045 165);
+    --sky: oklch(11% 0.016 266); --sky-2: oklch(15% 0.018 266);
+    --shadow: 0 0 0 1px oklch(100% 0 0 / 0.07); --shadow-float: 0 0 0 1px oklch(100% 0 0 / 0.1);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: oklch(14% 0.008 265); --panel: oklch(19% 0.009 265); --panel-2: oklch(22.5% 0.01 265); --panel-3: oklch(26% 0.011 265);
+  --ink: oklch(95% 0.005 265); --ink-2: oklch(84% 0.008 265); --muted: oklch(70% 0.012 265);
+  --rule: oklch(27% 0.01 265); --edge: oklch(35% 0.012 265);
+  --press: oklch(95% 0.005 265); --press-ink: oklch(16% 0.01 265);
+  --focus: oklch(72% 0.14 255); --select: oklch(28% 0.05 258);
+  --mark: oklch(45% 0.08 95); --mark-2: oklch(33% 0.05 95);
+  --ok: oklch(76% 0.14 150); --wait: oklch(80% 0.13 75); --bad: oklch(72% 0.15 25);
+  --fam-source: #3987e5; --fam-work: #d95926; --fam-object: #199e70;
+  --fam-source-wash: oklch(27% 0.05 258); --fam-work-wash: oklch(28% 0.05 45); --fam-object-wash: oklch(27% 0.045 165);
+  --sky: oklch(11% 0.016 266); --sky-2: oklch(15% 0.018 266);
+  --shadow: 0 0 0 1px oklch(100% 0 0 / 0.07); --shadow-float: 0 0 0 1px oklch(100% 0 0 / 0.1);
+}
+
+* { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+html { font-family: var(--font); -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-size: var(--t-body); line-height: 1.5; font-synthesis: none; caret-color: var(--focus); scrollbar-color: var(--edge) transparent; -webkit-font-smoothing: antialiased; }
+h1, h2, h3, p { margin: 0; }
+h1, h2, h3 { font-weight: 600; line-height: 1.25; text-wrap: balance; overflow-wrap: break-word; min-width: 0; }
+p { text-wrap: pretty; }
+a { color: inherit; text-decoration-color: var(--edge); text-underline-offset: 0.2em; }
+a:hover { text-decoration-color: var(--focus); }
+button { font: inherit; color: inherit; }
+::selection { background: var(--select); color: var(--ink); }
+:where(a, button, input, [tabindex], canvas):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+mark { background: var(--mark); color: var(--ink); border-radius: 3px; padding: 0 var(--s-3xs); box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.ico { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ico--20 { width: 20px; height: 20px; }
+.muted { color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--mono); font-size: var(--t-meta); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.sample { margin: 0; padding: var(--s-md); text-align: center; font-size: var(--t-meta); color: var(--muted); }
+
+/* top bar */
+.bar { position: sticky; top: 0; z-index: 300; height: var(--bar-h); display: flex; align-items: center; gap: var(--s-lg); padding: 0 var(--s-lg); background: color-mix(in oklch, var(--bg) 86%, transparent); backdrop-filter: saturate(1.6) blur(18px); -webkit-backdrop-filter: saturate(1.6) blur(18px); border-bottom: 1px solid var(--rule); }
+.wordmark { font-weight: 600; font-size: var(--t-section); letter-spacing: -0.01em; text-decoration: none; }
+.search { display: flex; align-items: center; gap: var(--s-xs); height: 36px; padding: 0 var(--s-sm); min-width: 0; border-radius: var(--r-pill); background: var(--panel-2); color: var(--muted); font-size: var(--t-label); transition: background-color var(--dur-micro) var(--ease); }
+.search:hover { background: var(--panel-3); }
+.search input { all: unset; flex: 1; min-width: 0; color: var(--ink); }
+.search input::placeholder { color: var(--muted); }
+.search:focus-within { outline: 2px solid var(--focus); outline-offset: 0; background: var(--panel); }
+kbd { font: inherit; font-size: var(--t-meta); padding: 0 var(--s-2xs); min-width: 20px; text-align: center; border-radius: 5px; background: var(--panel); box-shadow: var(--shadow); color: var(--muted); }
+.bar__end { margin-left: auto; display: flex; align-items: center; gap: var(--s-2xs); }
+
+/* buttons */
+.btn { text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: var(--s-xs); height: 32px; padding: 0 var(--s-sm); border: 0; border-radius: var(--r-pill); background: transparent; font-size: var(--t-label); font-weight: 500; cursor: pointer; transition: background-color var(--dur-micro) var(--ease), transform var(--dur-micro) var(--ease); }
+.btn:hover { background: var(--panel-2); }
+.btn:active { transform: scale(0.98); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+.btn--quiet { background: var(--panel-2); }
+.btn--quiet:hover { background: var(--panel-3); }
+.btn--press { height: 40px; padding: 0 var(--s-lg); background: var(--press); color: var(--press-ink); font-weight: 600; }
+.btn--press:hover { background: color-mix(in oklch, var(--press) 86%, var(--bg)); }
+.btn--line { height: 40px; padding: 0 var(--s-md); box-shadow: inset 0 0 0 1px var(--edge); }
+.btn--icon { width: 32px; padding: 0; }
+.badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 var(--s-xs); border-radius: var(--r-pill); background: var(--ink); color: var(--bg); font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* kind chip: family colour carries identity, text stays ink */
+.kind { display: inline-flex; align-items: center; gap: var(--s-xs); height: 22px; padding: 0 var(--s-xs); border-radius: 6px; font-size: var(--t-meta); font-weight: 500; color: var(--ink); white-space: nowrap; }
+.kind::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--dot, var(--muted)); }
+.kind--source { background: var(--fam-source-wash); --dot: var(--fam-source); }
+.kind--work { background: var(--fam-work-wash); --dot: var(--fam-work); }
+.kind--object { background: var(--fam-object-wash); --dot: var(--fam-object); }
+
+/* status: icon plus words; status colours are reserved */
+.st { display: inline-flex; align-items: center; gap: var(--s-xs); font-size: var(--t-label); }
+.st--ok { color: var(--ok); } .st--wait { color: var(--wait); } .st--bad { color: var(--bad); } .st--draft { color: var(--muted); }
+
+/* meta list */
+.meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--s-xs) var(--s-lg); font-size: var(--t-label); }
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; display: flex; align-items: center; gap: var(--s-xs); min-width: 0; }
+
+.figure { font-size: var(--t-figure); font-weight: 600; letter-spacing: -0.02em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.figure small { font-size: var(--t-section); font-weight: 400; letter-spacing: 0; color: var(--muted); margin-left: var(--s-2xs); }
+
+/* the sky: graph window */
+.sky { position: relative; background: radial-gradient(120% 90% at 50% 40%, var(--sky-2), var(--sky)); color: var(--sky-ink); border-radius: var(--r-panel); overflow: hidden; }
+.sky canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.sky__head { position: absolute; left: var(--s-md); top: var(--s-sm); right: var(--s-md); display: flex; align-items: center; justify-content: space-between; gap: var(--s-sm); font-size: var(--t-label); pointer-events: none; }
+.sky__head > * { pointer-events: auto; }
+.sky__title { font-weight: 600; }
+.seg { display: inline-flex; gap: var(--s-3xs); padding: var(--s-3xs); border-radius: var(--r-pill); background: var(--sky-glass); }
+.seg button { height: 24px; padding: 0 var(--s-sm); border: 0; border-radius: var(--r-pill); background: transparent; color: var(--sky-muted); font-size: var(--t-meta); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--sky-glass-on); color: var(--sky-ink); }
+.legend { position: absolute; left: var(--s-md); bottom: var(--s-sm); display: flex; flex-wrap: wrap; gap: var(--s-2xs) var(--s-md); font-size: var(--t-meta); color: var(--sky-muted); pointer-events: none; }
+.legend span { display: inline-flex; align-items: center; gap: var(--s-xs); }
+.legend i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.legend .ring { width: 9px; height: 9px; border-radius: 50%; border: 1px dashed var(--sky-muted); background: none; }
+.sky__tip { position: absolute; padding: var(--s-2xs) var(--s-xs); border-radius: 6px; background: var(--sky-tip); font-size: var(--t-meta); color: var(--sky-ink); pointer-events: none; opacity: 0; transition: opacity var(--dur-micro) var(--ease); white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; }
+}
+
+html, body { height: 100%; overflow: clip; }
+.app { display: grid; grid-template-columns: 236px minmax(0, 1fr) 380px; height: calc(100dvh - var(--bar-h)); }
+.app > * { min-height: 0; }
+.tree { padding: var(--s-md) var(--s-sm); overflow: auto; border-right: 1px solid var(--rule); }
+.tree h2 { font-size: var(--t-meta); font-weight: 500; color: var(--muted); margin: 0 0 var(--s-xs) var(--s-sm); }
+.tree ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3xs); }
+.tree ul ul { padding-left: var(--s-md); margin-top: var(--s-3xs); }
+.tree a { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: var(--s-xs); align-items: center; padding: var(--s-xs) var(--s-sm); border-radius: var(--r-control); text-decoration: none; font-size: var(--t-label); color: var(--ink-2); transition: background-color var(--dur-micro) var(--ease); }
+.tree a:hover { background: var(--panel-2); }
+.tree a[aria-current="true"] { background: var(--select); color: var(--ink); font-weight: 500; }
+.tree a > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree .n { font-size: var(--t-meta); color: var(--muted); font-variant-numeric: tabular-nums; }
+.tree .sub { padding-left: 28px; font-size: var(--t-meta); color: var(--muted); }
+.tree .sub a { grid-template-columns: 12px minmax(0, 1fr); padding: var(--s-2xs) var(--s-xs); font-size: var(--t-meta); }
+.tree .sub .ico { width: 12px; height: 12px; }
+
+/* the note */
+.page { overflow: auto; }
+.note { max-width: 780px; margin: 0 auto; padding: var(--s-lg) var(--s-xl) var(--s-2xl); }
+.note__bar { display: flex; align-items: center; gap: var(--s-xs); font-size: var(--t-label); color: var(--muted); margin-bottom: var(--s-lg); }
+.note__bar .path { display: flex; gap: var(--s-xs); align-items: center; min-width: 0; flex: 1; }
+.note__bar .path a { color: var(--muted); }
+.modes { display: inline-flex; gap: var(--s-3xs); }
+.modes .btn--icon[aria-pressed="true"] { background: var(--press); color: var(--press-ink); }
+h1.title { font-size: 1.75rem; letter-spacing: -0.015em; line-height: 1.2; margin: 0 0 var(--s-md); outline: 0; border-radius: 6px; }
+h1.title[contenteditable] { box-shadow: inset 0 -1px 0 var(--edge); }
+h1.title[contenteditable]:focus { box-shadow: 0 0 0 2px var(--focus); }
+
+/* properties, like Obsidian's */
+.props { display: grid; gap: var(--s-3xs); margin-bottom: var(--s-lg); padding-bottom: var(--s-md); border-bottom: 1px solid var(--rule); }
+.prop { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: var(--s-sm); align-items: center; min-height: 32px; border-radius: 6px; padding: 0 var(--s-xs); }
+.prop:hover { background: var(--panel-2); }
+.prop .k { display: flex; align-items: center; gap: var(--s-xs); font-size: var(--t-label); color: var(--muted); min-width: 0; }
+.prop .k .ico { width: 14px; height: 14px; color: var(--muted); }
+.prop .k span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prop .v { display: flex; align-items: center; gap: var(--s-xs); flex-wrap: wrap; font-size: var(--t-label); min-height: 28px; }
+.prop .v .num { font-variant-numeric: tabular-nums; }
+.prop .v input, .prop .v select { height: 28px; padding: 0 var(--s-xs); border: 0; border-radius: 6px; background: transparent; color: var(--ink); font: inherit; font-size: var(--t-label); outline: 2px solid transparent; outline-offset: 0; min-width: 0; }
+.prop .v input { width: 100%; }
+.prop .v input:focus-visible, .prop .v select:focus-visible { outline-color: var(--focus); background: var(--panel); }
+.prop .v input.num { width: 7rem; font-variant-numeric: tabular-nums; }
+.prop .v input.unit { width: 4rem; }
+.pill { display: inline-flex; align-items: center; gap: var(--s-2xs); padding: var(--s-3xs) var(--s-xs); border-radius: 6px; background: var(--panel-2); color: var(--ink); font-size: var(--t-label); text-decoration: none; }
+.pill.obj { background: var(--fam-object-wash); }
+.pill.rec { background: var(--fam-source-wash); }
+.pill.kind { background: var(--fam-work-wash); font-weight: 500; }
+.pill.kind[data-fam="source"] { background: var(--fam-source-wash); }
+.pill.kind::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--fam-work); }
+.pill.kind[data-fam="source"]::before { background: var(--fam-source); }
+.pill button { border: 0; background: none; width: 18px; height: 18px; border-radius: 4px; color: var(--muted); cursor: pointer; display: inline-grid; place-items: center; padding: 0; }
+.pill button:hover { background: var(--panel-3); color: var(--ink); }
+.pill .ico { width: 12px; height: 12px; }
+.need { font-size: var(--t-meta); color: var(--bad); font-weight: 500; }
+.addprop { display: inline-flex; align-items: center; gap: var(--s-2xs); height: 28px; padding: 0 var(--s-xs); border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: inherit; font-size: var(--t-label); cursor: pointer; justify-self: start; }
+.addprop:hover { background: var(--panel-2); color: var(--ink); }
+.kindbtn { display: inline-flex; align-items: center; gap: var(--s-xs); height: 28px; padding: 0 var(--s-xs); border: 0; border-radius: 6px; font: inherit; font-size: var(--t-label); cursor: pointer; }
+.kindbtn .ico { width: 12px; height: 12px; color: var(--muted); }
+
+/* kind popover */
+.pop { position: absolute; z-index: 100; width: 320px; background: var(--panel); border-radius: var(--r-panel); box-shadow: var(--shadow-float); padding: var(--s-xs); display: grid; gap: var(--s-2xs); }
+.pop[hidden] { display: none; }
+.pop input { height: 32px; padding: 0 var(--s-sm); border: 0; border-radius: var(--r-control); background: var(--panel-2); color: var(--ink); font: inherit; font-size: var(--t-label); outline: 2px solid transparent; }
+.pop input:focus-visible { outline-color: var(--focus); }
+.pop h4 { font-size: var(--t-meta); font-weight: 500; color: var(--muted); margin: var(--s-xs) var(--s-xs) var(--s-3xs); display: flex; justify-content: space-between; }
+.pop h4 a { color: var(--muted); font-weight: 400; }
+.pop button.opt { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: var(--s-xs); align-items: center; width: 100%; padding: var(--s-xs); border: 0; border-radius: 6px; background: transparent; font: inherit; font-size: var(--t-label); text-align: left; color: var(--ink); cursor: pointer; }
+.pop button.opt:hover, .pop button.opt[aria-selected="true"] { background: var(--panel-2); }
+.pop button.opt i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); justify-self: center; }
+.pop button.opt small { color: var(--muted); font-size: var(--t-meta); }
+
+/* body */
+.toolbar { display: flex; gap: var(--s-3xs); align-items: center; margin-bottom: var(--s-xs); flex-wrap: wrap; }
+.toolbar[hidden] { display: none; }
+.tb { height: 28px; min-width: 28px; padding: 0 var(--s-xs); border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); font: inherit; font-size: var(--t-label); cursor: pointer; }
+.tb:hover { background: var(--panel-2); color: var(--ink); }
+.tb b { font-weight: 700; } .tb i { font-style: italic; }
+.toolbar .sep { width: 1px; height: 18px; background: var(--rule); margin: 0 var(--s-2xs); }
+.body-read { font-size: var(--t-body); line-height: 1.6; min-height: 4rem; }
+.body-read[hidden], .body-edit[hidden], .source[hidden] { display: none; }
+.body-read h2 { font-size: var(--t-section); margin: var(--s-lg) 0 var(--s-xs); }
+.body-read h3 { font-size: var(--t-body); margin: var(--s-md) 0 var(--s-2xs); }
+.body-read p { margin: 0 0 var(--s-sm); }
+.body-read ul { margin: 0 0 var(--s-sm); padding-left: 1.25rem; }
+.body-read blockquote { margin: 0 0 var(--s-sm); padding: var(--s-sm) var(--s-md); border-left: 3px solid var(--fam-source); background: var(--fam-source-wash); border-radius: 0 var(--r-control) var(--r-control) 0; }
+.body-read blockquote p { margin: 0; }
+.body-read a.wiki { color: var(--ink); text-decoration-color: var(--fam-object); text-decoration-thickness: 1.5px; }
+.body-read code { font-family: var(--mono); font-size: 0.875em; background: var(--panel-2); padding: 0 var(--s-2xs); border-radius: 4px; }
+.body-read .katex-display { margin: var(--s-sm) 0; overflow: auto hidden; }
+.body-read .empty { color: var(--muted); }
+.body-edit { width: 100%; min-height: 14rem; padding: var(--s-sm) 0; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: var(--t-body); line-height: 1.6; resize: vertical; outline: 0; }
+.source { width: 100%; min-height: 24rem; padding: var(--s-md); border: 0; border-radius: var(--r-control); background: var(--panel-2); color: var(--ink); font-family: var(--mono); font-size: var(--t-label); line-height: 1.6; resize: vertical; outline: 2px solid transparent; tab-size: 2; }
+.source:focus-visible { outline-color: var(--focus); }
+
+/* widgets: dashboards of connected records */
+.widgets { display: grid; gap: var(--s-lg); margin-top: var(--s-xl); }
+.widget h2 { display: flex; align-items: center; justify-content: space-between; gap: var(--s-sm); font-size: var(--t-label); font-weight: 500; color: var(--muted); margin: 0 0 var(--s-xs); }
+.widget h2 .acts { display: inline-flex; gap: var(--s-3xs); }
+.widget h2 .acts .btn { height: 26px; font-size: var(--t-meta); color: var(--muted); }
+.srcs { display: grid; gap: var(--s-xs); }
+.src { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: var(--s-sm); align-items: start; padding: var(--s-sm) var(--s-md); border-radius: var(--r-panel); background: var(--panel); box-shadow: var(--shadow); font-size: var(--t-label); text-decoration: none; color: inherit; transition: box-shadow var(--dur-micro) var(--ease); }
+.src:hover { box-shadow: var(--shadow-float); }
+.src .ft { width: 36px; height: 36px; border-radius: 8px; background: var(--fam-object-wash); color: var(--ink); display: grid; place-items: center; font-family: var(--mono); font-size: 0.6875rem; font-weight: 600; }
+.src .name { font-weight: 500; }
+.src .place { color: var(--muted); display: flex; gap: var(--s-md); flex-wrap: wrap; margin-top: var(--s-3xs); }
+.src q { display: block; margin-top: var(--s-2xs); color: var(--ink-2); quotes: "«" "»"; }
+.src table { border-collapse: collapse; margin-top: var(--s-xs); font-size: var(--t-meta); font-variant-numeric: tabular-nums; }
+.src td, .src th { padding: 2px var(--s-xs); border: 1px solid var(--rule); text-align: left; font-weight: 400; }
+.src th { color: var(--muted); }
+.src .st { font-size: var(--t-meta); white-space: nowrap; }
+.rels { display: flex; flex-wrap: wrap; gap: var(--s-xs); }
+.rel { display: inline-flex; align-items: center; gap: var(--s-xs); padding: var(--s-2xs) var(--s-xs); border-radius: 6px; background: var(--panel); box-shadow: var(--shadow); font-size: var(--t-label); }
+.rel .r { color: var(--muted); }
+.rel a { text-decoration-color: var(--edge); }
+.addw { display: inline-flex; align-items: center; gap: var(--s-2xs); height: 32px; padding: 0 var(--s-sm); border: 1px dashed var(--edge); border-radius: var(--r-control); background: transparent; color: var(--muted); font: inherit; font-size: var(--t-label); cursor: pointer; justify-self: start; }
+.addw:hover { color: var(--ink); border-color: var(--muted); }
+.foot { margin-top: var(--s-xl); font-size: var(--t-meta); color: var(--muted); display: flex; gap: var(--s-md); flex-wrap: wrap; align-items: center; }
+.foot .spacer { flex: 1; }
+
+/* right: sky */
+.side { padding: var(--s-md); overflow: auto; border-left: 1px solid var(--rule); display: grid; gap: var(--s-md); align-content: start; }
+.sky--side { height: min(440px, 52vh); }
+.sky__hint { font-size: var(--t-meta); color: var(--sky-muted); }
+
+/* the kind constructor, a drawer */
+.drawer { position: fixed; z-index: 400; top: var(--bar-h); right: 0; bottom: 0; width: 440px; max-width: 100%; background: var(--panel); box-shadow: var(--shadow-float); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.drawer[hidden] { display: none; }
+.drawer header { display: flex; align-items: center; justify-content: space-between; gap: var(--s-sm); padding: var(--s-md) var(--s-lg); border-bottom: 1px solid var(--rule); }
+.drawer header h2 { font-size: var(--t-section); }
+.drawer .in { padding: var(--s-md) var(--s-lg); overflow: auto; display: grid; gap: var(--s-md); align-content: start; }
+.drawer .in p { font-size: var(--t-label); color: var(--muted); }
+.drawer h3 { font-size: var(--t-label); font-weight: 500; color: var(--muted); margin: var(--s-xs) 0 0; }
+.frow { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto auto; gap: var(--s-xs); align-items: center; padding: var(--s-xs); border-radius: 6px; background: var(--panel-2); font-size: var(--t-label); }
+.frow input, .frow select { height: 28px; padding: 0 var(--s-xs); border: 0; border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; font-size: var(--t-label); min-width: 0; }
+.frow label { display: inline-flex; gap: var(--s-2xs); align-items: center; font-size: var(--t-meta); color: var(--muted); white-space: nowrap; }
+.drawer .in .plus { display: inline-flex; align-items: center; gap: var(--s-2xs); height: 28px; padding: 0 var(--s-xs); border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: inherit; font-size: var(--t-label); cursor: pointer; justify-self: start; }
+.drawer .in .plus:hover { background: var(--panel-2); color: var(--ink); }
+.checks { display: grid; gap: var(--s-xs); font-size: var(--t-label); }
+.checks label { display: flex; gap: var(--s-xs); align-items: center; }
+.drawer footer { display: flex; justify-content: space-between; align-items: center; gap: var(--s-sm); padding: var(--s-sm) var(--s-lg); border-top: 1px solid var(--rule); font-size: var(--t-meta); color: var(--muted); }
+.toast { position: fixed; left: 50%; bottom: var(--s-lg); transform: translateX(-50%); z-index: 500; display: flex; align-items: center; gap: var(--s-md); height: 44px; padding: 0 var(--s-2xs) 0 var(--s-md); border-radius: var(--r-pill); background: var(--press); color: var(--press-ink); font-size: var(--t-label); box-shadow: var(--shadow-float); transition: opacity var(--dur-short) var(--ease), transform var(--dur-short) var(--ease); }
+.toast[hidden] { display: flex; opacity: 0; transform: translate(-50%, 8px); pointer-events: none; }
+.toast .btn { color: var(--press-ink); font-weight: 600; height: 36px; }
+
+@media (max-width: 86rem) { .app { grid-template-columns: minmax(0, 1fr) 340px; } .tree { display: none; } }
+@media (max-width: 64rem) { html, body { overflow: auto; } .app { grid-template-columns: minmax(0, 1fr); height: auto; } .side { border-left: 0; } .note { padding: var(--s-md); } .bar .hide-s, .hide-s { display: none; } .bar .search { flex: 1; } .prop { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="M10.4 10.4 14 14"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3.2v9.6M3.2 8h9.6"/></symbol>
+  <symbol id="i-theme" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="M8 2.4v11.2A5.6 5.6 0 0 0 8 2.4Z" fill="currentColor"/></symbol>
+  <symbol id="i-user" viewBox="0 0 16 16"><circle cx="8" cy="5.8" r="2.6"/><path d="M3 14c.8-2.4 2.7-3.6 5-3.6s4.2 1.2 5 3.6"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 16 16"><path d="M4 1.8h5.2L12.2 5v9.2H4Z"/><path d="M9 1.8V5h3.2"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="9" rx="1.6"/><path d="m2.6 4.6 5.4 4 5.4-4"/></symbol>
+  <symbol id="i-left" viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5"/></symbol>
+  <symbol id="i-right" viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.8V8l2.2 1.4"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.2 14.2 13H1.8Z"/><path d="M8 6.4v3"/><path d="M8 11.3v.1"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="m5.4 8.2 1.8 1.8 3.4-3.6"/></symbol>
+  <symbol id="i-cross" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="m5.9 5.9 4.2 4.2M10.1 5.9l-4.2 4.2"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 16 16"><path d="M2 9.5 3.8 3.5h8.4L14 9.5v3H2Z"/><path d="M2 9.5h3.4l.8 1.5h3.6l.8-1.5H14"/></symbol>
+  <symbol id="i-history" viewBox="0 0 16 16"><path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8"/><path d="M2.4 2.6v2.4h2.4"/><path d="M8 5.2V8l2 1.2"/></symbol>
+  <symbol id="i-stack" viewBox="0 0 16 16"><path d="M8 2 14 5 8 8 2 5Z"/><path d="m2 8 6 3 6-3"/><path d="m2 11 6 3 6-3"/></symbol>
+  <symbol id="i-box" viewBox="0 0 16 16"><path d="M8 1.8 13.6 5v6L8 14.2 2.4 11V5Z"/><path d="M2.4 5 8 8.2 13.6 5M8 8.2v6"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 16 16"><path d="M6 3.8 10.2 8 6 12.2"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M3.8 6 8 10.2 12.2 6"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"/></symbol>
+  <symbol id="i-note" viewBox="0 0 16 16"><path d="M3 2.5h10v8l-3 3H3Z"/><path d="M10 13.5v-3h3"/><path d="M5.5 6h5M5.5 8.5h3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></symbol>
+  <symbol id="i-table" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.4"/><path d="M2 7h12M2 10h12M6 3v10M10 3v10"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 16 16"><path d="m3 13 .9-3.2L10.6 3l2.4 2.4-6.8 6.8L3 13Z"/><path d="m9.6 4 2.4 2.4"/></symbol>
+  <symbol id="i-code" viewBox="0 0 16 16"><path d="m5.5 4.5-3.5 3.5 3.5 3.5M10.5 4.5l3.5 3.5-3.5 3.5"/></symbol>
+  <symbol id="i-hash" viewBox="0 0 16 16"><path d="M6 2.5 4.5 13.5M11.5 2.5 10 13.5M2.5 6h11M2 10h11"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="10" rx="1.6"/><path d="M2 7h12M5 2v3M11 2v3"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 16 16"><path d="M2.5 2.5h5l6 6-5 5-6-6Z"/><circle cx="5.5" cy="5.5" r="1"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="3.5" rx="1"/><path d="M3 6.5v6.5h10V6.5M6.5 9.5h3"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 16 16"><path d="M2 4.5a1 1 0 0 1 1-1h3.4l1.4 1.5H13a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1Z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.8 8s2.3-4 6.2-4 6.2 4 6.2 4-2.3 4-6.2 4S1.8 8 1.8 8Z"/><circle cx="8" cy="8" r="2"/></symbol>
+</svg>
+
+<header class="bar">
+  <a class="wordmark" href="#" aria-label="amemo, на главную">amemo</a>
+  <label class="search" style="width: min(440px, 40vw)">
+    <svg class="ico" aria-hidden="true"><use href="#i-search"/></svg>
+    <input type="search" name="q" placeholder="Поиск по базе" aria-label="Поиск по базе" autocomplete="off">
+    <kbd>⌘</kbd><kbd>K</kbd>
+  </label>
+  <nav class="bar__end" aria-label="Разделы">
+    <a class="btn hide-s" href="#">Проверка <span class="badge">3</span></a>
+    <a class="btn hide-s" href="#">Изменения</a>
+    <button class="btn btn--quiet" type="button" title="Записать, клавиша N"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg><span class="hide-s">Записать</span></button>
+    <button class="btn btn--icon" type="button" data-theme-toggle aria-label="Сменить тему"><svg class="ico" aria-hidden="true"><use href="#i-theme"/></svg></button>
+    <button class="btn btn--icon" type="button" aria-label="Меню"><svg class="ico" aria-hidden="true"><use href="#i-user"/></svg></button>
+  </nav>
+</header>
+
+<div class="app">
+  <nav class="tree" aria-label="Объекты">
+    <h2>Метеоплощадка</h2>
+    <ul>
+      <li><a href="#"><svg class="ico" aria-hidden="true"><use href="#i-down"/></svg><span>Метеостанция МС-1</span><span class="n">9</span></a>
+        <ul>
+          <li><a href="#"><span></span><span>Датчик температуры Т-1</span><span class="n">6</span></a></li>
+          <li><a href="#" aria-current="true"><span></span><span>Датчик влажности В-2</span><span class="n">6</span></a>
+            <ul class="sub">
+              <li><a href="#"><svg class="ico" aria-hidden="true"><use href="#i-note"/></svg><span>Погрешность влажности</span></a></li>
+              <li><a href="#" style="color: var(--ink); font-weight: 500"><svg class="ico" aria-hidden="true"><use href="#i-note"/></svg><span>В-2 завышает влажность при обмерзании</span></a></li>
+              <li><a href="#"><svg class="ico" aria-hidden="true"><use href="#i-note"/></svg><span>Нужен ли обогрев В-2 зимой?</span></a></li>
+            </ul>
+          </li>
+          <li><a href="#"><span></span><span>Датчик давления Д-3</span><span class="n">2</span></a></li>
+          <li><a href="#"><span></span><span>Мачта М-2</span><span class="n">2</span></a></li>
+        </ul>
+      </li>
+      <li><a href="#"><svg class="ico" aria-hidden="true"><use href="#i-chev"/></svg><span>Источники</span><span class="n">4</span></a></li>
+    </ul>
+  </nav>
+
+  <main class="page">
+    <article class="note" aria-label="Запись">
+      <div class="note__bar">
+        <div class="path"><a href="#">Метеостанция МС-1</a><svg class="ico" aria-hidden="true"><use href="#i-chev"/></svg><a href="#">Датчик влажности В-2</a></div>
+        <span class="st st--ok" style="font-size: var(--t-meta)"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg>Проверено</span>
+        <div class="modes" role="group" aria-label="Режим">
+          <button class="btn btn--icon" type="button" id="m-edit" aria-pressed="false" title="Править (карандаш)"><svg class="ico" aria-hidden="true"><use href="#i-pencil"/></svg></button>
+          <button class="btn btn--icon" type="button" id="m-src" aria-pressed="false" title="Исходник"><svg class="ico" aria-hidden="true"><use href="#i-code"/></svg></button>
+          <button class="btn btn--icon" type="button" aria-label="Действия"><svg class="ico" aria-hidden="true"><use href="#i-more"/></svg></button>
+        </div>
+      </div>
+
+      <h1 class="title" id="title">В-2 завышает влажность при обмерзании</h1>
+
+      <div class="props" id="props"></div>
+
+      <div class="toolbar" id="toolbar" hidden role="toolbar" aria-label="Оформление">
+        <button class="tb" type="button" data-wrap="**" title="Жирный, ⌘B"><b>B</b></button>
+        <button class="tb" type="button" data-wrap="*" title="Курсив, ⌘I"><i>I</i></button>
+        <button class="tb" type="button" data-wrap="`" title="Код">&lt;/&gt;</button>
+        <span class="sep" aria-hidden="true"></span>
+        <button class="tb" type="button" data-line="## " title="Заголовок">H2</button>
+        <button class="tb" type="button" data-line="> " title="Цитата">„“</button>
+        <button class="tb" type="button" data-line="- " title="Список">•</button>
+        <span class="sep" aria-hidden="true"></span>
+        <button class="tb" type="button" data-wrap="[[" data-wrap-end="]]" title="Ссылка на объект или запись">[[ ]]</button>
+        <button class="tb" type="button" data-wrap="$" title="Формула">∑</button>
+      </div>
+      <div class="body-read" id="read"></div>
+      <textarea class="body-edit" id="edit" hidden aria-label="Тело записи" spellcheck="false"></textarea>
+      <textarea class="source" id="src" hidden aria-label="Исходник записи" spellcheck="false"></textarea>
+
+      <div class="widgets" id="widgets">
+        <section class="widget" aria-labelledby="w1"><h2 id="w1"><span>Источники</span><span class="acts"><button class="btn" type="button" id="addsrc"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg>Источник</button></span></h2>
+          <div class="srcs">
+            <a class="src" href="#"><span class="ft">XLSX</span><span><span class="name">Наблюдения, ноябрь</span> <span class="muted">версия 1</span><span class="place"><span>Лист «В-2», B4:C9</span></span><table aria-label="Фрагмент листа"><tr><th>Дата</th><th>RH, %</th><th>Эталон, %</th></tr><tr><td>03.11</td><td>87</td><td>84</td></tr><tr><td>04.11</td><td>91</td><td>86</td></tr><tr><td>05.11</td><td>95</td><td>88</td></tr></table></span><span class="st st--ok"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg>Диапазон есть</span></a>
+            <a class="src" href="#"><span class="ft">PDF</span><span><span class="name">Руководство МС-1</span> <span class="muted">версия 2</span><span class="place"><span>Страница 12</span></span><q>Погрешность ±2 % в диапазоне от 10 до 90 %, вне его погрешность не нормируется.</q></span><span class="st st--ok"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg>Цитата найдена</span></a>
+          </div>
+        </section>
+        <section class="widget" aria-labelledby="w2"><h2 id="w2"><span>Связи</span><span class="acts"><button class="btn" type="button"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg>Связь</button></span></h2>
+          <div class="rels">
+            <span class="rel"><span class="r">уточняет</span><a href="#">Погрешность влажности: ±2 %</a></span>
+            <span class="rel"><span class="r">см. также</span><a href="#">Нужен ли обогрев В-2 зимой?</a></span>
+            <span class="rel"><span class="r">ссылается сюда</span><a href="#">Решение: ставим обогрев В-2 на зиму</a></span>
+          </div>
+        </section>
+        <button class="addw" type="button" id="addw"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg>Виджет</button>
+      </div>
+
+      <p class="foot"><span>Вы, 3 ноября 2026</span><span>Изменено 6 ноября, 18:02</span><span>Ревизия 2</span><span class="spacer"></span><span class="mono">atm:0193b7c2…4d21</span></p>
+    </article>
+  </main>
+
+  <aside class="side" aria-label="Созвездие">
+    <div class="sky sky--side">
+      <canvas id="sky" aria-label="Созвездие записи, живое: звёзды можно тянуть, небо двигать и приближать."></canvas>
+      <div class="sky__head"><span class="sky__title">Окрестность</span><span class="sky__hint">тяните, колесо: масштаб</span></div>
+      <div class="legend"><span><i style="--c: var(--fam-source)"></i>Из источников</span><span><i style="--c: var(--fam-work)"></i>Из работы</span><span><i style="--c: var(--fam-object)"></i>Объекты</span></div>
+      <div class="sky__tip" role="status"></div>
+    </div>
+  </aside>
+</div>
+
+<div class="pop" id="kindpop" hidden role="listbox" aria-label="Вид записи"></div>
+
+<aside class="drawer" id="drawer" hidden aria-labelledby="dr-title">
+  <header><h2 id="dr-title">Вид «Наблюдение»</h2><button class="btn btn--icon" type="button" id="dr-close" aria-label="Закрыть"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button></header>
+  <div class="in">
+    <p>Пакет «Метео» 1.0.0. Свойства ниже появляются у каждой записи этого вида; их видят и агенты. Правка сохраняется в ваш пакет «Мои виды».</p>
+    <h3>Свойства</h3>
+    <div class="frow"><input type="text" value="О чём" aria-label="Имя свойства"><select aria-label="Тип"><option>Объект</option><option>Запись</option><option>Текст</option><option>Число с единицей</option><option>Дата</option><option>Выбор из словаря</option><option>Теги</option></select><label><input type="checkbox" checked> нужно</label><button class="btn btn--icon" type="button" aria-label="Убрать"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+    <div class="frow"><input type="text" value="Значения" aria-label="Имя свойства"><select aria-label="Тип"><option>Число с единицей</option><option>Объект</option><option>Запись</option><option>Текст</option><option>Дата</option><option>Выбор из словаря</option><option>Теги</option></select><label><input type="checkbox" checked> нужно</label><button class="btn btn--icon" type="button" aria-label="Убрать"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+    <div class="frow"><input type="text" value="Когда" aria-label="Имя свойства"><select aria-label="Тип"><option>Дата</option><option>Объект</option><option>Запись</option><option>Текст</option><option>Число с единицей</option><option>Выбор из словаря</option><option>Теги</option></select><label><input type="checkbox" checked> нужно</label><button class="btn btn--icon" type="button" aria-label="Убрать"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+    <div class="frow"><input type="text" value="Эталон" aria-label="Имя свойства"><select aria-label="Тип"><option>Запись</option><option>Объект</option><option>Текст</option><option>Число с единицей</option><option>Дата</option><option>Выбор из словаря</option><option>Теги</option></select><label><input type="checkbox"> нужно</label><button class="btn btn--icon" type="button" aria-label="Убрать"><svg class="ico" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+    <button class="plus" type="button"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg>Свойство</button>
+    <h3>Тело</h3>
+    <div class="checks"><label><input type="radio" name="body" checked> желательно</label><label><input type="radio" name="body"> обязательно</label><label><input type="radio" name="body"> не нужно (запись из одних свойств)</label></div>
+    <h3>Виджеты на странице</h3>
+    <div class="checks"><label><input type="checkbox" checked> Источники</label><label><input type="checkbox" checked> Связи</label><label><input type="checkbox" checked> Окрестность</label><label><input type="checkbox"> Таблица значений</label><label><input type="checkbox"> Похожие записи</label></div>
+  </div>
+  <footer><span>Ядро нельзя менять; свои виды и свойства можно.</span><button class="btn btn--press" type="button" id="dr-save" style="height: 36px">Сохранить</button></footer>
+</aside>
+<div class="toast" id="toast" hidden role="status"><span id="toast-text">Записано</span><button class="btn" type="button" id="undo">Отменить</button></div>
+<p class="sr">Образец данных</p>
+
+<script>
+/* amemo sketch: the knowledge constellation, alive. Sample data only.
+   Settles on screen, stars drag, the sky pans and zooms; under reduced motion it settles at once. */
+(function () {
+  var FAMILY = { source: "Из источников", work: "Из работы", object: "Объекты" };
+  var KIND = {
+    parameter: ["source", "Параметр"], fact: ["source", "Факт"], term: ["source", "Термин"],
+    requirement: ["source", "Требование"], decision: ["work", "Решение"], lesson: ["work", "Урок"],
+    method: ["work", "Методика"], question: ["work", "Вопрос"], note: ["work", "Заметка"],
+    observation: ["work", "Наблюдение"], calibration: ["work", "Калибровка"], entity: ["object", "Объект"]
+  };
+  // id, kind, label, status, about (entity ids)
+  var N = [
+    ["e1", "entity", "Метеостанция МС-1", "verified"],
+    ["e2", "entity", "Датчик температуры Т-1", "verified", ["e1"]],
+    ["e3", "entity", "Датчик влажности В-2", "verified", ["e1"]],
+    ["e4", "entity", "Датчик давления Д-3", "verified", ["e1"]],
+    ["e5", "entity", "Мачта М-2", "verified", ["e1"]],
+    ["e6", "entity", "Руководство МС-1", "verified", ["e1"]],
+    ["e7", "entity", "Паспорт Т-1, 2019", "verified", ["e2"]],
+    ["e8", "entity", "Метеоплощадка", "verified"],
+    ["a1", "parameter", "Диапазон температуры: −40…+60 °C", "verified", ["e2", "e6"]],
+    ["a2", "parameter", "Погрешность температуры: ±0,3 °C", "verified", ["e2", "e6"]],
+    ["a3", "parameter", "Погрешность влажности: ±2 %", "needs_review", ["e3", "e6"]],
+    ["a4", "parameter", "Диапазон давления: 300…1100 гПа", "auto_verified", ["e4", "e6"]],
+    ["a5", "parameter", "Высота датчиков: не ниже 2 м", "verified", ["e5", "e6"]],
+    ["a6", "parameter", "Интервал опроса: 60 с", "verified", ["e1", "e6"]],
+    ["a7", "parameter", "Питание: 12 В", "auto_verified", ["e1", "e6"]],
+    ["a8", "parameter", "Степень защиты: IP65", "verified", ["e1", "e6"]],
+    ["a9", "fact", "Ниже −40 °C показания Т-1 не нормируются", "verified", ["e2", "e6"]],
+    ["a10", "fact", "Диапазон Т-1 по паспорту: −30…+50 °C", "verified", ["e2", "e7"]],
+    ["a11", "requirement", "Погрешность температуры не хуже ±0,5 °C", "verified", ["e8"]],
+    ["a12", "term", "Точка росы", "verified", ["e3"]],
+    ["a13", "decision", "Ставим мачту на 2 м", "verified", ["e5"]],
+    ["a14", "lesson", "В-2 завышает влажность при обмерзании", "verified", ["e3"]],
+    ["a15", "method", "Поверка Т-1 по эталонному термометру", "verified", ["e2"]],
+    ["a16", "question", "Нужен ли обогрев В-2 зимой?", "verified", ["e3"]],
+    ["a17", "fact", "Данные передаются по RS-485", "auto_verified", ["e1", "e6"]],
+    ["a18", "parameter", "Ток потребления: 0,4 А", "needs_review", ["e1", "e6"]],
+    ["a19", "decision", "Опрос раз в минуту достаточен", "verified", ["e8"]],
+    ["a20", "fact", "Корпус из алюминия", "verified", ["e1"]],
+    ["a21", "parameter", "Диапазон влажности: 0…100 %", "verified", ["e3", "e6"]]
+  ];
+  var EXTRA = [["e1", "e8", "часть"], ["a10", "a1", "противоречит"], ["a2", "a1", "уточняет"],
+    ["a19", "a6", "зависит от"], ["a11", "a2", "проверяется по"], ["a14", "a16", "см. также"], ["a15", "a2", "методика"]];
+
+  function makeNode(id, kind, label, status) {
+    var k = KIND[kind] || KIND.note;
+    return { id: id, kind: kind, family: k[0], kindName: k[1], label: label, status: status, entity: kind === "entity" };
+  }
+  var nodes = N.map(function (n) { return makeNode(n[0], n[1], n[2], n[3]); });
+  var byId = {}; nodes.forEach(function (n) { byId[n.id] = n; });
+  var links = [];
+  N.forEach(function (n) { (n[4] || []).forEach(function (t) { links.push({ s: n[0], t: t, rel: n[1] === "entity" ? "часть" : "о чём" }); }); });
+  EXTRA.forEach(function (l) { links.push({ s: l[0], t: l[1], rel: l[2] }); });
+
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function css(name, el) { return getComputedStyle(el).getPropertyValue(name).trim(); }
+
+  // one step of the force simulation; alpha is the temperature (1 hot, 0 still)
+  function step(g, alpha, focus, aspect, pinned) {
+    var P = g.P, list = g.list;
+    for (var i = 0; i < list.length; i++) for (var j = i + 1; j < list.length; j++) {
+      var a = P[list[i].id], b = P[list[j].id], dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy + 0.01, d = Math.sqrt(d2), f = 1400 / d2;
+      a.vx += dx * f / d; a.vy += dy * f / d; b.vx -= dx * f / d; b.vy -= dy * f / d;
+    }
+    g.L.forEach(function (l) {
+      var a = P[l.s], b = P[l.t], dx = b.x - a.x, dy = b.y - a.y, d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+      var want = byId[l.s].entity && byId[l.t].entity ? 95 : 62, f = (d - want) * 0.035;
+      a.vx += dx / d * f; a.vy += dy / d * f; b.vx -= dx / d * f; b.vy -= dy / d * f;
+    });
+    list.forEach(function (n) {
+      var p = P[n.id];
+      p.vx -= p.x * 0.012 / aspect; p.vy -= p.y * 0.012 * Math.min(aspect, 2);
+      if (n.id === pinned || n.id === focus) { p.vx = 0; p.vy = 0; return; }
+      p.x += p.vx * 0.5 * alpha; p.y += p.vy * 0.5 * alpha; p.vx *= 0.6; p.vy *= 0.6;
+    });
+    if (focus && P[focus]) { P[focus].x = 0; P[focus].y = 0; }
+  }
+
+  function mount(canvas, opts) {
+    opts = opts || {};
+    var ids = opts.ids || nodes.map(function (n) { return n.id; }), aspect = opts.aspect || 1, focus = opts.focus || null;
+    var rand = rng(7), P = {}, list = ids.map(function (id) { return byId[id]; });
+    list.forEach(function (n, i) { var a = i / list.length * Math.PI * 2; P[n.id] = { x: Math.cos(a) * 160 + rand() * 30, y: Math.sin(a) * 160 + rand() * 30, vx: 0, vy: 0 }; });
+    if (focus && P[focus]) { P[focus].x = 0; P[focus].y = 0; }
+    var g = { P: P, list: list, L: links.filter(function (l) { return P[l.s] && P[l.t]; }) };
+    var selected = opts.selected || focus || null, keep = null, bloom = null;
+    var view = null, userView = false, alpha = 1, running = false, pinned = null, drag = null, press = null;
+    var tip = canvas.parentNode.querySelector(".sky__tip");
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    function fit() {
+      var w = canvas.clientWidth, h = canvas.clientHeight;
+      var xs = g.list.map(function (n) { return g.P[n.id].x; }), ys = g.list.map(function (n) { return g.P[n.id].y; });
+      var minx = Math.min.apply(0, xs), maxx = Math.max.apply(0, xs), miny = Math.min.apply(0, ys), maxy = Math.max.apply(0, ys);
+      var pad = opts.pad || 56, s = Math.min((w - pad * 2) / (maxx - minx || 1), (h - pad * 2 - (opts.padBottom || 0)) / (maxy - miny || 1));
+      s = Math.min(s, opts.maxScale || 1.6);
+      view = { s: s, ox: w / 2 - (minx + maxx) / 2 * s, oy: (h - (opts.padBottom || 0)) / 2 - (miny + maxy) / 2 * s + (opts.padTop || 0) / 2 };
+    }
+    function pos(id) { var p = g.P[id]; return { x: view.ox + p.x * view.s, y: view.oy + p.y * view.s }; }
+    function world(x, y) { return { x: (x - view.ox) / view.s, y: (y - view.oy) / view.s }; }
+    function neighbours(id) { var s = {}; g.L.forEach(function (l) { if (l.s === id) s[l.t] = 1; if (l.t === id) s[l.s] = 1; }); return s; }
+    function degree(id) { var n = 0; g.L.forEach(function (l) { if (l.s === id || l.t === id) n++; }); return n; }
+    function hidden(id) { return keep && !keep(byId[id]); }
+
+    function draw() {
+      var dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+      if (!w || !h) return;
+      if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
+      if (!userView) fit();
+      var c = canvas.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, h);
+      var col = { source: css("--fam-source", canvas), work: css("--fam-work", canvas), object: css("--fam-object", canvas) };
+      var ink = css("--sky-ink", canvas), muted = css("--sky-muted", canvas), star = css("--sky-star", canvas), edge = css("--sky-edge", canvas), edgeOn = css("--sky-edge-on", canvas), ring = css("--sky-ring", canvas);
+      var near = selected ? neighbours(selected) : {};
+      var r = rng(3); c.fillStyle = star;
+      for (var k = 0; k < 70; k++) { c.beginPath(); c.arc(r() * w, r() * h, r() * 0.9 + 0.2, 0, 7); c.fill(); }
+      g.L.forEach(function (l) {
+        var a = pos(l.s), b = pos(l.t), on = selected && (l.s === selected || l.t === selected);
+        c.globalAlpha = hidden(l.s) || hidden(l.t) ? 0.25 : 1;
+        c.strokeStyle = on ? edgeOn : edge; c.lineWidth = on ? 1.2 : 0.8;
+        c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke(); c.globalAlpha = 1;
+      });
+      var labels = [];
+      g.list.forEach(function (n) {
+        var p = pos(n.id), base = n.entity ? 5 + Math.min(degree(n.id), 8) * 0.35 : 3.6, isSel = n.id === selected, dim = (selected && !isSel && !near[n.id]) || hidden(n.id);
+        var rad = base * (isSel ? 1.5 : 1), color = col[n.family];
+        var halo = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad * (isSel ? 6.5 : 4));
+        halo.addColorStop(0, color + (dim ? "22" : "66")); halo.addColorStop(1, color + "00");
+        c.fillStyle = halo; c.beginPath(); c.arc(p.x, p.y, rad * (isSel ? 7.5 : 4), 0, 7); c.fill();
+        c.globalAlpha = hidden(n.id) ? 0.22 : dim ? 0.45 : 1; c.fillStyle = color; c.beginPath(); c.arc(p.x, p.y, rad, 0, 7); c.fill();
+        if (n.entity) { c.strokeStyle = ring; c.lineWidth = 1; c.beginPath(); c.arc(p.x, p.y, rad + 2.5, 0, 7); c.stroke(); }
+        if (n.status === "needs_review" || n.status === "draft") { c.setLineDash([2, 2.5]); c.strokeStyle = ring; c.lineWidth = 1; c.beginPath(); c.arc(p.x, p.y, rad + 4, 0, 7); c.stroke(); c.setLineDash([]); }
+        if (isSel) { c.strokeStyle = ink; c.lineWidth = 1.5; c.beginPath(); c.arc(p.x, p.y, rad + 6, 0, 7); c.stroke(); }
+        if (bloom && bloom.id === n.id) { c.globalAlpha = 1 - bloom.t; c.strokeStyle = color; c.lineWidth = 2; c.beginPath(); c.arc(p.x, p.y, rad + 6 + bloom.t * 26, 0, 7); c.stroke(); }
+        c.globalAlpha = 1;
+        var showLabel = (n.entity && !dim) || isSel || (opts.labelNear && near[n.id]);
+        if (showLabel) labels.push({ n: n, p: p, rad: rad, sel: isSel });
+      });
+      labels.sort(function (a, b) { return (b.sel - a.sel) || (b.n.entity - a.n.entity); });
+      var placed = [], font = css("--font", canvas);
+      labels.forEach(function (l) {
+        c.font = (l.sel ? "600 " : "500 ") + "12px " + font;
+        var text = l.sel || l.n.entity ? l.n.label : l.n.label.split(":")[0], tw = c.measureText(text).width;
+        function free(bx) {
+          if (placed.some(function (b) { return bx.x < b.x + b.w && b.x < bx.x + bx.w && bx.y < b.y + b.h && b.y < bx.y + bx.h; })) return false;
+          return !g.list.some(function (m) { if (m.id === l.n.id) return false; var q = pos(m.id), rr = m.id === selected ? 18 : 8; return q.x > bx.x - rr && q.x < bx.x + bx.w + rr && q.y > bx.y - rr && q.y < bx.y + bx.h + rr; });
+        }
+        var mid = Math.max(10, Math.min(w - 10 - tw, l.p.x - tw / 2)), cands = [];
+        if (l.p.x + l.rad + 9 + tw < w - 10) cands.push({ x: l.p.x + l.rad + 9, y: l.p.y + 4 });
+        if (l.p.x - l.rad - 9 - tw > 10) cands.push({ x: l.p.x - l.rad - 9 - tw, y: l.p.y + 4 });
+        cands.push({ x: mid, y: l.p.y + l.rad + 20 }, { x: mid, y: l.p.y - l.rad - 10 });
+        var pick = null;
+        for (var ci = 0; ci < cands.length && !pick; ci++) { var bx = { x: cands[ci].x - 3, y: cands[ci].y - 12, w: tw + 6, h: 16 }; if (free(bx)) pick = { at: cands[ci], box: bx }; }
+        if (!pick) { if (!l.sel && !l.n.entity) return; pick = { at: cands[0], box: { x: cands[0].x - 3, y: cands[0].y - 12, w: tw + 6, h: 16 } }; }
+        placed.push(pick.box); c.textAlign = "left"; c.fillStyle = l.sel || l.n.entity ? ink : muted; c.fillText(text, pick.at.x, pick.at.y);
+      });
+    }
+
+    // the simulation runs while warm, then rests; anything that moves a star warms it again
+    function frame() {
+      running = true;
+      step(g, alpha, focus, aspect, pinned);
+      alpha *= 0.975;
+      if (bloom) { bloom.t = Math.min(1, bloom.t + 1 / 32); if (bloom.t >= 1) bloom = null; }
+      draw();
+      if (alpha > 0.015 || bloom || pinned) requestAnimationFrame(frame); else running = false;
+    }
+    function warm(a) {
+      alpha = Math.max(alpha, a);
+      if (reduce.matches) { for (var i = 0; i < 160; i++) { step(g, alpha, focus, aspect, pinned); alpha *= 0.975; } alpha = 0; bloom = null; draw(); return; }
+      if (!running) requestAnimationFrame(frame);
+    }
+
+    function hit(e) {
+      var b = canvas.getBoundingClientRect(), x = e.clientX - b.left, y = e.clientY - b.top, best = null, bd = 14;
+      g.list.forEach(function (n) { var p = pos(n.id), d = Math.hypot(p.x - x, p.y - y); if (d < bd) { bd = d; best = n; } });
+      return { n: best, x: x, y: y };
+    }
+    canvas.addEventListener("pointerdown", function (e) {
+      if (e.button !== 0) return;
+      var h = hit(e); press = { x: e.clientX, y: e.clientY, n: h.n, moved: false };
+      canvas.setPointerCapture(e.pointerId);
+      if (h.n) pinned = h.n.id; else drag = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy };
+    });
+    canvas.addEventListener("pointermove", function (e) {
+      if (press && !press.moved && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 4) press.moved = true;
+      if (pinned && press && press.moved) {
+        var b = canvas.getBoundingClientRect(), wpt = world(e.clientX - b.left, e.clientY - b.top), p = g.P[pinned];
+        userView = true; p.x = wpt.x; p.y = wpt.y; p.vx = 0; p.vy = 0; canvas.style.cursor = "grabbing"; warm(0.35); return;
+      }
+      if (drag && press && press.moved) { userView = true; view.ox = drag.ox + (e.clientX - drag.x); view.oy = drag.oy + (e.clientY - drag.y); canvas.style.cursor = "grabbing"; draw(); return; }
+      var h = hit(e); canvas.style.cursor = h.n ? "pointer" : "grab";
+      if (tip) { if (h.n) { tip.textContent = h.n.kindName + ". " + h.n.label; tip.style.left = Math.min(h.x + 12, canvas.clientWidth - tip.offsetWidth - 8) + "px"; tip.style.top = (h.y + 12) + "px"; tip.style.opacity = 1; } else tip.style.opacity = 0; }
+    });
+    function release() {
+      if (press && !press.moved && press.n) { selected = press.n.id; if (opts.onSelect) opts.onSelect(press.n); }
+      if (pinned && press && press.moved) { pinned = null; warm(0.25); }
+      pinned = null; drag = null; press = null; canvas.style.cursor = "grab"; draw();
+    }
+    canvas.addEventListener("pointerup", release);
+    canvas.addEventListener("pointercancel", release);
+    canvas.addEventListener("mouseleave", function () { if (tip) tip.style.opacity = 0; });
+    canvas.addEventListener("wheel", function (e) {
+      e.preventDefault();
+      var b = canvas.getBoundingClientRect(), x = e.clientX - b.left, y = e.clientY - b.top;
+      var k = Math.exp(-e.deltaY * 0.0015), s2 = Math.max(0.35, Math.min(5, view.s * k)); k = s2 / view.s;
+      userView = true; view.ox = x - (x - view.ox) * k; view.oy = y - (y - view.oy) * k; view.s = s2; draw();
+    }, { passive: false });
+    canvas.addEventListener("dblclick", function () { userView = false; draw(); });
+
+    new ResizeObserver(function () { draw(); }).observe(canvas);
+    new MutationObserver(function () { draw(); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { draw(); });
+    warm(1);
+
+    return {
+      select: function (id) { selected = id; draw(); },
+      clear: function () { selected = null; draw(); },
+      filter: function (pred) { keep = pred; draw(); },
+      nodes: function () { return g.list.slice(); },
+      selected: function () { return selected ? byId[selected] : null; },
+      refit: function () { userView = false; draw(); },
+      // A new star: appears beside the thing it is about, settles with its neighbours, blooms once.
+      add: function (spec, about) {
+        var n = makeNode(spec.id, spec.kind, spec.label, spec.status || "verified");
+        nodes.push(n); byId[n.id] = n;
+        about.forEach(function (t) { links.push({ s: n.id, t: t, rel: "о чём" }); });
+        var near = g.P[about[0]] || { x: 0, y: 0 };
+        g.P[n.id] = { x: near.x + 26, y: near.y - 22, vx: 0, vy: 0 };
+        g.list.push(n); g.L = links.filter(function (l) { return g.P[l.s] && g.P[l.t]; });
+        selected = n.id; bloom = { id: n.id, t: 0 }; warm(0.5);
+        return n;
+      },
+      remove: function (id) {
+        nodes = nodes.filter(function (n) { return n.id !== id; }); delete byId[id];
+        links = links.filter(function (l) { return l.s !== id && l.t !== id; });
+        g.list = g.list.filter(function (n) { return n.id !== id; }); delete g.P[id];
+        g.L = links.filter(function (l) { return g.P[l.s] && g.P[l.t]; });
+        if (selected === id) selected = focus || null;
+        warm(0.3);
+      }
+    };
+  }
+
+  window.amemoGraph = { KIND: KIND, FAMILY: FAMILY, byId: byId, mount: mount };
+
+  // theme toggle shared by all sketches
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-theme-toggle]"); if (!b) return;
+    var root = document.documentElement, cur = root.getAttribute("data-theme");
+    var dark = cur ? cur === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.setAttribute("data-theme", dark ? "light" : "dark");
+  });
+})();
+
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function icon(id, cls) { var s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("class", cls || "ico"); s.setAttribute("aria-hidden", "true"); var u = document.createElementNS("http://www.w3.org/2000/svg", "use"); u.setAttribute("href", "#" + id); s.appendChild(u); return s; }
+
+  // --- the ontology: kinds by pack; each kind lists its properties with a type. In the product this comes
+  // from the packs' templates (and the user's own pack from the constructor); nothing here is special-cased.
+  var PACKS = [
+    { name: "Ядро", kinds: [
+      ["note", "Заметка", "work", ["about", "tags"]], ["fact", "Факт", "source", ["about", "tags"]],
+      ["parameter", "Параметр", "source", ["about", "values", "when", "tags"]], ["decision", "Решение", "work", ["about", "when", "tags"]],
+      ["question", "Вопрос", "work", ["about", "tags"]], ["lesson", "Урок", "work", ["about", "tags"]],
+      ["method", "Методика", "work", ["about", "tags"]], ["term", "Термин", "source", ["tags"]], ["requirement", "Требование", "source", ["about", "values", "tags"]] ] },
+    { name: "Метео 1.0.0", kinds: [
+      ["observation", "Наблюдение", "work", ["about", "values", "when", "reference", "tags"]],
+      ["calibration", "Калибровка", "work", ["about", "values", "when", "method", "tags"]] ] },
+    { name: "Мои виды", kinds: [ ["walk", "Обход площадки", "work", ["about", "when", "tags"]] ] }
+  ];
+  var KINDS = {}; PACKS.forEach(function (p) { p.kinds.forEach(function (k) { KINDS[k[0]] = { label: k[1], fam: k[2], props: k[3], pack: p.name }; }); });
+  // property definitions: name, type, icon, required?
+  var PROPS = {
+    about: { name: "О чём", type: "object", icon: "i-box", need: true },
+    values: { name: "Значения", type: "value", icon: "i-hash", need: true },
+    when: { name: "Когда", type: "date", icon: "i-calendar" },
+    reference: { name: "Эталон", type: "record", icon: "i-note" },
+    method: { name: "Методика", type: "record", icon: "i-note" },
+    tags: { name: "Теги", type: "tags", icon: "i-tag" },
+    basis: { name: "Основание", type: "choice", icon: "i-check" }
+  };
+  var doc = {
+    kind: "observation", about: ["Датчик влажности В-2"], values: [["Погрешность влажности", "+4…+7", "%"]], when: ["2026-11-03", "2026-11-05"],
+    reference: ["Поверка В-2 по эталонному гигрометру"], tags: ["влажность", "обмерзание"], basis: "документ",
+    body: [
+      "## Что видно",
+      "Три дня подряд при RH выше 85 % датчик В-2 показывает **на 4…7 % больше** эталона. Ночью, когда температура падает к точке росы, разрыв растёт.",
+      "",
+      "## Проверка по точке росы",
+      "$$T_d = \\frac{b\\,\\gamma}{a - \\gamma}, \\qquad \\gamma = \\ln\\frac{RH}{100} + \\frac{a\\,T}{b + T}$$",
+      "При $T = 2$ °C и показании $RH = 95$ % выходит $T_d \\approx 1{,}3$ °C, по эталону $RH = 88$ % даёт $T_d \\approx 0{,}2$ °C.",
+      "",
+      "Вне диапазона датчик и не обязан быть точным; см. [[Нужен ли обогрев В-2 зимой?]]."
+    ].join("\n")
+  };
+  var editing = false, sourceMode = false;
+
+  // --- properties block
+  function pill(text, cls, removable) { var p = el("span", "pill " + (cls || ""), text); if (removable && editing) { var b = el("button"); b.type = "button"; b.setAttribute("aria-label", "Убрать"); b.appendChild(icon("i-x")); p.appendChild(b); } return p; }
+  function propRow(key) {
+    var def = PROPS[key], row = el("div", "prop"), k = el("div", "k"); k.appendChild(icon(def.icon)); k.appendChild(el("span", null, def.name)); row.appendChild(k);
+    var v = el("div", "v"), val = doc[key];
+    var empty = !val || (Array.isArray(val) && !val.length);
+    if (def.type === "object") { (val || []).forEach(function (o) { var p = pill(o, "obj", true); v.appendChild(p); }); if (editing) v.appendChild(adder("Объект")); }
+    else if (def.type === "record") { (val || []).forEach(function (o) { v.appendChild(pill(o, "rec", true)); }); if (editing) v.appendChild(adder("Запись")); }
+    else if (def.type === "value") { (val || []).forEach(function (t) { if (editing) { var i1 = el("input"); i1.value = t[0]; i1.setAttribute("aria-label", "Величина"); i1.style.width = "15rem"; var i2 = el("input", "num"); i2.value = t[1]; i2.setAttribute("aria-label", "Значение"); var i3 = el("input", "unit"); i3.value = t[2]; i3.setAttribute("aria-label", "Единица"); v.append(i1, i2, i3); } else { v.appendChild(el("span", null, t[0] + ": ")); v.appendChild(el("span", "num", t[1] + " " + t[2])); } }); if (editing) v.appendChild(adder("Величина")); }
+    else if (def.type === "date") { if (editing) { var d1 = el("input", "num"); d1.value = val[0]; d1.setAttribute("aria-label", "С даты"); var d2 = el("input", "num"); d2.value = val[1]; d2.setAttribute("aria-label", "По дату"); v.append(d1, el("span", "muted", "по"), d2); } else v.appendChild(el("span", "num", val[0] + " … " + val[1])); }
+    else if (def.type === "tags") { (val || []).forEach(function (t) { v.appendChild(pill(t, "", true)); }); if (editing) v.appendChild(adder("Тег")); }
+    else if (def.type === "choice") { if (editing) { var s = el("select"); ["документ", "моё слово", "допущение", "умолчание"].forEach(function (o) { var op = el("option", null, o); if (o === val) op.selected = true; s.appendChild(op); }); v.appendChild(s); } else v.appendChild(el("span", null, val)); }
+    if (empty && def.need) v.appendChild(el("span", "need", "нужно"));
+    row.appendChild(v); return row;
+  }
+  function adder(text) { var b = el("button", "addprop"); b.type = "button"; b.appendChild(icon("i-plus")); b.appendChild(document.createTextNode(text)); return b; }
+  function renderProps() {
+    var box = $("props"); box.replaceChildren();
+    var kind = KINDS[doc.kind];
+    var row = el("div", "prop"), k = el("div", "k"); k.appendChild(icon("i-stack")); k.appendChild(el("span", null, "Вид")); row.appendChild(k);
+    var v = el("div", "v"), kb = el("button", "pill kind kindbtn", kind.label); kb.type = "button"; kb.dataset.fam = kind.fam; kb.setAttribute("aria-haspopup", "listbox"); kb.appendChild(icon("i-down"));
+    kb.addEventListener("click", function () { openKinds(kb); });
+    v.appendChild(kb); v.appendChild(el("span", "muted", kind.pack)); row.appendChild(v); box.appendChild(row);
+    kind.props.forEach(function (key) { box.appendChild(propRow(key)); });
+    if (doc.basis && kind.props.indexOf("basis") < 0) box.appendChild(propRow("basis"));
+    if (editing) { var a = adder("Свойство"); a.title = "Любое свойство: из шаблона или своё"; box.appendChild(a); }
+  }
+
+  // --- kind popover, grouped by pack, with the constructor link
+  function openKinds(anchor) {
+    var pop = $("kindpop"); pop.replaceChildren();
+    var q = el("input"); q.type = "search"; q.placeholder = "Найти вид"; q.setAttribute("aria-label", "Найти вид"); pop.appendChild(q);
+    PACKS.forEach(function (p) {
+      var h = el("h4", null, p.name); if (p.name !== "Ядро") { var a = el("a", null, "настроить"); a.href = "#"; a.addEventListener("click", function (e) { e.preventDefault(); pop.hidden = true; $("drawer").hidden = false; }); h.appendChild(a); } pop.appendChild(h);
+      p.kinds.forEach(function (k) {
+        var b = el("button", "opt"); b.type = "button"; b.setAttribute("role", "option"); b.setAttribute("aria-selected", k[0] === doc.kind ? "true" : "false");
+        var dot = el("i"); dot.style.setProperty("--c", "var(--fam-" + k[2] + ")"); b.appendChild(dot); b.appendChild(el("span", null, k[1])); b.appendChild(el("small", null, k[3].length + " св."));
+        b.addEventListener("click", function () { doc.kind = k[0]; pop.hidden = true; renderProps(); });
+        pop.appendChild(b);
+      });
+    });
+    var r = anchor.getBoundingClientRect(); pop.style.left = r.left + "px"; pop.style.top = (r.bottom + 6 + window.scrollY) + "px"; pop.hidden = false; q.focus();
+  }
+  document.addEventListener("pointerdown", function (e) { var pop = $("kindpop"); if (!pop.hidden && !pop.contains(e.target) && !e.target.closest(".kindbtn")) pop.hidden = true; });
+
+  // --- body: reading view, pencil for editing, brackets for source
+  function inline(parent, s) {
+    var last = 0;
+    Array.from(s.matchAll(/(\$[^$]+\$|\*\*[^*]+\*\*|\*[^*]+\*|\[\[[^\]]+\]\]|`[^`]+`)/g)).forEach(function (m) {
+      if (m.index > last) parent.appendChild(document.createTextNode(s.slice(last, m.index)));
+      var tok = m[0], e;
+      if (tok.charAt(0) === "$") { e = el("span"); tex(e, tok.slice(1, -1), false); }
+      else if (tok.startsWith("**")) e = el("strong", null, tok.slice(2, -2));
+      else if (tok.startsWith("*")) e = el("em", null, tok.slice(1, -1));
+      else if (tok.startsWith("[[")) { e = el("a", "wiki", tok.slice(2, -2)); e.href = "#"; }
+      else e = el("code", null, tok.slice(1, -1));
+      parent.appendChild(e); last = m.index + tok.length;
+    });
+    if (last < s.length) parent.appendChild(document.createTextNode(s.slice(last)));
+  }
+  function tex(target, src, display) { if (window.katex) { try { window.katex.render(src, target, { displayMode: display, throwOnError: false }); return; } catch (err) { /* text below */ } } target.textContent = src; target.className = "mono"; }
+  function renderBody() {
+    var pv = $("read"); pv.replaceChildren();
+    if (!doc.body.trim()) { pv.appendChild(el("p", "empty", editing ? "" : "Без текста: запись из одних свойств.")); return; }
+    var lines = doc.body.split("\n"), para = [];
+    function flush() { if (para.length) { var p = el("p"); inline(p, para.join(" ")); pv.appendChild(p); para = []; } }
+    lines.forEach(function (l) {
+      if (!l.trim()) { flush(); return; }
+      var h = l.match(/^(#{1,3})\s+(.*)$/);
+      if (h) { flush(); var hd = el("h" + (h[1].length + 1)); inline(hd, h[2]); pv.appendChild(hd); return; }
+      if (/^\$\$.*\$\$$/.test(l.trim())) { flush(); var d = el("div"); tex(d, l.trim().slice(2, -2), true); pv.appendChild(d); return; }
+      if (/^>\s?/.test(l)) { flush(); var last = pv.lastElementChild; if (last && last.tagName === "BLOCKQUOTE") inline(last.firstChild, " " + l.replace(/^>\s?/, "")); else { var q = el("blockquote"), qp = el("p"); inline(qp, l.replace(/^>\s?/, "")); q.appendChild(qp); pv.appendChild(q); } return; }
+      if (/^[-*]\s+/.test(l)) { flush(); var ul = pv.lastElementChild; if (!ul || ul.tagName !== "UL") { ul = el("ul"); pv.appendChild(ul); } var li = el("li"); inline(li, l.replace(/^[-*]\s+/, "")); ul.appendChild(li); return; }
+      para.push(l);
+    });
+    flush();
+  }
+  function sourceText() {
+    var front = ["---", "kind: " + doc.kind, "about: " + doc.about.map(function (a) { return "[[" + a + "]]"; }).join(", ")];
+    if (doc.values && doc.values.length) front.push("values: " + doc.values.map(function (v) { return v[0] + " = " + v[1] + " " + v[2]; }).join("; "));
+    if (doc.when) front.push("when: " + doc.when[0] + " … " + doc.when[1]);
+    if (doc.reference) front.push("reference: " + doc.reference.map(function (a) { return "[[" + a + "]]"; }).join(", "));
+    front.push("tags: [" + doc.tags.join(", ") + "]", "basis: " + doc.basis, "---", "# " + $("title").textContent.trim(), "");
+    return front.join("\n") + doc.body;
+  }
+  function setMode() {
+    $("m-edit").setAttribute("aria-pressed", editing ? "true" : "false"); $("m-src").setAttribute("aria-pressed", sourceMode ? "true" : "false");
+    $("title").contentEditable = editing && !sourceMode ? "plaintext-only" : "false";
+    $("props").hidden = sourceMode; $("toolbar").hidden = !(editing && !sourceMode);
+    $("read").hidden = editing || sourceMode; $("edit").hidden = !(editing && !sourceMode); $("src").hidden = !sourceMode;
+    $("widgets").hidden = sourceMode;
+    if (sourceMode) $("src").value = sourceText(); else { renderProps(); renderBody(); $("edit").value = doc.body; }
+  }
+  $("m-edit").addEventListener("click", function () { editing = !editing; if (!editing) toast("Записано: новая ревизия"); setMode(); if (editing) { $("edit").focus(); $("edit").setSelectionRange(0, 0); $("edit").scrollTop = 0; } });
+  $("m-src").addEventListener("click", function () { sourceMode = !sourceMode; setMode(); if (sourceMode) $("src").focus(); });
+  $("edit").addEventListener("input", function () { doc.body = $("edit").value; });
+  $("src").addEventListener("input", function () { var t = $("src").value, i = t.indexOf("\n---", 3); if (i > 0) { var rest = t.slice(i + 4).replace(/^\n?# .*\n?/, ""); doc.body = rest.replace(/^\n/, ""); } });
+  document.querySelectorAll(".tb").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var ta = $("edit"), s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
+      if (b.dataset.wrap) { var w1 = b.dataset.wrap, w2 = b.dataset.wrapEnd || w1, sel = v.slice(s, e) || "текст"; ta.value = v.slice(0, s) + w1 + sel + w2 + v.slice(e); ta.setSelectionRange(s + w1.length, s + w1.length + sel.length); }
+      else { var ls = v.lastIndexOf("\n", s - 1) + 1; ta.value = v.slice(0, ls) + b.dataset.line + v.slice(ls); ta.setSelectionRange(s + b.dataset.line.length, e + b.dataset.line.length); }
+      doc.body = ta.value; ta.focus();
+    });
+  });
+  document.addEventListener("keydown", function (e) {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "e" && !e.shiftKey) { e.preventDefault(); $("m-edit").click(); }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b" && editing) { e.preventDefault(); document.querySelector('[data-wrap="**"]').click(); }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "i" && editing) { e.preventDefault(); document.querySelector('[data-wrap="*"]').click(); }
+  });
+
+  // --- widgets and the constructor
+  var timer = null;
+  function toast(text) { $("toast-text").textContent = text; $("toast").hidden = false; clearTimeout(timer); timer = setTimeout(function () { $("toast").hidden = true; }, 6000); }
+  $("undo").addEventListener("click", function () { $("toast").hidden = true; });
+  $("addw").addEventListener("click", function () { toast("Виджеты выбираются из списка; здесь образец"); });
+  $("addsrc").addEventListener("click", function () { toast("Источник: выбрать файл или добавить новый, он станет записью"); });
+  $("dr-close").addEventListener("click", function () { $("drawer").hidden = true; });
+  $("dr-save").addEventListener("click", function () { $("drawer").hidden = true; toast("Вид сохранён в пакет «Мои виды»"); });
+
+  var sky = amemoGraph.mount($("sky"), { ids: ["e1", "e3", "e6", "e2", "a3", "a21", "a12", "a14", "a16", "a1"], focus: "a14", selected: "a14", padTop: 36, padBottom: 34, pad: 36, labelNear: true, maxScale: 1.6, aspect: 1.1 });
+  setMode();
+  window.addEventListener("load", function () { if (!editing && !sourceMode) renderBody(); });
+})();
+</script>
+</body>
+</html>

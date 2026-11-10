@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from amem import db, ids, recipes, records, review, usefulness
-from amem.records import Item, RecordError, RecordNotFound
+from amemo import db, ids, recipes, records, review, usefulness
+from amemo.records import Item, RecordError, RecordNotFound
 
 AGENT = "model:test"
 

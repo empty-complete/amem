@@ -1,6 +1,6 @@
-"""Баннер README: docs/assets/readme/banner-{light,dark}.svg — знак amem и созвездие в цветах веб-UI.
+"""Баннер README: docs/assets/readme/banner-{light,dark}.svg — знак amemo и созвездие в цветах веб-UI.
 
-Цвета — токены веб-UI (docs/superpowers/specs/2026-11-06-amem-subproject-5-web-ui-design.md, разд. 4.2),
+Цвета — токены веб-UI (docs/superpowers/specs/2026-11-06-amemo-subproject-5-web-ui-design.md, разд. 4.2),
 переведённые из OKLCH в hex. Звёзды раскладываются детерминированно (random.Random(seed)), поэтому повторный
 запуск даёт те же файлы. Снимки экрана — настоящие, их снимает workflow readme-shots (docs/assets/readme/README.md).
 Запуск из корня репозитория: python3 tools/readme_assets.py ."""
@@ -169,13 +169,13 @@ def banner(theme):
     body = [rect(0.75, 0.75, BW - 1.5, BH - 1.5, paper, r=28, extra=f'stroke="{edge}" stroke-width="1.5"'),
             sky, f'<g clip-path="url(#bclip)">{stars}</g>',
             rect(700, 28, 872, 344, "none", r=22, extra='stroke="#ffffff14" stroke-width="1.5"'),
-            text(92, 222, "amem", 132, t["ink"], weight=600),
+            text(92, 222, "amemo", 132, t["ink"], weight=600),
             text(98, 282, "another memory", 30, t["muted"]),
             # три семьи знания — точки-подписи под знаком
             f'<circle cx="104" cy="327" r="6" fill="{t["src"]}"/>',
             f'<circle cx="124" cy="327" r="6" fill="{t["work"]}"/>',
             f'<circle cx="144" cy="327" r="6" fill="{t["obj"]}"/>']
-    return svg(BW, BH, "amem — another memory", "\n".join(body), defs)
+    return svg(BW, BH, "amemo — another memory", "\n".join(body), defs)
 
 
 def main(root: Path):
