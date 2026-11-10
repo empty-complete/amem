@@ -377,3 +377,37 @@ def test_zip_bomb_limits(tmp_path, monkeypatch):
     monkeypatch.setattr(bundle, "MAX_MEMBERS", 1)
     with pytest.raises(bundle.BundleError, match="записей в архиве"):
         bundle.inspect(path)
+
+
+def test_export_with_packs_writes_own_kinds(world, tmp_path, store, docs):
+    """Свой вид («Мои виды») едет пакетом packs/mine/, собранным из базы; запись вида в подборке ссылается на него.
+    Шаблон вида ссылается на класс sensor пакета ontology — пакет-владелец класса тоже в подборке."""
+    from amem import mine
+
+    pg, refs = world
+    mine.put(pg, "weighing", {
+        "label": {"ru": "Взвешивание"}, "target": "atom", "family": "source",
+        "form": [{"key": "about", "path": "about", "label": {"ru": "Датчик"}, "type": "object",
+                  "accepts": {"entity_classes": ["sensor"], "kinds": []}},
+                 {"key": "mass", "path": "content.values[property=mass]", "label": {"ru": "Масса"},
+                  "type": "quantity", "required": True, "property": "mass"}],
+        "body": "wanted", "widgets": ["sources"]}, agent=PERSON)
+    r = check.submit(pg, store, docs, [Proposal("atom", atom("@w", kind="weighing", tags=["weighed"], basis="author",
+                                                             sources=None,
+                                                             content={"values": [value("mass", 2, "kg")]}))],
+                     agent=PERSON)
+    assert r.state == "approved", r.report
+    out = tmp_path / "b"
+    m = bundle.export(pg, store=None, folder=out, selection=bundle.Selection(tags=("weighed",)), agent=PERSON,
+                      with_packs=True)
+    by_name = {p["name"]: p for p in m["packs"]}
+    assert by_name["mine"]["version"] == "0.0.1" and "ontology" in by_name
+    for part in ("packs/mine/pack.yaml", "packs/mine/vocab/kind.yaml", "packs/mine/templates/weighing.yaml"):
+        assert part in m["parts"], part
+    assert [row["kind"] for row in _rows(out / "atoms.jsonl")] == ["weighing"]
+    assert [c.code for c, _ in mine.read_pack(out / "packs" / "mine")] == ["weighing"]
+    assert bundle.inspect(out)["ok"] is True
+    # без with_packs — тот же пакет в манифесте, но без папки
+    m2 = bundle.export(pg, store=None, folder=tmp_path / "c", selection=bundle.Selection(tags=("weighed",)),
+                       agent=PERSON)
+    assert {p["name"] for p in m2["packs"]} >= {"mine", "ontology"} and not (tmp_path / "c" / "packs").exists()

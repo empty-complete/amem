@@ -1,0 +1,5 @@
+name: forms
+version: 1.0.0
+title: Формы видов для тестов
+description: Виды с блоком ui и без него — форма из шаблона (amem/forms.py).
+license: MIT

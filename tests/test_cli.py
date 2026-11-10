@@ -469,6 +469,31 @@ def test_review_list_claim_release_resolve_stats(run, kb, store, docs, start):
     assert code == 0 and mine == http
 
 
+# --- задачи агентам ---
+
+def test_tasks_list_and_cancel(run, kb, store, docs, start):
+    from amem import tasks
+
+    version = objects.ingest(kb, store, docs, "Заметки/узел.md", agent=PERSON)
+    task, _ = tasks.create(kb, "parse", version.object_id, version.n, agent="model:bot", note="разобрать узел")
+    task_id = str(task["id"])
+    code, out, _ = run("tasks", "list", "--json")
+    assert code == 0 and js(out) == start().get(f"{V1}/tasks").json()
+    assert task_id in run("tasks")[1] and "разобрать узел" in run("tasks", "list")[1]
+    assert js(run("tasks", "list", "--state", "done", "--json")[1]) == []
+    assert run("tasks", "list", "--state", "busy")[0] == 2
+    assert "Задач нет." in run("tasks", "list", "--object", str(objects.ingest(
+        kb, store, docs, "заметка.md", agent=PERSON).object_id))[1]
+    code, _, err = run("tasks", "cancel", task_id, extra={"AMEM_AS_MODEL": "other"})
+    assert code == 2 and "отменить" in err                        # чужая модель — forbidden (403)
+    code, out, _ = run("tasks", "cancel", task_id, "--json")       # человек — любую
+    assert code == 0 and js(out)["state"] == "cancelled"
+    code, _, err = run("tasks", "cancel", task_id)
+    assert code == 6 and "закрыта" in err                          # уже закрыта — task_closed (409)
+    assert run("tasks", "cancel", "019a0000-0000-7000-8000-000000000000")[0] == 4
+    assert run("tasks", "cancel", "не-uuid")[0] == 2
+
+
 # --- папки ---
 
 def test_folders(run, base, start):

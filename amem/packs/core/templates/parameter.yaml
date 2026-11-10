@@ -1,0 +1,12 @@
+code: parameter
+version: 1.0.0
+target: atom
+applies_to: parameter
+description: {ru: "Параметр: значение величины с единицей и условиями применения — о чём, значение, срок действия."}
+# правила без required — только поля формы: строгость проверки параметра не меняется
+fields:
+  - {path: content.values}
+  - {path: valid_from}
+  - {path: valid_to}
+ui:
+  widgets: [sources, links, around, values_table, similar]

@@ -1,0 +1,19 @@
+code: reading
+version: 1.0.0
+target: atom
+applies_to: reading
+description: {ru: "Показание: о каком приборе, значения, когда действует."}
+extends: [has_label]
+fields:
+  - {path: about, required: true, entity_classes: [artifact]}
+  - {path: content.values, required: true}
+  - {path: valid_from}
+  - {path: valid_to}
+  - {path: rank}
+  - {path: derived_from}
+ui:
+  body: none
+  widgets: [sources, values_table]
+  fields:
+    - {path: "content.values[property=humidity]", label: {ru: Влажность воздуха, en: Air humidity}}
+    - {path: "content.values[property=pressure]"}

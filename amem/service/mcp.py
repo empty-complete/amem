@@ -49,7 +49,7 @@ from pydantic import Field, ValidationError
 from starlette.datastructures import Headers
 from starlette.types import Receive, Scope, Send
 
-from .. import __version__, api, journal, private, usefulness
+from .. import __version__, api, journal, private, tasks, usefulness
 from .. import settings as settings_
 from ..ids import uuid7
 from . import problems
@@ -79,6 +79,8 @@ HINTS = {
     "folder_not_found": "переносить можно только в существующую папку",
     "db_unavailable": "база недоступна — повторите позже",
     "semantic_unavailable": "смысловой поиск недоступен — ищите amem_search по тексту и маркам",
+    "task_claimed": "задачу держит другой агент — возьмите свободную: amem_tasks",
+    "task_closed": "задача уже закрыта — свободные: amem_tasks",
 }
 READ = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 WRITE = ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=False)
@@ -398,6 +400,52 @@ def build(runtime: Runtime) -> MCPServer:
             conn, item, agent=caller.agent, outcome=outcome, confidence=confidence, note=note), write=True)
 
     @server.tool(annotations=READ, description=(
+        "Задачи агентам: свободные (open) и взятые вами — что разобрать (kind parse: объект и версия файла). Дальше — "
+        "amem_task_claim. / Agent tasks: open ones and those you hold."))
+    async def amem_tasks(ctx: Context,
+                         object: Annotated[str | None, Field(description="только об этом объекте: UUID")] = None,
+                         limit: Annotated[int | None, Field(description="1–500, по умолчанию 500")] = None
+                         ) -> CallToolResult:
+        return await call(ctx, lambda conn, caller: {"tasks": api.task_list(
+            conn, object=object, limit=limit, agent=caller.agent, full=True)})
+
+    @server.tool(annotations=WRITE, description=(
+        f"Взять задачу с арендой {tasks.LEASE.seconds // 60} мин: названную (task) или самую старую свободную; "
+        "task null в ответе — свободных нет. Своя — аренда продлевается. / Claim a task with a lease."))
+    async def amem_task_claim(
+            ctx: Context,
+            task: Annotated[str | None, Field(description="id задачи из amem_tasks; без него — самая старая")] = None,
+            kind: Annotated[str | None, Field(description="вид задачи: parse")] = None) -> CallToolResult:
+        return await call(ctx, lambda conn, caller: {"task": api.task_claim(conn, task, agent=caller.agent,
+                                                                             kind=kind)}, write=True)
+
+    @server.tool(annotations=SETTLE, description=(
+        "Вернуть взятую задачу свободной, если не сделаете её. / Release a claimed task."))
+    async def amem_task_release(task: Annotated[str, Field(description="id задачи")],
+                                ctx: Context) -> CallToolResult:
+        return await call(ctx, lambda conn, caller: {"task": api.task_release(conn, task, agent=caller.agent)},
+                          write=True)
+
+    @server.tool(annotations=SETTLE, description=(
+        "Закрыть взятую задачу с итогом result — что сделано, например {refs: [atm:…], note}. / Close a task "
+        "with its result."))
+    async def amem_task_done(
+            task: Annotated[str, Field(description="id задачи")],
+            ctx: Context,
+            result: Annotated[dict[str, Any] | None, Field(description="итог: {refs: [ссылки записей], note}")] = None
+    ) -> CallToolResult:
+        return await call(ctx, lambda conn, caller: api.task_done(conn, task, agent=caller.agent, result=result),
+                          write=True)
+
+    @server.tool(annotations=WRITE, description=(
+        "Отменить незакрытую задачу, которую поставили вы (человек отменяет любую). / Cancel an open task you "
+        "created."))
+    async def amem_task_cancel(task: Annotated[str, Field(description="id задачи")],
+                               ctx: Context) -> CallToolResult:
+        return await call(ctx, lambda conn, caller: {"task": api.task_cancel(conn, task, agent=caller.agent)},
+                          write=True)
+
+    @server.tool(annotations=READ, description=(
         "Коды словаря с подписями: kind, entity_class, property, rel, … / Vocabulary codes with labels."))
     async def amem_vocab(scheme: Annotated[str, Field(description="схема: kind, entity_class, property, rel, …")],
                          ctx: Context) -> CallToolResult:
@@ -414,7 +462,8 @@ def build(runtime: Runtime) -> MCPServer:
 
 TOOLS = ("amem_search", "amem_similar", "amem_timeline", "amem_get", "amem_card", "amem_submit", "amem_helpful",
          "amem_move", "amem_object_status", "amem_mark_object", "amem_review_claim", "amem_review_release",
-         "amem_review_resolve", "amem_vocab")
+         "amem_review_resolve", "amem_vocab", "amem_tasks", "amem_task_claim", "amem_task_release",
+         "amem_task_done", "amem_task_cancel")
 
 
 # --- /mcp службы ---

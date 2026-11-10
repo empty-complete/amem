@@ -44,8 +44,9 @@ def test_template_rules_point_to_real_fields(t):
     for rule in t.fields or []:
         slot = packs.check_path(rule.path, t.target)
         last = rule.path.split(".")[-1]
-        assert rule.required or rule.min_count or rule.ucum or rule.selector_types or rule.entity_classes, \
-            f"{t.code}: правило {rule.path} ничего не проверяет"
+        # правило без проверок — поле формы (спецификация разд. 6a.2): бывает только у шаблона с блоком ui
+        assert rule.required or rule.min_count or rule.ucum or rule.selector_types or rule.entity_classes \
+            or t.ui is not None, f"{t.code}: правило {rule.path} ничего не проверяет и не поле формы (нет ui)"
         if rule.ucum:
             assert last == "unit", f"{t.code}: ucum у поля {rule.path}"
         if rule.selector_types:

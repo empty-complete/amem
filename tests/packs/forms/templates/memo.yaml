@@ -1,0 +1,10 @@
+code: memo
+version: 1.0.0
+target: atom
+applies_to: memo
+fields:
+  - {path: valid_from, required: true}
+ui:
+  fields:
+    - {path: tags, type: text, label: {ru: Метки}, hint: {ru: "Через запятую."}}
+    - {path: valid_from, type: text}

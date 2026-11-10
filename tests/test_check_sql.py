@@ -244,7 +244,7 @@ def test_migration_0011_marks_text_source_and_drops_pdf_without_text(pg, tmp_pat
     pg.execute("INSERT INTO object_text (digest, page, text) VALUES (%s, 1, 'Ветер')", (digests["норматив.pdf"],))
     pg.execute("INSERT INTO object_text (digest, page, text) VALUES (%s, 0, '')", (digests["записка.docx"],))
     monkeypatch.setattr(db, "SQL_DIR", real)
-    assert db.migrate(pg) == ["0011_object_text_ocr.sql"]
+    assert db.migrate(pg)[0] == "0011_object_text_ocr.sql"
     rows = pg.execute("SELECT digest, page, text_source FROM object_text ORDER BY digest").fetchall()
     assert rows == [(digests["норматив.pdf"], 1, "layer"), (digests["записка.docx"], 0, "none")]
     with pytest.raises(psycopg.errors.CheckViolation):

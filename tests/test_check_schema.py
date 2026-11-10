@@ -16,7 +16,7 @@ CHECK_CODES = {
     "unknown_property", "out_of_range", "unit_mismatch", "conflict",
     "duplicate", "related",
     "basis_author_model", "basis_without_rule", "confidence_person", "bundle_pack_missing", "bundle_key_collision",
-    "bundle_object_conflict",
+    "bundle_object_conflict", "bundle_pack_conflict",
 }
 
 REPORT = {

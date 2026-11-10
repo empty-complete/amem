@@ -875,3 +875,105 @@ def test_ingest_during_write_waits_and_marks_written_revision(pg, pg2, monkeypat
         (revision_id,)).fetchall()
     assert changeset_id is None                                                  # пункт поставила новая версия
     assert [(o["from"], o["to"]) for o in details["objects"]] == [([1], 2)]
+
+
+# --- свои виды (пакет mine) в подборке: подпроект 4, часть 4d, задача 19 ---
+
+def _kind(**extra) -> dict:
+    """Черновик своего вида атома: величина массы и теги."""
+    return {"label": {"ru": "Взвешивание"}, "target": "atom", "family": "source",
+            "form": [{"key": "mass", "path": "content.values[property=mass]", "label": {"ru": "Масса"},
+                      "type": "quantity", "required": True, "property": "mass"},
+                     {"key": "tags", "path": "tags", "label": {"ru": "Теги"}, "type": "tags"}],
+            "body": "wanted", "widgets": ["sources"], **extra}
+
+
+def _own_kind_record(conn, store, docs) -> str:
+    from amem import mine
+
+    mine.put(conn, "weighing", _kind(), agent=PERSON)
+    r = check.submit(conn, store, docs, [Proposal("atom", atom("@w", kind="weighing", tags=["shared"], basis="author",
+                                                                sources=None,
+                                                                content={"values": [value("mass", 2, "kg")]}))],
+                     agent=PERSON)
+    assert r.state == "approved", r.report
+    return r.records[0]["record_id"]
+
+
+def _mine_kinds(conn) -> list[str]:
+    return [c for (c,) in conn.execute("SELECT code FROM concept WHERE origin = 'mine' ORDER BY code")]
+
+
+def test_own_kind_travels_with_packs(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    rid = _own_kind_record(pg, store, docs)
+    _export(pg, store, tmp_path / "b", with_packs=True)
+    plan = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER, dry_run=True)
+    assert plan.kinds == ["weighing"] and plan.counts["kinds"] == 1 and plan.complete, plan.report
+    assert _mine_kinds(pg2) == [] and _count(pg2, "atom") == 0                       # dry_run ничего не пишет
+    assert pg2.execute("SELECT count(*) FROM pack WHERE name = 'mine'").fetchone()[0] == 0
+    got = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert got.kinds == ["weighing"] and got.counts["created"] == 1 and got.complete
+    assert _mine_kinds(pg2) == ["weighing"]
+    assert lookup.get(pg2, "atom", rid)["kind"] == "weighing"
+    # повтор: вид уже есть с тем же содержимым — добавлять нечего
+    again = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER, dry_run=True)
+    assert again.kinds == [] and again.collisions == []
+
+
+def test_own_kind_with_other_content_is_pack_conflict(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    from amem import mine
+
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    _own_kind_record(pg, store, docs)
+    _export(pg, store, tmp_path / "b", with_packs=True)
+    mine.put(pg2, "weighing", _kind(body="none"), agent=OTHER)
+    plan = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER, dry_run=True)
+    assert plan.kinds == [] and not plan.complete
+    assert any(c.startswith("packs/mine") and "weighing" in c for c in plan.collisions), plan.collisions
+    with pytest.raises(bundle.BundleError) as e:
+        bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert e.value.code == "bundle_pack_conflict" and e.value.details["collisions"]
+    assert _count(pg2, "atom") == 0 and _count(pg2, "review_item") == 0             # и в очередь ничего молча
+
+
+def test_own_kind_without_packs_is_pack_missing(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    _own_kind_record(pg, store, docs)
+    _export(pg, store, tmp_path / "b")
+    with pytest.raises(bundle.BundleError, match="mine") as e:
+        bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER, dry_run=True)
+    assert e.value.code == "bundle_pack_missing" and "with_packs" in str(e.value)
+    # в свою же базу — без packs/: пакет mine той же версии и digest уже есть
+    assert bundle.import_(pg, store, tmp_path / "b", agent=PERSON).counts["unchanged"] == 1
+
+
+def test_own_kind_from_bundle_is_added_only_by_person(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    from amem import mine
+
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    _own_kind_record(pg, store, docs)
+    _export(pg, store, tmp_path / "b", with_packs=True)
+    assert bundle.import_(pg2, store2, tmp_path / "b", agent="model:bot", dry_run=True).kinds == ["weighing"]
+    with pytest.raises(mine.MineError) as e:
+        bundle.import_(pg2, store2, tmp_path / "b", agent="model:bot")
+    assert e.value.code == "forbidden" and _mine_kinds(pg2) == [] and _count(pg2, "atom") == 0
+
+
+def test_own_kind_failing_the_pack_check_is_a_dry_run_collision(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Вид подборки, который не проходит проверку пакета в этой базе: у dry_run — коллизия отчёта, а не отказ."""
+    from amem import mine, packs
+
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    _own_kind_record(pg, store, docs)
+    _export(pg, store, tmp_path / "b", with_packs=True)
+
+    def refuse(*args, **kwargs):
+        raise packs.PackError("шаблон weighing: величины нет в словаре")
+    monkeypatch.setattr(mine, "_check", refuse)
+    plan = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER, dry_run=True)
+    assert not plan.complete and any("weighing" in c for c in plan.collisions), plan.collisions
+    with pytest.raises(bundle.BundleError) as e:
+        bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert e.value.code == "bundle_pack_conflict"
+    assert _mine_kinds(pg2) == [] and _count(pg2, "atom") == 0

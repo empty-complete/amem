@@ -31,12 +31,7 @@ PERSON = "person:ann"
 METHODS = ("get", "post", "put", "patch", "delete")
 # пути контракта, которых в 4a ещё нет: часть D веба (шаблоны, «Мои виды», загрузка объектов, задачи агентам) —
 # служба сделает их в 4d; сделанный путь убирается отсюда (тест ниже не даст забыть)
-LATER_4D = frozenset({
-    ("/objects", "get"), ("/objects", "post"),
-    ("/templates", "get"),
-    ("/packs/mine/templates/{code}", "put"), ("/packs/mine/templates/{code}", "delete"),
-    ("/tasks", "get"), ("/tasks", "post"),
-})
+LATER_4D: frozenset[tuple[str, str]] = frozenset()       # часть 4d сделана; список — на будущие пути
 # маршруты службы вне контракта: сам контракт, живость, интерфейс (и /mcp — с частью 4b)
 OUTSIDE = frozenset({
     ("/api/v1/openapi.json", "get"), ("/health", "get"), ("/mcp", "post"), ("/mcp", "get"), ("/mcp", "delete"),
@@ -87,7 +82,7 @@ def test_no_routes_outside_contract(tmp_path):
 def test_service_does_not_answer_outside_contract(serve, pg):
     db.prepare(pg)
     client = serve()
-    for path in (f"{V1}/unknown", f"{V1}/records/x/unknown", f"{V1}", "/api/v2/session", f"{V1}/objects"):
+    for path in (f"{V1}/unknown", f"{V1}/records/x/unknown", f"{V1}", "/api/v2/session", f"{V1}/objects/x/unknown"):
         response = client.get(path)
         assert response.status_code == 404, (path, response.text)
         assert response.headers["content-type"].startswith("application/problem+json")

@@ -1,0 +1,5 @@
+scheme: kind
+concepts:
+  - {code: reading, label: {ru: показание, en: reading}, definition: {ru: "Показание прибора."}, family: source}
+  - {code: memo, label: {ru: памятка, en: memo}, definition: {ru: "Короткая памятка."}, family: work}
+  - {code: plain, label: {ru: простой вид, en: plain kind}, definition: {ru: "Вид без своего шаблона."}}
