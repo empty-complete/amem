@@ -74,7 +74,9 @@ test("английский интерфейс: новое — в en, правк�
       { target: "atom" as const, record_id: null, payload: { kind: "note", label: { en: "Mast" } } },
     ],
   });
-  expect((en.proposals[0]?.payload as { summary_plain?: unknown }).summary_plain).toEqual({ en: "Mast" });
+  expect(en.proposals.map((p) => (p.payload as { summary_plain?: unknown }).summary_plain)).toEqual([
+    { en: "Mast" },
+  ]);
 });
 
 test("замечания проверки — к полям формы, источникам и заголовку", () => {
