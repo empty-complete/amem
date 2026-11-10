@@ -155,7 +155,8 @@ def test_english_only_draft(kb):
     view = mine.put(kb, "weighing", draft(label={"en": "Weighing"}, description={"en": "Mass on a date."}, form=form),
                     agent=PERSON)
     assert view["label"] == {"en": "Weighing"}
-    assert view["form"][0]["label"] == {"en": "Tags"} and view["form"][0]["hint"] == {"en": "one word"}
+    tags = next(f for f in view["form"] if f["key"] == "tags")       # первым в форме — всегда «о чём»
+    assert tags["label"] == {"en": "Tags"} and tags["hint"] == {"en": "one word"}
 
 
 def test_entity_classes_must_exist(kb):
