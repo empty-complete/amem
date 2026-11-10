@@ -92,3 +92,78 @@ jobs:
         run: docker compose logs amemo db
       - if: always()
         run: docker compose down -v
+
+  # Windows без WSL: PostgreSQL из образа раннера (сборка EDB) и pgvector, собранный из исходников (nmake, MSVC);
+  # колесо ветки — через uv tool install, как у пользователя; затем путь docs/install-agent.md (tools/windows_smoke.py)
+  windows:
+    runs-on: windows-latest
+    env:
+      PGVECTOR: v0.8.1
+      AMEMO_BACKEND: none
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: PostgreSQL from the runner image
+        run: |
+          $root = $env:PGROOT
+          if (-not $root -or -not (Test-Path "$root\bin\initdb.exe")) {
+            $root = (Get-ChildItem "C:\Program Files\PostgreSQL" -Directory -ErrorAction SilentlyContinue |
+                     Sort-Object { [int]$_.Name } | Select-Object -Last 1).FullName
+          }
+          if (-not $root) {
+            choco install postgresql17 --no-progress -y --params "/Password:root /NoPath"
+            $root = "C:\Program Files\PostgreSQL\17"
+          }
+          & "$root\bin\postgres.exe" --version
+          "PGROOT=$root" >> $env:GITHUB_ENV
+          "PGBIN=$root\bin" >> $env:GITHUB_ENV
+      - name: pgvector from source (nmake /F Makefile.win)
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VS=%%i"
+          call "%VS%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          git clone --quiet --depth 1 --branch %PGVECTOR% https://github.com/pgvector/pgvector.git "%RUNNER_TEMP%\pgvector" || exit /b 1
+          cd /d "%RUNNER_TEMP%\pgvector"
+          nmake /NOLOGO /F Makefile.win || exit /b 1
+          nmake /NOLOGO /F Makefile.win install || exit /b 1
+      - name: Database cluster on port 5433
+        run: |
+          $data = "$env:RUNNER_TEMP\pgdata"
+          & "$env:PGBIN\initdb.exe" -D $data -U test --auth=trust -E UTF8 --no-locale
+          if ($LASTEXITCODE) { exit 1 }
+          & "$env:PGBIN\pg_ctl.exe" -D $data -l "$env:RUNNER_TEMP\postgres.log" -o "-p 5433" -w start
+          if ($LASTEXITCODE) { Get-Content "$env:RUNNER_TEMP\postgres.log"; exit 1 }
+          & "$env:PGBIN\createdb.exe" -h 127.0.0.1 -p 5433 -U test onecmd
+          if ($LASTEXITCODE) { exit 1 }
+      - name: Wheel of this branch, uv tool install
+        run: |
+          python -m pip install --quiet uv==0.10.4
+          uv build --wheel --out-dir dist
+          if ($LASTEXITCODE) { exit 1 }
+          $wheel = (Get-ChildItem dist\amemo-*.whl).FullName
+          uv tool install $wheel
+          if ($LASTEXITCODE) { exit 1 }
+          $bin = uv tool dir --bin
+          $bin >> $env:GITHUB_PATH
+      - name: Object store and file lock tests (no database)
+        env:
+          PYTHONUTF8: "1"         # только pytest: amemo в остальных шагах — без режима UTF-8, как у пользователя
+        run: |
+          python -m pip install --quiet -e . pytest ocfl-py==2.1.0
+          python -m pytest -q -p no:cacheprovider tests/test_portable.py tests/test_ocfl_store.py
+          if ($LASTEXITCODE) { exit 1 }
+      - name: amemo init, amemo install claude-code, amemo doctor, hooks, tokens, amemo serve /health
+        run: |
+          $env:HOME = "$env:RUNNER_TEMP\not-the-profile"
+          (Get-Command amemo).Source
+          python tools/windows_smoke.py "postgresql://test@127.0.0.1:5433/onecmd"
+          if ($LASTEXITCODE) { exit 1 }
+      - if: failure()
+        run: |
+          Get-Content "$env:RUNNER_TEMP\postgres.log" -ErrorAction SilentlyContinue
+          Get-Content "$env:USERPROFILE\.local\state\amemo\hooks.log" -ErrorAction SilentlyContinue
