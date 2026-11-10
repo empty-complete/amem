@@ -95,7 +95,8 @@ def test_my_kind_round_trip_keeps_versions_and_required(serve, pg, monkeypatch):
     view, versions = state()
     required = {f["property"]: f["required"] for f in view["form"] if f["type"] == "quantity"}
     assert required == {"mass": True, "length": False}
-    echo = {k: view[k] for k in ("label", "target", "family", "description", "form", "body", "widgets")}
+    echo = {k: view[k] for k in ("label", "target", "family", "description", "form", "body", "widgets")
+            if view.get(k) is not None}   # null-поля веб не шлёт: у черновика description — объект
     contract.check_request(echo, MINE, "put")
     contract.check(client.put(f"{V1}/packs/mine/templates/weighing", json=echo), MINE, "put")
     again, after = state()
