@@ -185,7 +185,7 @@ def _notices(work: Path, packages: list[dict], runtime_dlls: list[str]) -> str:
 
 
 LAUNCHER = ("@echo off\r\n"
-            "rem amemo из комплекта: Python рядом, без PYTHON* окружения и пользовательского site-packages\r\n"
+            "rem amemo from the runtime: its own Python, no PYTHON* variables, no user site-packages\r\n"
             "\"%~dp0python\\python.exe\" -I -m amemo.cli %*\r\n"
             "exit /b %ERRORLEVEL%\r\n")
 
@@ -193,7 +193,7 @@ LAUNCHER = ("@echo off\r\n"
 def _vcredist(folder: Path | None, targets: list[Path]) -> list[str]:
     """Библиотеки Visual C++ (msvcp140, vcruntime140 и др.) рядом с postgres.exe и python.exe: zip EDB и onnxruntime
     без них не запускаются, а у человека Visual C++ Redistributable может не быть. Копия «рядом с программой» —
-    разрешённый Microsoft способ (папка VC\Redist\MSVC\<версия>\x64\Microsoft.VC*.CRT)."""
+    разрешённый Microsoft способ (папка VC/Redist/MSVC/<версия>/x64/Microsoft.VC*.CRT)."""
     if folder is None:
         return []
     dlls = sorted(folder.glob("*.dll"))
