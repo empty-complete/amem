@@ -88,17 +88,42 @@ test("объект: «Добавить заметку» — строка в сп
   expect(await within(notes).findByRole("link", { name: /Решили поставить козырёк/ })).toBeInTheDocument();
 });
 
-test("@объект ищется по всей базе: запись привязана к найденному объекту", async () => {
+test("@объект ищется по всей базе: без выбора из подсказки — первая находка поиска", async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
   await renderWithApp(<Harness />, "/");
   act(() => placeStore.openQuick(true));
   const dlg = await screen.findByRole("dialog", { name: "Новая запись" });
-  await user.type(within(dlg).getByRole("textbox", { name: "Текст записи" }), "Смазали узел @влажности");
-  // ответ поиска по объекту — до Enter
+  const box = within(dlg).getByRole("textbox", { name: "Текст записи" });
+  await user.type(box, "Смазали узел @влажности");
   await act(() => vi.advanceTimersByTimeAsync(300));
+  // подсказка открыта — Esc закрывает её, окно остаётся; Enter записывает
+  await user.keyboard("{Escape}");
+  expect(screen.getByRole("dialog", { name: "Новая запись" })).toBeInTheDocument();
   await user.keyboard("{Enter}");
   await act(() => vi.advanceTimersByTimeAsync(UNDO_MS + 100));
   const made = db.records.find((r) => r.label.startsWith("Смазали узел"));
   expect(made?.about.map((a) => a.ref)).toContain(E3);
+});
+
+test("подсказки: @ — объект плашкой «О чём», # — тег с частотой, вид с причиной", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  await renderWithApp(<Harness />, "/");
+  act(() => placeStore.openQuick(true));
+  const dlg = await screen.findByRole("dialog", { name: "Новая запись" });
+  const box = within(dlg).getByRole("textbox", { name: "Текст записи" });
+  await user.type(box, "Проверили @влаж");
+  const opt = await within(dlg).findByRole("option", { name: /Датчик влажности В-2/ });
+  await user.click(opt);
+  expect(within(dlg).getByText("О чём: Датчик влажности В-2")).toBeInTheDocument();
+  expect(box).toHaveValue("Проверили ");
+  await user.type(box, "#мет");
+  expect(await within(dlg).findByRole("option", { name: /#метео/ })).toBeInTheDocument();
+  await user.keyboard("{Enter}");
+  expect(box).toHaveValue("Проверили #метео ");
+  expect(within(dlg).getByText("правило не подошло — нажмите, чтобы сменить")).toBeInTheDocument();
+  await user.clear(box);
+  await user.type(box, "Нужен ли обогрев?");
+  expect(within(dlg).getByText("в конце «?»")).toBeInTheDocument();
 });

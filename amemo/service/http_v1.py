@@ -226,6 +226,11 @@ def get_vocab(request: Request) -> JSONResponse:
         return JSONResponse(api.vocab_entries(conn, request.path_params["scheme"]))
 
 
+def get_tags(request: Request) -> JSONResponse:
+    with connection(request) as conn:
+        return JSONResponse(api.tag_counts(conn, q=_q(request, "q"), limit=_q(request, "limit")))
+
+
 def get_templates(request: Request) -> JSONResponse:
     with connection(request) as conn:
         return JSONResponse(api.templates(conn, target=_q(request, "target")))
@@ -739,6 +744,7 @@ ROUTES = [
     Route(f"{API}/tasks", create_task, methods=["POST"]),
     Route(f"{API}/submit", submit, methods=["POST"]),
     Route(f"{API}/vocab/{{scheme}}", get_vocab, methods=["GET"]),
+    Route(f"{API}/tags", get_tags, methods=["GET"]),
     Route(f"{API}/templates", get_templates, methods=["GET"]),
     Route(f"{API}/packs/mine/templates/{{code}}", put_my_template, methods=["PUT"]),
     Route(f"{API}/packs/mine/templates/{{code}}", delete_my_template, methods=["DELETE"]),

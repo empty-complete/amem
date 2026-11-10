@@ -70,6 +70,19 @@ export const handlers = [
     const limit = Number(url.searchParams.get("limit") ?? 10);
     return HttpResponse.json({ ...result, items: items.slice(0, limit), candidate_count: items.length });
   }),
+  // теги на записях с частотой, как у службы: сначала частые, q — начало тега без регистра
+  http.get("/api/v1/tags", ({ request }) => {
+    const url = new URL(request.url);
+    const q = (url.searchParams.get("q") ?? "").replace(/^#/, "").toLowerCase();
+    const counts = new Map<string, number>();
+    for (const r of db.records) for (const t of r.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+    const items = [...counts]
+      .filter(([t]) => t.toLowerCase().startsWith(q))
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, Number(url.searchParams.get("limit") ?? 50))
+      .map(([tag, count]) => ({ tag, count }));
+    return HttpResponse.json(items);
+  }),
   http.get("/api/v1/vocab/kind", () => HttpResponse.json(vocabKind)),
   http.get("/api/v1/vocab/entity_class", () => HttpResponse.json(vocabClass)),
   // прочие словари пакетов (parameter_group, parameter_origin…): неизвестная схема — пустой список, как у службы

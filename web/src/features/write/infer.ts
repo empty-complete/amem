@@ -13,8 +13,11 @@ export interface ObjectHint {
   label: string;
   codes?: string[];
 }
+/** Почему вид такой — для подписи у плашки вида. */
+export type InferredWhy = "question_mark" | "decision_word" | "lesson_word" | "quantity" | "default";
 export interface Inferred {
   kind: InferredKind;
+  why: InferredWhy;
   label: string;
   body: string;
   about: string[];
@@ -76,9 +79,9 @@ export function infer(text: string, ctx: { properties: Property[]; objects?: Obj
   const body = lines.slice(1).join("\n").trim();
   const base = { label, body, about, tags };
 
-  if (label.endsWith("?")) return { kind: "question", ...base };
-  if (DECISION.test(label)) return { kind: "decision", ...base };
-  if (LESSON.test(label)) return { kind: "lesson", ...base };
+  if (label.endsWith("?")) return { kind: "question", why: "question_mark", ...base };
+  if (DECISION.test(label)) return { kind: "decision", why: "decision_word", ...base };
+  if (LESSON.test(label)) return { kind: "lesson", why: "lesson_word", ...base };
 
   const units = unitTable(ctx.properties);
   const m = label.match(new RegExp(`^(.+?)(?::\\s*|\\s+)${NUM}\\s*(°\\s?[CС]|\\S+)\\s*$`, "u"));
@@ -89,6 +92,7 @@ export function infer(text: string, ctx: { properties: Property[]; objects?: Obj
       const qlabel = (m[1] ?? "").trim();
       return {
         kind: "parameter",
+        why: "quantity",
         ...base,
         quantity: {
           label: qlabel,
@@ -99,5 +103,5 @@ export function infer(text: string, ctx: { properties: Property[]; objects?: Obj
       };
     }
   }
-  return { kind: "note", ...base };
+  return { kind: "note", why: "default", ...base };
 }

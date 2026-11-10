@@ -27,3 +27,16 @@ Each PR: service tests where the service changes, unit and e2e on mocks, checks 
   verified; a person's edit of a verified model record stays verified with no queue item (existing test).
 - Web: the editor opens on a model's record with the status note; «Поставить на проверку» is in «Ещё»; e2e — edit
   a model's record title, a new revision, the status unchanged.
+
+## PR B — suggestions
+
+- **Service:** `GET /api/v1/tags?q=&limit=` — tags on current atom revisions with counts, frequent first, `q` is a
+  case-insensitive prefix (a leading `#` is ignored; LIKE wildcards are escaped). `/vocab/tag` has no such list.
+- **Web:** one suggestion list (`features/write/Suggest.tsx`, ARIA combobox with `aria-activedescendant`: arrows,
+  Enter or Tab pick, Esc closes the list only). Quick write keeps its plain textarea and gets suggestions for the
+  word before the caret: `@` — objects by search, the picked one becomes an «О чём» pill; `#` — known tags with
+  counts; `[[` — records by search, inserted as `[[label]]`. A typed `@word` without picking still binds through
+  search. The tags field suggests known tags with counts; a new tag is still just Enter. The kind chip says why
+  the kind was inferred; the placeholder is shorter.
+- **Tests:** service `/tags` (counts, prefix with `#` and case, wildcard escaped, limit); unit for the quick-write
+  suggestions and the kind reason.
