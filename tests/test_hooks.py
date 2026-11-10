@@ -1,8 +1,8 @@
-"""Хуки Claude Code (подпроект 4, часть 4c, задача 13): `amem hook СОБЫТИЕ` на образцах JSON событий.
+"""Хуки Claude Code (подпроект 4, часть 4c, задача 13): `amemo hook СОБЫТИЕ` на образцах JSON событий.
 
-Вход и выход — по протоколу хуков Claude Code (amem/agents/hooks.py): SessionStart и UserPromptSubmit отвечают
+Вход и выход — по протоколу хуков Claude Code (amemo/agents/hooks.py): SessionStart и UserPromptSubmit отвечают
 hookSpecificOutput.additionalContext, PreCompact — простым текстом. Только чтение: retrieval и журнал запросов
-не пишутся. Сбой (нет AMEM_DSN, зависшая база, ошибка) — пустой ответ, код 0, строка в AMEM_STATE/hooks.log.
+не пишутся. Сбой (нет AMEMO_DSN, зависшая база, ошибка) — пустой ответ, код 0, строка в AMEMO_STATE/hooks.log.
 """
 import io
 import json
@@ -14,9 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from amem import cli, db, records
-from amem.agents import hooks
-from amem.records import Item
+from amemo import cli, db, records
+from amemo.agents import hooks
+from amemo.records import Item
 
 AGENT = "model:test"
 ROOT = Path(__file__).resolve().parent.parent
@@ -24,14 +24,14 @@ ROOT = Path(__file__).resolve().parent.parent
 
 @pytest.fixture
 def kb(pg, monkeypatch):
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
     db.prepare(pg)
     return pg
 
 
 @pytest.fixture
 def env(dsn, tmp_path):
-    return {"AMEM_DSN": dsn, "HOME": str(tmp_path / "home"), "AMEM_STATE": str(tmp_path / "state")}
+    return {"AMEMO_DSN": dsn, "HOME": str(tmp_path / "home"), "AMEMO_STATE": str(tmp_path / "state")}
 
 
 def atom(key, *, codes=(), about=(), project=None, status=None, label=None):
@@ -60,7 +60,7 @@ def context(out: str, name: str) -> str:
 
 
 def hooks_log(env) -> str:
-    path = Path(env["AMEM_STATE"]) / "hooks.log"
+    path = Path(env["AMEMO_STATE"]) / "hooks.log"
     return path.read_text(encoding="utf-8") if path.exists() else ""
 
 
@@ -94,7 +94,7 @@ def test_session_start_with_project_gives_atoms_with_status_and_reminder(kb, env
     assert shown[0].startswith(f"- {refs['@checked']} — «Атом checked»") and "проверено человеком" in shown[0]
     assert all("не проверено" in line for line in shown[1:])
     assert refs["@gone"] not in text and refs["@foreign"] not in text
-    assert "amem_search" in text and "amem_submit" in text and "<private>" in text
+    assert "amemo_search" in text and "amemo_submit" in text and "<private>" in text
     assert hooks_log(env) == ""
 
 
@@ -161,7 +161,7 @@ def test_label_cannot_close_the_frame_or_forge_a_tag(kb, env, tmp_path):
 
 
 def test_session_reader_connection_is_read_only(kb, env):
-    conn = hooks._connect(env["AMEM_DSN"])
+    conn = hooks._connect(env["AMEMO_DSN"])
     try:
         assert conn.execute("SHOW default_transaction_read_only").fetchone()[0] == "on"
     finally:
@@ -208,14 +208,14 @@ def test_hooks_write_nothing_to_retrieval_or_the_query_log(kb, env, tmp_path):
     assert hooks.run("SessionStart", event("SessionStart", cwd=str(git_folder(tmp_path, "alpha"))), env)
     assert kb.execute("SELECT count(*) FROM retrieval").fetchone()[0] == before == 0
     assert kb.execute("SELECT count(*) FROM retrieval_item").fetchone()[0] == 0
-    assert not (Path(env["AMEM_STATE"]) / "queries.jsonl").exists()
+    assert not (Path(env["AMEMO_STATE"]) / "queries.jsonl").exists()
 
 
 # --- PreCompact ---
 
 def test_pre_compact_gives_plain_instructions_for_the_summary(kb, env):
     out = hooks.run("PreCompact", event("PreCompact", trigger="auto", custom_instructions=None), env)
-    assert out == hooks.COMPACT and "amem-remember" in out and "amem_helpful" in out
+    assert out == hooks.COMPACT and "amemo-remember" in out and "amemo_helpful" in out
     with pytest.raises(json.JSONDecodeError):
         json.loads(out)                   # простой текст: у PreCompact stdout — указания к сводке
 
@@ -246,22 +246,22 @@ def test_stuck_hook_is_cut_by_the_budget(kb, env, tmp_path, monkeypatch):
 
 
 def test_without_dsn_the_answer_is_empty_with_code_0_and_a_log_line(tmp_path, monkeypatch, capsys):
-    env = {"HOME": str(tmp_path / "home"), "AMEM_STATE": str(tmp_path / "state")}
+    env = {"HOME": str(tmp_path / "home"), "AMEMO_STATE": str(tmp_path / "state")}
     for name in ("SessionStart", "UserPromptSubmit", "PreCompact"):
         monkeypatch.setattr(sys, "stdin", io.StringIO(event(name, prompt="ВН-45")))
         assert cli.main(["hook", name], env=env) == 0
         assert capsys.readouterr().out == ""
     log = hooks_log(env)
-    assert log.count("AMEM_DSN не задана") == 3
-    assert oct(os.stat(Path(env["AMEM_STATE"]) / "hooks.log").st_mode & 0o777) == "0o600"
+    assert log.count("AMEMO_DSN не задана") == 3
+    assert oct(os.stat(Path(env["AMEMO_STATE"]) / "hooks.log").st_mode & 0o777) == "0o600"
 
 
 def test_any_failure_gives_code_0_and_an_empty_answer(env, tmp_path, monkeypatch, capsys):
-    bad = {**env, "AMEM_DSN": "postgresql://nobody@127.0.0.1:1/none"}
+    bad = {**env, "AMEMO_DSN": "postgresql://nobody@127.0.0.1:1/none"}
     cases = [(["hook", "SessionStart"], "{не json", env), (["hook", "UserPromptSubmit"], "[1, 2]", env),
              (["hook", "Stop"], event("Stop"), env), (["hook", "SessionStart"], event("SessionStart"), bad),
              (["hook", "UserPromptSubmit"], event("UserPromptSubmit", prompt="ВН-45"),
-              {**env, "AMEM_AS_MODEL": "Не Так"})]
+              {**env, "AMEMO_AS_MODEL": "Не Так"})]
     for argv, stdin, environ in cases:
         monkeypatch.setattr(sys, "stdin", io.StringIO(stdin))
         assert cli.main(argv, env=environ) == 0, argv
@@ -289,9 +289,9 @@ def test_subprocess_session_start_reads_stdin_and_answers_json(kb, env, tmp_path
     written = records.commit(kb, [project("alpha", "Альфа"), atom("a1", project="@alpha", status="verified")],
                              agent=AGENT)
     root = git_folder(tmp_path, "alpha")
-    environ = {**{k: v for k, v in os.environ.items() if not k.startswith("AMEM_")}, **env,
-               "PYTHONPATH": str(ROOT), "AMEM_BACKEND": "none"}
-    done = subprocess.run([sys.executable, "-m", "amem.cli", "hook", "SessionStart"], cwd=root,
+    environ = {**{k: v for k, v in os.environ.items() if not k.startswith("AMEMO_")}, **env,
+               "PYTHONPATH": str(ROOT), "AMEMO_BACKEND": "none"}
+    done = subprocess.run([sys.executable, "-m", "amemo.cli", "hook", "SessionStart"], cwd=root,
                           input=event("SessionStart", source="startup", cwd=str(root)).encode("utf-8"),
                           capture_output=True, env=environ, timeout=60)
     assert done.returncode == 0, done.stderr

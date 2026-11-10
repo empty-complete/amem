@@ -59,7 +59,7 @@ test("База — таблицы статусов, очереди, пакето
   await page.goto("./base");
   await expect(page.getByRole("table", { name: "Записи по статусам" })).toBeVisible();
   await expect(page.getByRole("table", { name: "Очередь по причинам" })).toContainText("правка");
-  await expect(page.getByRole("table", { name: "Бэкапы" })).toContainText("amem-2026-11-07T03-00.dump");
+  await expect(page.getByRole("table", { name: "Бэкапы" })).toContainText("amemo-2026-11-07T03-00.dump");
 });
 
 test("по документам: группы, фильтр документа, решение — следующий в той же группе", async ({

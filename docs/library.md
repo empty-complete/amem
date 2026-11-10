@@ -1,8 +1,8 @@
-# amem library reference
+# amemo library reference
 
 [Справочник на русском](library.ru.md) · [Back to README](../README.md)
 
-This page documents the Python library — the part of amem that is ready today: the data model,
+This page documents the Python library — the part of amemo that is ready today: the data model,
 search, automatic checks, the review queue, profiles and cards, bundles, folders and backups.
 The HTTP service, CLI and MCP server build on these same functions (see the [roadmap](../README.md#roadmap)).
 
@@ -21,7 +21,7 @@ The HTTP service, CLI and MCP server build on these same functions (see the [roa
   matcher finds a quote in the actual file text, and every submitted record goes
   through the automatic check pipeline (see [Automatic checks](#automatic-checks)).
 - **Domain packs** — vocabularies and templates are pluggable packages
-  (`amem/packs/core` is the kernel itself; more packs via the `AMEM_PACKS`
+  (`amemo/packs/core` is the kernel itself; more packs via the `AMEMO_PACKS`
   environment variable). Codes used by records are enforced by foreign keys.
   A pack may depend on others (`requires`: pack name → version range); packs load
   in dependency order, the core (version 1.3.0) first, cycles and unmet ranges are errors,
@@ -39,7 +39,7 @@ The HTTP service, CLI and MCP server build on these same functions (see the [roa
 
 ## Search
 
-Four named recipes in `amem.recipes`, each returning plain JSON-compatible data:
+Four named recipes in `amemo.recipes`, each returning plain JSON-compatible data:
 
 - `exact_fact(conn, query, agent=…)` — codes and marks (exact and prefix), Russian full text
   and vectors merged with RRF; an exact code always comes first, ambiguity returns all candidates;
@@ -49,16 +49,16 @@ Four named recipes in `amem.recipes`, each returning plain JSON-compatible data:
   `about` / `derived_from` fields; a path's confidence is its weakest scored link, and its
   `evidence_role` is the weakest source role.
 
-Agents mark atoms that helped (`amem.usefulness.mark_helpful`); marks decay over time and give
+Agents mark atoms that helped (`amemo.usefulness.mark_helpful`); marks decay over time and give
 a small capped boost in ranking — they never change status or checks.
 
 Vectors are local and optional: `pip install -e ".[embed]"` adds fastembed (a model is downloaded
-only with explicit permission). `AMEM_BACKEND=none` turns the semantic channel off — lexical search
+only with explicit permission). `AMEMO_BACKEND=none` turns the semantic channel off — lexical search
 keeps working and results say `semantic: unavailable`.
 
 ## Automatic checks
 
-`amem.check.submit(conn, store, docs, proposals, links, agent=…)` is the single entry point for
+`amemo.check.submit(conn, store, docs, proposals, links, agent=…)` is the single entry point for
 writing knowledge: it checks the whole batch, then writes it in one transaction.
 
 1. schema and templates — fields, types, link rules, UCUM units;
@@ -75,7 +75,7 @@ review by another model or a human) is reported as `queued`. Numbers recomputed 
 `role: "derived"` in the source. High risk (`high_risk` in pack templates, `decision` in the core)
 always goes to a human.
 
-The review queue lives in `amem.review`. `claim(conn, agent=…)` hands out the oldest items the agent
+The review queue lives in `amemo.review`. `claim(conn, agent=…)` hands out the oldest items the agent
 may decide, with a lease (15 minutes by default) so that parallel reviewers never take the same
 item; `release` gives an item back, `items` lists items for interfaces. `resolve(conn, item_id,
 outcome, agent=…)` records a verdict and applies it, also without a prior claim. A model (`model:…`)
@@ -108,7 +108,7 @@ inherit through `extends`: a descendant's rule replaces its ancestor's rule for 
 (code, label); the core does not check it, and the web UI falls back to the code itself
 (`operating_conditions` → “Operating conditions”). The sample pack `tools/sample-pack/meteo` shows all of it.
 
-`amem.profile.card(conn, ref, ancestors=True)` builds the card of an entity (format `amem.card/1`)
+`amemo.profile.card(conn, ref, ancestors=True)` builds the card of an entity (format `amem.card/1`)
 from the live `parameter` atoms about it; nothing is stored. Each field in `fields` has a `state`:
 
 - `known` — one value (or several equal ones); the field also tells the `status` of the atom,
@@ -120,10 +120,10 @@ from the live `parameter` atoms about it; nothing is stored. Each field in `fiel
 
 `extra` lists atoms about quantities outside the profile (an entity without a profile has only `extra`),
 `summary` counts fields by state, open blockers (`blockers_open`) and fields with a basis, and
-`ancestors` holds the cards of the entities above along `part_of`. `amem.profile.rules_for_entity(conn,
+`ancestors` holds the cards of the entities above along `part_of`. `amemo.profile.rules_for_entity(conn,
 entity_class)` returns the rules a class gets from its templates.
 
-`amem.records.rebuild_projections(conn)` rebuilds the projections of atoms from all revisions
+`amemo.records.rebuild_projections(conn)` rebuilds the projections of atoms from all revisions
 (idempotent, revision bodies stay as they are): `atom_property` is erased and built again, while
 `atom_about` and `atom_derived` are protected from deletion and only get missing rows.
 
@@ -136,7 +136,7 @@ the parts are `atoms.jsonl`, `entities.jsonl`, `links.jsonl`, `sources.jsonl`, `
 revision history and copies of the packs.
 
 ```python
-from amem import bundle
+from amemo import bundle
 
 bundle.export(conn, store=store, folder=Path("out/shared"), agent="person:anna",
               selection=bundle.Selection(tags=("shared",), kinds=("parameter",)),
@@ -173,7 +173,7 @@ overwrites, and runs in one transaction:
 
 The packs of the manifest must be loaded with the same name, version and digest; otherwise
 `BundleError` with `code="bundle_pack_missing"` says what is required and what is present (and the
-path to add to `AMEM_PACKS` if the bundle carries the packs). Other errors have their codes too:
+path to add to `AMEMO_PACKS` if the bundle carries the packs). Other errors have their codes too:
 `bundle_key_collision` (also a link id taken by a link with another `rel` or other ends),
 `bundle_object_conflict`, `bundle_damaged`, `bundle_level1` (with the `amem.check/1` report). A file already in both databases is matched by
 digest (a web page or a message — by address or name), and its copy is not stored twice. With
@@ -199,7 +199,7 @@ level 1 report. The returned `Imported` also carries `changeset_id`, `queued` an
 
 ## Folders, lists and object cards
 
-- **Folders** (`amem.folders`) sort records for people; a folder is a path like `Projects/Alpha`
+- **Folders** (`amemo.folders`) sort records for people; a folder is a path like `Projects/Alpha`
   and is not part of a revision. The registry holds the folders (`create`, `delete`, `rename`;
   a new base gets four: Projects, Areas, Resources, Archive); `move(conn, ref, folder, agent=...)`
   moves an atom or an entity without a new revision and logs the move; `tree(conn)` returns the tree
@@ -222,8 +222,8 @@ level 1 report. The returned `Imported` also carries `changeset_id`, `queued` an
 
 ## Backup
 
-`amem.backup` needs the PostgreSQL 18 client (`pg_dump`, `pg_restore`, `psql`) — in `PATH`
-or in the folder given by `AMEM_PG_BIN`.
+`amemo.backup` needs the PostgreSQL 18 client (`pg_dump`, `pg_restore`, `psql`) — in `PATH`
+or in the folder given by `AMEMO_PG_BIN`.
 
 - `create(dsn, folder)` — a `pg_dump -Fc` dump plus a JSON manifest (SHA-256, `base_id`,
   migrations, record counts — taken from the same snapshot as the dump); the last 14 copies are kept;
@@ -234,5 +234,5 @@ or in the folder given by `AMEM_PG_BIN`.
 - `verify(source, dsn)` — a real trial restore into a temporary database and a search, then cleanup.
 
 Storage is PostgreSQL 16+ with pgvector; the schema of record is LinkML
-(`amem/schema/amem_v1.yaml`), from which the Pydantic models and JSON Schema
+(`amemo/schema/amemo_v1.yaml`), from which the Pydantic models and JSON Schema
 are generated.

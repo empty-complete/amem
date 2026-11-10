@@ -9,8 +9,8 @@ from decimal import Decimal
 import pytest
 import rfc8785
 
-from amem import canon
-from amem.ids import uuid7
+from amemo import canon
+from amemo.ids import uuid7
 from v1_support import schema_attrs, schema_yaml
 
 ENT = f"ent:{uuid7()}"

@@ -1,4 +1,4 @@
-"""Веб-интерфейс по /ui (подпроект 4, часть 4a, задача 8): статика пакета amem_web — здесь поддельного, в
+"""Веб-интерфейс по /ui (подпроект 4, часть 4a, задача 8): статика пакета amemo_web — здесь поддельного, в
 sys.modules, с папкой сборки во временном каталоге. Кэш (immutable у файлов с хэшем, no-cache у index.html),
 cookie человека у index.html только своей странице, SPA (неизвестный путь — index.html), обходы и символические
 ссылки — 404, без пакета — 404 с подсказкой."""
@@ -9,30 +9,30 @@ import types
 import pytest
 
 import contract
-from amem import db
-from amem.service import session
+from amemo import db
+from amemo.service import session
 
 V1 = "/api/v1"
 ASSET = "index-BxY3k9aP.js"
-INDEX_HTML = "<!doctype html><title>amem</title><script type=module src=/ui/assets/index-BxY3k9aP.js></script>"
+INDEX_HTML = "<!doctype html><title>amemo</title><script type=module src=/ui/assets/index-BxY3k9aP.js></script>"
 
 
 @pytest.fixture
 def web(tmp_path, monkeypatch, pg):
-    """Поддельный amem_web: dist/ с index.html, assets/ (файл с хэшем, ссылка наружу), значок; рядом — секрет."""
+    """Поддельный amemo_web: dist/ с index.html, assets/ (файл с хэшем, ссылка наружу), значок; рядом — секрет."""
     db.prepare(pg)
     dist = tmp_path / "web" / "dist"
     (dist / "assets").mkdir(parents=True)
     (dist / "index.html").write_text(INDEX_HTML, encoding="utf-8")
-    (dist / "assets" / ASSET).write_text("console.log('amem')", encoding="utf-8")
+    (dist / "assets" / ASSET).write_text("console.log('amemo')", encoding="utf-8")
     (dist / "favicon.svg").write_text("<svg/>", encoding="utf-8")
     secret = tmp_path / "web" / "secret.txt"
     secret.write_text("пароль от щита", encoding="utf-8")
     (dist / "assets" / "link.js").symlink_to(secret)
     (dist / "inside.js").symlink_to(dist / "assets" / ASSET)       # ссылка внутрь — тоже не отдаётся
-    module = types.ModuleType("amem_web")
+    module = types.ModuleType("amemo_web")
     module.static_dir = lambda: dist
-    monkeypatch.setitem(sys.modules, "amem_web", module)
+    monkeypatch.setitem(sys.modules, "amemo_web", module)
     return dist
 
 
@@ -74,7 +74,7 @@ def test_index_no_cache_and_cookie_only_for_own_page(serve, web):
 def test_hashed_assets_are_immutable(serve, web):
     client = serve()
     response = client.get(f"/ui/assets/{ASSET}")
-    assert response.status_code == 200 and response.text == "console.log('amem')"
+    assert response.status_code == 200 and response.text == "console.log('amemo')"
     assert "javascript" in response.headers["content-type"]
     assert response.headers["cache-control"] == "public, max-age=31536000, immutable"
     common_headers(response)
@@ -111,27 +111,27 @@ def test_redirects_to_ui(serve, web):
 
 def test_without_package_404_with_hint(serve, pg, monkeypatch):
     db.prepare(pg)
-    monkeypatch.setitem(sys.modules, "amem_web", None)        # пакет не установлен
+    monkeypatch.setitem(sys.modules, "amemo_web", None)        # пакет не установлен
     client = serve()
     for path in ("/", "/ui", "/ui/", "/ui/assets/x.js"):
         body = problem(client.get(path, follow_redirects=False), 404, "not_found")
-        assert "pip install 'amem[web]'" in body["detail"], path
+        assert "pip install 'amemo[web]'" in body["detail"], path
 
 
 def test_package_without_build_404(serve, pg, monkeypatch, tmp_path):
     db.prepare(pg)
-    module = types.ModuleType("amem_web")
+    module = types.ModuleType("amemo_web")
     module.static_dir = lambda: tmp_path / "empty"
-    monkeypatch.setitem(sys.modules, "amem_web", module)
+    monkeypatch.setitem(sys.modules, "amemo_web", module)
     body = problem(serve().get("/ui/"), 404, "not_found")
     assert "сборки" in body["detail"]
 
 
 def test_static_is_public_in_shared_service(serve, web, tmp_path):
-    """Общая служба (AMEM_TOKENS): статика интерфейса без входа, cookie не выдаётся; API — по токену."""
+    """Общая служба (AMEMO_TOKENS): статика интерфейса без входа, cookie не выдаётся; API — по токену."""
     from test_service_core import tokens_file
 
-    client = serve({"AMEM_TOKENS": tokens_file(tmp_path, ("t-one", "person:anna", True))})
+    client = serve({"AMEMO_TOKENS": tokens_file(tmp_path, ("t-one", "person:anna", True))})
     for path in ("/ui/", "/ui/index.html", f"/ui/assets/{ASSET}", "/ui/records/x"):
         response = client.get(path, headers={"Sec-Fetch-Site": "same-origin"})
         assert response.status_code == 200, path

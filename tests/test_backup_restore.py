@@ -1,6 +1,6 @@
 """Восстановление на PostgreSQL 18 и 16: дамп и полный снимок — в пустую базу и папку; тот же base_id, миграции, записи,
 отметки и поисковая выдача; старый источник открывает прежнюю версию файла; verify — настоящее пробное восстановление.
-Нужен клиент PostgreSQL 18 (AMEM_PG_BIN или PATH)."""
+Нужен клиент PostgreSQL 18 (AMEMO_PG_BIN или PATH)."""
 import json
 import shutil
 from pathlib import Path
@@ -9,10 +9,10 @@ from datetime import datetime, timedelta, timezone
 import psycopg
 import pytest
 
-from amem import backup, db, embed, ids, lookup, objects, recipes, records, search
-from amem.backup import BackupError
-from amem.ocfl_store import ObjectStore
-from amem.records import Item
+from amemo import backup, db, embed, ids, lookup, objects, recipes, records, search
+from amemo.backup import BackupError
+from amemo.ocfl_store import ObjectStore
+from amemo.records import Item
 from conftest import FakeProvider
 from ocfl_check import validate
 from test_backup import AGENT, NOW, PDF, fill, tools
@@ -186,7 +186,7 @@ def test_verify_restores_into_a_temporary_database_and_searches(pgdb, tmp_path, 
     snap = backup.snapshot(src, tmp_path / "objects", tmp_path / "snap", now=NOW + timedelta(seconds=1))
     with psycopg.connect(src) as conn:
         counts = backup._facts(conn)["counts"]
-    temporary = "SELECT datname FROM pg_database WHERE datname LIKE 'amem\\_verify\\_%' ORDER BY 1"
+    temporary = "SELECT datname FROM pg_database WHERE datname LIKE 'amemo\\_verify\\_%' ORDER BY 1"
     with psycopg.connect(src) as conn:
         before = conn.execute(temporary).fetchall()
 
@@ -300,7 +300,7 @@ def test_interrupted_restore_leaves_the_target_empty(pgdb, tmp_path, docs, monke
               'for a in "$@"; do last="$a"; done\n'
               'list="$0.list"; "$REAL" -l "$last" | grep -v " TABLE public atom " > "$list"\n'
               'exec "$REAL" -L "$list" "$@"')
-    monkeypatch.setenv("AMEM_PG_BIN", str(tools(tmp_path, pg_restore=broken)))
+    monkeypatch.setenv("AMEMO_PG_BIN", str(tools(tmp_path, pg_restore=broken)))
     with pytest.raises(BackupError, match="pg_restore завершился с кодом 1"):
         backup.restore(made["manifest"], dst)
     with psycopg.connect(dst) as conn:
@@ -349,7 +349,7 @@ def test_psql_error_is_reported_first(pgdb, tmp_path, docs, monkeypatch):
     # ошибка в начале и много SQL после неё: pg_restore пишет в закрытую трубу и получает SIGPIPE
     poisoned = ('case "$*" in *--file=-*) echo "SELECT 1/0;"; yes "SELECT 1;" | head -n 200000;; esac\n'
                 'exec "$REAL" "$@"')
-    monkeypatch.setenv("AMEM_PG_BIN", str(tools(tmp_path, pg_restore=poisoned)))
+    monkeypatch.setenv("AMEMO_PG_BIN", str(tools(tmp_path, pg_restore=poisoned)))
     if server_version(dst) >= 170000:
         assert backup.restore(made["manifest"], dst)["counts"] == made["counts"]   # прямой путь SQL не читает
         return

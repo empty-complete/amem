@@ -6,7 +6,9 @@ const A3 = "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b";
 const WINDOW = 6500;
 
 const skyCount = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __amemSky?: { count: () => number } }).__amemSky?.count() ?? 0);
+  page.evaluate(
+    () => (window as unknown as { __amemoSky?: { count: () => number } }).__amemoSky?.count() ?? 0,
+  );
 
 test("N на странице объекта: вопрос из текста, звезда загорается, после окна — в «Заметках и решениях»", async ({
   page,

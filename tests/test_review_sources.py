@@ -6,8 +6,8 @@ import time
 import pytest
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
-from amem import check, db, objects, records, review
-from amem.check import Proposal, level4
+from amemo import check, db, objects, records, review
+from amemo.check import Proposal, level4
 from check_support import CHECK_PACK, atom, entity, source_md
 
 AUTHOR = "model:writer"
@@ -20,8 +20,8 @@ V3 = "# Узел\n\n## Кронштейн\n\nКронштейн КБ-18 креп
 
 @pytest.fixture
 def kb(pg, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", str(CHECK_PACK))
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_PACKS", str(CHECK_PACK))
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
     monkeypatch.setattr(review, "AUDIT_RATE", 0.0)
     db.prepare(pg)
     return pg
@@ -203,7 +203,7 @@ def test_ingest_during_write_waits_and_does_not_duplicate(kb, store, docs, monke
     """Новая версия во время транзакции записи пакета: ingest ждёт разделяемую блокировку объектов (разд. 7.5,
     шаг 2) и после фиксации пакета видит его ревизию — но пункт уже поставил пакет, второго нет."""
     write(docs, V1)
-    app = f"amem-ingest-{time.monotonic_ns()}"
+    app = f"amemo-ingest-{time.monotonic_ns()}"
     errors: list[BaseException] = []
     original = check._verdicts
     started: list[threading.Thread] = []

@@ -7,7 +7,7 @@ related_targets: ["src/features/records/RecordList.tsx","src/features/search/Sea
 
 ## Surface
 
-Оболочка веб-интерфейса amem: верхняя строка, папки слева, рабочая область (список записей, результаты поиска, настройки). Режим Operate. Аудитория и задачи — web/PRODUCT.md; полная спецификация — docs/superpowers/specs/2026-11-06-amem-subproject-5-web-ui-design.md.
+Оболочка веб-интерфейса amemo: верхняя строка, папки слева, рабочая область (список записей, результаты поиска, настройки). Режим Operate. Аудитория и задачи — web/PRODUCT.md; полная спецификация — docs/superpowers/specs/2026-11-06-amemo-subproject-5-web-ui-design.md.
 
 ## Direction contract
 

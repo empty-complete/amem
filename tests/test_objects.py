@@ -14,10 +14,10 @@ import psycopg
 
 import pytest
 
-from amem import db, lookup, model_v1, objects, sources
-from amem.ocfl_store import ObjectStore, StoreError
-from amem.objects import ObjectError
-from amem.records import Item, commit
+from amemo import db, lookup, model_v1, objects, sources
+from amemo.ocfl_store import ObjectStore, StoreError
+from amemo.objects import ObjectError
+from amemo.records import Item, commit
 from ocfl_check import validate
 from samples import make_docs
 from v1_support import same_database

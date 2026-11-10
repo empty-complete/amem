@@ -85,9 +85,9 @@ for it in items:
     full[it["id"]] = entry
 
 backups = [
-    {"name": "amem-2026-11-07T03-00.dump", "created_at": "2026-11-07T03:00:00Z", "size": 1843200},
-    {"name": "amem-2026-11-06T03-00.dump", "created_at": "2026-11-06T03:00:00Z", "size": 1826400},
-    {"name": "amem-2026-10-31T03-00.dump", "created_at": "2026-10-31T03:00:00Z", "size": 1702400},
+    {"name": "amemo-2026-11-07T03-00.dump", "created_at": "2026-11-07T03:00:00Z", "size": 1843200},
+    {"name": "amemo-2026-11-06T03-00.dump", "created_at": "2026-11-06T03:00:00Z", "size": 1826400},
+    {"name": "amemo-2026-10-31T03-00.dump", "created_at": "2026-10-31T03:00:00Z", "size": 1702400},
 ]
 (OUT / "review-items.json").write_text(json.dumps(items, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 (OUT / "review-views.json").write_text(json.dumps(full, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")

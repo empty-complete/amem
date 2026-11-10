@@ -9,7 +9,7 @@ import { markRange, scrollWithin } from "./mark";
 import { findQuote } from "./quote";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
-const ORIGINAL_KEY = "amem.pdf_original";
+const ORIGINAL_KEY = "amemo.pdf_original";
 
 type TextItem = { str: string; transform: number[]; width: number; height: number };
 

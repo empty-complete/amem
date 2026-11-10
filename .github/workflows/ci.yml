@@ -6,7 +6,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # На pull request — только PostgreSQL 18 (вдвое быстрее); обе версии — на push в main.
-      AMEM_TEST_DSNS: ${{ github.event_name == 'pull_request' && 'postgresql://test:test@localhost:5433/test' || 'postgresql://test:test@localhost:5433/test,postgresql://test:test@localhost:5434/test' }}
+      AMEMO_TEST_DSNS: ${{ github.event_name == 'pull_request' && 'postgresql://test:test@localhost:5433/test' || 'postgresql://test:test@localhost:5433/test,postgresql://test:test@localhost:5434/test' }}
     defaults:
       run:
         shell: bash          # явный bash — это bash -eo pipefail: упавший pytest | tee валит шаг
@@ -41,29 +41,29 @@ jobs:
             echo "apt: попытка $attempt не удалась"; sleep 15
             [ "$attempt" = 3 ] && exit 1
           done
-          echo "AMEM_PG_BIN=/usr/lib/postgresql/18/bin" >> "$GITHUB_ENV"
+          echo "AMEMO_PG_BIN=/usr/lib/postgresql/18/bin" >> "$GITHUB_ENV"
       - run: pip install -e ".[dev]"
-      - run: ruff check amem tests tools
+      - run: ruff check amemo tests tools
       - run: pytest -q -p no:cacheprovider -rA | tee pytest.log
       - name: Restore tests ran once on PostgreSQL 18 and once on 16
         run: |
           for test in test_dump_restores_records_marks_and_search test_snapshot_restore_opens_the_old_file_version test_verify_restores_into_a_temporary_database_and_searches; do
-            for db in $(echo "$AMEM_TEST_DSNS" | tr ',' '\n' | sed -E 's#.*:([0-9]+)/.*#pg\1#'); do
+            for db in $(echo "$AMEMO_TEST_DSNS" | tr ',' '\n' | sed -E 's#.*:([0-9]+)/.*#pg\1#'); do
               n=$(grep -c "^PASSED tests/test_backup_restore.py::${test}\[${db}\]" pytest.log || true)
               [ "$n" = 1 ] || { echo "${test}[${db}]: passed $n times"; exit 1; }
             done
           done
       - run: python tools/gen_schema.py --check
-      - name: One command — amem init, amem install claude-code --project, amem doctor
+      - name: One command — amemo init, amemo install claude-code --project, amemo doctor
         run: |
-          PGPASSWORD=test "$AMEM_PG_BIN/psql" -h localhost -p 5433 -U test -d test -qc "CREATE DATABASE onecmd"
-          export HOME="$(mktemp -d)" AMEM_BACKEND=none
+          PGPASSWORD=test "$AMEMO_PG_BIN/psql" -h localhost -p 5433 -U test -d test -qc "CREATE DATABASE onecmd"
+          export HOME="$(mktemp -d)" AMEMO_BACKEND=none
           project="$(mktemp -d)"
-          amem init --dsn postgresql://test:test@localhost:5433/onecmd
-          amem install claude-code --project "$project"
+          amemo init --dsn postgresql://test:test@localhost:5433/onecmd
+          amemo install claude-code --project "$project"
           cd "$project"
-          amem doctor --project "$project"
-          amem doctor --project "$project" --json > "$RUNNER_TEMP/doctor.json"
+          amemo doctor --project "$project"
+          amemo doctor --project "$project" --json > "$RUNNER_TEMP/doctor.json"
           python - "$project" "$RUNNER_TEMP/doctor.json" <<'PY'
           import json, sys
           project, path = sys.argv[1:]
@@ -72,23 +72,23 @@ jobs:
               assert checks.get(name) == "ok", (name, checks)
           PY
 
-  # образ службы: обе цели Dockerfile, служба из compose отвечает /health и проходит amem doctor
+  # образ службы: обе цели Dockerfile, служба из compose отвечает /health и проходит amemo doctor
   docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: docker compose config -q
-      - run: docker build --target web -t amem-web:ci .
-      - name: amem-web in the web image
+      - run: docker build --target web -t amemo-web:ci .
+      - name: amemo-web in the web image
         run: |
-          docker run --rm amem-web:ci python -c "import amem_web; p = amem_web.static_dir() / 'index.html'; assert p.is_file(), p"
-      - run: docker compose build amem
-      - name: compose — db and amem, /health, amem doctor
+          docker run --rm amemo-web:ci python -c "import amemo_web; p = amemo_web.static_dir() / 'index.html'; assert p.is_file(), p"
+      - run: docker compose build amemo
+      - name: compose — db and amemo, /health, amemo doctor
         run: |
-          docker compose up -d --wait --wait-timeout 180 amem
+          docker compose up -d --wait --wait-timeout 180 amemo
           curl -fsS http://127.0.0.1:8767/health
-          docker compose exec -T amem amem doctor
+          docker compose exec -T amemo amemo doctor
       - if: failure()
-        run: docker compose logs amem db
+        run: docker compose logs amemo db
       - if: always()
         run: docker compose down -v

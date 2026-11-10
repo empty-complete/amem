@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from amem import db, forms, packs, records
-from amem.records import Item
+from amemo import db, forms, packs, records
+from amemo.records import Item
 
 PACKS = Path(__file__).with_name("packs")
 FORMS = PACKS / "forms"
@@ -84,7 +84,7 @@ def test_ui_values_are_closed(tmp_path):
 
 @pytest.fixture
 def kb(pg, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join(
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join(
         [str(FORMS), str(PACKS / "quantities"), str(PACKS / "ontology")]))
     db.prepare(pg)
     return pg

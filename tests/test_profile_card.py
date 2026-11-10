@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from amem import db, profile, records
-from amem.records import Item
+from amemo import db, profile, records
+from amemo.records import Item
 from check_support import atom, entity, value
 
 PACKS = Path(__file__).with_name("packs")
@@ -14,7 +14,7 @@ MODEL, PERSON = "model:claude", "person:alice"
 
 @pytest.fixture
 def ready(pg, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(PACKS / "ontology")]))
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(PACKS / "ontology")]))
     db.prepare(pg)
     return pg
 
@@ -145,7 +145,7 @@ def test_unknown_entity(ready):
 
 
 def test_card_validates_against_model(ready):
-    from amem import model_v1
+    from amemo import model_v1
     rack = _entity(ready, "Стойка", "device")
     sensor = _entity(ready, "Датчик", "sensor")
     records.commit(ready, [], [{"rel": "part_of", "src": sensor, "dst": rack}], agent=PERSON)
@@ -232,7 +232,7 @@ def interface(ready, tmp_path, monkeypatch):
     (extra / "vocab" / "property.yaml").write_text(
         "scheme: property\nconcepts:\n  - {code: load, label: {ru: нагрузка, en: load}, "
         "definition: {ru: \"Нагрузка без единицы в словаре.\"}}\n", encoding="utf-8")
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(PACKS / "ontology"), str(extra)]))
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(PACKS / "ontology"), str(extra)]))
     db.prepare(ready)
     return ready
 
@@ -278,8 +278,8 @@ def test_conflict_atoms_are_live_candidates(ready):
 
 
 def test_revisions_sources_keys_and_input(ready, store, docs):
-    from amem import check, lookup
-    from amem.check import Proposal
+    from amemo import check, lookup
+    from amemo.check import Proposal
     from check_support import source_md
     body = atom("@m", kind="parameter", sources=[source_md("заметка.md", "Масса 3 кг.")],
                 content={"values": [value("mass", 3, "kg")]})
@@ -291,10 +291,10 @@ def test_revisions_sources_keys_and_input(ready, store, docs):
 
 def test_card_through_submit_review_and_rebuild(ready, store, docs, monkeypatch):
     """Сквозной путь: check.submit → очередь проверки → карточка; карточка переживает перестройку проекций."""
-    from amem import check, review
-    from amem.check import Proposal
+    from amemo import check, review
+    from amemo.check import Proposal
     from check_support import source_md
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
 
     def submit(body, agent, record_id=None):
         done = check.submit(ready, store, docs, [Proposal(body.get("entity_class") and "entity" or "atom", body,

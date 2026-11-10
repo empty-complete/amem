@@ -3,7 +3,7 @@ secret_like в submit — служба HTTP (запись не отклоняе�
 import pytest
 
 import contract
-from amem import private
+from amemo import private
 from test_service_write import batch, fact, post_submit
 
 pytest_plugins = ["test_service_write"]     # фикстуры kb и start
@@ -23,12 +23,12 @@ AWS = "AKIA" + "IOSFODNN7EXAMPLE"                 # собирается по ч
     ("xoxb-" + "1234567890-abcdef", "slack_token"),
     ("AIza" + "B" * 35, "google_api_key"),
     ("sk_live_" + "a" * 24, "stripe_key"),
-    ("amem_" + "A" * 43, "amem_token"),
+    ("amemo_" + "A" * 43, "amemo_token"),
     ("-----BEGIN RSA PRIVATE KEY-----\nMIIE…", "private_key"),
     ("-----BEGIN PRIVATE KEY-----", "private_key"),
     ("-----BEGIN OPENSSH PRIVATE KEY-----", "private_key"),
     ("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0." + "s" * 30, "jwt"),
-    ("postgresql://amem:" + "s3cret" + "@db:5432/amem", "url_password"),
+    ("postgresql://amemo:" + "s3cret" + "@db:5432/amemo", "url_password"),
     ("https://user:" + "hunter22" + "@example.org/x", "url_password"),
     ("password=" + "Hunter2024", "password"),
     ("PASSWORD: " + "qwerty77", "password"),
@@ -41,7 +41,7 @@ def test_known_secret_forms(text, kind):
 
 @pytest.mark.parametrize("text", [
     "ВН-45", "КБ-14 крепится к закладной анкером М10", "sha256:" + "a" * 64, "sha256:" + "0f" * 32,
-    "018f3c1e-7a2b-7c3d-8e4f-123456789abc", "https://example.org/path?q=1", "postgresql://db:5432/amem",
+    "018f3c1e-7a2b-7c3d-8e4f-123456789abc", "https://example.org/path?q=1", "postgresql://db:5432/amemo",
     "ssh://git@example.org/repo.git", "user@example.org", "пароль от щита хранится у мастера",
     "Пароль задаёт администратор.", "password: ********", "password=<пароль>", "password: ${DB_PASSWORD}",
     "password=%(pw)s", "пароль: xxxxxx", "risk-assessment-procedure-document", "disk-" + "a" * 30, "sk-14",

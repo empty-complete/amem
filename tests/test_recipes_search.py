@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from amem import db, embed, ids, lookup, records
-from amem.records import Item, RecordError
+from amemo import db, embed, ids, lookup, records
+from amemo.records import Item, RecordError
 from conftest import FakeProvider
 
 AGENT = "model:test"
@@ -78,7 +78,7 @@ def test_exact_fact_returns_all_ambiguous_codes_without_hidden_best_answer(kb):
 
 
 def search_recipe(kb, name, query, **kwargs):
-    from amem import recipes
+    from amemo import recipes
     kwargs.setdefault("agent", AGENT)
     return getattr(recipes, name)(kb, query, **kwargs)
 
@@ -255,7 +255,7 @@ def test_similar_ref_without_current_fresh_vector_does_not_substitute_old_revisi
             return getattr(self.conn, name)
 
     recorder = QueryRecorder(kb)
-    from amem import recipes
+    from amemo import recipes
     source_data = recipes._source_document(recorder, f"atm:{source.record_id}")
     assert "currentonly" in source_data[2] and "legacyonly" not in source_data[2]
     result = search_recipe(kb, "similar", f"atm:{source.record_id}", provider=provider)
@@ -287,11 +287,11 @@ def test_similar_without_active_model_uses_fts_and_reports_unavailable(kb):
 def test_backend_none_ignores_old_vectors_and_explicit_provider(kb, provider, monkeypatch):
     written = write(kb, atom("alpha", "alpha"), atom("near", "near alpha"))
     activate(kb, provider)
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
 
     class ExplodingProvider(FakeProvider):
         def _embed(self, texts):
-            raise AssertionError("provider вызван при AMEM_BACKEND=none")
+            raise AssertionError("provider вызван при AMEMO_BACKEND=none")
 
     result = search_recipe(kb, "similar", "alpha", provider=ExplodingProvider())
 
@@ -317,7 +317,7 @@ def test_query_provider_must_match_active_model(kb, provider):
 
 def test_availability_reports_why_the_semantic_channel_is_off(kb, provider, monkeypatch):
     """recipes.availability — то же решение, что у поиска по тексту, без счёта векторов."""
-    from amem import recipes
+    from amemo import recipes
 
     assert recipes.availability(kb, provider) == {"semantic": "unavailable", "reason": "no_active_model"}
     activate(kb, provider)
@@ -331,14 +331,14 @@ def test_availability_reports_why_the_semantic_channel_is_off(kb, provider, monk
     with pytest.raises(embed.EmbeddingError):                 # поиск по тексту с этим provider — отказ
         search_recipe(kb, "exact_fact", "alpha", provider=wrong)
 
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
     assert recipes.availability(kb, provider) == {"semantic": "unavailable", "reason": "backend_disabled"}
-    monkeypatch.setenv("AMEM_BACKEND", "nonsense")
+    monkeypatch.setenv("AMEMO_BACKEND", "nonsense")
     assert recipes.availability(kb) == {"semantic": "unavailable", "reason": "backend_unknown"}
 
 
 def test_availability_fastembed_model_without_the_package(kb, monkeypatch):
-    from amem import recipes
+    from amemo import recipes
 
     class Fastembed(FakeProvider):
         name, version, backend = "intfloat/multilingual-e5-small", "1", "fastembed"
@@ -352,7 +352,7 @@ def test_availability_fastembed_model_without_the_package(kb, monkeypatch):
 def test_on_semantic_error_skip_degrades_to_lexical_channels(kb, provider, monkeypatch):
     """on_semantic_error="skip": provider, который не может посчитать вектор запроса, не валит поиск — смысловой
     канал пропускается с причиной; по умолчанию (raise) — EmbeddingError, как раньше. Журнал — одна строка."""
-    from amem import recipes
+    from amemo import recipes
 
     written = write(kb, atom("alpha", "alpha"), atom("near", "near alpha"))
     activate(kb, provider)
@@ -388,7 +388,7 @@ def test_on_semantic_error_skip_degrades_to_lexical_channels(kb, provider, monke
     embed.activate_model(kb, model["id"])
     result = search_recipe(kb, "exact_fact", "alpha", provider=FastembedBroken(), on_semantic_error="skip")
     assert result["channels"]["reasons"] == {"vector": "fastembed_missing"}
-    monkeypatch.setenv("AMEM_BACKEND", "nonsense")
+    monkeypatch.setenv("AMEMO_BACKEND", "nonsense")
     result = search_recipe(kb, "exact_fact", "alpha", on_semantic_error="skip")
     assert result["channels"]["reasons"] == {"vector": "backend_unknown"} and alpha in by_ref(result)
     with pytest.raises(ValueError, match="on_semantic_error"):

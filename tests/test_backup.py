@@ -1,5 +1,5 @@
 """Бэкап на PostgreSQL 18 и 16: дамп с манифестом из одного снимка, пароль только в окружении процесса, атомарные
-пары, ротация, полный снимок с копией OCFL и границы путей. Нужен клиент PostgreSQL 18 (AMEM_PG_BIN или PATH)."""
+пары, ротация, полный снимок с копией OCFL и границы путей. Нужен клиент PostgreSQL 18 (AMEMO_PG_BIN или PATH)."""
 import json
 import os
 import shutil
@@ -12,10 +12,10 @@ import psycopg
 import pytest
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
-from amem import backup, db, ids, objects, recipes, records, usefulness
-from amem.backup import BackupError
-from amem.ocfl_store import ObjectStore
-from amem.records import Item
+from amemo import backup, db, ids, objects, recipes, records, usefulness
+from amemo.backup import BackupError
+from amemo.ocfl_store import ObjectStore
+from amemo.records import Item
 from ocfl_check import validate
 
 AGENT = "model:test"
@@ -58,7 +58,7 @@ def test_dump_and_manifest_describe_one_snapshot(pgdb, tmp_path, docs):
     dump, manifest = tmp_path / "bk" / "2026-11-05T08-00-00Z.dump", tmp_path / "bk" / "2026-11-05T08-00-00Z.json"
     assert made["dump"] == str(dump) and made["manifest"] == str(manifest)
     data = json.loads(manifest.read_text(encoding="utf-8"))
-    assert data["format"] == 1 and data["kind"] == "amem.pg_dump" and data["file"] == dump.name
+    assert data["format"] == 1 and data["kind"] == "amemo.pg_dump" and data["file"] == dump.name
     assert data["size"] == dump.stat().st_size and data["sha256"] == backup._sha256(dump)
     assert data["base_id"] == filled["base_id"] and data["created_at"] == NOW.isoformat()
     assert data["pg_dump_version"].startswith("pg_dump (PostgreSQL) 18")
@@ -79,7 +79,7 @@ def test_dump_and_manifest_describe_one_snapshot(pgdb, tmp_path, docs):
 def test_password_is_only_in_the_process_environment(pgdb, tmp_path, docs, monkeypatch):
     src = pgdb()
     fill(src, tmp_path / "objects", docs)
-    role, secret = f"amem_bk_{uuid.uuid4().hex[:8]}", f"Pw-{uuid.uuid4().hex}"
+    role, secret = f"amemo_bk_{uuid.uuid4().hex[:8]}", f"Pw-{uuid.uuid4().hex}"
     with psycopg.connect(src, autocommit=True) as admin:
         admin.execute(f"CREATE ROLE {role} LOGIN SUPERUSER PASSWORD '{secret}'")
     calls = []
@@ -174,7 +174,7 @@ def test_rotation_keeps_last_complete_pairs_and_runs_only_after_a_good_copy(pgdb
 def test_snapshot_links_dump_and_objects_by_base_id(pgdb, tmp_path, docs):
     src = pgdb()
     filled = fill(src, tmp_path / "data" / "objects", docs)
-    (tmp_path / "data" / ".env").write_text("AMEM_PG_PASSWORD=secret\n", encoding="utf-8")
+    (tmp_path / "data" / ".env").write_text("AMEMO_PG_PASSWORD=secret\n", encoding="utf-8")
     (tmp_path / "data" / "models").mkdir()
 
     made = backup.snapshot(src, tmp_path / "data" / "objects", tmp_path / "snap", now=NOW)
@@ -183,7 +183,7 @@ def test_snapshot_links_dump_and_objects_by_base_id(pgdb, tmp_path, docs):
     assert made["path"] == str(root) and not (tmp_path / "snap" / "2026-11-05T08-00-00Z.tmp").exists()
     assert sorted(p.name for p in root.iterdir()) == ["manifest.json", "objects", "pg"]
     data = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-    assert data["kind"] == "amem.snapshot" and data["base_id"] == filled["base_id"]
+    assert data["kind"] == "amemo.snapshot" and data["base_id"] == filled["base_id"]
     assert data["dump"]["manifest"] == "pg/2026-11-05T08-00-00Z.json"
     assert backup.check(root / "pg" / "2026-11-05T08-00-00Z.json")["base_id"] == filled["base_id"]
     with psycopg.connect(src) as conn:
@@ -231,10 +231,10 @@ def test_tool_must_be_postgresql_18(tmp_path, monkeypatch):
     fake = tmp_path / "pg_dump"
     fake.write_text("#!/bin/sh\necho 'pg_dump (PostgreSQL) 16.4'\n", encoding="utf-8")
     fake.chmod(0o755)
-    monkeypatch.setenv("AMEM_PG_BIN", str(tmp_path))
+    monkeypatch.setenv("AMEMO_PG_BIN", str(tmp_path))
     with pytest.raises(BackupError, match="нужна версия 18"):
         backup._tool("pg_dump")
-    monkeypatch.setenv("AMEM_PG_BIN", str(tmp_path / "нет"))
+    monkeypatch.setenv("AMEMO_PG_BIN", str(tmp_path / "нет"))
     with pytest.raises(BackupError, match="нужен клиент PostgreSQL 18"):
         backup._tool("pg_dump")
 
@@ -244,10 +244,10 @@ def test_default_rotation_keeps_fourteen_ready_copies(tmp_path):
     for i in range(16):
         name = (NOW + timedelta(minutes=i)).strftime("%Y-%m-%dT%H-%M-%SZ")
         (tmp_path / f"{name}.dump").write_bytes(b"x" * i)
-        (tmp_path / f"{name}.json").write_text(json.dumps({"kind": "amem.pg_dump", "format": 1,
+        (tmp_path / f"{name}.json").write_text(json.dumps({"kind": "amemo.pg_dump", "format": 1,
                                                            "file": f"{name}.dump", "size": i}), encoding="utf-8")
     (tmp_path / "2026-11-05T09-00-00Z.dump.tmp").write_bytes(b"half")
-    (tmp_path / "2026-11-05T09-01-00Z.json").write_text(json.dumps({"kind": "amem.pg_dump", "format": 1,
+    (tmp_path / "2026-11-05T09-01-00Z.json").write_text(json.dumps({"kind": "amemo.pg_dump", "format": 1,
                                                                     "file": "2026-11-05T09-01-00Z.dump", "size": 1}))
     removed = backup.rotate(tmp_path)
     assert removed == ["2026-11-05T08-00-00Z", "2026-11-05T08-01-00Z"]
@@ -258,7 +258,7 @@ def test_default_rotation_keeps_fourteen_ready_copies(tmp_path):
 def tools(tmp_path, **scripts) -> Path:
     """Папка с обёртками клиента PostgreSQL: по умолчанию — настоящие, scripts — свои тела shell для pg_dump и т. п.
     В теле $REAL — путь к настоящей программе."""
-    real = Path(os.environ["AMEM_PG_BIN"]) if os.environ.get("AMEM_PG_BIN") else None
+    real = Path(os.environ["AMEMO_PG_BIN"]) if os.environ.get("AMEMO_PG_BIN") else None
     folder = tmp_path / "pgbin"
     folder.mkdir()
     for name in ("pg_dump", "pg_restore", "psql"):
@@ -295,7 +295,7 @@ def test_dump_survives_idle_in_transaction_timeout(pgdb, tmp_path, docs, monkeyp
     with psycopg.connect(src, autocommit=True) as conn:
         dbname = conn.info.dbname
         conn.execute(f'ALTER DATABASE "{dbname}" SET idle_in_transaction_session_timeout = \'1s\'')
-    monkeypatch.setenv("AMEM_PG_BIN", str(tools(tmp_path, pg_dump='sleep 3; exec "$REAL" "$@"')))
+    monkeypatch.setenv("AMEMO_PG_BIN", str(tools(tmp_path, pg_dump='sleep 3; exec "$REAL" "$@"')))
     made = backup.create(src, tmp_path / "bk", now=NOW)
     assert backup.check(made["manifest"])["counts"]["atom"] == 2
 

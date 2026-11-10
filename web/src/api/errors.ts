@@ -49,7 +49,7 @@ export async function problemFromResponse(res: Response): Promise<ApiError> {
 
 /** Сеть недоступна вовсе (служба не запущена). */
 export function offlineError(cause: unknown): ApiError {
-  return new ApiError(0, "Нет связи со службой amem", cause instanceof Error ? cause.message : undefined);
+  return new ApiError(0, "Нет связи со службой amemo", cause instanceof Error ? cause.message : undefined);
 }
 
 /** Текст ошибки для человека: что случилось; для обрыва связи — подсказка, что делать. */

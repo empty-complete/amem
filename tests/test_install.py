@@ -1,4 +1,4 @@
-"""Установщик amem в агентов (подпроект 4, часть 4c, задача 14): `amem install|uninstall claude-code|codex`.
+"""Установщик amemo в агентов (подпроект 4, часть 4c, задача 14): `amemo install|uninstall claude-code|codex`.
 
 Всё — на временном HOME и временной папке проекта; настоящий `claude` не запускается: в PATH лежит заглушка,
 которая правит ~/.claude.json так же, как `claude mcp add|remove --scope user`, и пишет свои вызовы в журнал.
@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from amem import cli
-from amem.agents import install, platforms
+from amemo import cli
+from amemo.agents import install, platforms
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -99,7 +99,7 @@ def read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def amem_hooks(settings: dict) -> dict:
+def amemo_hooks(settings: dict) -> dict:
     return {event: [h for g in groups for h in g["hooks"] if install.is_our_hook(h)]
             for event, groups in settings.get("hooks", {}).items()}
 
@@ -123,18 +123,18 @@ def test_claude_global_with_claude_in_path_calls_mcp_add(home, env, claude):
     report = install.install("claude-code", env)
     calls = claude()
     assert len(calls) == 1 and calls[0][:4] == ["mcp", "add", "--scope", "user"]
-    assert "AMEM_AS_MODEL=claude-code" in calls[0] and calls[0][calls[0].index("--") - 1] == "amem"
+    assert "AMEMO_AS_MODEL=claude-code" in calls[0] and calls[0][calls[0].index("--") - 1] == "amemo"
     assert calls[0][-3:] == ["mcp", "--agent", "model:claude-code"]
-    server = read_json(home / ".claude.json")["mcpServers"]["amem"]
-    assert server["env"] == {"AMEM_AS_MODEL": "claude-code"}
+    server = read_json(home / ".claude.json")["mcpServers"]["amemo"]
+    assert server["env"] == {"AMEMO_AS_MODEL": "claude-code"}
     assert server["args"][-3:] == ["mcp", "--agent", "model:claude-code"]
     assert report.warnings == [] and any("claude" in note for note in report.notes)
-    # хуки — три события, AMEM_AS_MODEL и явный timeout; чужие хуки на месте
+    # хуки — три события, AMEMO_AS_MODEL и явный timeout; чужие хуки на месте
     written = read_json(home / ".claude" / "settings.json")
-    ours = amem_hooks(written)
+    ours = amemo_hooks(written)
     for event in ("SessionStart", "UserPromptSubmit", "PreCompact"):
         (hook,) = ours[event]
-        assert hook["command"].startswith("AMEM_AS_MODEL=claude-code ")
+        assert hook["command"].startswith("AMEMO_AS_MODEL=claude-code ")
         assert hook["command"].endswith(f"hook {event}") and hook["timeout"] == platforms.HOOK_TIMEOUT
     assert written["model"] == "opus" and written["hooks"]["PreToolUse"] == settings["hooks"]["PreToolUse"]
     assert written["hooks"]["SessionStart"][0] == settings["hooks"]["SessionStart"][0]
@@ -148,10 +148,10 @@ def test_claude_global_with_claude_in_path_calls_mcp_add(home, env, claude):
     assert again.changes == [] and again.commands == [] and tree(home) == snapshot and len(claude()) == 1
     # uninstall — claude mcp remove и файлы как были (разобранный JSON)
     install.uninstall("claude-code", env)
-    assert claude()[-1] == ["mcp", "remove", "--scope", "user", "amem"]
+    assert claude()[-1] == ["mcp", "remove", "--scope", "user", "amemo"]
     assert read_json(home / ".claude.json") == user
     assert read_json(home / ".claude" / "settings.json") == settings
-    assert not (home / ".claude" / "skills" / "amem-remember").exists()
+    assert not (home / ".claude" / "skills" / "amemo-remember").exists()
 
 
 def test_claude_global_without_claude_edits_claude_json_with_a_warning(home, env):
@@ -161,14 +161,14 @@ def test_claude_global_without_claude_edits_claude_json_with_a_warning(home, env
     assert any("Claude Code может переписать" in w for w in report.warnings)
     data = read_json(home / ".claude.json")
     assert data["mcpServers"]["other"] == user["mcpServers"]["other"] and data["numStartups"] == 7
-    assert data["mcpServers"]["amem"]["type"] == "stdio"
-    assert Path(data["mcpServers"]["amem"]["command"]).is_absolute()          # глобально — полный путь
-    assert data["mcpServers"]["amem"]["env"] == {"AMEM_AS_MODEL": "claude-code"}
+    assert data["mcpServers"]["amemo"]["type"] == "stdio"
+    assert Path(data["mcpServers"]["amemo"]["command"]).is_absolute()          # глобально — полный путь
+    assert data["mcpServers"]["amemo"]["env"] == {"AMEMO_AS_MODEL": "claude-code"}
     # резервная копия — исходный файл байт в байт, и повторная правка её не трогает
-    assert (home / ".claude.json.amem-backup").read_bytes() == original
+    assert (home / ".claude.json.amemo-backup").read_bytes() == original
     install.uninstall("claude-code", env)
     install.install("claude-code", env)
-    assert (home / ".claude.json.amem-backup").read_bytes() == original
+    assert (home / ".claude.json.amemo-backup").read_bytes() == original
     install.uninstall("claude-code", env)
     assert read_json(home / ".claude.json") == user
     assert read_json(home / ".claude" / "settings.json") == settings
@@ -180,7 +180,7 @@ def test_claude_global_on_a_clean_home_creates_and_then_removes_its_files(home, 
     assert stat.S_IMODE(os.stat(home / ".claude.json").st_mode) == 0o600
     install.uninstall("claude-code", env)
     assert not (home / ".claude.json").exists() and not (home / ".claude" / "settings.json").exists()
-    assert not list(home.rglob("*.amem-backup"))
+    assert not list(home.rglob("*.amemo-backup"))
     assert not list(home.rglob("SKILL.md"))
 
 
@@ -191,11 +191,11 @@ def test_claude_project_writes_mcp_json_settings_and_skills(home, env, project, 
     report = install.install("claude-code", env, project)
     assert claude() == []                          # в проект — без claude: .mcp.json правится сам
     servers = read_json(project / ".mcp.json")["mcpServers"]
-    assert servers["db"] == {"command": "db-mcp"} and servers["amem"]["env"] == {"AMEM_AS_MODEL": "claude-code"}
-    assert servers["amem"]["command"] == "amem"                    # в проекте — без пути этой машины
-    ours = amem_hooks(read_json(project / ".claude" / "settings.json"))
+    assert servers["db"] == {"command": "db-mcp"} and servers["amemo"]["env"] == {"AMEMO_AS_MODEL": "claude-code"}
+    assert servers["amemo"]["command"] == "amemo"                    # в проекте — без пути этой машины
+    ours = amemo_hooks(read_json(project / ".claude" / "settings.json"))
     assert sorted(ours) == ["PreCompact", "SessionStart", "UserPromptSubmit"]
-    assert all(h[0]["command"] == f"AMEM_AS_MODEL=claude-code amem hook {e}" for e, h in ours.items())
+    assert all(h[0]["command"] == f"AMEMO_AS_MODEL=claude-code amemo hook {e}" for e, h in ours.items())
     assert any("PATH агента" in note for note in report.notes)
     assert str(Path(sys.executable).parent) not in (project / ".mcp.json").read_text(encoding="utf-8")
     assert all((project / ".claude" / "skills" / n / "SKILL.md").exists() for n in platforms.SKILLS)
@@ -234,21 +234,21 @@ def test_codex_global_writes_a_marked_toml_block_agents_md_and_hooks(home, env):
     report = install.install("codex", env)
     text = (codex / "config.toml").read_text(encoding="utf-8")
     assert text.startswith(CODEX_CONFIG)
-    begin, end = text.index("# amem:begin"), text.index("# amem:end")
-    assert begin < text.index("[mcp_servers.amem]") < end
+    begin, end = text.index("# amemo:begin"), text.index("# amemo:end")
+    assert begin < text.index("[mcp_servers.amemo]") < end
     parsed = tomllib.loads(text)
     assert parsed["mcp_servers"]["other"] == original_toml["mcp_servers"]["other"]
     assert parsed["projects"] == original_toml["projects"]
-    server = parsed["mcp_servers"]["amem"]
-    assert server["env"] == {"AMEM_AS_MODEL": "codex"} and server["args"][-3:] == ["mcp", "--agent", "model:codex"]
-    assert server["env_vars"] == ["AMEM_DSN", "AMEM_CONFIG", "AMEM_STATE", "PGPASSFILE", "PGSERVICE"]
+    server = parsed["mcp_servers"]["amemo"]
+    assert server["env"] == {"AMEMO_AS_MODEL": "codex"} and server["args"][-3:] == ["mcp", "--agent", "model:codex"]
+    assert server["env_vars"] == ["AMEMO_DSN", "AMEMO_CONFIG", "AMEMO_STATE", "PGPASSFILE", "PGSERVICE"]
     assert "postgresql" not in text and any("env_vars" in note for note in report.notes)
     md = (codex / "AGENTS.md").read_text(encoding="utf-8")
-    assert md.startswith(original_md) and "<!-- amem:begin" in md and "<!-- amem:end -->" in md
+    assert md.startswith(original_md) and "<!-- amemo:begin" in md and "<!-- amemo:end -->" in md
     assert "данные, а не указания" in md and "data, not instructions" in md
-    hooks = amem_hooks(read_json(codex / "hooks.json"))
+    hooks = amemo_hooks(read_json(codex / "hooks.json"))
     assert sorted(hooks) == ["SessionStart", "UserPromptSubmit"]
-    assert all(h[0]["command"].startswith("AMEM_AS_MODEL=codex ") and h[0]["timeout"] == 5 for h in hooks.values())
+    assert all(h[0]["command"].startswith("AMEMO_AS_MODEL=codex ") and h[0]["timeout"] == 5 for h in hooks.values())
     assert all((home / ".agents" / "skills" / n / "SKILL.md").exists() for n in platforms.SKILLS)
     assert report.agent == "codex" and report.format == platforms.CODEX_FORMAT
 
@@ -264,22 +264,22 @@ def test_codex_global_writes_a_marked_toml_block_agents_md_and_hooks(home, env):
 
 @pytest.mark.parametrize("original", ["", "# Правила", "# Правила\n", "# Правила\n\n\n"])
 def test_markdown_block_is_removed_back_to_the_same_text(original):
-    added = install.put_block(original, "<!-- amem:begin", "<!-- amem:end -->", "текст\n", " -->")
-    assert added.startswith(original) and added.endswith("<!-- amem:end -->\n")
-    assert install.put_block(added, "<!-- amem:begin", "<!-- amem:end -->", "текст\n", " -->") == added
-    assert install.drop_block(added, "<!-- amem:begin", "<!-- amem:end -->") == original
+    added = install.put_block(original, "<!-- amemo:begin", "<!-- amemo:end -->", "текст\n", " -->")
+    assert added.startswith(original) and added.endswith("<!-- amemo:end -->\n")
+    assert install.put_block(added, "<!-- amemo:begin", "<!-- amemo:end -->", "текст\n", " -->") == added
+    assert install.drop_block(added, "<!-- amemo:begin", "<!-- amemo:end -->") == original
     # чужой текст, дописанный после блока, остаётся
     later = added + "Ещё правило.\n"
-    assert install.drop_block(later, "<!-- amem:begin", "<!-- amem:end -->").endswith("Ещё правило.\n")
+    assert install.drop_block(later, "<!-- amemo:begin", "<!-- amemo:end -->").endswith("Ещё правило.\n")
 
 
 def test_codex_project_uses_project_files_and_warns_about_trust(home, env, project):
     report = install.install("codex", env, project)
-    server = tomllib.loads((project / ".codex" / "config.toml").read_text())["mcp_servers"]["amem"]
-    assert server["env"] == {"AMEM_AS_MODEL": "codex"} and server["command"] == "amem"
-    assert all(h[0]["command"].startswith("AMEM_AS_MODEL=codex amem hook ")
-               for h in amem_hooks(read_json(project / ".codex" / "hooks.json")).values())
-    assert "<!-- amem:begin" in (project / "AGENTS.md").read_text(encoding="utf-8")
+    server = tomllib.loads((project / ".codex" / "config.toml").read_text())["mcp_servers"]["amemo"]
+    assert server["env"] == {"AMEMO_AS_MODEL": "codex"} and server["command"] == "amemo"
+    assert all(h[0]["command"].startswith("AMEMO_AS_MODEL=codex amemo hook ")
+               for h in amemo_hooks(read_json(project / ".codex" / "hooks.json")).values())
+    assert "<!-- amemo:begin" in (project / "AGENTS.md").read_text(encoding="utf-8")
     assert (project / ".codex" / "hooks.json").exists()
     assert all((project / ".agents" / "skills" / n / "SKILL.md").exists() for n in platforms.SKILLS)
     assert any("доверенн" in note for note in report.notes)
@@ -288,13 +288,13 @@ def test_codex_project_uses_project_files_and_warns_about_trust(home, env, proje
     assert not (project / "AGENTS.md").exists() and not (project / ".codex" / "config.toml").exists()
 
 
-def test_codex_server_amem_outside_the_block_is_not_overwritten(home, env):
+def test_codex_server_amemo_outside_the_block_is_not_overwritten(home, env):
     (home / ".codex").mkdir()
     config = home / ".codex" / "config.toml"
-    config.write_text('[mcp_servers.amem]\ncommand = "mine"\n', encoding="utf-8")
+    config.write_text('[mcp_servers.amemo]\ncommand = "mine"\n', encoding="utf-8")
     with pytest.raises(install.InstallError, match="вне блока"):
         install.install("codex", env)
-    assert config.read_text() == '[mcp_servers.amem]\ncommand = "mine"\n'
+    assert config.read_text() == '[mcp_servers.amemo]\ncommand = "mine"\n'
     assert cli.main(["install", "codex"], env=env) == 2
 
 
@@ -323,7 +323,7 @@ def test_foreign_hooks_in_a_shared_group_stay_and_reinstall_is_stable(home, env)
     install.install("claude-code", env)
     path = home / ".claude" / "settings.json"
     data = read_json(path)
-    # пользователь дописал свой хук в группу amem и свою группу после неё
+    # пользователь дописал свой хук в группу amemo и свою группу после неё
     data["hooks"]["UserPromptSubmit"][0]["hooks"].append({"type": "command", "command": "my-hook"})
     data["hooks"]["UserPromptSubmit"].append({"hooks": [{"type": "command", "command": "late"}]})
     path.write_text(json.dumps(data), encoding="utf-8")
@@ -347,10 +347,10 @@ def test_write_keeps_file_mode_and_writes_through_a_symlink(home, env, tmp_path)
     settings.symlink_to(real)
     real.chmod(0o640)
     install.install("claude-code", env)
-    assert settings.is_symlink() and amem_hooks(read_json(real))
+    assert settings.is_symlink() and amemo_hooks(read_json(real))
     assert stat.S_IMODE(os.stat(real).st_mode) == 0o640
-    assert (real.parent / "settings.json.amem-backup").exists()
-    assert not list(real.parent.glob("*.amem-tmp"))
+    assert (real.parent / "settings.json.amemo-backup").exists()
+    assert not list(real.parent.glob("*.amemo-tmp"))
 
 
 def test_broken_json_is_left_alone(home, env):
@@ -363,7 +363,7 @@ def test_broken_json_is_left_alone(home, env):
 
 def test_changed_skill_is_kept_on_uninstall(home, env):
     install.install("claude-code", env)
-    skill = home / ".claude" / "skills" / "amem-answer" / "SKILL.md"
+    skill = home / ".claude" / "skills" / "amemo-answer" / "SKILL.md"
     skill.write_text(skill.read_text(encoding="utf-8") + "\nмоя правка\n", encoding="utf-8")
     report = install.uninstall("claude-code", env)
     assert skill.exists() and any("изменён после установки" in w for w in report.warnings)
@@ -372,10 +372,10 @@ def test_changed_skill_is_kept_on_uninstall(home, env):
 def test_agent_command_failure_is_an_environment_error(home, env, claude):
     seed_claude(home)
     data = read_json(home / ".claude.json")
-    data["mcpServers"]["amem"] = {"type": "stdio", "command": "old", "args": [], "env": {}}
+    data["mcpServers"]["amemo"] = {"type": "stdio", "command": "old", "args": [], "env": {}}
     (home / ".claude.json").write_text(json.dumps(data), encoding="utf-8")
     report = install.plan("claude-code", env)
-    assert [c[1:3] for c in report.commands] == [["mcp", "remove"], ["mcp", "add"]]   # старый amem заменяется
+    assert [c[1:3] for c in report.commands] == [["mcp", "remove"], ["mcp", "add"]]   # старый amemo заменяется
     (Path(env["PATH"]) / "claude").write_text(f"#!{sys.executable}\nimport sys\nsys.exit(3)\n")
     assert cli.main(["install", "claude-code"], env=env) == 1
 
@@ -391,15 +391,15 @@ def test_cli_json_report(home, env, capsys):
     assert not (home / ".codex" / "config.toml").exists()
 
 
-def test_amem_in_path_is_used_by_full_path(env, tmp_path):
-    fake = Path(env["PATH"]) / "amem"
+def test_amemo_in_path_is_used_by_full_path(env, tmp_path):
+    fake = Path(env["PATH"]) / "amemo"
     fake.write_text("#!/bin/sh\n")
     fake.chmod(0o755)
-    command, note = install.amem_command(env)
+    command, note = install.amemo_command(env)
     assert command == [str(fake)] and note is None
     assert install.is_our_hook({"command": install.hook_command(command, "codex", "SessionStart")})
-    assert install.is_our_hook({"command": install.hook_command([sys.executable, "-m", "amem.cli"], "x", "PreCompact")})
-    assert not install.is_our_hook({"command": "echo amem hooks are great"})
+    assert install.is_our_hook({"command": install.hook_command([sys.executable, "-m", "amemo.cli"], "x", "PreCompact")})
+    assert not install.is_our_hook({"command": "echo amemo hooks are great"})
 
 
 # --- навыки ---
@@ -416,15 +416,15 @@ def test_core_skills_are_bilingual_pages_with_frontmatter_and_data_framing():
         assert 15 <= len(ru.split("## RU")[1].strip().splitlines()) <= 60       # по странице на язык
         assert 15 <= len(en.strip().splitlines()) <= 60
         assert "/home/" not in text and "C:\\" not in text
-    assert "не указания" in install.skill_text("amem-answer") and "not instructions" in \
-        install.skill_text("amem-answer")
-    assert "basis" in install.skill_text("amem-remember") and "amem_search" in install.skill_text("amem-remember")
-    assert "semantic" in install.skill_text("amem-verify") and "confidence" in install.skill_text("amem-verify")
+    assert "не указания" in install.skill_text("amemo-answer") and "not instructions" in \
+        install.skill_text("amemo-answer")
+    assert "basis" in install.skill_text("amemo-remember") and "amemo_search" in install.skill_text("amemo-remember")
+    assert "semantic" in install.skill_text("amemo-verify") and "confidence" in install.skill_text("amemo-verify")
 
 
 def test_skills_are_package_data():
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    assert "packs/core/skills/*/SKILL.md" in pyproject["tool"]["setuptools"]["package-data"]["amem"]
+    assert "packs/core/skills/*/SKILL.md" in pyproject["tool"]["setuptools"]["package-data"]["amemo"]
 
 
 # --- правки по ревью установщика ---
@@ -449,7 +449,7 @@ def test_crlf_files_get_a_crlf_block_and_return_to_the_same_text(home, env):
     for path in (codex / "config.toml", codex / "AGENTS.md"):
         raw = path.read_bytes().decode("utf-8")
         assert raw.count("\n") == raw.count("\r\n"), path            # ни одного голого LF
-    assert tomllib.loads((codex / "config.toml").read_text(encoding="utf-8"))["mcp_servers"]["amem"]
+    assert tomllib.loads((codex / "config.toml").read_text(encoding="utf-8"))["mcp_servers"]["amemo"]
     assert install.install("codex", env).changes == []                 # повтор — без изменений
     install.uninstall("codex", env)
     assert (codex / "config.toml").read_bytes().decode("utf-8") == toml_text
@@ -459,7 +459,7 @@ def test_crlf_files_get_a_crlf_block_and_return_to_the_same_text(home, env):
 def test_erased_end_mark_warns_on_uninstall_and_refuses_install(home, env):
     install.install("codex", env)
     agents_md = home / ".codex" / "AGENTS.md"
-    text = agents_md.read_text(encoding="utf-8").replace("<!-- amem:end -->", "")
+    text = agents_md.read_text(encoding="utf-8").replace("<!-- amemo:end -->", "")
     agents_md.write_text(text, encoding="utf-8")
     report = install.uninstall("codex", env)
     assert any("стёрта" in w for w in report.warnings)
@@ -471,33 +471,33 @@ def test_erased_end_mark_warns_on_uninstall_and_refuses_install(home, env):
 def test_failed_add_after_remove_restores_the_old_server(home, env, claude):
     seed_claude(home)
     data = read_json(home / ".claude.json")
-    old = {"type": "stdio", "command": "old-amem", "args": ["mcp"], "env": {"K": "v"}}
-    data["mcpServers"]["amem"] = old
+    old = {"type": "stdio", "command": "old-amemo", "args": ["mcp"], "env": {"K": "v"}}
+    data["mcpServers"]["amemo"] = old
     (home / ".claude.json").write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(install.AgentCommandError, match="возвращена"):
         install.install("claude-code", {**env, "STUB_FAIL_ADD": "model:claude-code"})
     assert [c[:2] for c in claude()] == [["mcp", "remove"], ["mcp", "add"], ["mcp", "add"]]
-    assert read_json(home / ".claude.json")["mcpServers"]["amem"] == old
+    assert read_json(home / ".claude.json")["mcpServers"]["amemo"] == old
 
 
 def test_same_server_without_type_or_with_extra_keys_runs_no_command(home, env, claude):
     seed_claude(home)
     install.install("claude-code", env)
     data = read_json(home / ".claude.json")
-    entry = data["mcpServers"]["amem"]
+    entry = data["mcpServers"]["amemo"]
     del entry["type"]
     entry["timeout"] = 30                                              # ключ, который агент мог дописать сам
     (home / ".claude.json").write_text(json.dumps(data), encoding="utf-8")
     assert install.plan("claude-code", env).commands == []
 
 
-def test_uninstall_touches_amem_hooks_only_in_its_own_events(home, env):
+def test_uninstall_touches_amemo_hooks_only_in_its_own_events(home, env):
     seed_claude(home)
     install.install("claude-code", env)
     path = home / ".claude" / "settings.json"
     data = read_json(path)
-    mine = {"matcher": "Bash", "hooks": [{"type": "command", "command": "amem hook PreToolUse"}]}
-    data["hooks"]["PreToolUse"].append(mine)                           # свой хук пользователя с amem hook
+    mine = {"matcher": "Bash", "hooks": [{"type": "command", "command": "amemo hook PreToolUse"}]}
+    data["hooks"]["PreToolUse"].append(mine)                           # свой хук пользователя с amemo hook
     path.write_text(json.dumps(data), encoding="utf-8")
     install.uninstall("claude-code", env)
     assert mine in read_json(path)["hooks"]["PreToolUse"]
@@ -506,7 +506,7 @@ def test_uninstall_touches_amem_hooks_only_in_its_own_events(home, env):
 def test_reports_tell_about_backups_and_empty_folders(home, env):
     seed_claude(home)
     report = install.install("claude-code", env)
-    assert any(".amem-backup" in n and "перед правкой" in n for n in report.notes)
+    assert any(".amemo-backup" in n and "перед правкой" in n for n in report.notes)
     report = install.uninstall("claude-code", env)
     assert any("копия до установки оставлена" in n for n in report.notes)
     clean = home.parent / "clean"

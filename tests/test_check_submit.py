@@ -8,9 +8,9 @@ import psycopg
 import pytest
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
-from amem import check, db, embed, model_v1, objects, records, review
-from amem.check import Proposal, level4
-from amem.ocfl_store import StoreError
+from amemo import check, db, embed, model_v1, objects, records, review
+from amemo.check import Proposal, level4
+from amemo.ocfl_store import StoreError
 from check_support import CHECK_PACK, PDF, atom, entity, pack, source_pdf, value
 from conftest import FakeProvider
 
@@ -21,8 +21,8 @@ PAGE2 = "Ветровой район II: w0 = 0,30 кПа"
 
 @pytest.fixture
 def kb(pg, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", str(CHECK_PACK))
-    monkeypatch.setenv("AMEM_BACKEND", "none")          # уровень 4 — только текст, без модели
+    monkeypatch.setenv("AMEMO_PACKS", str(CHECK_PACK))
+    monkeypatch.setenv("AMEMO_BACKEND", "none")          # уровень 4 — только текст, без модели
     monkeypatch.setattr(review, "AUDIT_RATE", 0.0)      # выборка аудита — только там, где тест её включает
     db.prepare(pg)
     return pg
@@ -168,8 +168,8 @@ def test_entity_with_risk_goes_to_person(pg, store, docs, monkeypatch, tmp_path)
     risky = pack(tmp_path / "risky", "risky", {"any_entity": {
         "code": "any_entity", "version": "1.0.0", "target": "entity",
         "description": {"ru": "Все сущности — к человеку."}, "high_risk": ["always"]}})
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(CHECK_PACK), str(risky)]))
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join([str(CHECK_PACK), str(risky)]))
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
     db.prepare(pg)
     result = send(pg, store, docs, entity("@e"))
     assert result.records[0]["status"] == "needs_review"
@@ -363,7 +363,7 @@ def test_new_agents_editing_one_record_do_not_deadlock(kb, store, docs, mode):
 
 
 def test_report_has_violations_and_summary():
-    from amem.check.report import Report
+    from amemo.check.report import Report
 
     report = Report()
     assert report.has_violations() is False and report.summary() == "Замечаний нет"
@@ -495,7 +495,7 @@ def test_similar_entity_goes_to_person_with_same_as(kb, store, docs):
 
 
 def test_active_model_and_provider_give_no_degraded(kb, store, docs, monkeypatch):
-    monkeypatch.delenv("AMEM_BACKEND")
+    monkeypatch.delenv("AMEMO_BACKEND")
     fake = FakeProvider()
     model = embed.register_model(kb, fake)
     embed.sync_embeddings(kb, model["id"], fake)

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from amem.embed import EmbeddingProvider
+from amemo.embed import EmbeddingProvider
 from samples import make_docs
 
 
@@ -48,9 +48,9 @@ class FakeProvider(EmbeddingProvider):
 
 @pytest.fixture(autouse=True)
 def _hermetic_backend(monkeypatch):
-    """AMEM_BACKEND из окружения разработчика не влияет на тесты: режим none тесты включают сами (monkeypatch).
+    """AMEMO_BACKEND из окружения разработчика не влияет на тесты: режим none тесты включают сами (monkeypatch).
     Без него выбор — как в CI; fastembed в зависимостях разработки нет, поэтому скрытая загрузка модели упала бы."""
-    monkeypatch.delenv("AMEM_BACKEND", raising=False)
+    monkeypatch.delenv("AMEMO_BACKEND", raising=False)
 
 
 @pytest.fixture
@@ -61,7 +61,7 @@ def docs(tmp_path) -> Path:
 # Тестовые базы схемы v1 — PostgreSQL 18 и 16 (проверка совместимости).
 # Запуск: docker compose --profile test up -d --wait db-test db-test-pg16
 TEST_DSNS = os.environ.get(
-    "AMEM_TEST_DSNS",
+    "AMEMO_TEST_DSNS",
     "postgresql://test:test@localhost:5433/test,postgresql://test:test@localhost:5434/test").split(",")
 
 
@@ -126,7 +126,7 @@ def pgdb(request):
     created = []
 
     def new_database() -> str:
-        name = f"amem_t_{uuid.uuid4().hex[:12]}"
+        name = f"amemo_t_{uuid.uuid4().hex[:12]}"
         admin.execute(f'CREATE DATABASE "{name}"')
         created.append(name)
         return make_conninfo(**{**conninfo_to_dict(dsn), "dbname": name})
@@ -159,13 +159,13 @@ def serve(dsn, tmp_path):
     Хранилище объектов — tmp_path/objects (как у фикстуры store), каталог бэкапов — tmp_path/backups."""
     from starlette.testclient import TestClient
 
-    from amem import service, settings
+    from amemo import service, settings
 
     clients = []
 
     def start(env=None, *, provider=None, routes=(), raise_server_exceptions=True, **explicit) -> TestClient:
-        environ = {"AMEM_DSN": dsn, "HOME": str(tmp_path / "home"), "USER": "ann",
-                   "AMEM_DATA": str(tmp_path / "objects"), "AMEM_BACKUPS": str(tmp_path / "backups"), **(env or {})}
+        environ = {"AMEMO_DSN": dsn, "HOME": str(tmp_path / "home"), "USER": "ann",
+                   "AMEMO_DATA": str(tmp_path / "objects"), "AMEMO_BACKUPS": str(tmp_path / "backups"), **(env or {})}
         app = service.create_app(settings.load(environ, **explicit), provider=provider)
         app.router.routes.extend(routes)
         client = TestClient(app, base_url=SERVICE_URL, raise_server_exceptions=raise_server_exceptions)
@@ -181,7 +181,7 @@ def serve(dsn, tmp_path):
 @pytest.fixture
 def store(tmp_path):
     """Хранилище объектов OCFL во временной папке теста (корень создаёт первая запись файла)."""
-    from amem.ocfl_store import ObjectStore
+    from amemo.ocfl_store import ObjectStore
 
     return ObjectStore(tmp_path / "objects")
 
@@ -189,6 +189,6 @@ def store(tmp_path):
 @pytest.fixture
 def store2(tmp_path):
     """Хранилище объектов второй базы (pg2)."""
-    from amem.ocfl_store import ObjectStore
+    from amemo.ocfl_store import ObjectStore
 
     return ObjectStore(tmp_path / "objects2")

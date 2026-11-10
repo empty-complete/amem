@@ -1,4 +1,4 @@
-# amem web UI
+# amemo web UI
 
 React 19, HeroUI v3, TanStack Router and Query, Vite. The design system is in [DESIGN.md](DESIGN.md); the product
 context is in [PRODUCT.md](PRODUCT.md); the HTTP contract is [`../docs/api/http-v1.openapi.yaml`](../docs/api/).
@@ -11,17 +11,17 @@ npm ci
 
 ## Three ways to run it
 
-| Command            | What you get                                                                                                        |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `npm run dev:mock` | The app on sample data (MSW mocks of the contract), http://127.0.0.1:5173/ui/                                       |
-| `npm run dev`      | The app against a running `amem serve`; `/api` is proxied to http://127.0.0.1:8767 (override with `AMEM_URL`)       |
-| `npm run build`    | Production build into `python/amem_web/dist`; `pip install "amem[web]"` ships it and the service serves it at `/ui` |
+| Command            | What you get                                                                                                          |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev:mock` | The app on sample data (MSW mocks of the contract), http://127.0.0.1:5173/ui/                                         |
+| `npm run dev`      | The app against a running `amemo serve`; `/api` is proxied to http://127.0.0.1:8767 (override with `AMEMO_URL`)       |
+| `npm run build`    | Production build into `python/amemo_web/dist`; `pip install "amemo[web]"` ships it and the service serves it at `/ui` |
 
 For `npm run dev`, start the service with the dev server's origin allowed, so the page gets the person's session
 and may write:
 
 ```bash
-AMEM_UI_ORIGINS=http://127.0.0.1:5173 python -m amem.service   # `amem serve` once the CLI ships
+AMEMO_UI_ORIGINS=http://127.0.0.1:5173 python -m amemo.service   # `amemo serve` once the CLI ships
 ```
 
 The proxy never rewrites `Origin`: that would let any page write to the base through the dev server.

@@ -9,5 +9,5 @@ test("База: статусы, очередь по причинам, пакет
   const queue = screen.getByRole("table", { name: "Очередь по причинам" });
   expect(within(queue).getByRole("rowheader", { name: "правка" })).toBeInTheDocument();
   expect(screen.getByRole("table", { name: "Пакеты" })).toHaveTextContent("meteo");
-  expect(screen.getByRole("table", { name: "Бэкапы" })).toHaveTextContent("amem-2026-11-07T03-00.dump");
+  expect(screen.getByRole("table", { name: "Бэкапы" })).toHaveTextContent("amemo-2026-11-07T03-00.dump");
 });

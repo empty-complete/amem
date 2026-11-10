@@ -5,9 +5,9 @@ import psycopg
 import pytest
 from psycopg.types.json import Jsonb
 
-from amem import db
-from amem.ids import uuid7
-from amem.records import Item, commit
+from amemo import db
+from amemo.ids import uuid7
+from amemo.records import Item, commit
 
 AGENT = "model:claude"
 
@@ -37,9 +37,9 @@ def _history(kb, cs, id=None, origin=None, record=None, n=1):
 def test_import_history_is_append_only(kb):
     cs, _ = _revision(kb)
     hid = _history(kb, cs)[0]
-    with pytest.raises(psycopg.errors.RaiseException, match="amem:"):
+    with pytest.raises(psycopg.errors.RaiseException, match="amemo:"):
         kb.execute("UPDATE import_history SET agent = 'model:other' WHERE id = %s", (hid,))
-    with pytest.raises(psycopg.errors.RaiseException, match="amem:"):
+    with pytest.raises(psycopg.errors.RaiseException, match="amemo:"):
         kb.execute("DELETE FROM import_history WHERE id = %s", (hid,))
 
 

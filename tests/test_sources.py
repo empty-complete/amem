@@ -3,8 +3,8 @@ import random
 import pymupdf
 import pytest
 
-from amem import sources
-from amem.sources import (
+from amemo import sources
+from amemo.sources import (
     DocText, Verdict, as_page, clean_anchor, extract_pages, extract_text, find_locator, find_quote, judge,
     looks_like_file, normalize, safe_join,
 )
@@ -118,13 +118,13 @@ def test_extract_text_scan_with_ocr(tmp_path):
 
 def test_ocr_languages_need_traineddata(tmp_path, monkeypatch):
     monkeypatch.setattr(pymupdf, "get_tessdata", lambda tessdata=None: str(tmp_path))
-    monkeypatch.delenv("AMEM_OCR_LANGUAGES", raising=False)
+    monkeypatch.delenv("AMEMO_OCR_LANGUAGES", raising=False)
     assert sources.ocr_languages() is None
     (tmp_path / "eng.traineddata").write_bytes(b"")
     assert sources.ocr_languages() == "eng"
     (tmp_path / "rus.traineddata").write_bytes(b"")
     assert sources.ocr_languages() == "rus+eng"
-    monkeypatch.setenv("AMEM_OCR_LANGUAGES", "deu+eng")
+    monkeypatch.setenv("AMEMO_OCR_LANGUAGES", "deu+eng")
     assert sources.ocr_languages() == "eng"
 
     def missing(tessdata=None):

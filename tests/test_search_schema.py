@@ -2,7 +2,7 @@
 import psycopg
 import pytest
 
-from amem import db, ids
+from amemo import db, ids
 
 
 TABLES = {"search_document", "search_code", "embedding_model", "embedding",

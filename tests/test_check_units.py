@@ -2,7 +2,7 @@
 База не нужна."""
 import pytest
 
-from amem.check import units
+from amemo.check import units
 
 
 @pytest.mark.parametrize("code", ["kPa", "W/(m2.K)", "W/(m2.Cel)", "Cel", "1", "%", "mm", "kg/m3", "Pa.s", "[degF]"])

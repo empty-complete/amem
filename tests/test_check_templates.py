@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from amem import db, packs
-from amem.check import templates
+from amemo import db, packs
+from amemo.check import templates
 
 CHECK = Path(__file__).with_name("packs") / "check"
 INTERFACES = ("has_label@1.0.0", "has_source@1.1.0", "has_value@1.0.0")
@@ -123,7 +123,7 @@ def test_extends_into_other_pack_is_allowed(tmp_path):
 def test_load_vocab_rejects_template_code_twice_before_writing(pg, monkeypatch, tmp_path):
     a = _pack(tmp_path / "a", "pack_a", {"memo": _t("memo")})
     b = _pack(tmp_path / "b", "pack_b", {"memo": _t("memo")})
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(a), str(b)]))
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join([str(a), str(b)]))
     with pytest.raises(packs.PackError, match=r"memo\.yaml.*pack_a"):     # а не UniqueViolation template_active
         db.prepare(pg)
     assert pg.execute("SELECT count(*) FROM pack").fetchone()[0] == 0
@@ -132,7 +132,7 @@ def test_load_vocab_rejects_template_code_twice_before_writing(pg, monkeypatch, 
 # --- сведение ---
 
 def _prepare(pg, monkeypatch, *extra: Path) -> dict[str, dict]:
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join(str(p) for p in (CHECK, *extra)))
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join(str(p) for p in (CHECK, *extra)))
     db.prepare(pg)
     return templates.active(pg)
 
@@ -141,7 +141,7 @@ def test_active_reads_bodies_of_active_versions(pg, monkeypatch):
     active = _prepare(pg, monkeypatch)
     assert set(active) == {"has_label", "has_source", "has_value", "decision", "note", "parameter", "rule", "idea"}
     assert active["rule"]["version"] == "1.0.0" and active["rule"]["applies_to"] == "rule"
-    monkeypatch.delenv("AMEM_PACKS")
+    monkeypatch.delenv("AMEMO_PACKS")
     db.prepare(pg)
     assert set(templates.active(pg)) == {"has_label", "has_source", "has_value", "decision", "note", "parameter"}
 

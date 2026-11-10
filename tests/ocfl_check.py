@@ -46,7 +46,7 @@ def validate(root: Path) -> tuple[bool, str]:
 
 
 def object_path(root: Path, identifier: str) -> Path:
-    """Папка объекта по раскладке корня — как её вычисляет ocfl-py, независимо от amem.ocfl_store."""
+    """Папка объекта по раскладке корня — как её вычисляет ocfl-py, независимо от amemo.ocfl_store."""
     store = ocfl.StorageRoot(root=str(root))
     store.open_root_fs()
     store.check_root_structure()

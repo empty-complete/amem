@@ -1,6 +1,6 @@
 """Подготовка релиза на PyPI (.github/workflows/release.yml).
 
-    python tools/release.py versions [--tag vX.Y.Z]   версии amem и amem-web совпадают, amem[web] закреплён ровно
+    python tools/release.py versions [--tag vX.Y.Z]   версии amemo и amemo-web совпадают, amemo[web] закреплён ровно
                                                       на ней, метка релиза (если дана) её называет; печатает версию
     python tools/release.py readme REF                README.md для страницы PyPI: относительные ссылки и картинки
                                                       ведут на GitHub в состоянии REF (метка или коммит); строка
@@ -17,8 +17,8 @@ from pathlib import Path
 from packaging.version import Version
 
 ROOT = Path(__file__).resolve().parent.parent
-REPO = "https://github.com/empty-complete/amem"
-RAW = "https://raw.githubusercontent.com/empty-complete/amem"
+REPO = "https://github.com/empty-complete/amemo"
+RAW = "https://raw.githubusercontent.com/empty-complete/amemo"
 
 _VERSION = re.compile(r'^__version__ = "([^"]+)"$', re.M)
 _LOCAL = r"(?!https?:|#|mailto:|data:)"                       # ссылка внутри репозитория
@@ -35,17 +35,17 @@ def _version_of(path: Path) -> str:
 
 
 def versions(tag: str | None) -> str:
-    core = _version_of(ROOT / "amem" / "__init__.py")
-    web = _version_of(ROOT / "web" / "python" / "amem_web" / "__init__.py")
+    core = _version_of(ROOT / "amemo" / "__init__.py")
+    web = _version_of(ROOT / "web" / "python" / "amemo_web" / "__init__.py")
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     extra = pyproject["project"]["optional-dependencies"]["web"]
     problems = []
     if str(Version(core)) != core:
         problems.append(f"версия {core} не в канонической форме PEP 440 ({Version(core)})")
     if web != core:
-        problems.append(f"amem {core}, amem-web {web}: версии должны совпадать")
-    if extra != [f"amem-web=={core}"]:
-        problems.append(f"amem[web] = {extra}, нужно [\"amem-web=={core}\"]")
+        problems.append(f"amemo {core}, amemo-web {web}: версии должны совпадать")
+    if extra != [f"amemo-web=={core}"]:
+        problems.append(f"amemo[web] = {extra}, нужно [\"amemo-web=={core}\"]")
     if tag is not None and tag != f"v{core}":
         problems.append(f"метка {tag}, а версия {core}: нужна метка v{core}")
     if problems:

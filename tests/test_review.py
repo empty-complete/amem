@@ -8,8 +8,8 @@ import psycopg
 import pytest
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
-from amem import check, db, objects, records, review
-from amem.check import Proposal
+from amemo import check, db, objects, records, review
+from amemo.check import Proposal
 from check_support import CHECK_PACK, PDF, atom, entity, source_pdf
 
 AUTHOR = "model:writer"
@@ -20,8 +20,8 @@ PAGE2 = "Ветровой район II: w0 = 0,30 кПа"
 
 @pytest.fixture
 def kb(pg, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", str(CHECK_PACK))
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_PACKS", str(CHECK_PACK))
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
     monkeypatch.setattr(review, "AUDIT_RATE", 0.0)
     db.prepare(pg)
     return pg
@@ -565,7 +565,7 @@ def wait_locked(conn, app: str, n: int) -> None:
 def crossing(kb, hold, workers) -> list[BaseException]:
     """Третье соединение держит блокировку (hold — запросы в открытой транзакции); оба потока стартуют и встают
     в ожидание; затем блокировка отпускается. Ошибки потоков — в ответе."""
-    app = f"amem-cross-{time.monotonic_ns()}"
+    app = f"amemo-cross-{time.monotonic_ns()}"
     params = conninfo_to_dict(dsn_of(kb))
     dsn = make_conninfo(**{**params, "application_name": app})
     errors: list[BaseException] = []
