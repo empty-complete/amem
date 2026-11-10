@@ -173,3 +173,52 @@ def test_disappeared_unused_code_is_removed(pg, monkeypatch, tmp_path):
     monkeypatch.setattr(packs, "discover", lambda: [packs.CORE_PACK])
     db.load_vocab(pg)
     assert pg.execute("SELECT count(*) FROM concept WHERE origin = 'example'").fetchone()[0] == 0
+
+
+# --- дайджест пакета: одинаков при CRLF и на любой ОС ---
+
+def _old_digest(path: Path) -> str:
+    """Дайджест в прежнем виде (до учёта CRLF): для файлов с LF новый обязан совпадать с ним."""
+    import hashlib
+
+    digest = hashlib.sha256()
+    for file in sorted(p for p in path.rglob("*") if p.is_file() and p.suffix in (".yaml", ".md")):
+        digest.update(file.relative_to(path).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(file.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def test_pack_digest_is_the_same_with_crlf_line_endings(tmp_path):
+    """git в Windows с core.autocrlf=true выдаёт файлы пакета с CRLF: дайджест не должен расходиться с базой."""
+    copy = tmp_path / "core"
+    shutil.copytree(packs.CORE_PACK, copy)
+    lf = packs.load_pack(copy).digest
+    for file in copy.rglob("*"):
+        if file.is_file() and file.suffix in (".yaml", ".md"):
+            file.write_bytes(file.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+    assert packs.load_pack(copy).digest == lf
+
+
+def test_pack_digest_keeps_the_value_stored_in_existing_bases(tmp_path):
+    copy = tmp_path / "core"
+    shutil.copytree(packs.CORE_PACK, copy)
+    assert packs.pack_digest(copy) == _old_digest(copy) == packs.load_pack(packs.CORE_PACK).digest
+
+
+def test_pack_digest_orders_files_by_path_parts_not_by_platform_rules(tmp_path):
+    """WindowsPath сортирует без учёта регистра: README.md и pack.yaml шли бы в другом порядке, чем в Linux."""
+    one, two = tmp_path / "one", tmp_path / "two"
+    for folder in (one, two):
+        folder.mkdir()
+    (one / "README.md").write_text("про пакет\n", encoding="utf-8")
+    (one / "pack.yaml").write_text("name: x\n", encoding="utf-8")
+    (two / "pack.yaml").write_text("name: x\n", encoding="utf-8")
+    (two / "README.md").write_text("про пакет\n", encoding="utf-8")
+    assert packs.pack_digest(one) == packs.pack_digest(two)
+    import hashlib
+
+    expected = hashlib.sha256(b"README.md\0\xd0\xbf\xd1\x80\xd0\xbe \xd0\xbf\xd0\xb0\xd0\xba\xd0\xb5\xd1\x82\n\0"
+                              b"pack.yaml\0name: x\n\0").hexdigest()
+    assert packs.pack_digest(one) == expected
