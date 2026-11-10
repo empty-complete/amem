@@ -33,7 +33,7 @@ NOT_ENUM = {("status_log", "target"), ("search_document", "target"), ("search_co
             ("embedding", "target"), ("review_item", "target"), ("import_history", "target"),
             ("folder_log", "target"),
             ("object_text", "text_source"),     # откуда текст страницы в кэше — деталь хранения, не модели
-            ("task", "kind"), ("task", "state")}     # задачи агентам — состояние службы (контракт TaskView), не модели v1
+            ("task", "state")}     # задачи агентам — состояние службы (TaskView); kind из одного значения — не список
 
 # поля записей схемы, которых нет в теле ревизии, → где они хранятся (у концов связи — пара столбцов)
 RECORD_COLUMNS = {
