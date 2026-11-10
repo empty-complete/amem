@@ -9,6 +9,7 @@ import { markRange, scrollWithin } from "./mark";
 import { findQuote } from "./quote";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
+const ORIGINAL_KEY = "amem.pdf_original";
 
 type TextItem = { str: string; transform: number[]; width: number; height: number };
 
@@ -59,6 +60,22 @@ export default function PdfPage({
   const [state, setState] = useState<"loading" | "ok" | "missing" | "error">("loading");
 
   const [zoom, setZoom] = useState(false);
+  // «Как в файле» — выбор человека, запоминается: по умолчанию в тёмной теме страница перекрашена под палитру
+  // (как в читалках); кнопка видна только в тёмной теме (source.css)
+  const [original, setOriginal] = useState(() => {
+    try {
+      return window.localStorage.getItem(ORIGINAL_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleOriginal = () =>
+    setOriginal((o) => {
+      try {
+        window.localStorage.setItem(ORIGINAL_KEY, o ? "0" : "1");
+      } catch {}
+      return !o;
+    });
 
   useEffect(() => {
     const host = box.current;
@@ -141,7 +158,7 @@ export default function PdfPage({
   }, [url, page, quotes, zoom]);
 
   return (
-    <div className="pdf">
+    <div className="pdf" data-original={original || undefined}>
       {state === "missing" && <p className="pdf__note">{t("source.quote_missing")}</p>}
       {state === "error" && (
         <p className="pdf__note" role="alert">
@@ -149,6 +166,15 @@ export default function PdfPage({
         </p>
       )}
       <div className="pdf__tools">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="pdf__darkbtn"
+          aria-pressed={original}
+          onPress={toggleOriginal}
+        >
+          {t("source.original_colors")}
+        </Button>
         <Button size="sm" variant="ghost" aria-pressed={zoom} onPress={() => setZoom((z) => !z)}>
           {zoom ? t("source.zoom_fit") : t("source.zoom_in")}
         </Button>
