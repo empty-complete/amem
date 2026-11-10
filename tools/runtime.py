@@ -272,6 +272,11 @@ def cmd_model(work: Path, out: Path) -> None:
     for path in list(folder.iterdir()):
         if not path.name.startswith("models--"):
             shutil.rmtree(path) if path.is_dir() else path.unlink()
+    for link in [p for p in folder.glob("models--*/snapshots/**/*") if p.is_symlink()]:
+        # с правом на символьные ссылки (раннер — администратор) файлы снимка — ссылки в blobs: сделать их файлами
+        real = link.resolve(strict=True)
+        link.unlink()
+        shutil.copy2(real, link)
     for path in [p for p in folder.glob("models--*/*") if p.name in ("blobs", ".locks")]:
         shutil.rmtree(path)
     check = ("import sys\n"
