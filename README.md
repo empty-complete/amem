@@ -757,7 +757,7 @@ and the `commits` workflow (Conventional Commits in English); changes to `web/` 
 
 ## License
 
-GNU Affero General Public License v3.0 only (AGPL-3.0-only), see [LICENSE.txt](LICENSE.txt).
+GNU Affero General Public License v3.0 only (AGPL-3.0-only), see [LICENSE.txt](LICENSE.txt) and [NOTICE.txt](NOTICE.txt).
 © 2026 empty-complete.
 
 You may use, study, change and share amemo freely. If you distribute a modified version, or run one as a

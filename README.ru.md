@@ -753,7 +753,7 @@ issue, чтобы договориться о подходе. Каждый pull 
 
 ## Лицензия
 
-GNU Affero General Public License v3.0 (AGPL-3.0-only), см. [LICENSE.txt](LICENSE.txt).
+GNU Affero General Public License v3.0 (AGPL-3.0-only), см. [LICENSE.txt](LICENSE.txt) и [NOTICE.txt](NOTICE.txt).
 © 2026 empty-complete.
 
 amemo можно свободно использовать, изучать, менять и распространять. Кто распространяет изменённую версию или
