@@ -7,6 +7,8 @@
 
 `amemo install AGENT [--project DIR] [--dry-run]` ставит в Claude Code или Codex сервер MCP, хуки и навыки;
 `amemo uninstall AGENT [--project DIR] [--dry-run]` убирает ровно поставленное. Базы установщик не касается.
+`amemo install cowork [--out FILE]` собирает zip-плагин для Claude Cowork (amemo/agents/cowork.py): в аккаунт его
+загружает человек.
 """
 from __future__ import annotations
 
@@ -21,12 +23,16 @@ def register(sub, shared) -> None:
             run_hook)
     p.add_argument("event", metavar="СОБЫТИЕ", help="SessionStart, UserPromptSubmit или PreCompact")
 
-    for name, help_, run in (("install", "поставить amemo в агента: сервер MCP, хуки, навыки", run_install),
+    for name, help_, run in (("install", "поставить amemo в агента: сервер MCP, хуки, навыки (cowork — zip-плагин)",
+                              run_install),
                              ("uninstall", "убрать amemo из агента (только поставленное установщиком)",
                               run_uninstall)):
         p = add(sub, shared, name, help_, run)
-        p.add_argument("target", metavar="АГЕНТ", choices=("claude-code", "codex"), help="claude-code или codex")
+        p.add_argument("target", metavar="АГЕНТ", choices=("claude-code", "codex", "cowork"),
+                       help="claude-code, codex или cowork (zip-плагин для Claude Cowork)")
         p.add_argument("--project", metavar="DIR", type=Path, help="в проект DIR, а не глобально")
+        p.add_argument("--out", metavar="FILE", type=Path,
+                       help="cowork: путь к zip плагина (по умолчанию ~/amemo-plugin.zip)")
         p.add_argument("--dry-run", action="store_true", help="показать изменения, ничего не записывая")
 
 
@@ -45,11 +51,20 @@ def run_uninstall(ctx, args) -> int:
 
 
 def _run(ctx, args, *, remove: bool) -> int:
-    from ...agents import install
+    from ...agents import cowork, install
 
+    if args.target != "cowork" and args.out is not None:
+        raise CliError("--out — только для cowork", exit=USAGE, code="install")
+    if args.target == "cowork" and args.project is not None:
+        raise CliError("--project — не для cowork: плагин ставится в аккаунт, а не в проект", exit=USAGE,
+                       code="install")
     try:
-        do = install.uninstall if remove else install.install
-        report = do(args.target, ctx.env, args.project, dry_run=args.dry_run)
+        if args.target == "cowork":
+            do_plugin = cowork.remove if remove else cowork.build
+            report = do_plugin(ctx.env, args.out, dry_run=args.dry_run)
+        else:
+            do = install.uninstall if remove else install.install
+            report = do(args.target, ctx.env, args.project, dry_run=args.dry_run)
     except install.InstallError as e:
         raise CliError(str(e), exit=USAGE, code="install") from None
     except install.AgentCommandError as e:
