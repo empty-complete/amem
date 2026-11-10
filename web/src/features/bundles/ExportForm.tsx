@@ -6,6 +6,7 @@ import { api } from "../../api/client";
 import type { ApiError } from "../../api/errors";
 import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
+import { FileLink } from "../../ui/FileLink";
 import { Icon } from "../../ui/icons";
 
 type Status = components["schemas"]["Status"];
@@ -94,14 +95,14 @@ export function ExportForm() {
           })}
         </p>
         <div className="editor__foot">
-          <a className="pillbtn" href={res.download} download>
+          <FileLink className="pillbtn" href={res.download} download>
             {t("bundles.download")}
-          </a>
+          </FileLink>
           {res.report && (
-            <a className="navlink" href={res.report} target="_blank" rel="noreferrer">
+            <FileLink className="navlink" href={res.report} target="_blank" rel="noreferrer">
               <Icon name="external" />
               {t("bundles.report")}
-            </a>
+            </FileLink>
           )}
           <Button variant="ghost" onPress={() => setRes(null)}>
             {t("bundles.again")}

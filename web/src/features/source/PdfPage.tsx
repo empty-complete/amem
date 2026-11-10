@@ -5,6 +5,7 @@ import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy, TextLayer } fr
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { authHeaders } from "../../api/auth";
 import { markRange, scrollWithin } from "./mark";
 import { findQuote } from "./quote";
 
@@ -36,7 +37,7 @@ const open = (url: string) => {
   let p = docs.get(url);
   if (!p) {
     // pdf.js 6 не генерирует код во время выполнения — строгая CSP службы ему не мешает (e2e «csp»)
-    p = getDocument({ url, rangeChunkSize: 65536 }).promise;
+    p = getDocument({ url, rangeChunkSize: 65536, httpHeaders: authHeaders() }).promise;
     p.catch(() => docs.delete(url));
     docs.set(url, p);
   }

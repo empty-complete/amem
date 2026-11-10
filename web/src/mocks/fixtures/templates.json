@@ -250,7 +250,7 @@
       },
       {
         "key": "value",
-        "path": "content.values[0]",
+        "path": "content.values",
         "label": {
           "ru": "Значение",
           "en": "Value"
@@ -414,24 +414,6 @@
     "family": "object",
     "form": [
       {
-        "key": "part_of",
-        "path": "part_of",
-        "label": {
-          "ru": "Входит в",
-          "en": "Part of"
-        },
-        "type": "object",
-        "required": false,
-        "hint": null,
-        "scheme": null,
-        "property": null,
-        "unit": null,
-        "accepts": {
-          "entity_classes": ["artifact", "project"],
-          "kinds": []
-        }
-      },
-      {
         "key": "codes",
         "path": "codes",
         "label": {
@@ -483,7 +465,7 @@
         }
       },
       {
-        "key": "value",
+        "key": "relative_humidity",
         "path": "content.values[property=relative_humidity]",
         "label": {
           "ru": "Влажность",
@@ -498,7 +480,7 @@
         "accepts": null
       },
       {
-        "key": "when",
+        "key": "valid_from",
         "path": "valid_from",
         "label": {
           "ru": "Когда",

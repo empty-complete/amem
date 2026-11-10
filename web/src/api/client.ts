@@ -1,9 +1,16 @@
 import createClient, { type Middleware } from "openapi-fetch";
+import { auth, authHeaders } from "./auth";
 import { offlineError, problemFromResponse } from "./errors";
 import type { paths } from "./schema";
 
 const problems: Middleware = {
+  // общая служба: токен в каждом запросе (локальная — cookie, заголовка нет)
+  onRequest({ request }) {
+    for (const [k, v] of Object.entries(authHeaders())) request.headers.set(k, v);
+    return request;
+  },
   async onResponse({ response }) {
+    if (response.status === 401) auth.require();
     if (!response.ok) throw await problemFromResponse(response.clone());
     return response;
   },

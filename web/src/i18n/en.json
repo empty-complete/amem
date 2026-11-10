@@ -655,5 +655,15 @@
     "table": "Table",
     "table_scroll": "Table, scrollable",
     "table_empty": "No rows."
+  },
+  "signin": {
+    "title": "Sign in to the shared service",
+    "why": "This service is shared: sign in with a token from its owner (amemo token create). The token goes nowhere but this service.",
+    "token": "Token",
+    "remember": "Remember on this device",
+    "enter": "Sign in",
+    "rejected": "The token did not work: a typo, or it was revoked. Ask the owner for a new one.",
+    "leave": "Sign out",
+    "leave_hint": "The token will be erased from this device."
   }
 }

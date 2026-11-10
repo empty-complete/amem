@@ -1,6 +1,7 @@
 import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
 import { Folders } from "../app/shell/Folders";
+import { SignIn } from "../app/shell/SignIn";
 import { TopBar } from "../app/shell/TopBar";
 import { useKindsOpen } from "../features/kinds/store";
 import { UndoToasts } from "../features/write/UndoToast";
@@ -34,6 +35,7 @@ export const Route = createRootRoute({
       </div>
       <UndoToasts />
       <KindsLazy />
+      <SignIn />
     </div>
   ),
 });

@@ -5,6 +5,7 @@ import { lazy, Suspense, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { contentUrl } from "../../api/queries";
 import type { components } from "../../api/schema";
+import { FileLink } from "../../ui/FileLink";
 import { Icon, type IconName } from "../../ui/icons";
 import { RegionState } from "../../ui/RegionState";
 import { TextFragment } from "./TextFragment";
@@ -167,7 +168,7 @@ export function SourcePanel({
           {t("source.open_page")}
         </Link>
         {s.object_kind !== "web" && s.object_kind !== "message" && (
-          <a
+          <FileLink
             className="navlink"
             href={contentUrl(s.object, s.object_version)}
             target="_blank"
@@ -175,7 +176,7 @@ export function SourcePanel({
           >
             <Icon name="external" />
             {t("source.open_file")}
-          </a>
+          </FileLink>
         )}
       </footer>
     </aside>
