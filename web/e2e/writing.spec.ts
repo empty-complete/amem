@@ -36,14 +36,19 @@ test("N на странице объекта: вопрос из текста, з
   ).toBeVisible();
 });
 
-test("«Отменить» в окне — ничего не записано", async ({ page }) => {
+test("«Добавить заметку» у объекта: редактор с заголовком; брошенный — черновик «не записано»", async ({
+  page,
+}) => {
   await page.goto(`./entity/${E3}`);
   const add = page.getByRole("textbox", { name: "Добавить заметку" });
   await add.fill("Временная мысль");
   await add.press("Enter");
-  await page.getByRole("button", { name: "Отменить" }).click();
-  await page.waitForTimeout(WINDOW);
-  await expect(page.getByText("Временная мысль")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/new\?/);
+  await expect(page.getByRole("textbox", { name: "Заголовок" })).toHaveValue("Временная мысль");
+  await page.goto(`./entity/${E3}`);
+  const notes = page.getByRole("region", { name: "Заметки и решения" });
+  await expect(notes.getByText("Временная мысль")).toBeVisible();
+  await expect(notes.getByText("не записано")).toBeVisible();
 });
 
 test("пустое поле карточки — значение; «Принять» умолчание — полоса полноты растёт", async ({ page }) => {
@@ -66,6 +71,24 @@ test("правка своей записи: заголовок → новая р
   await page.waitForTimeout(WINDOW);
   await expect(page.getByRole("heading", { level: 1, name: "Проверить мачту после бури" })).toBeVisible();
   await expect(page.getByText("ревизия 2")).toBeVisible();
+});
+
+test("история: сравнить прежнюю ревизию с текущей и вернуть её новой ревизией", async ({ page }) => {
+  await page.goto(`./atom/${N1}`);
+  await page.getByRole("button", { name: /^Править, (⌘|Ctrl\+)E$/ }).click();
+  await page.getByRole("textbox", { name: "Заголовок" }).fill("Проверить мачту после бури");
+  await page.getByRole("main").getByRole("button", { name: "Записать" }).click();
+  await page.waitForTimeout(WINDOW);
+  await expect(page.getByRole("heading", { level: 1, name: "Проверить мачту после бури" })).toBeVisible();
+  await page.getByRole("button", { name: "История" }).click();
+  await page.getByRole("button", { name: "Сравнить с текущей" }).first().click();
+  await expect(page.locator(".hist del, .hist ins").first()).toBeVisible();
+  await page.getByRole("button", { name: "Вернуть эту ревизию" }).first().click();
+  await page.waitForTimeout(WINDOW);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Проверить крепление мачты после ветра" }),
+  ).toBeVisible();
+  await expect(page.getByText("ревизия 3")).toBeVisible();
 });
 
 test("запись модели — «Поставить на проверку» из меню «Ещё»", async ({ page }) => {

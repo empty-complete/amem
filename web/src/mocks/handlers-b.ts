@@ -62,10 +62,15 @@ export const handlersB = (pdf: () => Promise<ArrayBuffer>) => [
     const items = summaries(about);
     return HttpResponse.json({ items, total: items.length, next_cursor: null });
   }),
-  http.get("/api/v1/records/:ref", async ({ params }) => {
+  http.get("/api/v1/records/:ref", async ({ params, request }) => {
     await delay(100);
     const v = db.views[String(params.ref)];
-    return v ? HttpResponse.json(v) : problem(404, `Записи ${params.ref} нет`);
+    if (!v) return problem(404, `Записи ${params.ref} нет`);
+    // прежняя ревизия: её тело, остальное — записи (как у службы)
+    const n = Number(new URL(request.url).searchParams.get("revision") ?? v.revision);
+    if (n === v.revision) return HttpResponse.json(v);
+    const old = db.revisions[String(params.ref)]?.[n];
+    return old ? HttpResponse.json({ ...v, revision: n, payload: old }) : problem(404, `Ревизии ${n} нет`);
   }),
   http.get("/api/v1/records/:ref/history", ({ params }) =>
     HttpResponse.json(

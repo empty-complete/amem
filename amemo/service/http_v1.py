@@ -156,7 +156,7 @@ def list_records(request: Request) -> JSONResponse:
 
 def get_record(request: Request) -> JSONResponse:
     with connection(request) as conn:
-        return JSONResponse(api.record(conn, request.path_params["ref"]))
+        return JSONResponse(api.record(conn, request.path_params["ref"], revision=_q(request, "revision")))
 
 
 def get_history(request: Request) -> JSONResponse:

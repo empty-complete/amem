@@ -1,43 +1,40 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
-import { pickText, useText } from "../../ui/lang";
 import { RecordRow } from "../records/RecordList";
+import { draftKey, loadDraft, saveDraft } from "../write/drafts";
 import { infer } from "../write/infer";
-import { emptyDraft, toProposal } from "../write/proposal";
+import { emptyDraft } from "../write/proposal";
 import { usePending } from "../write/submitQueue";
-import { useSubmit } from "../write/useSubmit";
 
 const KINDS = new Set(["note", "decision", "question", "lesson"]);
 
-/** «Заметки и решения» у объекта: последняя строка — «Добавить заметку», как новая строка в Напоминаниях. */
+/** «Заметки и решения» у объекта: последняя строка — «Добавить заметку». Строка — только заголовок: Enter открывает
+ * полный редактор с ним, объектом и видом; в базу запись уходит по «Записать». Незаконченное — черновик в списке. */
 export function Notes({ entityRef }: { entityRef: string }) {
   const { t } = useTranslation();
-  const { lang } = useText();
   const list = useQuery(q.about(entityRef));
   const vocab = useQuery(q.vocab("kind"));
-  const templates = useQuery(q.templates("atom"));
   const pending = usePending().filter((p) => p.about.includes(entityRef) && KINDS.has(p.kind));
-  const submit = useSubmit();
+  const navigate = useNavigate();
   const [text, setText] = useState("");
+  const key = draftKey("new", entityRef);
+  const draft = loadDraft(key);
   const items = (list.data?.items ?? []).filter((r) => KINDS.has(r.kind_or_class));
   const add = () => {
     const i = infer(text, { properties: [] });
     if (!i.label) return;
     const kind = i.kind === "parameter" ? "note" : i.kind;
-    const tpl = templates.data?.find((x) => x.code === kind);
-    const d = {
+    saveDraft(key, {
       ...emptyDraft(kind),
       label: i.label,
       body: i.body,
       values: { about: [entityRef], tags: i.tags },
-    };
-    submit(
-      { proposals: [toProposal(d, tpl).proposal] },
-      { label: i.label, what: (pickText(tpl?.label, lang) || kind).toLowerCase(), kind, about: [entityRef] },
-    );
+    });
     setText("");
+    navigate({ to: "/new", search: { about: entityRef, kind } as never });
   };
   return (
     <section className="notes" aria-labelledby="notes-title">
@@ -46,6 +43,14 @@ export function Notes({ entityRef }: { entityRef: string }) {
         {items.map((r) => (
           <RecordRow key={r.ref} r={r} vocab={vocab.data} />
         ))}
+        {draft?.label && !pending.length && (
+          <li className="row row--pending">
+            <Link className="main" to="/new" search={{ about: entityRef, kind: draft.kind } as never}>
+              <span className="ttl">{draft.label}</span>
+            </Link>
+            <span className="muted">{t("card.unsaved")}</span>
+          </li>
+        )}
         {pending.map((p) => (
           <li key={p.id} className="row row--pending">
             <span className="main">

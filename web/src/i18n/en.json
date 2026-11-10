@@ -160,7 +160,11 @@
     "foot": "revision {{revision}}",
     "source_view": "Record source",
     "agent_view": "The record as the agent receives it",
-    "not_found": "No record {{ref}}"
+    "not_found": "No record {{ref}}",
+    "compare_now": "Compare with current",
+    "restore": "Restore this revision",
+    "restored": "restore of revision {{n}}",
+    "same_as_now": "Same as the current one"
   },
   "source": {
     "panel": "Source",
@@ -263,7 +267,8 @@
     "question_open": "question asked — open",
     "ask_whom": "ask: {{who}}",
     "when": "needed {{when}}",
-    "rule": "Rule of template {{rule}}"
+    "rule": "Rule of template {{rule}}",
+    "unsaved": "not saved"
   },
   "changes": {
     "title": "Changes",

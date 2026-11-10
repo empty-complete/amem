@@ -78,6 +78,14 @@ export const q = {
       queryKey: ["record", ref],
       queryFn: async () => data(await api.GET("/records/{ref}", { params: { path: { ref } } })),
     }),
+  /** Запись с прежней ревизией n: сравнение и «Вернуть эту ревизию». */
+  recordAt: (ref: string, n: number) =>
+    queryOptions({
+      queryKey: ["record", ref, "rev", n],
+      queryFn: async () =>
+        data(await api.GET("/records/{ref}", { params: { path: { ref }, query: { revision: n } } })),
+      staleTime: Infinity,
+    }),
   history: (ref: string) =>
     queryOptions({
       queryKey: ["history", ref],

@@ -1572,7 +1572,10 @@ export interface operations {
     };
     getRecord: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Показать эту ревизию (сравнение, возврат): тело, источники, автор и время — её; статус, папка и пункты — записи. Нет такой — 404 */
+                revision?: number;
+            };
             header?: never;
             path: {
                 ref: components["parameters"]["Ref"];

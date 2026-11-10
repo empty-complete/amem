@@ -40,3 +40,17 @@ Each PR: service tests where the service changes, unit and e2e on mocks, checks 
   the kind was inferred; the placeholder is shorter.
 - **Tests:** service `/tags` (counts, prefix with `#` and case, wildcard escaped, limit); unit for the quick-write
   suggestions and the kind reason.
+
+## PR C — note from an object, history
+
+- **Service:** `GET /api/v1/records/{ref}?revision=N` shows revision N: its body, sources, author and time; status,
+  folder and open items are the record's. No such revision — 404. History events carry only diffs, so the web
+  needs this to compare and restore.
+- **History:** older revisions get «Сравнить с текущей» (field diff, shared with Review) and, for a person,
+  «Вернуть эту ревизию» — the old body is sent as a new revision through the usual undo window; history is not
+  rewritten.
+- **«Добавить заметку» on an object:** the line is only a title; Enter saves a draft (title, object, inferred kind)
+  and opens the full editor; nothing reaches the base until «Записать». A left draft shows in the object's list as
+  «не записано» and opens the editor again.
+- **Tests:** service — revision view (1 = current, missing — 404, 0 — 400); unit — the object line opens `/new`
+  with a draft and writes nothing; e2e — edit, compare, restore as revision 3; an abandoned note stays a draft.

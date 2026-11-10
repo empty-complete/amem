@@ -162,6 +162,7 @@ function write(proposals: Proposal[], links: LinkP[]) {
       // правка своей записи — «проверено» (3c); записи модели — статус прежний (решение 11.11.2026)
       const kept = !String(v.agent).startsWith("person:");
       const status = kept ? v.status : "verified";
+      db.revisions[p.record_id] = { ...db.revisions[p.record_id], [v.revision]: v.payload };
       v.payload = p.payload as never;
       v.revision += 1;
       v.recorded_at = now;

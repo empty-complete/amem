@@ -491,3 +491,31 @@ a.pill:hover {
 .ctab tbody tr:last-child td {
   border-bottom: 0;
 }
+/* история: действия у прежней ревизии и сравнение под строкой во всю ширину */
+.hist__acts {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-md);
+}
+.hist li > .diff,
+.hist li > .region-msg,
+.hist li > p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.linkbtn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--link);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.linkbtn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}

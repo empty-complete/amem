@@ -60,6 +60,8 @@ function fresh() {
     reviewViews: clone(reviewViewsFx) as Record<string, (typeof reviewViewsFx)[keyof typeof reviewViewsFx]>,
     decisions: [] as { id: string; outcome: string; by: string; at: string }[],
     submits: 0,
+    /** Прежние тела записей по номеру ревизии: GET /records/{ref}?revision=n. */
+    revisions: {} as Record<string, Record<number, unknown>>,
   };
 }
 
@@ -74,7 +76,7 @@ const stored = () => {
 };
 
 /** В браузере состояние моков живёт в sessionStorage вкладки: переход по адресу его не теряет. */
-export const db = { ...(stored() ?? fresh()), reset() {}, save() {} };
+export const db = { ...fresh(), ...(stored() ?? {}), reset() {}, save() {} };
 db.reset = () => Object.assign(db, fresh());
 db.save = () => {
   try {

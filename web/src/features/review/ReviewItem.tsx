@@ -16,6 +16,7 @@ import { Properties } from "../record/Properties";
 import { kindLabel, recordPath } from "../records/RecordList";
 import { Sky } from "../sky/Sky";
 import { SourcePanel } from "../source/SourcePanel";
+import { DiffFields } from "./DiffFields";
 import { fieldDiff, wordDiff } from "./diff";
 import { REASON_ICON } from "./reasons";
 
@@ -75,27 +76,7 @@ function Diff({ v }: { v: View }) {
           </span>
         )}
       </h2>
-      <dl className="diff">
-        {changes.map((c) => (
-          <div key={c.field}>
-            <dt>{t(`review.field.${c.field}`, { defaultValue: c.field })}</dt>
-            <dd>
-              {c.pieces.map((p, i) =>
-                p.op === "same" ? (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: куски сравнения неизменны и упорядочены
-                  <span key={i}>{p.text}</span>
-                ) : p.op === "del" ? (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: куски сравнения неизменны и упорядочены
-                  <del key={i}>{p.text}</del>
-                ) : (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: куски сравнения неизменны и упорядочены
-                  <ins key={i}>{p.text}</ins>
-                ),
-              )}
-            </dd>
-          </div>
-        ))}
-      </dl>
+      <DiffFields changes={changes} />
     </section>
   );
 }
