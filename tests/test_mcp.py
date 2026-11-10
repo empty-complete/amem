@@ -61,13 +61,14 @@ def test_tools_list_matches_spec(env, kb, mode):
         async with connect(env, mode=mode) as client:
             tools = (await client.list_tools()).tools
         assert {t.name for t in tools} == set(mcp.TOOLS)
-        assert len(mcp.TOOLS) == 14
+        assert len(mcp.TOOLS) == 18
         for tool in tools:
             assert tool.description and len(tool.description) < 400, tool.name
         hints = {t.name: t.annotations.read_only_hint for t in tools}
         assert hints["amem_search"] and hints["amem_get"] and not hints["amem_submit"] and not hints["amem_move"]
         idempotent = {t.name for t in tools if t.annotations.idempotent_hint}
-        assert idempotent == {"amem_move", "amem_helpful", "amem_mark_object"}
+        assert idempotent == {"amem_move", "amem_helpful", "amem_mark_object", "amem_task_release", "amem_task_done"}
+        assert hints["amem_tasks"] and not hints["amem_task_claim"] and not hints["amem_task_done"]
         mark = next(t for t in tools if t.name == "amem_mark_object")
         assert "хранилище" in mark.description
         schema = {t.name: t.input_schema for t in tools}
@@ -298,6 +299,46 @@ def test_object_status_and_mark(env, base, kb):
             err, body = await call(client, "amem_mark_object", path="нет/такого.md", status="parsed")
             assert err
     sync(main)
+
+
+def test_task_from_http_claimed_and_done_through_mcp(http, env, kb, store, docs):
+    """Задачу ставят по HTTP, модель берёт и закрывает её через MCP, GET /tasks видит done."""
+    from amem import objects
+
+    client = http()
+    version = objects.ingest(kb, store, docs, "Заметки/узел.md", agent=PERSON)
+    made = client.post("/api/v1/tasks", json={"kind": "parse", "object": str(version.object_id),
+                                              "version": version.n, "note": "разобрать узел"})
+    assert made.status_code == 202, made.text
+    task_id = made.json()["task_id"]
+
+    async def main():
+        async with connect(env) as agent, connect(env, agent="model:other") as other:
+            err, listed = await call(agent, "amem_tasks")
+            assert not err and [t["id"] for t in listed["tasks"]] == [task_id]
+            assert listed["tasks"][0]["state"] == "open" and listed["tasks"][0]["note"] == "разобрать узел"
+            err, taken = await call(agent, "amem_task_claim", task=task_id)
+            assert not err and taken["task"]["state"] == "claimed" and taken["task"]["claimed_by"] == AGENT
+            err, body = await call(other, "amem_task_claim", task=task_id)
+            assert err and body["code"] == "task_claimed" and body["status"] == 409
+            err, none = await call(other, "amem_task_claim")
+            assert not err and none == {"task": None}                            # свободных нет
+            err, mine = await call(agent, "amem_tasks")
+            assert not err and [t["id"] for t in mine["tasks"]] == [task_id]     # своя взятая — в списке
+            err, foreign = await call(other, "amem_tasks")
+            assert not err and foreign["tasks"] == []
+            err, body = await call(other, "amem_task_release", task=task_id)
+            assert err and body["code"] == "task_claimed"
+            result = {"refs": ["atm:019a0000-0000-7000-8000-000000000001"], "note": "один атом"}
+            err, closed = await call(agent, "amem_task_done", task=task_id, result=result)
+            assert not err and closed["task"]["state"] == "done" and closed["task"]["result"] == result
+            err, body = await call(agent, "amem_task_done", task=task_id)
+            assert err and body["code"] == "task_closed"
+            err, body = await call(agent, "amem_task_claim", task="не-uuid")
+            assert err and body["code"] == "bad_request"
+    sync(main)
+    [view] = client.get("/api/v1/tasks").json()
+    assert (view["id"], view["state"], view["claimed_by"]) == (task_id, "done", AGENT)
 
 
 # --- /mcp службы ---

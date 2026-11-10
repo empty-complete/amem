@@ -291,6 +291,7 @@ amem становится программой, которой пользуют�
 | `amem_object_status(path)` и `amem_mark_object(path, status, note?)` | Что из документа уже атомизировано |
 | `amem_review_claim(reasons?)`, `amem_review_release(item)`, `amem_review_resolve(item, outcome, confidence, note?)` | Для смыслового проверяющего (навык `amem-verify`) |
 | `amem_vocab(scheme)` | Коды словаря с подписями |
+| `amem_tasks(object?, limit?)`, `amem_task_claim(task?, kind?)`, `amem_task_release(task)`, `amem_task_done(task, result?)` | Задачи агентам (разд. 6a.5): свободные и свои, взять с арендой (без `task` — самую старую свободную), вернуть, закрыть с итогом |
 
 **Задача сессии.** Сервер MCP при старте сессии (stdio — процесс, `/mcp` — сессия SDK) получает задачу `usefulness.session_activity(conn, "mcp:<id>")`. Её передают все поиски и отметки этой сессии. `amem_helpful` отмечает только атомы выдачи этой же сессии.
 
@@ -472,7 +473,8 @@ amem doctor                          проверка установки
 
 - **Таблица `task`** (миграция 0012): id (UUIDv7), `kind` (`parse`), объект и версия, `note`, `state` (`open | claimed | done | cancelled`), кто поставил и когда, кто взял и до какого времени (аренда 30 мин, как у очереди проверки), когда закрыта, `result` (что сделано — ссылки записей). Входит в счётчики бэкапа.
 - **Одна открытая задача на (kind, объект, версия).** Повтор `POST /tasks` возвращает тот же `task_id` (202).
-- **MCP:** `amem_tasks` (открытые и свои), `amem_task_claim`, `amem_task_release`, `amem_task_done` (с `result`). Истёкшую аренду берёт другой агент.
+- **MCP:** `amem_tasks` (открытые и свои), `amem_task_claim`, `amem_task_release`, `amem_task_done` (с `result`). Истёкшую аренду берёт другой агент: в списке такая задача — `open` без `claimed_by`; закрыть её тот, кто брал, может, пока её не взял другой.
+- **Ответы.** `GET /tasks` — `TaskView` контракта (без `limit`: до 500 задач по времени постановки). MCP отдаёт ещё `created_at`, `done_at` и `result`. Закрыть не взятую задачу — 400 `bad_request`.
 - **CLI:** `amem tasks list [--state]`, `amem tasks cancel ID`.
 
 ### 6a.6. Права

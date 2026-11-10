@@ -346,6 +346,23 @@ def get_review_stats(request: Request) -> JSONResponse:
         return JSONResponse(api.review_stats(conn, days=_q(request, "days")))
 
 
+# --- задачи агентам ---
+
+def list_tasks(request: Request) -> JSONResponse:
+    with connection(request) as conn:
+        return JSONResponse(api.task_list(conn, state=_q(request, "state"), object=_q(request, "object")))
+
+
+async def create_task(request: Request) -> JSONResponse:
+    """Поставить задачу (человек или модель; токен только для чтения — 403 у session.Guard): 202 и task_id, и при
+    повторе — тот же id незакрытой задачи."""
+    body = await _body(request)
+    made, _ = await _call(request, lambda conn: api.task_create(
+        conn, agent=request.state.agent, kind=body.get("kind"), object=body.get("object"),
+        version=body.get("version"), note=body.get("note")))
+    return JSONResponse(made, status_code=202)
+
+
 # --- submit ---
 
 async def submit(request: Request) -> JSONResponse:
@@ -680,6 +697,8 @@ ROUTES = [
     Route(f"{API}/review/items/{{id}}/resolve", resolve_review_item, methods=["POST"]),
     Route(f"{API}/review/enqueue", enqueue_review, methods=["POST"]),
     Route(f"{API}/review/stats", get_review_stats, methods=["GET"]),
+    Route(f"{API}/tasks", list_tasks, methods=["GET"]),
+    Route(f"{API}/tasks", create_task, methods=["POST"]),
     Route(f"{API}/submit", submit, methods=["POST"]),
     Route(f"{API}/vocab/{{scheme}}", get_vocab, methods=["GET"]),
     Route(f"{API}/templates", get_templates, methods=["GET"]),

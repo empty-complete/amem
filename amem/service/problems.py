@@ -5,7 +5,7 @@ by и at у review_closed; missing…); расширение не заменяе
 ValueError, поэтому перевод идёт от частного к общему одной цепочкой (to_problem): отказ проверки (api.CheckRejected)
 и RecordNotFound раньше RecordError (api.Missing — подборки нет — тоже 404; api.Ambiguous — текст указал не на
 одну запись — 409 ambiguous с candidates: путей с текстом вместо ссылки у службы нет, перевод — для CLI и MCP),
-коды ReviewError, FolderError, MineError и ObjectError раньше «прочего», EmbeddingError (503) раньше прочего ValueError —
+коды ReviewError, FolderError, MineError, TaskError и ObjectError раньше «прочего», EmbeddingError (503) раньше прочего ValueError —
 последней ступени перед 500: так библиотека отвечает на неверный ввод, и ответ — 400 с её сообщением.
 Необработанная ошибка — 500 internal: подробности уходят в журнал службы (logger amem.service), в ответе их нет.
 Недоступная база — 503 без строки соединения: в тексте ошибки psycopg бывают адрес и порт сервера; значение,
@@ -27,7 +27,7 @@ from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from .. import api, bundle, db, embed, mine, objects, records, review, vocab
+from .. import api, bundle, db, embed, mine, objects, records, review, tasks, vocab
 from ..canon import CanonError
 from ..check import CheckError
 from ..folders import FolderError
@@ -50,7 +50,8 @@ CODE_TITLES = {"read_only": "Только чтение", "review_closed": "Уж�
                "store_unavailable": "Хранилище копий недоступно", "timeout": "Запрос слишком долгий",
                "body_timeout": "Тело запроса не дошло", "quota_exceeded": "Нет места для подборок",
                "ambiguous": "Неоднозначно", "template_exists": "Код вида занят",
-               "template_in_use": "У вида есть записи", "template_invalid": "Вид не прошёл проверку"}
+               "template_in_use": "У вида есть записи", "template_invalid": "Вид не прошёл проверку",
+               "task_closed": "Задача уже закрыта", "task_claimed": "Задачу держит другой агент"}
 RESERVED = frozenset({"type", "title", "status", "code", "detail"})       # расширения их не заменяют
 REVIEW = {"closed": (409, "review_closed"), "forbidden": (403, "review_forbidden"),
           "claimed": (403, "review_forbidden"), "stale": (400, "review_bad"), "bad_outcome": (400, "review_bad"),
@@ -61,6 +62,8 @@ MINE = {"exists": (409, "template_exists"), "in_use": (409, "template_in_use"), 
         "not_found": (404, "not_found"), "forbidden": (403, "forbidden")}
 OBJECT = {"too_large": (413, "too_large"), "not_found": (404, "not_found"), "invalid": (400, "bad_request"),
           "path_taken": (409, "object_path_taken"), "docs_unavailable": (503, "docs_unavailable")}
+TASK = {"not_found": (404, "not_found"), "closed": (409, "task_closed"), "claimed": (409, "task_claimed"),
+        "forbidden": (403, "forbidden"), "invalid": (400, "bad_request")}
 HTTP = {404: "not_found", 405: "method_not_allowed"}
 
 
@@ -119,6 +122,9 @@ def to_problem(exc: BaseException) -> Problem:
     if isinstance(exc, mine.MineError):
         status, code = MINE.get(exc.code, (422, "template_invalid"))
         return Problem(status, code, message, **({"issues": exc.issues} if exc.issues else {}))
+    if isinstance(exc, tasks.TaskError):
+        status, code = TASK.get(exc.code, (400, "bad_request"))
+        return Problem(status, code, message)
     if isinstance(exc, bundle.BundleError):
         problem = Problem(422, exc.code or "bundle_invalid", message)
         problem.extra = dict(exc.details)        # ключи деталей — любые, в том числе detail и headers
@@ -166,8 +172,8 @@ async def handle(request: Request, exc: Exception) -> JSONResponse:
 # классы, которые ловит ExceptionMiddleware (поиск по MRO исключения); Exception — последний рубеж
 # (ServerErrorMiddleware): он отвечает 500 и передаёт исключение серверу дальше
 HANDLED = (Problem, api.CheckRejected, api.Ambiguous, api.Forbidden, api.ReadOnly, api.Missing, api.BadRequest,
-           records.RecordError, review.ReviewError, FolderError, mine.MineError, bundle.BundleError, objects.ObjectError,
-           CheckError,
+           records.RecordError, review.ReviewError, FolderError, mine.MineError, tasks.TaskError, bundle.BundleError,
+           objects.ObjectError, CheckError,
            db.BaseNameError, vocab.VocabError, CanonError, PackError, embed.EmbeddingError, api.StoreUnavailable,
            api.QuotaExceeded, psycopg.OperationalError, psycopg.DataError, HTTPException, ValueError, Exception)
 HANDLERS = {cls: handle for cls in HANDLED}

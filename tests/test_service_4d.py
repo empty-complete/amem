@@ -213,3 +213,56 @@ def test_list_objects(serve, pg, tmp_path):
     assert [i["original_name"] for i in found["items"]] == ["Акт.md"]
     problem(client.get(f"{V1}/objects", params={"limit": 0}), 400, "bad_request", "/objects")
     problem(client.get(f"{V1}/objects", params={"cursor": "мусор"}), 400, "bad_request", "/objects")
+
+
+# --- GET / POST /tasks (задача 21) ---
+
+def _file(client, name="Протокол.md") -> dict:
+    view = contract.check(_upload(client, name.encode(), name=name), "/objects", "post")
+    return {"kind": "parse", "object": view["id"], "version": view["versions"][-1]["n"]}
+
+
+def test_tasks_create_and_list(serve, pg, tmp_path):
+    docs = tmp_path / "d"
+    docs.mkdir()
+    person = _person(serve({"AMEM_DOCS": str(docs)}))
+    body = {**_file(person), "note": "разобрать протокол"}
+    contract.check_request(body, "/tasks", "post")
+    made = person.post(f"{V1}/tasks", json=body)
+    assert made.status_code == 202, made.text
+    task_id = contract.check(made, "/tasks", "post")["task_id"]
+    again = person.post(f"{V1}/tasks", json=body)
+    assert again.status_code == 202 and again.json()["task_id"] == task_id                # та же задача
+    model = serve({"AMEM_DOCS": str(docs)})
+    other = _file(model, "Акт.md")
+    by_model = model.post(f"{V1}/tasks", json=other)                                    # модель тоже ставит
+    assert by_model.status_code == 202, by_model.text
+    every = contract.check(person.get(f"{V1}/tasks"), "/tasks")
+    assert [t["id"] for t in every] == [task_id, by_model.json()["task_id"]]
+    first = every[0]
+    assert (first["state"], first["note"], first["created_by"], first["claimed_by"]) == \
+        ("open", "разобрать протокол", "person:ann", None)
+    assert every[1]["created_by"].startswith("model:")
+    only = contract.check(person.get(f"{V1}/tasks", params={"object": other["object"]}), "/tasks")
+    assert [t["object"] for t in only] == [other["object"]]
+    assert contract.check(person.get(f"{V1}/tasks", params={"state": "done"}), "/tasks") == []
+    problem(person.get(f"{V1}/tasks", params={"state": "busy"}), 400, "bad_request", "/tasks")
+    problem(person.get(f"{V1}/tasks", params={"object": "мусор"}), 400, "bad_request", "/tasks")
+    problem(person.post(f"{V1}/tasks", json={**body, "version": 9}), 404, "not_found", "/tasks", "post")
+    problem(person.post(f"{V1}/tasks", json={"kind": "parse", "object": body["object"]}), 400, "bad_request",
+            "/tasks", "post")
+    problem(person.post(f"{V1}/tasks", json={**body, "kind": "summarize"}), 400, "bad_request", "/tasks", "post")
+
+
+def test_tasks_read_only_token(serve, pg, tmp_path):
+    from test_service_core import tokens_file
+
+    docs = tmp_path / "d"
+    docs.mkdir()
+    body = _file(_person(serve({"AMEM_DOCS": str(docs)})))
+    path = tokens_file(tmp_path, ("t-read", "person:anna", False))
+    reader = serve({"AMEM_DOCS": str(docs), "AMEM_TOKENS": path})
+    reader.headers["Authorization"] = "Bearer t-read"
+    problem(reader.post(f"{V1}/tasks", json=body), 403, "read_only", "/tasks", "post")
+    assert contract.check(reader.get(f"{V1}/tasks"), "/tasks") == []
+    assert pg.execute("SELECT count(*) FROM task").fetchone()[0] == 0

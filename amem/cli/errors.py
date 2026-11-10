@@ -41,6 +41,8 @@ HINTS = {
     "review_closed": "открытые пункты: amem review list --state queued",
     "folder_exists": "дерево папок: amem folders tree",
     "folder_not_empty": "сначала перенесите записи и вложенные папки",
+    "task_closed": "незакрытые задачи: amem tasks list --state open",
+    "task_claimed": "задачу держит агент; отменить её может поставивший или человек: amem tasks cancel ID",
     "bundle_pack_missing": "загрузите в базу недостающие пакеты и повторите",
     "bundle_key_collision": "ключи записей подборки уже заняты в этой базе: смотрите collisions",
     "bundle_pack_conflict": "свои виды подборки расходятся со своими видами базы: смотрите collisions",
