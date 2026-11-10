@@ -257,14 +257,16 @@ def _new_props(conn: psycopg.Connection, body: dict) -> list[Concept]:
 
 
 def _gc_props(conn: psycopg.Connection) -> None:
-    """Убрать свойства mine, на которые больше не ссылается ни свой вид, ни текущая запись (qualifiers)."""
+    """Убрать свойства mine, на которые больше не ссылается ни свой вид, ни текущая запись, ни действующая связь
+    (у атома и у связи — qualifiers)."""
     used = {code for scheme, code in refs(conn) if scheme == "property"}
     for c in _props(conn):
         if c.code in used:
             continue
         in_records = conn.execute(
             "SELECT 1 FROM atom_current WHERE payload->'qualifiers' @> jsonb_build_array(jsonb_build_object("
-            "'property', %s::text)) LIMIT 1", (c.code,)).fetchone()
+            "'property', %s::text)) UNION ALL SELECT 1 FROM link WHERE retired_at IS NULL AND qualifiers @> "
+            "jsonb_build_array(jsonb_build_object('property', %s::text)) LIMIT 1", (c.code, c.code)).fetchone()
         if in_records is None:
             conn.execute("DELETE FROM concept WHERE scheme = 'property' AND code = %s AND origin = %s",
                          (c.code, NAME))

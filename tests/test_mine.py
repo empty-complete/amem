@@ -418,3 +418,32 @@ def test_bundle_with_my_property_lands_in_a_clean_base(kb, pg2, tmp_path):
     db.prepare(pg2)                                                   # и переживает пересборку
     assert _prop(pg2)[0] == "mine"
 
+
+def test_a_live_link_keeps_my_property(kb, store, docs):
+    """Свойство mine держит и действующая связь с qualifiers: удаление вида его не убирает."""
+    mine.put(kb, "inspection", inspection(), agent=PERSON)
+
+    def note(ref: str) -> dict:
+        return {"ref": ref, "kind": "note", "label": {"ru": f"Заметка {ref}"}, "summary_plain": {"ru": "Заметка."},
+                "body": {"ru": "Текст."}, "basis": "author"}
+
+    link = {"rel": "see_also", "src": "@a", "dst": "@b",
+            "qualifiers": [{"property": "what_found", "value_text": "одно и то же место"}]}
+    done = check.submit(kb, store, docs, [check.Proposal("atom", note("@a")), check.Proposal("atom", note("@b"))],
+                        [link], agent=PERSON)
+    assert done.state != "rejected", done.report["issues"]
+    mine.delete(kb, "inspection", agent=PERSON)
+    assert _prop(kb)[0] == "mine"
+
+
+def test_model_cannot_bring_my_property_by_import(kb, pg2, tmp_path):
+    """Новое свойство заводит только человек: импорт подборки от модели — отказ, свойства нет."""
+    mine.put(kb, "inspection", inspection(), agent=PERSON)
+    mine.write_pack(kb, tmp_path / "mine")
+    kinds = mine.read_pack(tmp_path / "mine")
+    db.prepare(pg2)
+    with pytest.raises(mine.MineError) as e:
+        mine.adopt(pg2, kinds, agent=MODEL)
+    assert e.value.code == "forbidden"
+    assert _prop(pg2) is None
+
