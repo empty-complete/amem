@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg
+import yaml
 from psycopg.types.json import Jsonb
 
 from . import canon, db, forms, packs
@@ -246,6 +247,13 @@ def _pack_version(conn: psycopg.Connection) -> str:
     return max(versions, key=_version) if versions else "0.0.0"
 
 
+def pack_row(conn: psycopg.Connection) -> dict:
+    """Последняя версия пакета mine в таблице pack: name, version, digest, requires (как у пакетов в манифесте)."""
+    version = _pack_version(conn)
+    digest = conn.execute("SELECT digest FROM pack WHERE name = %s AND version = %s", (NAME, version)).fetchone()
+    return {"name": NAME, "version": version, "digest": digest[0] if digest else "", "requires": {}}
+
+
 def _make_pack(version: str, concepts: list[Concept], bodies: list[dict]) -> packs.Pack:
     tpls = [Template.model_validate_json(json.dumps(b, ensure_ascii=False), strict=True) for b in bodies]
     return packs.Pack(name=NAME, version=version, path=Path(NAME), concepts=concepts, templates=tpls,
@@ -256,6 +264,27 @@ def _make_pack(version: str, concepts: list[Concept], bodies: list[dict]) -> pac
 def as_pack(conn: psycopg.Connection) -> packs.Pack:
     """Пакет mine, собранный из базы: понятия своих видов и их действующие шаблоны."""
     return _make_pack(_pack_version(conn), list(_concepts(conn).values()), templates(conn))
+
+
+def refs(conn: psycopg.Connection) -> set[tuple[str, str]]:
+    """Коды словарей, на которые ссылаются действующие шаблоны своих видов: (scheme, code) — классы сущностей и
+    типы селекторов правил, виды и классы связей, величины ui.fields и параметров профиля."""
+    out: set[tuple[str, str]] = set()
+    for body in templates(conn):
+        for rule in body.get("fields") or []:
+            out |= {("entity_class", c) for c in rule.get("entity_classes") or []}
+            out |= {("selector_type", c) for c in rule.get("selector_types") or []}
+        links = body.get("links") or {}
+        out |= {("rel", r) for r in links.get("allowed") or []}
+        for req in links.get("required") or []:
+            out.add(("rel", req["rel"]))
+            out |= {("entity_class", c) for c in req.get("to_classes") or []}
+        for p in body.get("parameters") or []:
+            out.add(("property", p["property"]))
+        for f in (body.get("ui") or {}).get("fields") or []:
+            if (m := packs.UI_PROPERTY.fullmatch(f["path"])) is not None:
+                out.add(("property", m.group(2)))
+    return out
 
 
 def _check(loaded: list[packs.Pack], version: str, concepts: list[Concept], bodies: list[dict]) -> None:
@@ -279,6 +308,54 @@ def _file_codes(loaded: list[packs.Pack]) -> tuple[dict[tuple[str, str], str], d
     return concepts, tpls
 
 
+def _save(conn: psycopg.Connection, concept: Concept, template: Template, loaded: list[packs.Pack]) -> bool:
+    """Записать понятие и шаблон своего вида в открытой транзакции под MINE_LOCK; True — что-то изменилось.
+
+    Тот же вид (понятие и тело шаблона без version) ничего не меняет; правка — следующая версия шаблона (номер
+    тела — если таких версий кода в template ещё нет) и новая версия пакета mine."""
+    code = concept.code
+    file_concepts, file_templates = _file_codes(loaded)
+    owner = file_templates.get(code) or file_concepts.get((concept.scheme, code))
+    row = conn.execute("SELECT origin FROM concept WHERE scheme = %s AND code = %s",
+                       (concept.scheme, code)).fetchone()
+    if owner is None and row is not None and row[0] != NAME:
+        owner = row[0]
+    if owner is not None:
+        raise MineError(f"код {code} уже занят видом пакета {owner}", code="exists")
+    other = conn.execute("SELECT scheme FROM concept WHERE code = %s AND origin = %s AND scheme <> %s "
+                         "AND scheme IN ('kind', 'entity_class')", (code, NAME, concept.scheme)).fetchone()
+    if other is not None:
+        raise MineError(f"вид {code} уже есть для {TARGETS[other[0]]}: target не меняется — удалите вид и "
+                        f"создайте заново", code="invalid",
+                        issues=[_issue(code, "target", f"вид {code} — {TARGETS[other[0]]}")])
+    concepts = _concepts(conn)
+    active = _active(conn)
+    body = template.model_dump(mode="json", exclude_none=True)
+    data = concept.model_dump(mode="json", exclude_none=True)
+    old = active.get(code)
+    if (old is not None and {**old, "version": ""} == {**body, "version": ""}
+            and concepts[code].model_dump(mode="json", exclude_none=True) == data):
+        return False
+    versions = [v for (v,) in conn.execute("SELECT version FROM template WHERE code = %s", (code,))]
+    if versions:
+        major, minor, patch = (_version(max(versions, key=_version)) + (0, 0, 0))[:3]
+        body["version"] = f"{major}.{minor}.{patch + 1}"
+    bodies = [b for c, b in active.items() if c != code] + [body]
+    try:
+        _check(loaded, _pack_version(conn), [*(c for k, c in concepts.items() if k != code), concept], bodies)
+    except packs.PackError as e:
+        raise MineError(f"вид {code}: {e}", code="invalid", issues=[_issue(code, "", str(e))]) from e
+    now = datetime.now(timezone.utc)
+    db._upsert_concept(conn, concept, NAME, now)
+    conn.execute("INSERT INTO template (code, version, target, applies_to, body, body_hash, loaded_at) "
+                 "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                 (code, body["version"], body["target"], code, Jsonb(body), canon.content_hash(body), now))
+    conn.execute("INSERT INTO template_active (code, version) VALUES (%s, %s) "
+                 "ON CONFLICT (code) DO UPDATE SET version = EXCLUDED.version", (code, body["version"]))
+    _bump(conn, now)
+    return True
+
+
 def put(conn: psycopg.Connection, code: str, draft, *, agent: str) -> dict:
     """Свой вид по черновику: новый — шаблон 1.0.0, правка — следующая версия шаблона; тот же черновик ничего не
     меняет. Пакет mine получает новую версию при каждой правке. Вернуть TemplateView вида."""
@@ -286,49 +363,115 @@ def put(conn: psycopg.Connection, code: str, draft, *, agent: str) -> dict:
     _person(agent, "правит")
     concept, template = build(conn, code, draft)
     loaded = packs.load_packs()
-    file_concepts, file_templates = _file_codes(loaded)
     with conn.transaction():
         conn.execute("SELECT pg_advisory_xact_lock(%s)", (db.MINE_LOCK,))
-        owner = file_templates.get(code) or file_concepts.get((concept.scheme, code))
-        row = conn.execute("SELECT origin FROM concept WHERE scheme = %s AND code = %s",
-                           (concept.scheme, code)).fetchone()
-        if owner is None and row is not None and row[0] != NAME:
-            owner = row[0]
-        if owner is not None:
-            raise MineError(f"код {code} уже занят видом пакета {owner}", code="exists")
-        other = conn.execute("SELECT scheme FROM concept WHERE code = %s AND origin = %s AND scheme <> %s "
-                             "AND scheme IN ('kind', 'entity_class')", (code, NAME, concept.scheme)).fetchone()
-        if other is not None:
-            raise MineError(f"вид {code} уже есть для {TARGETS[other[0]]}: target не меняется — удалите вид и "
-                            f"создайте заново", code="invalid",
-                            issues=[_issue(code, "target", f"вид {code} — {TARGETS[other[0]]}")])
-        concepts = _concepts(conn)
-        active = _active(conn)
-        body = template.model_dump(mode="json", exclude_none=True)
-        data = concept.model_dump(mode="json", exclude_none=True)
-        old = active.get(code)
-        unchanged = (old is not None and {**old, "version": ""} == {**body, "version": ""}
-                     and concepts[code].model_dump(mode="json", exclude_none=True) == data)
-        if not unchanged:
-            versions = [v for (v,) in conn.execute("SELECT version FROM template WHERE code = %s", (code,))]
-            if versions:
-                major, minor, patch = (_version(max(versions, key=_version)) + (0, 0, 0))[:3]
-                body["version"] = f"{major}.{minor}.{patch + 1}"
-            bodies = [b for c, b in active.items() if c != code] + [body]
-            try:
-                _check(loaded, _pack_version(conn), [*(c for k, c in concepts.items() if k != code), concept], bodies)
-            except packs.PackError as e:
-                raise MineError(f"вид {code}: {e}", code="invalid", issues=[_issue(code, "", str(e))]) from e
-            now = datetime.now(timezone.utc)
-            db._upsert_concept(conn, concept, NAME, now)
-            conn.execute("INSERT INTO template (code, version, target, applies_to, body, body_hash, loaded_at) "
-                         "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                         (code, body["version"], body["target"], code, Jsonb(body), canon.content_hash(body), now))
-            conn.execute("INSERT INTO template_active (code, version) VALUES (%s, %s) "
-                         "ON CONFLICT (code) DO UPDATE SET version = EXCLUDED.version", (code, body["version"]))
-            _bump(conn, now)
+        _save(conn, concept, template, loaded)
     [view] = forms.views(conn, target=TARGETS[concept.scheme], code=code)
     return view
+
+
+# --- пакет mine на диске и из подборки ---
+
+def _pack_kinds(pack: packs.Pack) -> list[tuple[Concept, Template]]:
+    """Свои виды пакета mine с диска: понятие вида и его шаблон; сначала классы сущностей — на них ссылаются виды
+    атомов (about). Пакет не по правилам «Моих видов» — MineError(invalid)."""
+    concepts = {c.code: c for c in pack.concepts}
+    kinds = []
+    for t in pack.templates:
+        c = concepts.pop(t.code, None)
+        where = f"пакет {pack.name}: шаблон {t.code}"
+        if c is None or c.scheme != SCHEMES.get(t.target):
+            raise MineError(f"{where}: нет понятия вида {SCHEMES.get(t.target, '?')}.{t.code}", code="invalid")
+        if not CODE.fullmatch(t.code) or t.applies_to != t.code:
+            raise MineError(f"{where}: код своего вида — [a-z][a-z0-9_]{{1,63}}, applies_to — тот же код",
+                            code="invalid")
+        family = getattr(c.family, "value", c.family)
+        if family not in (FAMILIES["atom"] if t.target == "atom" else (None,)):
+            raise MineError(f"{where}: семья вида {c.family!r} не по правилам {t.target}", code="invalid")
+        kinds.append((c, t))
+    if concepts:
+        raise MineError(f"пакет {pack.name}: понятия без шаблона: {', '.join(sorted(concepts))}", code="invalid")
+    return sorted(kinds, key=lambda k: (k[0].scheme != "entity_class", k[0].code))
+
+
+def read_pack(folder: Path) -> list[tuple[Concept, Template]]:
+    """Свои виды из папки пакета mine (packs/mine/ подборки): строгая проверка, как у пакета из файла."""
+    try:
+        pack = packs.load_pack(folder)
+    except packs.PackError as e:
+        raise MineError(f"пакет «Мои виды»: {e}", code="invalid") from e
+    if pack.name != NAME:
+        raise MineError(f"пакет «Мои виды»: имя {pack.name}, а не {NAME}", code="invalid")
+    return _pack_kinds(pack)
+
+
+def write_pack(conn: psycopg.Connection, folder: Path) -> packs.Pack:
+    """Записать пакет mine из базы в папку folder как обычный пакет: pack.yaml, vocab/<scheme>.yaml с понятиями
+    своих видов и templates/<code>.yaml с действующими шаблонами. Вернуть пакет."""
+    pack = as_pack(conn)
+    folder = Path(folder)
+    (folder / "vocab").mkdir(parents=True, exist_ok=True)
+    (folder / "templates").mkdir(exist_ok=True)
+
+    def dump(path: Path, data) -> None:
+        path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+    dump(folder / "pack.yaml", {"name": NAME, "version": pack.version,
+                                "title": "Мои виды", "description": "Свои виды, собранные из базы."})
+    for scheme in sorted({c.scheme for c in pack.concepts}):
+        dump(folder / "vocab" / f"{scheme}.yaml",
+             {"scheme": scheme, "concepts": [{k: v for k, v in c.model_dump(mode="json", exclude_none=True).items()
+                                              if k != "scheme"} for c in pack.concepts if c.scheme == scheme]})
+    for t in pack.templates:
+        dump(folder / "templates" / f"{t.code}.yaml", t.model_dump(mode="json", exclude_none=True))
+    return pack
+
+
+def compare(conn: psycopg.Connection, kinds: list[tuple[Concept, Template]]) -> tuple[list[str], list[str]]:
+    """Свои виды подборки против базы: (коды, которых в базе нет, — их добавит adopt; коллизии — тот же код с другим
+    содержимым или код, занятый пакетом из файла). Совпавшие виды (тело шаблона без version) — ни там, ни там."""
+    concepts, active = _concepts(conn), _active(conn)
+    rows = conn.execute("SELECT scheme, code, origin FROM concept WHERE scheme IN ('kind', 'entity_class') "
+                        "AND code = ANY(%s)", ([c.code for c, _ in kinds],)).fetchall()
+    taken = {(s, c): o for s, c, o in rows if o != NAME}
+    tpls = {c for (c,) in conn.execute("SELECT code FROM template_active WHERE code = ANY(%s)",
+                                       ([c.code for c, _ in kinds],))}
+    new, collisions = [], []
+    for c, t in kinds:
+        if (c.scheme, c.code) in taken or (c.code in tpls and c.code not in active):
+            owner = f"видом пакета {taken[(c.scheme, c.code)]}" if (c.scheme, c.code) in taken else "шаблоном пакета"
+            collisions.append(f"packs/mine: код своего вида {c.code} уже занят {owner}")
+            continue
+        if c.code not in concepts:
+            new.append(c.code)
+            continue
+        body = t.model_dump(mode="json", exclude_none=True)
+        if (concepts[c.code].model_dump(mode="json", exclude_none=True) != c.model_dump(mode="json", exclude_none=True)
+                or {**active.get(c.code, {}), "version": ""} != {**body, "version": ""}):
+            collisions.append(f"packs/mine: свой вид {c.code} в базе другой — переименуйте один из них")
+    return new, collisions
+
+
+def adopt(conn: psycopg.Connection, kinds: list[tuple[Concept, Template]], *, agent: str,
+          dry_run: bool = False) -> list[str]:
+    """Добавить в mine свои виды из подборки (read_pack), которых в базе нет; вернуть их коды. Вид с тем же кодом и
+    другим содержимым или код пакета из файла — MineError(exists). Идёт в транзакции вызывающего (или своей):
+    импорт пробует виды в транзакции, которую откатывает (dry_run — без проверки, что вливает человек)."""
+    db.require_autocommit(conn)
+    if not dry_run:
+        _person(agent, "добавляет")
+    loaded = packs.load_packs()
+    added = []
+    with conn.transaction():
+        conn.execute("SELECT pg_advisory_xact_lock(%s)", (db.MINE_LOCK,))
+        new, collisions = compare(conn, kinds)
+        if collisions:
+            raise MineError("; ".join(collisions), code="exists")
+        for concept, template in kinds:
+            if concept.code in new:
+                _save(conn, concept, template, loaded)
+                added.append(concept.code)
+    return added
 
 
 def delete(conn: psycopg.Connection, code: str, *, agent: str) -> None:

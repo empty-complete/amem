@@ -1073,7 +1073,8 @@
         "confidence_person",
         "bundle_pack_missing",
         "bundle_key_collision",
-        "bundle_object_conflict"
+        "bundle_object_conflict",
+        "bundle_pack_conflict"
       ],
       "title": "CheckCode",
       "type": "string"

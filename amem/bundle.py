@@ -40,7 +40,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
-from . import __version__, canon, lookup, model_v1, objects, packs, records, review
+from . import __version__, canon, lookup, mine, model_v1, objects, packs, records, review
 from .ids import uuid7
 from .ocfl_store import StoreError
 from .records import PREFIX, RecordError, Target
@@ -329,12 +329,19 @@ def _codes(atoms: list[dict], entities: list[dict], links: list[dict]) -> set[tu
 
 def _packs_used(conn, codes: set[tuple[str, str]]) -> tuple[list[dict], list[dict]]:
     """Пакеты-владельцы кодов (concept.origin) с зависимостями по requires и понятия агентов (origin = agent).
+    Пакет mine (свои виды) тянет и владельцев кодов, на которые ссылаются его шаблоны.
 
     Версия пакета — последняя загруженная: старые версии остаются в pack навсегда."""
-    schemes, values = [c[0] for c in sorted(codes)], [c[1] for c in sorted(codes)]
-    rows = conn.execute("SELECT c.origin, c.data FROM concept c JOIN unnest(%s::text[], %s::text[]) AS u(scheme, code) "
-                        "ON c.scheme = u.scheme AND c.code = u.code ORDER BY c.scheme, c.code",
-                        (schemes, values)).fetchall()
+    def owners(codes):
+        schemes, values = [c[0] for c in sorted(codes)], [c[1] for c in sorted(codes)]
+        return conn.execute("SELECT c.origin, c.data FROM concept c JOIN unnest(%s::text[], %s::text[]) "
+                            "AS u(scheme, code) ON c.scheme = u.scheme AND c.code = u.code ORDER BY c.scheme, c.code",
+                            (schemes, values)).fetchall()
+
+    rows = owners(codes)
+    if any(origin == mine.NAME for origin, _ in rows):
+        # пакет mine едет целиком: коды, на которые ссылаются его шаблоны (классы, величины), — тоже
+        rows = owners(codes | mine.refs(conn))
     agent_concepts = [data for origin, data in rows if origin == "agent"]
     names = {origin for origin, _ in rows if origin not in ("schema", "agent")} | {"core"}
     found: dict[str, dict] = {}
@@ -347,6 +354,8 @@ def _packs_used(conn, codes: set[tuple[str, str]]) -> tuple[list[dict], list[dic
         if missing:
             raise BundleError(f"пакеты {sorted(missing)} не загружены в базу — выполните prepare")
         names |= {dep for p in found.values() for dep in p["requires"]}
+    if mine.NAME in found:              # версия mine — наибольшая по номеру, а не по часам загрузки (как у as_pack)
+        found[mine.NAME] = mine.pack_row(conn)
     return [found[n] for n in sorted(found)], agent_concepts
 
 
@@ -384,11 +393,18 @@ def _copy_files(store, objects: list[dict], dst: Path) -> None:
                 raise BundleError(f"obj:{o['id']} версия {v['n']}: копия в хранилище не совпадает с digest базы")
 
 
-def _copy_packs(pack_rows: list[dict], dst: Path) -> None:
+def _copy_packs(conn, pack_rows: list[dict], dst: Path) -> None:
     """Копии папок пакетов (packs.discover); digest папки обязан совпасть с базой. Копируются файлы, по которым
-    считается digest (.yaml, .md), — у копии тот же digest."""
+    считается digest (.yaml, .md), — у копии тот же digest. Пакет «Мои виды» (mine) живёт в базе: его папка
+    собирается из базы (mine.write_pack) — понятия и действующие шаблоны своих видов."""
     by_name = {p.name: p for p in packs.load_packs()}
     for row in pack_rows:
+        if row["name"] == mine.NAME:
+            written = mine.write_pack(conn, dst / mine.NAME)
+            if written.version != row["version"]:
+                raise BundleError(f"пакет {mine.NAME}: версия сменилась во время экспорта ({row['version']} → "
+                                  f"{written.version}) — повторите экспорт")
+            continue
         loaded = by_name.get(row["name"])
         if loaded is None or loaded.version != row["version"] or loaded.digest != row["digest"]:
             raise BundleError(f"digest пакета {row['name']} {row['version']} в базе не совпадает с папкой пакета "
@@ -460,7 +476,7 @@ def export(conn: psycopg.Connection, *, store, folder: Path, selection: Selectio
         if with_files:
             _copy_files(store, object_rows, work / "objects" / "sha256")
         if with_packs:
-            _copy_packs(pack_rows, work / "packs")
+            _copy_packs(conn, pack_rows, work / "packs")
         manifest = {"format": FORMAT, "created_at": datetime.now(timezone.utc).isoformat(), "base_id": base_id[0],
                     "agent": agent, "amem_version": __version__, "selection": selection.as_json(),
                     "packs": pack_rows,
@@ -603,6 +619,7 @@ CONCEPT_SCHEMES = ("property",)              # понятия агентов, к
 SHAKY = ("fuzzy", "not_found", "unresolved", "no_text", "error")     # итоги своей сверки — предупреждение
 UNCONFIRMED = ("fuzzy", "not_found", "no_file")   # своя сверка атома не подтвердила место — запись на проверку
 _NAME = re.compile(r"@b\d+")
+PACK_CONFLICT = "bundle_pack_conflict"   # свой вид подборки (packs/mine) с тем же кодом и другим содержимым
 # коды отказа импорта без своего CheckCode: в отчёт amem.check/1 они не попадают, это коды BundleError.code
 DAMAGED = "bundle_damaged"          # нет части или sha256 не совпал с манифестом
 LEVEL1 = "bundle_level1"            # тела не прошли уровень 1 (details["report"] — отчёт amem.check/1)
@@ -615,7 +632,9 @@ class Imported:
     """Ответ импорта: пакет изменений (None — ничего не записано: dry_run или всё совпало), счётчики по действиям
     (created, unchanged, pending, skipped; links — новые связи; objects — новые объекты), пункты очереди,
     предупреждения, коллизии ключей и id связей (только у dry_run: без него коллизия — отказ), отчёт уровня 1
-    (amem.check/1; у dry_run — всегда, иначе при записи он без ошибок) и complete — очередь пуста и отказа нет."""
+    (amem.check/1; у dry_run — всегда, иначе при записи он без ошибок), complete — очередь пуста и отказа нет, и
+    kinds — коды своих видов (пакет mine подборки), которых в базе не было: импорт их добавил (у dry_run — добавит);
+    тогда же в counts есть kinds — их число."""
     changeset_id: uuid.UUID | None
     counts: dict[str, int]
     queued: list[dict] = field(default_factory=list)
@@ -623,6 +642,7 @@ class Imported:
     collisions: list[str] = field(default_factory=list)
     report: dict | None = None
     complete: bool = True
+    kinds: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -661,12 +681,17 @@ def _read_jsonl(root: Path, name: str) -> list[dict]:
     return rows
 
 
-def _check_packs(conn, manifest: dict, root: Path, folder: Path) -> None:
-    """Пакеты подборки загружены с теми же name, version, digest; иначе — отказ со списком и подсказкой."""
+def _check_packs(conn, manifest: dict, root: Path, folder: Path) -> list[tuple]:
+    """Пакеты подборки загружены с теми же name, version, digest; иначе — отказ со списком и подсказкой.
+
+    Пакет «Мои виды» (mine) живёт в базе, а не в AMEM_PACKS: с папкой packs/mine/ (with_packs) его виды
+    сверяются с базой по содержимому, и ответ — эти виды (mine.read_pack) для _plan_mine; без папки он есть, если в
+    базе была версия mine с тем же digest (та же база или те же свои виды)."""
     have = {(n, v): d for n, v, d in conn.execute("SELECT name, version, digest FROM pack")}
     latest = dict(conn.execute("SELECT DISTINCT ON (name) name, version FROM pack "
                                "ORDER BY name, loaded_at DESC, version DESC").fetchall())
     missing, names = [], []
+    kinds: list[tuple] = []
     for p in manifest["packs"]:
         if not isinstance(p, dict):
             raise BundleError(f"{folder.name}/manifest.json: пакет {p!r} — не объект")
@@ -674,13 +699,28 @@ def _check_packs(conn, manifest: dict, root: Path, folder: Path) -> None:
         got = have.get((name, version))
         if got is not None and got == digest:
             continue
+        if name == mine.NAME:
+            if (root / "packs" / mine.NAME / "pack.yaml").is_file():
+                try:
+                    kinds = mine.read_pack(root / "packs" / mine.NAME)
+                except mine.MineError as e:
+                    raise BundleError(f"{folder.name}: {e}") from e
+                continue
+            if digest in {d for (n, _), d in have.items() if n == mine.NAME}:
+                continue
+            missing.append(f"{name} {version} (свои виды базы-источника: экспортируйте подборку с пакетами — "
+                           f"with_packs)")
+            continue
         why = ("загружен с другим digest" if got is not None else
                f"загружена версия {latest[name]}" if name in latest else "не загружен")
         missing.append(f"{name} {version} ({why})")
         names.append(name)
     if not missing:
-        return
+        return kinds
     bundled = [n for n in names if isinstance(n, str) and (root / "packs" / n / "pack.yaml").is_file()]
+    if not names:                                        # недостаёт только своих видов: AMEM_PACKS не поможет
+        raise BundleError("не загружены пакеты подборки: " + "; ".join(missing), code="bundle_pack_missing",
+                          missing=missing)
     if bundled and folder.suffix == ".zip":
         hint = "; пакеты лежат в подборке (packs/): распакуйте её, добавьте их папки в AMEM_PACKS и выполните prepare"
     elif bundled:
@@ -1142,8 +1182,14 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
     а принятое до отказа своими транзакциями остаётся, как после ingest: объекты с копиями (копия файла —
     содержимое, а не утверждение), пункты source_changed, которые adopt поставил для новой версии известного
     объекта, кэш текста (object_text) и строка агента. Повторный импорт примет объекты как есть (adopt идемпотентен)
-    и запишет остальное. Коды отказа: bundle_damaged (DAMAGED), bundle_pack_missing, bundle_object_conflict,
-    bundle_key_collision, bundle_level1 (LEVEL1); ошибка самих данных строки (не JSON, неверный хэш тела) — без кода.
+    и запишет остальное. Коды отказа: bundle_damaged (DAMAGED), bundle_pack_missing, bundle_pack_conflict
+    (PACK_CONFLICT), bundle_object_conflict, bundle_key_collision, bundle_level1 (LEVEL1); ошибка самих данных строки
+    (не JSON, неверный хэш тела) — без кода.
+
+    Свои виды (пакет mine, подпроект 4, разд. 6a.3): с папкой packs/mine/ виды, которых в базе нет, добавляются в
+    mine той же транзакцией записи, раньше записей (вливает только человек — иначе MineError(forbidden));
+    уровень 1 видит их в пробной транзакции с откатом. Тот же код с другим содержимым или код пакета из файла —
+    коллизия в collisions (у dry_run) или отказ bundle_pack_conflict; dry_run показывает добавляемые виды в kinds.
 
     Блокировка — как у submit и ingest (разд. 7.5 спецификации 3): исключительная блокировка объектов
     (OBJECTS_LOCK) берётся только на время приёма одного объекта — его строк и копий, как у objects.ingest; своя
@@ -1171,7 +1217,7 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
         if damaged:
             raise BundleError(f"{folder.name}: повреждены части подборки: {', '.join(damaged)}", code=DAMAGED,
                               damaged=damaged)
-        _check_packs(conn, manifest, root, folder)
+        kinds = _check_packs(conn, manifest, root, folder)
         own = conn.execute("SELECT value FROM meta WHERE key = 'base_id'").fetchone()
         if own is None:
             raise BundleError("у базы нет base_id — выполните prepare")
@@ -1184,7 +1230,9 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
         files = {f"sha256:{PurePosixPath(n).name}": root / n for n in manifest["parts"]
                  if n.startswith("objects/sha256/")}
         warnings: list[str] = []
-        collisions: list[str] = []
+        new_kinds, pack_collisions = mine.compare(conn, kinds) if kinds else ([], [])
+        kinds = [k for k in kinds if k[0].code in new_kinds]
+        collisions: list[str] = list(pack_collisions)
         adopt, vmap, new_objects = _plan_objects(conn, store, object_rows, _referenced(recs), files, warnings)
         person = agent.startswith("person:")
         for rec in recs:
@@ -1193,10 +1241,18 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
         new_links, retire = _plan_links(conn, link_rows, warnings, collisions)
         counts = {a: sum(r.action == a for r in recs) for a in ("created", "unchanged", "pending", "skipped")}
         counts |= {"links": len(new_links), "objects": new_objects}
-        report, names = _level1(conn, recs, new_links)
+        if kinds or pack_collisions:
+            counts["kinds"] = len(new_kinds)
+        report, names = _level1_with_kinds(conn, recs, new_links, kinds, agent=agent)
         if dry_run:
             return Imported(None, counts, warnings=warnings, collisions=collisions, report=_report_json(report, names),
-                            complete=not collisions and not report.has_violations())
+                            complete=not collisions and not report.has_violations(), kinds=new_kinds)
+        if pack_collisions:
+            raise BundleError("свои виды подборки расходятся с базой: " + "; ".join(pack_collisions),
+                              code=PACK_CONFLICT, collisions=pack_collisions)
+        if kinds and not person:
+            raise mine.MineError(f"свои виды из подборки ({', '.join(new_kinds)}) добавляет только человек (person:), "
+                                 f"а не {agent}", code="forbidden")
         if collisions:
             raise BundleError("коллизии ключей и id связей: " + "; ".join(collisions), code="bundle_key_collision",
                               collisions=collisions)
@@ -1224,6 +1280,8 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
                                   "принятые объекты остаются") from e
         try:
             with conn.transaction():
+                if kinds:                                    # свои виды — до записей: записи их видов проверяются
+                    _adopt_kinds(conn, kinds, agent=agent)
                 cs, queued = _write(conn, recs, new_links, retire, object_rows, concepts, history, vmap, warnings,
                                     agent=agent, origin_base=origin_base,
                                     reason=f"import {origin_base} {manifest['created_at']}")
@@ -1238,7 +1296,38 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
             raise BundleError(f"подборка не записана: {e.diag.message_primary}",
                               code="bundle_key_collision" if taken else None) from e
     return Imported(cs, counts, queued=queued, warnings=warnings, report=_report_json(report, names),
-                    complete=not queued)
+                    complete=not queued, kinds=new_kinds)
+
+
+class _Trial(Exception):
+    """Откат пробной транзакции: свои виды подборки видны только уровню 1."""
+
+
+def _adopt_kinds(conn, kinds: list[tuple], *, agent: str, dry_run: bool = False) -> None:
+    """Свои виды подборки — в mine (mine.adopt); вид, который не встаёт в эту базу, — bundle_pack_conflict."""
+    try:
+        mine.adopt(conn, kinds, agent=agent, dry_run=dry_run)
+    except mine.MineError as e:
+        if e.code == "forbidden":
+            raise
+        raise BundleError(f"свои виды подборки не встают в базу: {e}", code=PACK_CONFLICT,
+                          collisions=[str(e)]) from e
+
+
+def _level1_with_kinds(conn, recs: list[_Rec], links: list[dict], kinds: list[tuple], *, agent: str):
+    """Уровень 1 так, как будто новые свои виды подборки уже в mine: виды добавляются в транзакции, которую
+    уровень 1 откатывает, — до записи (и у dry_run) в базе их нет."""
+    if not kinds:
+        return _level1(conn, recs, links)
+    out = None
+    try:
+        with conn.transaction():
+            _adopt_kinds(conn, kinds, agent=agent, dry_run=True)
+            out = _level1(conn, recs, links)
+            raise _Trial
+    except _Trial:
+        pass
+    return out
 
 
 def _write(conn, recs: list[_Rec], new_links: list[dict], retire: list[uuid.UUID], object_rows: list[dict],

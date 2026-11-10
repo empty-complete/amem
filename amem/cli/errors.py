@@ -18,7 +18,7 @@ BY_CODE = {
     "ambiguous": AMBIGUOUS,
     "check_rejected": REJECTED,
     "review_closed": CONFLICT, "folder_exists": CONFLICT, "folder_not_empty": CONFLICT,
-    "bundle_key_collision": CONFLICT,
+    "bundle_key_collision": CONFLICT, "bundle_pack_conflict": CONFLICT,
     "bundle_pack_missing": ENV,           # в базе нет пакета, на который опирается подборка: окружение получателя
     "db_unavailable": ENV, "store_unavailable": ENV, "semantic_unavailable": ENV, "timeout": ENV,
     "quota_exceeded": ENV, "internal": ENV,
@@ -43,6 +43,7 @@ HINTS = {
     "folder_not_empty": "сначала перенесите записи и вложенные папки",
     "bundle_pack_missing": "загрузите в базу недостающие пакеты и повторите",
     "bundle_key_collision": "ключи записей подборки уже заняты в этой базе: смотрите collisions",
+    "bundle_pack_conflict": "свои виды подборки расходятся со своими видами базы: смотрите collisions",
     "semantic_unavailable": "смысловой поиск: AMEM_BACKEND и модель (amem doctor)",
     "backup": "клиент PostgreSQL 18 — в AMEM_PG_BIN или PATH; восстановление — только в пустую базу",
     "tokens": "задайте AMEM_TOKENS — путь к файлу токенов, например ~/.config/amem/amem-tokens.toml",

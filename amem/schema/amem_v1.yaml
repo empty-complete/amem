@@ -279,6 +279,8 @@ enums:
         annotations: {label_ru: "ключ занят", label_en: "bundle key collision", definition_ru: "key записи подборки принадлежит другой записи, или id связи подборки занят связью с другими rel или концами."}
       bundle_object_conflict:
         annotations: {label_ru: "объект не сопоставлен", label_en: "bundle object conflict", definition_ru: "Файл подборки известен базе под другим id лишь частично: не все версии, на которые ссылаются источники, найдены по digest, или версии ведут на разные локальные объекты."}
+      bundle_pack_conflict:
+        annotations: {label_ru: "свой вид расходится", label_en: "bundle pack conflict", definition_ru: "Свой вид подборки (пакет mine) с тем же кодом, что в базе, но с другим содержимым, или код, занятый пакетом из файла."}
 
   ReviewReason:
     description: Почему запись попала в очередь проверки.

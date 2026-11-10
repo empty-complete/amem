@@ -17,6 +17,7 @@ UTF8: миграции и данные в UTF-8, имена и пути объе
 """
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import unicodedata
 from datetime import datetime, timezone
@@ -96,6 +97,21 @@ def _upsert_concept(conn, c, origin: str, now: datetime) -> None:
         (c.scheme, c.code, Jsonb(data), origin, now))
 
 
+def _check_mine(conn: psycopg.Connection, loaded: list[packs.Pack]) -> None:
+    """Свои виды — вместе с новыми пакетами-файлами, той же проверкой, что при правке вида (mine._check): из пакета
+    исчезла величина или класс, на которые ссылается свой вид, — MigrationError с кодом вида, а не тихий пропуск.
+    Каждый вид проверяется отдельно (шаблоны mine не наследуют друг друга), чтобы назвать именно его."""
+    from . import mine                          # mine импортирует db: локальный импорт
+
+    pack = mine.as_pack(conn)
+    for t in pack.templates:
+        try:
+            packs._check_templates([*loaded, dataclasses.replace(pack, templates=[t])])
+        except packs.PackError as e:
+            raise MigrationError(f"свой вид {t.code} («Мои виды») не сходится с пакетами: {e} — верните код в пакет "
+                                 f"или поправьте свой вид {t.code}") from e
+
+
 def load_vocab(conn: psycopg.Connection) -> None:
     """Пакеты домена — в таблицы pack, concept и template; служебные перечни схемы — в concept.
 
@@ -104,7 +120,9 @@ def load_vocab(conn: psycopg.Connection) -> None:
     - пакет с тем же именем и версией уже загружен с другим содержимым — поднимите версию;
     - шаблон с той же code и version, но другим содержимым — поднимите version;
     - из пакета исчез код, которым пользуются записи, — внешний ключ не даёт удалить понятие;
-    - пакет из файла принёс код своего вида («Мои виды», amem/mine.py) — переименуйте одно из двух.
+    - пакет из файла принёс код своего вида («Мои виды», amem/mine.py) — переименуйте одно из двух;
+    - пакет из файла потерял код (величину, класс сущности), на который ссылается свой вид, — ошибка с кодом вида;
+    - пакет из файла называется mine — имя занято пакетом своих видов в базе.
 
     Свои виды переживают пересборку: понятия origin = 'mine' не считаются осиротевшими, а их шаблоны (последняя
     версия каждого кода) возвращаются в template_active.
@@ -116,6 +134,9 @@ def load_vocab(conn: psycopg.Connection) -> None:
         for c in packs.service_concepts():
             _upsert_concept(conn, c, "schema", now)
         loaded = packs.load_packs()
+        if any(p.name == MINE for p in loaded):
+            raise MigrationError(f"пакет из файла с именем {MINE}: имя занято пакетом своих видов в базе («Мои виды») — "
+                                 f"уберите его из AMEM_PACKS (свои виды из подборки вливает импорт)")
         mine = {code: scheme for scheme, code in conn.execute(
             "SELECT scheme, code FROM concept WHERE origin = %s AND scheme IN ('kind', 'entity_class')", (MINE,))}
         for p in loaded:
@@ -124,6 +145,8 @@ def load_vocab(conn: psycopg.Connection) -> None:
             if clash:
                 raise MigrationError(f"пакет {p.name}: код {', '.join(clash)} уже занят своим видом («Мои виды») — "
                                      f"переименуйте вид пакета или удалите свой вид")
+        if mine:
+            _check_mine(conn, loaded)
         for p in loaded:
             row = conn.execute("SELECT digest FROM pack WHERE name = %s AND version = %s",
                                (p.name, p.version)).fetchone()

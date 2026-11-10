@@ -207,3 +207,88 @@ def test_model_cannot_put_or_delete(kb):
         mine.delete(kb, "weighing", agent=MODEL)
     assert e.value.code == "forbidden"
     assert _versions(kb) == ("1.0.0", "0.0.1")
+
+
+def _pack_copy(tmp_path, src: Path, version: str, drop: str) -> Path:
+    """Копия тестового пакета с новой версией и без понятия drop."""
+    root = tmp_path / src.name
+    for file in src.rglob("*.yaml"):
+        target = root / file.relative_to(src)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        data = yaml.safe_load(file.read_text(encoding="utf-8"))
+        if file.name == "pack.yaml":
+            data["version"] = version
+        elif isinstance(data, dict) and "concepts" in data:
+            data["concepts"] = [c for c in data["concepts"] if c["code"] != drop]
+        target.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    return root
+
+
+def test_file_pack_losing_a_property_of_my_kind_is_refused(kb, tmp_path, monkeypatch):
+    """Из пакета-файла исчезла величина, на которую ссылается свой вид: понятная ошибка с кодом вида."""
+    mine.put(kb, "weighing", draft(), agent=PERSON)
+    monkeypatch.setenv("AMEM_PACKS", str(_pack_copy(tmp_path, PACKS / "quantities", "1.0.1", "mass")))
+    with pytest.raises(db.MigrationError, match="свой вид weighing") as e:
+        db.prepare(kb)
+    assert "mass" in str(e.value)
+    # всё откатилось: величина и свой вид на месте
+    assert kb.execute("SELECT count(*) FROM concept WHERE scheme = 'property' AND code = 'mass'").fetchone()[0] == 1
+    assert _versions(kb) == ("1.0.0", "0.0.1")
+
+
+def test_file_pack_losing_a_class_of_my_kind_is_refused(kb, tmp_path, monkeypatch):
+    """Класс сущности из accepts своего вида исчез вместе с пакетом-файлом — та же ошибка, а не тихий пропуск."""
+    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(PACKS / "ontology")]))
+    db.prepare(kb)
+    form = [{"key": "about", "path": "about", "label": {"ru": "Датчик"}, "type": "object",
+             "accepts": {"entity_classes": ["sensor"], "kinds": []}}]
+    mine.put(kb, "gauge_reading", draft(form=form), agent=PERSON)
+    monkeypatch.setenv("AMEM_PACKS", str(PACKS / "quantities"))
+    with pytest.raises(db.MigrationError, match="свой вид gauge_reading") as e:
+        db.prepare(kb)
+    assert "sensor" in str(e.value)
+    assert kb.execute("SELECT origin FROM concept WHERE scheme = 'entity_class' AND code = 'sensor'").fetchone() == (
+        "ontology",)
+
+
+def test_file_pack_named_mine_is_refused(kb, tmp_path, monkeypatch):
+    root = tmp_path / "mine"
+    root.mkdir()
+    (root / "pack.yaml").write_text("name: mine\nversion: 9.0.0\n", encoding="utf-8")
+    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(root)]))
+    with pytest.raises(db.MigrationError, match="mine"):
+        db.prepare(kb)
+
+
+def test_write_pack_and_read_it_back(kb, tmp_path):
+    """Пакет mine на диске — обычный пакет: читается packs.load_pack, свои виды — те же."""
+    mine.put(kb, "weighing", draft(), agent=PERSON)
+    form = [{"key": "codes", "path": "codes", "label": {"ru": "Марки"}, "type": "tags"}]
+    mine.put(kb, "rig", draft(target="entity", family="object", form=form, widgets=["children"]), agent=PERSON)
+    pack = mine.write_pack(kb, tmp_path / "mine")
+    assert (tmp_path / "mine" / "pack.yaml").is_file() and (tmp_path / "mine" / "templates" / "weighing.yaml").is_file()
+    assert {p.name for p in (tmp_path / "mine" / "vocab").iterdir()} == {"kind.yaml", "entity_class.yaml"}
+    kinds = mine.read_pack(tmp_path / "mine")
+    assert [c.code for c, _ in kinds] == ["rig", "weighing"]           # классы сущностей — первыми
+    assert {t.code: t.model_dump(mode="json", exclude_none=True) for _, t in kinds} == {
+        t.code: t.model_dump(mode="json", exclude_none=True) for t in pack.templates}
+    assert mine.compare(kb, kinds) == ([], [])
+
+
+def test_adopt_adds_missing_kinds_and_refuses_other_content(kb, pg2, tmp_path):
+    mine.put(kb, "weighing", draft(), agent=PERSON)
+    mine.write_pack(kb, tmp_path / "mine")
+    kinds = mine.read_pack(tmp_path / "mine")
+    db.prepare(pg2)
+    with pytest.raises(mine.MineError) as e:
+        mine.adopt(pg2, kinds, agent=MODEL)
+    assert e.value.code == "forbidden"
+    assert mine.adopt(pg2, kinds, agent=PERSON) == ["weighing"]
+    assert _versions(pg2) == ("1.0.0", "0.0.1")
+    assert mine.adopt(pg2, kinds, agent=PERSON) == []                 # повтор ничего не меняет
+    mine.put(pg2, "weighing", draft(body="none"), agent=PERSON)
+    new, collisions = mine.compare(pg2, kinds)
+    assert new == [] and len(collisions) == 1 and "weighing" in collisions[0]
+    with pytest.raises(mine.MineError) as e:
+        mine.adopt(pg2, kinds, agent=PERSON)
+    assert e.value.code == "exists"

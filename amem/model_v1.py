@@ -221,6 +221,7 @@ class CheckCode(str, Enum):
     bundle_pack_missing = "bundle_pack_missing"
     bundle_key_collision = "bundle_key_collision"
     bundle_object_conflict = "bundle_object_conflict"
+    bundle_pack_conflict = "bundle_pack_conflict"
 
 
 class ReviewReason(str, Enum):
