@@ -147,9 +147,12 @@ uv tool install --python 3.12 'amemo[web]'
 amemo --version
 ```
 
-- `[web]` adds the web UI at `/ui`. Exact and full-text search work out of the box. Local semantic search
-  (`[embed]`, a multilingual model of about 250 MB) has no command to turn it on yet, so `amemo doctor` reports it
-  as unavailable; leave it out unless the user asks.
+- `[web]` adds the web UI at `/ui`. Exact and full-text search work out of the box.
+- Local semantic search (by meaning, across languages) is optional: the `[embed]` extra and a multilingual model of
+  about 250 MB. Ask the user. If they want it, install `'amemo[web,embed]'` instead, and after step 5 ask them to
+  run `amemo embed enable` in their own terminal, outside your session: only a person can turn it on (from an agent
+  it exits with code 2). It asks before downloading the model, embeds every record and switches the channel on;
+  `amemo embed status` (you may run it) shows the result. Otherwise leave it out.
 - If `amemo` is not found, run `uv tool update-shell` and open a new shell, or call `~/.local/bin/amemo`.
 - With pipx instead of uv: `pipx install 'amemo[web]'` (needs Python 3.11 or newer).
 
@@ -209,7 +212,7 @@ amemo doctor
 ```
 
 Every line must be `ok` or a warning you can explain; fix each `FAIL` line using its hint and run it again. A
-warning that semantic search is unavailable is expected (see step 4). Then try the service:
+warning that semantic search is unavailable is expected unless the user turned it on (see step 4). Then try the service:
 
 ```bash
 amemo serve &                                   # http://127.0.0.1:8767; --port changes the port

@@ -46,7 +46,7 @@ HINTS = {
     "bundle_pack_missing": "загрузите в базу недостающие пакеты и повторите",
     "bundle_key_collision": "ключи записей подборки уже заняты в этой базе: смотрите collisions",
     "bundle_pack_conflict": "свои виды подборки расходятся со своими видами базы: смотрите collisions",
-    "semantic_unavailable": "смысловой поиск: AMEMO_BACKEND и модель (amemo doctor)",
+    "semantic_unavailable": "смысловой поиск: amemo embed status (включить — amemo embed enable)",
     "backup": "клиент PostgreSQL 18 — в AMEMO_PG_BIN или PATH; восстановление — только в пустую базу",
     "tokens": "задайте AMEMO_TOKENS — путь к файлу токенов, например ~/.config/amemo/amemo-tokens.toml",
 }

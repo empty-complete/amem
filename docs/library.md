@@ -56,6 +56,27 @@ Vectors are local and optional: `pip install -e ".[embed]"` adds fastembed (a mo
 only with explicit permission). `AMEMO_BACKEND=none` turns the semantic channel off — lexical search
 keeps working and results say `semantic: unavailable`.
 
+The semantic channel uses the one active model in `embedding_model`. From the shell a person turns it
+on with `amemo embed enable` and checks it with `amemo embed status` (see the README). From Python
+it is three steps in `amemo.embed`, which is what the command does:
+
+```python
+from amemo import embed
+
+provider = embed.FastembedProvider(allow_download=True)   # the default multilingual model, 384 dims
+model = embed.register_model(conn, provider)              # idempotent: name, version, backend, dims
+embed.sync_embeddings(conn, model["id"], provider)        # current documents without a fresh vector
+embed.activate_model(conn, model["id"])                   # refused until every current document has one
+```
+
+- `embedding_coverage(conn, model_id)` → `{total, covered, missing, complete}` over current documents;
+  `embed_revision(conn, target, revision_id, model_id)` embeds one revision.
+- Model files live in `embed.models_dir()`: `AMEMO_MODELS`, else `FASTEMBED_CACHE_PATH`, else
+  `~/.local/share/amemo/models` (not fastembed's temporary folder, which a reboot may clear). Without
+  `allow_download=True` the provider reads only those files and never goes to the network.
+- A write does not embed its revision yet: `sync_embeddings` (or `amemo embed enable` again) catches
+  up, and search results report the covered share as `embedding_coverage`.
+
 ## Automatic checks
 
 `amemo.check.submit(conn, store, docs, proposals, links, agent=…)` is the single entry point for

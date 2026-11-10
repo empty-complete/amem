@@ -54,6 +54,27 @@ CLI и сервер MCP строятся на этих же функциях (с
 скачивается только с явного разрешения). `AMEMO_BACKEND=none` отключает смысловой канал — лексический
 поиск продолжает работать, а выдача сообщает `semantic: unavailable`.
 
+Смысловой канал работает на единственной активной модели из `embedding_model`. Из терминала его
+включает человек — `amemo embed enable`, проверяет — `amemo embed status` (см. README). Из Python это
+три шага `amemo.embed` — то же, что делает команда:
+
+```python
+from amemo import embed
+
+provider = embed.FastembedProvider(allow_download=True)   # многоязычная модель по умолчанию, 384 измерения
+model = embed.register_model(conn, provider)              # идемпотентно: имя, версия, провайдер, размерность
+embed.sync_embeddings(conn, model["id"], provider)        # текущие документы без свежего вектора
+embed.activate_model(conn, model["id"])                   # откажет, пока вектор есть не у каждого документа
+```
+
+- `embedding_coverage(conn, model_id)` → `{total, covered, missing, complete}` по текущим документам;
+  `embed_revision(conn, target, revision_id, model_id)` считает вектор одной ревизии.
+- Файлы модели — в `embed.models_dir()`: `AMEMO_MODELS`, иначе `FASTEMBED_CACHE_PATH`, иначе
+  `~/.local/share/amemo/models` (а не временная папка fastembed, которую чистит перезагрузка). Без
+  `allow_download=True` провайдер читает только эти файлы и в сеть не ходит.
+- Запись пока сама свою ревизию не векторизует: досчитывает `sync_embeddings` (или повторный
+  `amemo embed enable`), а выдача поиска сообщает покрытую долю в `embedding_coverage`.
+
 ## Автопроверка
 
 `amemo.check.submit(conn, store, docs, proposals, links, agent=…)` — единая точка записи знаний:
