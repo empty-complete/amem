@@ -1,0 +1,47 @@
+/* те же оттенки, что web/src/styles/theme.css: светлая и тёмная тема — по Windows */
+:root {
+  color-scheme: light dark;
+  --background: oklch(97.5% 0.003 265);
+  --foreground: oklch(22% 0.012 265);
+  --surface: oklch(100% 0 0);
+  --muted: oklch(52% 0.012 265);
+  --border: oklch(84% 0.008 265);
+  --hover: oklch(92.5% 0.007 265);
+  --danger: oklch(58% 0.2 27);
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(16% 0.008 265);
+    --foreground: oklch(95% 0.005 265);
+    --surface: oklch(19% 0.009 265);
+    --muted: oklch(70% 0.012 265);
+    --border: oklch(35% 0.012 265);
+    --hover: oklch(26% 0.011 265);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  display: flex; flex-direction: column; background: var(--background); color: var(--foreground);
+  font: 14px/1.5 var(--font); -webkit-user-select: none; user-select: none;
+}
+.titlebar {
+  display: flex; align-items: center; gap: 8px; height: 36px; padding-left: 12px; flex: none;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.titlebar-logo { width: 18px; height: 18px; }
+.titlebar-title { font-size: 13px; color: var(--muted); }
+.titlebar-buttons { margin-left: auto; display: flex; height: 100%; }
+.titlebar-buttons button {
+  width: 46px; height: 100%; border: 0; background: transparent; color: var(--foreground); cursor: default;
+  display: grid; place-items: center;
+}
+.titlebar-buttons button:hover { background: var(--hover); }
+.titlebar-buttons button.close:hover { background: var(--danger); color: white; }
+.titlebar-buttons svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1; }
+.start { flex: 1; display: grid; place-content: center; text-align: center; gap: 4px; padding: 24px; }
+.start-logo { width: 72px; height: 72px; margin: 0 auto 12px; border-radius: 16px; }
+.start h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.01em; }
+.start p { margin: 0; }
+.muted { color: var(--muted); max-width: 44ch; margin: 8px auto 0 !important; }

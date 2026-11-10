@@ -5,6 +5,8 @@
     python tools/release.py readme REF                README.md для страницы PyPI: относительные ссылки и картинки
                                                       ведут на GitHub в состоянии REF (метка или коммит); строка
                                                       копирайта — без «© …»: имя автора остаётся только на GitHub
+    python tools/release.py semver [VERSION]          версия amemo (PEP 440) в semver для приложения Tauri:
+                                                      0.1.0a1 → 0.1.0-alpha.1, 1.2.0rc2 → 1.2.0-rc.2
 """
 from __future__ import annotations
 
@@ -72,6 +74,19 @@ def pypi_readme(text: str, ref: str) -> str:
     return "".join(out)
 
 
+_PRE = {"a": "alpha", "b": "beta", "rc": "rc"}
+
+
+def semver(version: str) -> str:
+    """Semver из версии PEP 440: Tauri и его updater принимают только semver. Пост- и dev-версии и локальная часть
+    в выпуски amemo не попадают — ошибка, а не молчаливая потеря."""
+    v = Version(version)
+    if v.epoch or v.post is not None or v.dev is not None or v.local is not None or len(v.release) > 3:
+        sys.exit(f"версия {version}: для приложения нужна X.Y.Z с необязательной a/b/rc")
+    core = ".".join(str(n) for n in (list(v.release) + [0, 0])[:3])
+    return f"{core}-{_PRE[v.pre[0]]}.{v.pre[1]}" if v.pre else core
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="tools/release.py")
     sub = ap.add_subparsers(dest="command", required=True)
@@ -79,9 +94,13 @@ def main(argv: list[str] | None = None) -> int:
     v.add_argument("--tag")
     r = sub.add_parser("readme")
     r.add_argument("ref")
+    s = sub.add_parser("semver")
+    s.add_argument("version", nargs="?")
     args = ap.parse_args(argv)
     if args.command == "versions":
         print(versions(args.tag))
+    elif args.command == "semver":
+        print(semver(args.version or _version_of(ROOT / "amemo" / "__init__.py")))
     else:
         path = ROOT / "README.md"
         path.write_text(pypi_readme(path.read_text(encoding="utf-8"), args.ref), encoding="utf-8")

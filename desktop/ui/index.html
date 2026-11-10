@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>amemo</title>
+  <link rel="stylesheet" href="app.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="titlebar" data-tauri-drag-region>
+    <img src="logo.svg" alt="" class="titlebar-logo" data-tauri-drag-region>
+    <span class="titlebar-title" data-tauri-drag-region>amemo</span>
+    <nav class="titlebar-buttons">
+      <button type="button" data-action="minimize" aria-label="Свернуть" title="Свернуть">
+        <svg viewBox="0 0 10 10"><path d="M1 5h8"/></svg>
+      </button>
+      <button type="button" data-action="maximize" aria-label="Развернуть" title="Развернуть">
+        <svg viewBox="0 0 10 10"><rect x="1.5" y="1.5" width="7" height="7"/></svg>
+      </button>
+      <button type="button" data-action="close" class="close" aria-label="Закрыть" title="Закрыть">
+        <svg viewBox="0 0 10 10"><path d="M2 2l6 6M8 2l-6 6"/></svg>
+      </button>
+    </nav>
+  </header>
+  <main class="start">
+    <img src="logo.svg" alt="" class="start-logo">
+    <h1>amemo</h1>
+    <p>Общая память с источниками для людей и агентов.</p>
+    <p class="muted">Здесь появится мастер установки. Окно можно закрыть — amemo останется в области уведомлений.</p>
+  </main>
+</body>
+</html>
