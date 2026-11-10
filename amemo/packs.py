@@ -313,6 +313,22 @@ def _check_templates(packs: list[Pack]) -> None:
         walk(code, ())
 
 
+def pack_digest(path: Path) -> str:
+    """sha256 файлов .yaml и .md пакета: путь, NUL, содержимое, NUL — по порядку частей пути.
+
+    Одинаков на любой ОС и при любых концах строк: CRLF считается как LF (git в Windows с core.autocrlf=true
+    переписывает файлы при клонировании), а порядок — по частям пути, как PurePosixPath (WindowsPath сравнивает без
+    учёта регистра). Для файлов с LF это тот же дайджест, что считался раньше."""
+    digest = hashlib.sha256()
+    files = [p for p in path.rglob("*") if p.is_file() and p.suffix in (".yaml", ".md")]
+    for file in sorted(files, key=lambda p: p.relative_to(path).parts):
+        digest.update(file.relative_to(path).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(file.read_bytes().replace(b"\r\n", b"\n"))
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def load_pack(path: Path) -> Pack:
     """Пакет из каталога: манифест, понятия и шаблоны в строгой проверке, digest содержимого."""
     path = Path(path)
@@ -359,14 +375,9 @@ def load_pack(path: Path) -> Pack:
         templates.append(t)
         template_files[t.code] = file
 
-    digest = hashlib.sha256()
-    for file in sorted(p for p in path.rglob("*") if p.is_file() and p.suffix in (".yaml", ".md")):
-        digest.update(file.relative_to(path).as_posix().encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(file.read_bytes())
-        digest.update(b"\0")
+    digest = pack_digest(path)
     return Pack(name=name, version=version, path=path, concepts=concepts, templates=templates,
-                digest=digest.hexdigest(), template_files=template_files, requires=requires)
+                digest=digest, template_files=template_files, requires=requires)
 
 
 def _ordered(packs: list[Pack]) -> list[Pack]:
