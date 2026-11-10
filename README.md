@@ -15,7 +15,7 @@
 <p align="center">
   <a href="https://github.com/empty-complete/amemo/actions/workflows/ci.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amemo/ci.yml?branch=main&label=tests&style=flat-square"></a>
   <a href="https://github.com/empty-complete/amemo/actions/workflows/web.yml"><img alt="Web UI" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amemo/web.yml?branch=main&label=web%20ui&style=flat-square"></a>
-  <a href="LICENSE.txt"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2a78d6?style=flat-square"></a>
+  <a href="LICENSE.txt"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-2a78d6?style=flat-square"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&logo=python&logoColor=white">
   <img alt="PostgreSQL 16+ with pgvector" src="https://img.shields.io/badge/PostgreSQL-16%2B%20%C2%B7%20pgvector-4169e1?style=flat-square&logo=postgresql&logoColor=white">
   <img alt="Status: early development" src="https://img.shields.io/badge/status-early%20development-eb6834?style=flat-square">
@@ -739,6 +739,16 @@ and the `commits` workflow (Conventional Commits in English); changes to `web/` 
 
 ## License
 
-MIT, see [LICENSE.txt](LICENSE.txt). © 2026 Philipp Beloborodov (Филипп Белобородов).
+GNU Affero General Public License v3.0 only (AGPL-3.0-only), see [LICENSE.txt](LICENSE.txt).
+© 2026 empty-complete.
+
+You may use, study, change and share amemo freely. If you distribute a modified version, or run one as a
+service for other people over a network, you must offer its complete source code under the same license.
+
+The domain packs in `amemo/packs` (vocabularies and templates) are data and stay under the MIT license, so they
+can be reused anywhere.
+
+A commercial license without the AGPL conditions (for example, for a closed hosted service) is available from
+the author — open an issue on GitHub. Versions released before the change to AGPL remain available under MIT.
 
 <p align="center"><sub>amemo is a tool for remembering well.</sub></p>

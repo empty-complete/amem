@@ -3,7 +3,7 @@ name = "amemo-web"
 dynamic = ["version"]                # amemo_web.__version__ — та же, что у amemo (tools/release.py)
 description = "Web UI of amemo as static files; the amemo service serves them at /ui"
 readme = "README.md"
-license = "MIT"                      # текст лицензии — в LICENSE.txt репозитория amemo
+license = "AGPL-3.0-only"                      # текст лицензии — в LICENSE.txt репозитория amemo
 authors = [{name = "empty-complete"}]
 requires-python = ">=3.11"
 classifiers = [
