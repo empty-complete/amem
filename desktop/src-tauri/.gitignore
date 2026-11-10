@@ -1,0 +1,4 @@
+/target/
+/gen/schemas/
+# значки собираются из web/public/favicon.svg (npx @tauri-apps/cli icon), см. desktop/README.md
+/icons/

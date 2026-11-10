@@ -1,0 +1,25 @@
+[package]
+name = "amemo-desktop"
+version = "0.0.0"            # версия приложения — в tauri.conf.json (её задаёт сборка из amemo/__init__.py)
+description = "amemo for Windows: installer, window and tray"
+edition = "2021"
+license = "AGPL-3.0-only"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-window-state = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"          # tauri::generate_context! ссылается на него
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
