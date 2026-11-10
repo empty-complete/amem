@@ -48,3 +48,14 @@ test("документ без шапки — заметка с заголовк�
   const r = documentToRecord("# Мысль\n\nкороткая");
   expect(r).toMatchObject({ kind: "note", label: "Мысль", summary_plain: "короткая", body: "" });
 });
+
+test("пустые «о чём» и теги у атома — в шапке пустыми; туда и обратно не теряются", () => {
+  const bare: AtomPayload = { kind: "note", label: { ru: "Голая заметка" } };
+  const d = recordToDocument(bare);
+  expect(d).toContain("\nabout:\n");
+  expect(d).toContain("\ntags: []\n");
+  const r = documentToRecord(d);
+  expect(r.about).toEqual([]);
+  expect(r.tags).toEqual([]);
+  expect(r.qualifiers).toEqual({});
+});

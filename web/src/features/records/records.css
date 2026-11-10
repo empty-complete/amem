@@ -57,11 +57,16 @@
   gap: var(--s-xs);
   min-width: 0;
 }
+/* не больше двух строк: длинные названия не раздувают список */
 .row .ttl {
   font-size: var(--t-body);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 .row .line2 {
   display: flex;
@@ -127,4 +132,11 @@
 }
 .more {
   margin-top: var(--s-md);
+}
+
+/* догрузка списка: срабатывает при прокрутке к концу, кнопка — для клавиатуры и на случай без прокрутки */
+.rows__more {
+  display: flex;
+  justify-content: center;
+  padding: var(--s-md) 0;
 }

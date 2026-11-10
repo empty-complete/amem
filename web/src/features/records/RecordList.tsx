@@ -1,5 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { Button } from "@heroui/react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { useEffect, useRef } from "react";
 import { useDrag } from "react-aria";
 import { useTranslation } from "react-i18next";
 import { errorText } from "../../api/errors";
@@ -64,21 +66,33 @@ export function RecordRow({ r, vocab, classes }: { r: Summary; vocab?: Vocab; cl
   );
 }
 
-/** «Все записи» или содержимое папки; папка — scope.folder записи. */
+/** «Все записи» или содержимое папки; папка — scope.folder записи. Страницы догружаются при прокрутке к концу. */
 export function RecordList({ folder, title }: { folder: string | null; title: string }) {
   const { t } = useTranslation();
-  const list = useQuery(q.records(folder));
+  const list = useInfiniteQuery(q.recordPages(folder));
   const vocab = useQuery(q.vocab("kind"));
   const classes = useQuery(q.vocab("entity_class"));
+  const end = useRef<HTMLDivElement>(null);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = list;
+  useEffect(() => {
+    const el = end.current;
+    if (!el || !hasNextPage || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (es) => {
+        if (es.some((e) => e.isIntersecting) && !isFetchingNextPage) void fetchNextPage();
+      },
+      { rootMargin: "600px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  const items = list.data?.pages.flatMap((p) => p.items) ?? [];
+  const total = list.data?.pages[0]?.total ?? items.length;
   return (
     <section aria-labelledby="records-title">
       <div className="page-head">
         <h1 id="records-title">{title}</h1>
-        {list.data && (
-          <span className="count">
-            {t("records.count", { count: list.data.total ?? list.data.items.length })}
-          </span>
-        )}
+        {list.data && <span className="count">{t("records.count", { count: total })}</span>}
       </div>
       {list.isPending ? (
         <RegionState state="loading" />
@@ -88,14 +102,23 @@ export function RecordList({ folder, title }: { folder: string | null; title: st
           message={errorText(list.error, t("region.offline"))}
           retry={() => list.refetch()}
         />
-      ) : list.data.items.length === 0 ? (
+      ) : items.length === 0 ? (
         <RegionState state="empty" text={t("records.empty")} />
       ) : (
-        <ul className="rows">
-          {list.data.items.map((r) => (
-            <RecordRow key={r.ref} r={r} vocab={vocab.data} classes={classes.data} />
-          ))}
-        </ul>
+        <>
+          <ul className="rows">
+            {items.map((r) => (
+              <RecordRow key={r.ref} r={r} vocab={vocab.data} classes={classes.data} />
+            ))}
+          </ul>
+          {hasNextPage && (
+            <div ref={end} className="rows__more">
+              <Button variant="outline" isPending={isFetchingNextPage} onPress={() => void fetchNextPage()}>
+                {isFetchingNextPage ? t("records.loading_more") : t("records.more")}
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

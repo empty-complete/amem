@@ -54,7 +54,7 @@ for (const theme of ["light", "dark"] as const) {
 }
 
 const opened: [string, string, (p: import("@playwright/test").Page) => Promise<void>][] = [
-  ["правка записи", `./atom/${N1}`, async (p) => p.getByRole("button", { name: "Править, ⌘E" }).click()],
+  ["правка записи", `./atom/${N1}`, async (p) => p.getByRole("button", { name: /^Править, (⌘|Ctrl\+)E$/ }).click()],
   [
     "окно N",
     `./records`,

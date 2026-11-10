@@ -50,7 +50,10 @@ export function recordToDocument(
   lang = "ru",
 ): string {
   const head: Record<string, unknown> = { kind: p.kind ?? p.entity_class ?? "note" };
+  // у атома «о чём» и теги в шапке всегда, пустые тоже: видно, что их можно заполнить
+  const atom = !p.entity_class;
   if (about.length) head.about = about.map((a) => `[[${a.label}]]`).join(", ");
+  else if (atom) head.about = null;
   const s = sources[0];
   if (s?.object_name) {
     head.source = s.object_name;
@@ -58,10 +61,13 @@ export function recordToDocument(
     if (page) head.page = page.label ?? String(page.value);
   }
   if (p.tags?.length) head.tags = p.tags;
+  else if (atom) head.tags = [];
   if (p.basis) head.basis = p.basis;
   for (const q of p.qualifiers ?? []) if (q.value_text) head[q.property] = q.value_text;
   // [[…]] в YAML — строка в кавычках; в документе их не видно, как в Obsidian.
-  const yaml = stringify(head, { lineWidth: 0 }).replace(/"(\[\[[^"]+\]\](?:, \[\[[^"]+\]\])*)"/g, "$1");
+  const yaml = stringify(head, { lineWidth: 0 })
+    .replace(/"(\[\[[^"]+\]\](?:, \[\[[^"]+\]\])*)"/g, "$1")
+    .replace(/^about: null$/m, "about:");
   const summary = pickText(p.summary_plain ?? p.description, lang);
   const quote = s?.quote ? `\n## Цитата\n> ${s.quote}\n` : "";
   const body = pickText(p.body, lang);

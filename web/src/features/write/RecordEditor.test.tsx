@@ -19,7 +19,7 @@ test("своя заметка правится: заголовок → нова�
   vi.useFakeTimers({ shouldAdvanceTime: true });
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
   await renderWithApp(<RecordPage recordRef={N1} view="human" />, `/atom/${N1}`);
-  await user.click(await screen.findByRole("button", { name: "Править, ⌘E" }));
+  await user.click(await screen.findByRole("button", { name: /^Править, (⌘|Ctrl\+)E$/ }));
   const title = await screen.findByRole("textbox", { name: "Заголовок" });
   await user.clear(title);
   await user.type(title, "Проверить мачту после бури");
@@ -35,7 +35,7 @@ test("пустой заголовок — замечание проверки у
   vi.useFakeTimers({ shouldAdvanceTime: true });
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
   await renderWithApp(<RecordPage recordRef={N1} view="human" />, `/atom/${N1}`);
-  await user.click(await screen.findByRole("button", { name: "Править, ⌘E" }));
+  await user.click(await screen.findByRole("button", { name: /^Править, (⌘|Ctrl\+)E$/ }));
   await user.clear(await screen.findByRole("textbox", { name: "Заголовок" }));
   await user.click(screen.getByRole("button", { name: "Записать" }));
   await act(() => vi.advanceTimersByTimeAsync(UNDO_MS + 50));
@@ -54,7 +54,7 @@ test("чужая запись: вместо правки — «Поставит�
 test("смена вида подставляет форму шаблона; своё свойство переживает исходник", async () => {
   const user = userEvent.setup();
   await renderWithApp(<RecordPage recordRef={N1} view="human" />, `/atom/${N1}`);
-  await user.click(await screen.findByRole("button", { name: "Править, ⌘E" }));
+  await user.click(await screen.findByRole("button", { name: /^Править, (⌘|Ctrl\+)E$/ }));
   await user.click(await screen.findByRole("button", { name: "Вид: Заметка. Сменить" }));
   await user.click(await screen.findByRole("button", { name: "Решение" }));
   expect(await screen.findByLabelText("Действует с")).toBeInTheDocument();

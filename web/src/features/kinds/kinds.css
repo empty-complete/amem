@@ -33,7 +33,12 @@
   align-content: start;
   gap: var(--s-sm);
   padding: var(--s-md) var(--s-lg) var(--s-xl);
-  overflow: auto;
+  /* только вертикальная прокрутка: длинные подписи видов и свойств переносятся, а не раздвигают панель */
+  overflow: hidden auto;
+  overflow-wrap: anywhere;
+}
+.drawer__body > * {
+  min-width: 0;
 }
 .drawer__body h3 {
   margin: var(--s-xs) 0 0;

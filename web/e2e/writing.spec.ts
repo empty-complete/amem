@@ -60,7 +60,7 @@ test("пустое поле карточки — значение; «Приня�
 
 test("правка своей записи: заголовок → новая ревизия", async ({ page }) => {
   await page.goto(`./atom/${N1}`);
-  await page.getByRole("button", { name: "Править, ⌘E" }).click();
+  await page.getByRole("button", { name: /^Править, (⌘|Ctrl\+)E$/ }).click();
   await page.getByRole("textbox", { name: "Заголовок" }).fill("Проверить мачту после бури");
   await page.getByRole("main").getByRole("button", { name: "Записать" }).click();
   await page.waitForTimeout(WINDOW);
@@ -132,16 +132,36 @@ test("свой вид из конструктора — сразу в /new", asy
   await expect(page.getByRole("textbox", { name: "Что нашли" })).toBeVisible();
 });
 
-test("перенос в папку из меню записи — с окном отмены", async ({ page }) => {
+test("перенос в папку сохраняется, даже если сразу обновить страницу; «Отменить» возвращает", async ({
+  page,
+}) => {
+  const move = async () => {
+    await page.goto(`./atom/${N1}`);
+    await page.getByRole("button", { name: "Ещё" }).click();
+    await page.getByRole("menuitem", { name: "Переместить в папку" }).click();
+    await page.getByRole("radio", { name: "Архив" }).check({ force: true });
+    const done = page.waitForResponse((r) => r.request().method() === "PATCH" && r.url().endsWith("/folder"));
+    await page.getByRole("dialog").getByRole("button", { name: "Переместить в папку" }).click();
+    await expect(page.getByText("Перенесено в «Архив»")).toBeVisible();
+    await done;
+  };
+  const inArchive = () => page.getByRole("main").getByRole("link", { name: /Проверить крепление мачты/ });
+  await move();
+  // не ждём окна отмены: перенос уже у службы
+  await page.goto(`./records?folder=${encodeURIComponent("Архив")}`);
+  await expect(inArchive()).toBeVisible();
   await page.goto(`./atom/${N1}`);
   await page.getByRole("button", { name: "Ещё" }).click();
   await page.getByRole("menuitem", { name: "Переместить в папку" }).click();
-  await page.getByRole("radio", { name: "Архив" }).check({ force: true });
+  await page.getByRole("radio", { name: "Без папки" }).check({ force: true });
   await page.getByRole("dialog").getByRole("button", { name: "Переместить в папку" }).click();
-  await expect(page.getByText("Перенесено в «Архив»")).toBeVisible();
-  await page.waitForTimeout(WINDOW);
+  const back = page.waitForResponse(
+    (r) => r.request().method() === "PATCH" && r.request().postData()?.includes("Архив") === true,
+  );
+  await page.getByRole("button", { name: "Отменить" }).click();
+  await back;
   await page.goto(`./records?folder=${encodeURIComponent("Архив")}`);
-  await expect(page.getByRole("link", { name: /Проверить крепление мачты/ })).toBeVisible();
+  await expect(inArchive()).toBeVisible();
 });
 
 test("загрузка файла в «+ Источник»", async ({ page }) => {

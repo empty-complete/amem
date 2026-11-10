@@ -29,7 +29,15 @@ export const handlers = [
     if (folder === "-") items = items.filter((r) => !r.folder);
     else if (folder) items = items.filter((r) => r.folder === folder || r.folder?.startsWith(`${folder}/`));
     if (status.length) items = items.filter((r) => status.includes(r.status));
-    return HttpResponse.json({ items, total: items.length, next_cursor: null });
+    // страницы, как у службы: limit (по умолчанию 50, до 200) и cursor — здесь смещение
+    const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 200);
+    const from = Number(url.searchParams.get("cursor") ?? 0);
+    const next = from + limit < items.length ? String(from + limit) : null;
+    return HttpResponse.json({
+      items: items.slice(from, from + limit),
+      total: items.length,
+      next_cursor: next,
+    });
   }),
   http.get("/api/v1/search", async ({ request }) => {
     await delay(150);
@@ -37,6 +45,25 @@ export const handlers = [
     const q = (url.searchParams.get("q") ?? "").trim();
     const kinds = url.searchParams.getAll("kind");
     if (q === "ошибка") return problem(503, "Служба недоступна", "База не отвечает");
+    // выбор сущности (@объект, «о чём»): ищем по всем сущностям базы, а не по образцам выдачи
+    if (url.searchParams.get("target") === "entity") {
+      const w = q === "*" ? "" : q.toLowerCase();
+      const hits = db.records
+        .filter((r) => r.target === "entity" && r.label.toLowerCase().includes(w))
+        .slice(0, Number(url.searchParams.get("limit") ?? 10))
+        .map((r, i) => ({
+          ref: r.ref,
+          revision: 1,
+          label: r.label,
+          snippet: "",
+          status: r.status,
+          review_state: "none",
+          entity_class: r.kind_or_class,
+          score: 1 - i / 100,
+          matches: [],
+        }));
+      return HttpResponse.json({ ...search, items: hits, candidate_count: hits.length });
+    }
     const result = q === "без смысла" ? searchSemanticOff : search;
     let items = q ? result.items : [];
     if (kinds.length) items = items.filter((i) => kinds.includes(i.kind));

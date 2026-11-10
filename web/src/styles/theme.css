@@ -50,10 +50,11 @@
   --fam-source-wash: oklch(95% 0.03 255);
   --fam-work-wash: oklch(95.5% 0.035 45);
   --fam-object-wash: oklch(95.5% 0.035 165);
-  --sky: oklch(17% 0.022 266);
-  --sky-2: oklch(21% 0.024 266);
-  --sky-ink: oklch(92% 0.01 265);
-  --sky-muted: oklch(70% 0.02 265);
+  /* небо в светлой теме светлое: бумага с лёгким холодом, подписи тёмные */
+  --sky: oklch(98.5% 0.004 265);
+  --sky-2: oklch(95.5% 0.01 265);
+  --sky-ink: oklch(24% 0.015 265);
+  --sky-muted: oklch(50% 0.02 265);
 
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
@@ -116,4 +117,6 @@
   --fam-object-wash: oklch(27% 0.045 165);
   --sky: oklch(11% 0.016 266);
   --sky-2: oklch(15% 0.018 266);
+  --sky-ink: oklch(92% 0.01 265);
+  --sky-muted: oklch(70% 0.02 265);
 }
