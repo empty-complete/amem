@@ -78,3 +78,30 @@ test("содержание записи: формула с обозначени�
   await expect(table.getByRole("columnheader", { name: "В-2, %" })).toBeVisible();
   await expect(table.getByRole("row")).toHaveCount(5);
 });
+
+test("страница PDF в тёмной теме: приглушена, «Тёмная страница» инвертирует и запоминается", async ({
+  page,
+}) => {
+  await page.goto("./atom/atm:0193b7c2-5e1a-7d40-9f2e-00000000000b");
+  const btn = page.getByRole("button", { name: "Тёмная страница" });
+  await expect(page.locator(".pdf__inner canvas").first()).toBeVisible({ timeout: 15_000 });
+  await expect(btn).toBeHidden();
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = "dark";
+  });
+  await expect(btn).toBeVisible();
+  const filter = () =>
+    page
+      .locator(".pdf__inner canvas")
+      .first()
+      .evaluate((c) => getComputedStyle(c).filter);
+  expect(await filter()).toContain("brightness");
+  await btn.click();
+  await expect(btn).toHaveAttribute("aria-pressed", "true");
+  expect(await filter()).toContain("invert");
+  await page.reload();
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = "dark";
+  });
+  await expect(page.getByRole("button", { name: "Тёмная страница" })).toHaveAttribute("aria-pressed", "true");
+});

@@ -88,6 +88,25 @@
 .pdf__tools {
   display: flex;
   justify-content: flex-end;
+  gap: var(--s-2xs);
+}
+/* Страница PDF — бумага: цвета файла не трогаем (фото, чертежи, цветные схемы). В тёмной теме лист приглушён,
+   а «Тёмная страница» инвертирует холст с поворотом оттенков, чтобы цвета не уезжали; подсветка цитаты — слой
+   текста поверх холста, фильтр её не задевает. Кнопка — только в тёмной теме. */
+.pdf__darkbtn {
+  display: none;
+}
+:root[data-theme="dark"] .pdf__darkbtn {
+  display: inline-flex;
+}
+:root[data-theme="dark"] .pdf__inner canvas {
+  filter: brightness(0.86);
+}
+:root[data-theme="dark"] .pdf[data-dark] .pdf__sheet {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .pdf[data-dark] .pdf__inner canvas {
+  filter: invert(0.9) hue-rotate(180deg);
 }
 .pdf__zoom {
   overflow-x: auto;

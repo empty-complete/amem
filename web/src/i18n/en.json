@@ -215,7 +215,8 @@
     "zoom_in": "Zoom in",
     "zoom_fit": "Fit width",
     "task_set": "Task set: an agent will pick it up over MCP",
-    "task_open": "Task is with the agents"
+    "task_open": "Task is with the agents",
+    "dark_page": "Dark page"
   },
   "card": {
     "tab_card": "Card",
