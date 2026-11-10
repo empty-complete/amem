@@ -23,7 +23,7 @@ from . import lang as lang_, sources
 
 SEARCH_TEXT_VERSION = 1
 PROJECTION = 2                       # 2 — слоты en в индексе (english); meta.search_projection
-PROJECTION_LOCK = 0x616D656D00000002  # pg_advisory_xact_lock перестройки при старте: «amemo» + 2
+PROJECTION_LOCK = 0x616D656D00000005  # pg_advisory_xact_lock перестройки при старте: «amemo» + 5 (1–4 заняты)
 Target = Literal["atom", "entity"]
 _UUID = re.compile(r"(?:atm:|ent:|obj:)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
