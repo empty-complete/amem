@@ -958,3 +958,22 @@ def test_own_kind_from_bundle_is_added_only_by_person(pg, pg2, monkeypatch, stor
     with pytest.raises(mine.MineError) as e:
         bundle.import_(pg2, store2, tmp_path / "b", agent="model:bot")
     assert e.value.code == "forbidden" and _mine_kinds(pg2) == [] and _count(pg2, "atom") == 0
+
+
+def test_own_kind_failing_the_pack_check_is_a_dry_run_collision(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Вид подборки, который не проходит проверку пакета в этой базе: у dry_run — коллизия отчёта, а не отказ."""
+    from amem import mine, packs
+
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    _own_kind_record(pg, store, docs)
+    _export(pg, store, tmp_path / "b", with_packs=True)
+
+    def refuse(*args, **kwargs):
+        raise packs.PackError("шаблон weighing: величины нет в словаре")
+    monkeypatch.setattr(mine, "_check", refuse)
+    plan = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER, dry_run=True)
+    assert not plan.complete and any("weighing" in c for c in plan.collisions), plan.collisions
+    with pytest.raises(bundle.BundleError) as e:
+        bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert e.value.code == "bundle_pack_conflict"
+    assert _mine_kinds(pg2) == [] and _count(pg2, "atom") == 0

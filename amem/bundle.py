@@ -1243,7 +1243,14 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
         counts |= {"links": len(new_links), "objects": new_objects}
         if kinds or pack_collisions:
             counts["kinds"] = len(new_kinds)
-        report, names = _level1_with_kinds(conn, recs, new_links, kinds, agent=agent)
+        try:
+            report, names = _level1_with_kinds(conn, recs, new_links, kinds, agent=agent)
+        except BundleError as e:
+            if not dry_run or e.code != PACK_CONFLICT:
+                raise
+            # пробный импорт: вид, который не проходит проверку пакета, — коллизия отчёта, а не отказ
+            collisions.extend(e.details.get("collisions") or [str(e)])
+            report, names = _level1(conn, recs, new_links)
         if dry_run:
             return Imported(None, counts, warnings=warnings, collisions=collisions, report=_report_json(report, names),
                             complete=not collisions and not report.has_violations(), kinds=new_kinds)

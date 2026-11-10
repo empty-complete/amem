@@ -12,8 +12,9 @@
 
 Тип — из ui.fields[path].type, иначе по пути (infer). Подпись и подсказка — из ui.fields, иначе из словаря property,
 иначе подпись поля записи (LABELS), иначе сам путь. Блок ui сводится по порядку применения шаблонов: поле — по path,
-body и widgets — у последнего шаблона, где они заданы. Величины ui заменяют общее поле content.values; правило
-content.values просит хотя бы одно значение, поэтому величина обязательна, только если она одна.
+body и widgets — у последнего шаблона, где они заданы. Величины ui заменяют общее поле content.values; их
+обязательность — ui.fields[path].required, иначе: правило content.values просит хотя бы одно значение, поэтому
+величина обязательна, только если она одна.
 """
 from __future__ import annotations
 
@@ -146,8 +147,12 @@ def _form(ctx: _Vocab, target: str, code: str) -> tuple[list[dict], str, list[st
             is_value = prop.group(1) == VALUES
             key, concept = prop.group(2), ctx.properties.get(prop.group(2)) or {}
             ftype = "quantity" if is_value else "text"
-            # правило content.values просит хотя бы одно значение: обязательно поле, только если величина одна
-            required = is_value and n_values == 1 and bool((rules.fields.get(VALUES) or {}).get("required"))
+            # обязательность величины — из ui.fields (свои виды хранят её там); иначе правило content.values просит
+            # хотя бы одно значение: обязательно поле, только если величина одна
+            if own.get("required") is not None:
+                required = bool(own["required"])
+            else:
+                required = is_value and n_values == 1 and bool((rules.fields.get(VALUES) or {}).get("required"))
             if is_value:
                 extra = {"property": key, "unit": concept.get("unit")}
             label, hint = concept.get("label"), concept.get("definition")

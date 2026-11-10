@@ -21,7 +21,7 @@ skills/*.md (тексты для агентов — раздаёт устано�
 - пути правил ведут на настоящие поля схемы (check_path), коды selector_types, entity_classes, links — из словарей;
 - ключи блока ui.fields — пути правил шаблона, его предков по extends и интерфейсов его target, поля, которые
   форма показывает всегда (UI_BASE), или величина content.values[property=X] / qualifiers[property=X] из словаря
-  property (_check_ui); блок ui бывает только у atom и entity.
+  property (_check_ui); required в ui.fields — только у величины; блок ui бывает только у atom и entity.
 
 Служебные перечни (Status, Rank, ValueState, SourceRole, Visibility) остаются закрытыми
 перечислениями amem/schema/amem_v1.yaml и грузятся в concept с origin='schema' — как раньше.
@@ -242,6 +242,8 @@ def _check_ui(t: Template, file: Path, by_code: dict[str, Template], codes: dict
                 raise PackError(f"{where} — property {prop.group(2)} нет в словаре property загружаемых пакетов")
         elif field.path not in allowed:
             raise PackError(f"{where} — нет правила с таким путём ни у шаблона, ни у его предков и интерфейсов")
+        elif field.required is not None:
+            raise PackError(f"{where} — required в ui только у величины: обязательность поля задаёт его правило")
 
 
 def _check_parameters(t: Template, file: Path, codes: dict[str, set[str]], properties: dict[str, str | None]) -> None:

@@ -125,7 +125,8 @@ def _field(code: str, target: str, i: int, f, issues: list, properties: set[str]
             issues.append(_issue(code, f"{at}.property", f"путь называет величину {prop.group(2)}, "
                                                          f"а не {f.get('property')}"))
             return []
-        return [(path, {"path": prop.group(1), "required": required}, ui)]
+        # обязательность величины — в ui: общее правило content.values просит лишь хотя бы одно значение
+        return [(path, {"path": prop.group(1), "required": required}, {**ui, "required": required})]
     if ftype == "period":
         if path not in (*PERIOD, "valid"):
             issues.append(_issue(code, f"{at}.path", "период задаётся путём valid_from"))
@@ -315,10 +316,12 @@ def _save(conn: psycopg.Connection, concept: Concept, template: Template, loaded
     тела — если таких версий кода в template ещё нет) и новая версия пакета mine."""
     code = concept.code
     file_concepts, file_templates = _file_codes(loaded)
-    owner = file_templates.get(code) or file_concepts.get((concept.scheme, code))
-    row = conn.execute("SELECT origin FROM concept WHERE scheme = %s AND code = %s",
-                       (concept.scheme, code)).fetchone()
-    if owner is None and row is not None and row[0] != NAME:
+    # код вида не должен быть занят ни видом атома, ни классом сущности: веб и ссылки различают вид по коду
+    owner = (file_templates.get(code) or file_concepts.get(("kind", code))
+             or file_concepts.get(("entity_class", code)))
+    row = conn.execute("SELECT origin FROM concept WHERE scheme IN ('kind', 'entity_class') AND code = %s "
+                       "AND origin <> %s ORDER BY scheme LIMIT 1", (code, NAME)).fetchone()
+    if owner is None and row is not None:
         owner = row[0]
     if owner is not None:
         raise MineError(f"код {code} уже занят видом пакета {owner}", code="exists")
@@ -356,16 +359,37 @@ def _save(conn: psycopg.Connection, concept: Concept, template: Template, loaded
     return True
 
 
+def _norm_field(f: dict) -> tuple:
+    path = "valid_from" if f.get("type") == "period" else f.get("path")
+    accepts = f.get("accepts") if isinstance(f.get("accepts"), dict) else {}
+    return (path, f.get("type"), bool(f.get("required")), json.dumps(f.get("label"), sort_keys=True),
+            json.dumps(f.get("hint"), sort_keys=True), tuple(sorted(accepts.get("entity_classes") or [])))
+
+
+def _norm(draft: dict) -> tuple:
+    """Черновик или TemplateView в сравнимом виде: то, что форма показывает человеку, без служебных полей
+    (key, unit, scheme, property — они следуют из пути и словаря)."""
+    return (json.dumps(draft.get("label"), sort_keys=True), draft.get("target"), draft.get("family"),
+            json.dumps(draft.get("description"), sort_keys=True), draft.get("body"), tuple(draft.get("widgets") or ()),
+            tuple(_norm_field(f) for f in draft.get("form") or [] if isinstance(f, dict)))
+
+
 def put(conn: psycopg.Connection, code: str, draft, *, agent: str) -> dict:
     """Свой вид по черновику: новый — шаблон 1.0.0, правка — следующая версия шаблона; тот же черновик ничего не
-    меняет. Пакет mine получает новую версию при каждой правке. Вернуть TemplateView вида."""
+    меняет. Пакет mine получает новую версию при каждой правке. Вернуть TemplateView вида.
+
+    «Тот же» — и черновик, который совпадает с формой вида из GET /templates: веб присылает обратно форму с
+    подписями и подсказками по умолчанию (из словаря property), и пересохранение без правок не должно поднимать
+    версию."""
     db.require_autocommit(conn)
     _person(agent, "правит")
     concept, template = build(conn, code, draft)
     loaded = packs.load_packs()
     with conn.transaction():
         conn.execute("SELECT pg_advisory_xact_lock(%s)", (db.MINE_LOCK,))
-        _save(conn, concept, template, loaded)
+        current = forms.views(conn, target=TARGETS[concept.scheme], code=code) if code in _concepts(conn) else []
+        if not (current and current[0]["editable"] and _norm(current[0]) == _norm(draft)):
+            _save(conn, concept, template, loaded)
     [view] = forms.views(conn, target=TARGETS[concept.scheme], code=code)
     return view
 
@@ -433,13 +457,13 @@ def compare(conn: psycopg.Connection, kinds: list[tuple[Concept, Template]]) -> 
     concepts, active = _concepts(conn), _active(conn)
     rows = conn.execute("SELECT scheme, code, origin FROM concept WHERE scheme IN ('kind', 'entity_class') "
                         "AND code = ANY(%s)", ([c.code for c, _ in kinds],)).fetchall()
-    taken = {(s, c): o for s, c, o in rows if o != NAME}
+    taken = {c: o for s, c, o in rows if o != NAME}          # код занят в любой из двух схем
     tpls = {c for (c,) in conn.execute("SELECT code FROM template_active WHERE code = ANY(%s)",
                                        ([c.code for c, _ in kinds],))}
     new, collisions = [], []
     for c, t in kinds:
-        if (c.scheme, c.code) in taken or (c.code in tpls and c.code not in active):
-            owner = f"видом пакета {taken[(c.scheme, c.code)]}" if (c.scheme, c.code) in taken else "шаблоном пакета"
+        if c.code in taken or (c.code in tpls and c.code not in active):
+            owner = f"видом пакета {taken[c.code]}" if c.code in taken else "шаблоном пакета"
             collisions.append(f"packs/mine: код своего вида {c.code} уже занят {owner}")
             continue
         if c.code not in concepts:
@@ -496,5 +520,9 @@ def delete(conn: psycopg.Connection, code: str, *, agent: str) -> None:
         except packs.PackError as e:
             raise MineError(f"на вид {code} ссылается другой свой вид: {e}", code="in_use") from e
         conn.execute("DELETE FROM template_active WHERE code = %s", (code,))
-        conn.execute("DELETE FROM concept WHERE scheme = %s AND code = %s", (scheme, code))
+        try:
+            conn.execute("DELETE FROM concept WHERE scheme = %s AND code = %s", (scheme, code))
+        except psycopg.errors.ForeignKeyViolation as e:
+            # запись вида появилась после подсчёта (submit не берёт MINE_LOCK): то же, что записи были
+            raise MineError(f"у вида {code} появились записи — сначала смените им вид", code="in_use") from e
         _bump(conn, datetime.now(timezone.utc))

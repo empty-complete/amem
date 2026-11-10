@@ -1673,7 +1673,11 @@ class FieldRule(ConfiguredBaseModel):
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
 
     path: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Source', 'FieldRule', 'TemplateUiField']} })
-    required: Optional[bool] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule', 'LinkRules', 'ParameterRule', 'CardField']} })
+    required: Optional[bool] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule',
+                       'LinkRules',
+                       'ParameterRule',
+                       'CardField',
+                       'TemplateUiField']} })
     min_count: Optional[int] = Field(default=None, ge=0, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule']} })
     severity: Optional[Severity] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule', 'RequiredLink', 'CheckIssue']} })
     ucum: Optional[bool] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule']} })
@@ -1776,7 +1780,11 @@ class LinkRules(ConfiguredBaseModel):
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
 
     allowed: Optional[list[str]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['LinkRules']} })
-    required: Optional[list[RequiredLink]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule', 'LinkRules', 'ParameterRule', 'CardField']} })
+    required: Optional[list[RequiredLink]] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule',
+                       'LinkRules',
+                       'ParameterRule',
+                       'CardField',
+                       'TemplateUiField']} })
 
     @field_validator('allowed')
     def pattern_allowed(cls, v):
@@ -1799,7 +1807,11 @@ class ParameterRule(ConfiguredBaseModel):
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
 
     property: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'Qualifier', 'ParameterRule', 'CardField']} })
-    required: Optional[bool] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule', 'LinkRules', 'ParameterRule', 'CardField']} })
+    required: Optional[bool] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule',
+                       'LinkRules',
+                       'ParameterRule',
+                       'CardField',
+                       'TemplateUiField']} })
     group: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField']} })
     origin: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField']} })
     default: Optional[ParameterDefault] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField']} })
@@ -1867,7 +1879,11 @@ class CardField(ConfiguredBaseModel):
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
 
     property: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['Value', 'Qualifier', 'ParameterRule', 'CardField']} })
-    required: bool = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule', 'LinkRules', 'ParameterRule', 'CardField']} })
+    required: bool = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule',
+                       'LinkRules',
+                       'ParameterRule',
+                       'CardField',
+                       'TemplateUiField']} })
     group: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField']} })
     origin: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField']} })
     rule: Optional[str] = Field(default=None, description="""Шаблон, чьё правило действует (code@version).""", json_schema_extra = { "linkml_meta": {'domain_of': ['CardField']} })
@@ -2099,7 +2115,7 @@ class Template(ConfiguredBaseModel):
 
 class TemplateUiField(ConfiguredBaseModel):
     """
-    Подпись, подсказка и тип поля формы. path — путь правила поля шаблона (FieldRule.path) или величина content.values[property=X] / qualifiers[property=X]; один path — не больше одного раза.
+    Подпись, подсказка и тип поля формы. path — путь правила поля шаблона (FieldRule.path) или величина content.values[property=X] / qualifiers[property=X]; один path — не больше одного раза. required — только у величины: обязательна ли она в форме (правило content.values просит лишь хотя бы одно значение).
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amem'})
 
@@ -2116,6 +2132,11 @@ class TemplateUiField(ConfiguredBaseModel):
                        'Activity']} })
     hint: Optional[LangString] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['ParameterRule', 'CardField', 'TemplateUiField']} })
     type: Optional[FieldType] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['Selector', 'TemplateUiField']} })
+    required: Optional[bool] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['FieldRule',
+                       'LinkRules',
+                       'ParameterRule',
+                       'CardField',
+                       'TemplateUiField']} })
 
     @field_validator('path')
     def pattern_path(cls, v):

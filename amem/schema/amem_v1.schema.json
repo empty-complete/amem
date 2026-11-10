@@ -2911,7 +2911,7 @@
     },
     "TemplateUiField": {
       "additionalProperties": false,
-      "description": "Подпись, подсказка и тип поля формы. path — путь правила поля шаблона (FieldRule.path) или величина content.values[property=X] / qualifiers[property=X]; один path — не больше одного раза.",
+      "description": "Подпись, подсказка и тип поля формы. path — путь правила поля шаблона (FieldRule.path) или величина content.values[property=X] / qualifiers[property=X]; один path — не больше одного раза. required — только у величины: обязательна ли она в форме (правило content.values просит лишь хотя бы одно значение).",
       "properties": {
         "hint": {
           "anyOf": [
@@ -2936,6 +2936,12 @@
         "path": {
           "pattern": "^[a-z_][a-z0-9_]*(\\[\\])?(\\.[a-z_][a-z0-9_]*(\\[\\])?)*(\\[property=[a-z][a-z0-9_]*\\])?$",
           "type": "string"
+        },
+        "required": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "type": {
           "anyOf": [

@@ -74,6 +74,34 @@ def test_my_kinds_by_the_person(serve, pg, monkeypatch):
     problem(client.delete(f"{V1}/packs/mine/templates/weighing"), 404, "not_found", MINE, "delete")
 
 
+def test_my_kind_round_trip_keeps_versions_and_required(serve, pg, monkeypatch):
+    """Вид с двумя величинами, обязательна одна: GET /templates → PUT того же — версии те же, обязательность та же."""
+    monkeypatch.setenv("AMEM_PACKS", str(PACKS / "quantities"))
+    db.prepare(pg)
+    client = _person(serve())
+    draft = {**DRAFT, "form": [
+        DRAFT["form"][0],
+        {"key": "length", "path": "content.values[property=length]", "label": {"ru": "Длина"}, "type": "quantity",
+         "required": False, "property": "length"}]}
+    contract.check(client.put(f"{V1}/packs/mine/templates/weighing", json=draft), MINE, "put")
+
+    def state():
+        [view] = [v for v in contract.check(client.get(f"{V1}/templates", params={"target": "atom"}), "/templates")
+                  if v["code"] == "weighing"]
+        versions = (pg.execute("SELECT version FROM template_active WHERE code = 'weighing'").fetchone(),
+                    pg.execute("SELECT count(*) FROM pack WHERE name = 'mine'").fetchone())
+        return view, versions
+
+    view, versions = state()
+    required = {f["property"]: f["required"] for f in view["form"] if f["type"] == "quantity"}
+    assert required == {"mass": True, "length": False}
+    echo = {k: view[k] for k in ("label", "target", "family", "description", "form", "body", "widgets")}
+    contract.check_request(echo, MINE, "put")
+    contract.check(client.put(f"{V1}/packs/mine/templates/weighing", json=echo), MINE, "put")
+    again, after = state()
+    assert after == versions and again["form"] == view["form"]
+
+
 def test_my_kind_in_use_cannot_be_deleted(serve, pg, monkeypatch):
     monkeypatch.setenv("AMEM_PACKS", str(PACKS / "quantities"))
     db.prepare(pg)

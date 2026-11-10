@@ -86,6 +86,34 @@ def test_code_of_a_file_pack_is_taken(kb, code):
     assert e.value.code == "exists" and _versions(kb) == (None, None)
 
 
+def test_code_taken_in_the_other_scheme(kb):
+    """Код вида атома не может совпасть с классом сущности пакета (и наоборот): вид различают по коду."""
+    with pytest.raises(mine.MineError) as e:
+        mine.put(kb, "project", draft(), agent=PERSON)                       # project — класс сущности ядра
+    assert e.value.code == "exists" and _versions(kb, "project") == (None, None)
+    form = [{"key": "codes", "path": "codes", "label": {"ru": "Марки"}, "type": "tags"}]
+    with pytest.raises(mine.MineError) as e:
+        mine.put(kb, "fact", draft(target="entity", family="object", form=form), agent=PERSON)   # fact — вид атома
+    assert e.value.code == "exists"
+
+
+def test_two_quantities_keep_their_required_through_the_form(kb):
+    """Обязательность каждой величины — в ui.fields: форма отдаёт её, повторное сохранение формы версий не меняет."""
+    form = [{"key": "mass", "path": "content.values[property=mass]", "label": {"ru": "Масса"}, "type": "quantity",
+             "required": True},
+            {"key": "length", "path": "content.values[property=length]", "label": {"ru": "Длина"},
+             "type": "quantity"}]
+    view = mine.put(kb, "weighing", draft(form=form), agent=PERSON)
+    assert {f["property"]: f["required"] for f in view["form"] if f["type"] == "quantity"} == {
+        "mass": True, "length": False}
+    body = kb.execute("SELECT body FROM template WHERE code = 'weighing'").fetchone()[0]
+    assert {f["path"]: f.get("required") for f in body["ui"]["fields"] if "[property=" in f["path"]} == {
+        "content.values[property=mass]": True, "content.values[property=length]": False}
+    echo = {k: view[k] for k in mine.DRAFT_KEYS}
+    again = mine.put(kb, "weighing", echo, agent=PERSON)
+    assert _versions(kb) == ("1.0.0", "0.0.1") and again["form"] == view["form"]
+
+
 def test_property_code_is_not_a_kind_code_clash(kb):
     """Код величины — другая схема: вид mass допустим, если шаблона и вида mass нет."""
     view = mine.put(kb, "mass", draft(), agent=PERSON)
