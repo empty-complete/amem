@@ -3,7 +3,8 @@ name: install-agent
 # (репозиторий PGDG) и Homebrew без Docker, с ролью amemo без прав суперпользователя, и контейнер Docker; amemo
 # из этой ветки через uv (amemo-web — из PyPI), amemo init с папкой документов, amemo install claude-code и codex,
 # amemo doctor без FAIL, служба (/health и /ui), бэкап и его пробное восстановление.
-# Windows (WSL2) на машинах GitHub не проверить: шаг 2 инструкции CI не проходит.
+# Windows без WSL — job windows в ci.yml: шаг 3C Windows (установщик EDB, pgvector через nmake), uv, init, install,
+# doctor, служба и бэкап — на каждый push. WSL2 на машинах GitHub не проверить.
 on:
   workflow_dispatch:
   schedule:
