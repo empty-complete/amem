@@ -74,6 +74,18 @@ class BackupError(RuntimeError):
 # Клиент PostgreSQL
 
 
+def _arg(path: Path) -> str:
+    """Путь файла для pg_dump, pg_restore: в Windows — с короткими именами папок вместо символов вне кодовой страницы
+    ANSI (amemo/localpg.py native); сам файл может ещё не существовать."""
+    from .localpg import LocalPgError, native
+
+    path = Path(path)
+    try:
+        return native(path.parent) + os.sep + path.name
+    except LocalPgError as e:
+        raise BackupError(str(e)) from None
+
+
 def _configured_bin() -> str | None:
     from . import settings
 
@@ -147,7 +159,7 @@ def _restore_via_sql(pg_restore: str, psql: str, dump: Path, conninfo: str, env:
     откатывает всё."""
     with tempfile.TemporaryFile() as restore_err, tempfile.TemporaryFile() as psql_err:
         producer = subprocess.Popen([pg_restore, "--single-transaction", "--file=-", "--no-owner",
-                                     "--no-privileges", "--no-comments", str(dump)],
+                                     "--no-privileges", "--no-comments", _arg(dump)],
                                     stdout=subprocess.PIPE, stderr=restore_err, env=env)
         consumer = subprocess.Popen([psql, "--no-psqlrc", "--quiet", "--no-password", "--set=ON_ERROR_STOP=1",
                                      f"--dbname={conninfo}"],
@@ -333,7 +345,7 @@ def _dump(dsn: str, backup_dir: Path, name: str, created_at: str, *, during=None
             if during is not None:
                 during(conn)                                 # первым: снимок держит блокировку объектов как можно короче
             facts = _facts(conn)
-            _run([pg_dump, "--format=custom", f"--snapshot={snapshot}", "--no-password", f"--file={tmp}",
+            _run([pg_dump, "--format=custom", f"--snapshot={snapshot}", "--no-password", f"--file={_arg(tmp)}",
                   f"--dbname={conninfo}"], env, password, "pg_dump")
             try:
                 conn.rollback()
@@ -666,7 +678,7 @@ def restore(source: Path, dsn: str, *, objects_root: Path | None = None) -> dict
             _check_store(tmp, snap["objects"]["file_versions"], "восстановление")
         if server >= 170000:
             _run([pg_restore, "--exit-on-error", "--single-transaction", "--no-owner", "--no-privileges",
-                  "--no-comments", "--no-password", f"--dbname={conninfo}", str(manifest.parent / dump["file"])],
+                  "--no-comments", "--no-password", f"--dbname={conninfo}", _arg(manifest.parent / dump["file"])],
                  env, password, "pg_restore")
         else:
             _restore_via_sql(pg_restore, psql, manifest.parent / dump["file"], conninfo, env, password)

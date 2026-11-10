@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -266,8 +267,18 @@ def cmd_model(work: Path, out: Path) -> None:
               "                  'license': info.get('license')}, default=str))")
     found = json.loads(subprocess.run([str(exe), "-I", "-c", script, str(folder)], check=True, capture_output=True,
                                       text=True, encoding="utf-8").stdout.strip().splitlines()[-1])
-    for lock in [p for p in folder.rglob(".locks") if p.is_dir()]:
-        shutil.rmtree(lock)
+    # нужен только снимок (refs и snapshots/<коммит>): копии файла модели в blobs кэша Hugging Face (в Windows без
+    # символьных ссылок это вторая копия) и прочие кэши загрузки втрое раздували бы архив
+    for path in list(folder.iterdir()):
+        if not path.name.startswith("models--"):
+            shutil.rmtree(path) if path.is_dir() else path.unlink()
+    for path in [p for p in folder.glob("models--*/*") if p.name in ("blobs", ".locks")]:
+        shutil.rmtree(path)
+    check = ("import sys\n"
+             "from amemo.embed import FastembedProvider\n"
+             "assert len(FastembedProvider(cache_dir=sys.argv[1]).embed(['проба'])[0]) == 384\n")
+    subprocess.run([str(exe), "-I", "-c", check, str(folder)], check=True,
+                   env={**os.environ, "HF_HUB_OFFLINE": "1"})          # модель грузится из оставшегося без сети
     for path in sorted((p for p in folder.rglob("*") if p.is_file()), key=lambda p: -p.stat().st_size)[:12]:
         log(f"  {mb(path.stat().st_size):>12}  {path.relative_to(folder).as_posix()}")
     license_text = fetch(APACHE, work / "downloads" / "LICENSE-2.0.txt").read_text(encoding="utf-8")

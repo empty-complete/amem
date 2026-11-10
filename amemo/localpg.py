@@ -146,13 +146,13 @@ class Cluster:
             raise LocalPgError(f"{self.data}: кластер уже есть")
         if self.data.exists() and any(self.data.iterdir()):
             raise LocalPgError(f"{self.data}: папка не пустая и не кластер PostgreSQL — выберите другую")
-        self.data.mkdir(parents=True, exist_ok=True)         # initdb берёт и пустую папку; короткое имя — у готовой
+        self.data.parent.mkdir(parents=True, exist_ok=True)   # папку кластера создаёт initdb: короткое имя — у родителя
         # файл пароля — рядом с кластером, а не во временной папке профиля: её путь бывает не в кодовой странице ANSI
         fd, pwfile = tempfile.mkstemp(prefix="amemo-pw-", dir=self.data.parent, text=True)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as out:
                 out.write(password + "\n")
-            self._run([self.exe("initdb"), "-D", native(self.data), "-U", ROLE, "--pwfile", native(Path(pwfile)),
+            self._run([self.exe("initdb"), "-D", native(self.data.parent) + os.sep + self.data.name, "-U", ROLE, "--pwfile", native(Path(pwfile)),
                        "-A", "scram-sha-256", "-E", "UTF8", "--no-locale"], "initdb")
         finally:
             Path(pwfile).unlink(missing_ok=True)
@@ -198,7 +198,8 @@ class Cluster:
         except OSError as e:
             raise LocalPgError(f"{what}: {e}") from None
         if done.returncode != 0:
-            tail = ((done.stderr or "") + (done.stdout or "")).strip().splitlines()[-3:] if not detach else []
+            # stderr — последним: причина ошибки там, а stdout initdb длинный
+            tail = ((done.stdout or "") + "\n" + (done.stderr or "")).strip().splitlines()[-3:] if not detach else []
             where = f"; журнал — {self.log}" if what.startswith("pg_ctl start") else ""
             raise LocalPgError(f"{what}: код {done.returncode}" + (f": {' / '.join(tail)}" if tail else "") + where)
         return done
