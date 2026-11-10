@@ -3,6 +3,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { SignIn } from "../app/shell/SignIn";
+import base from "../mocks/fixtures/base.json";
 import { server } from "../mocks/node";
 import { apiFetch, auth, authHeaders, nameFrom } from "./auth";
 import { api } from "./client";
@@ -26,7 +27,7 @@ test("с токеном — Authorization в запросах клиента и 
   server.use(
     http.get("/api/v1/base", ({ request }) => {
       seen.push(request.headers.get("authorization"));
-      return HttpResponse.json({});
+      return HttpResponse.json(base);
     }),
   );
   await api.GET("/base").catch(() => {});
@@ -37,7 +38,14 @@ test("с токеном — Authorization в запросах клиента и 
 });
 
 test("ответ 401 — показать вход; ввод токена — вход скрыт, токен сохранён", async () => {
-  server.use(http.get("/api/v1/base", () => HttpResponse.json({ title: "Нужен вход" }, { status: 401 })));
+  server.use(
+    http.get("/api/v1/base", () =>
+      HttpResponse.json(
+        { type: "about:blank", title: "Нужен вход", status: 401, code: "unauthorized" },
+        { status: 401, headers: { "content-type": "application/problem+json" } },
+      ),
+    ),
+  );
   const qc = new QueryClient();
   render(
     <QueryClientProvider client={qc}>

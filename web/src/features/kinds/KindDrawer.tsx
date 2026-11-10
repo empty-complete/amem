@@ -27,6 +27,14 @@ const TYPES: FormField["type"][] = [
 ];
 const WIDGETS = ["sources", "links", "around", "values_table", "similar", "children"] as const;
 
+/** Замечание службы к свойству i: к имени — первым, иначе любое к этому полю (путь, тип, величина). */
+function fieldIssue(issues: Record<string, string>, i: number): string | undefined {
+  const at = `form[${i}]`;
+  return (
+    issues[`${at}.label.ru`] ?? Object.entries(issues).find(([k]) => k === at || k.startsWith(`${at}.`))?.[1]
+  );
+}
+
 const blankField = (i: number): FormField => ({
   key: `f${i}`,
   path: `qualifiers[property=f${i}]`,
@@ -321,7 +329,11 @@ export function KindDrawer() {
       const map: Record<string, string> = {};
       for (const i of err.issues ?? []) map[i.path ?? "_"] = i.message;
       setIssues(map);
+      // замечание к свойству (form[i]…) показывает само свойство, к имени вида — поле имени; прочие — общей строкой,
+      // иначе отказ службы остался бы невидимым
+      const loose = (err.issues ?? []).filter((i) => !/^(label\.ru|form\[\d+\])/.test(i.path ?? ""));
       if (!err.issues?.length) setMsg(err.detail ?? err.title);
+      else if (loose.length) setMsg(loose.map((i) => i.message).join("; "));
     }
   };
   const remove = async () => {
@@ -429,7 +441,7 @@ export function KindDrawer() {
                   f={f}
                   i={i}
                   n={d.form.length}
-                  err={issues[`form[${i}].label.ru`]}
+                  err={fieldIssue(issues, i)}
                   onChange={(nf) => setForm(d.form.map((x, j) => (j === i ? nf : x)))}
                   onMove={(dir) => {
                     const a = [...d.form];
