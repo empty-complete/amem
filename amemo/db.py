@@ -4,6 +4,8 @@
   базы → поисковая проекция, если её версия в базе старее кода (search.ensure_projection) → счётчик id.
   set_base_name(conn, name), base_name(conn) — имя базы для людей (ключ base_name в meta); base_id от него
   не зависит.
+  rehearse(conn) — пробный прогон новых миграций в одной транзакции с откатом под замком миграций: проверка новой
+  версии перед обновлением (amemo/updates.py), в базе ничего не остаётся.
 
 Соединение — в режиме autocommit: тогда каждый `with conn.transaction()` — настоящая транзакция и фиксируется
 при выходе из блока. Без autocommit первое же чтение открывает неявную транзакцию, все дальнейшие блоки становятся
@@ -32,6 +34,8 @@ SQL_DIR = Path(__file__).with_name("sql")
 MIGRATION_LOCK = 0x616D656D00000001          # ключ pg_advisory_lock для миграций: «amemo» + 1
 MINE_LOCK = 0x616D656D00000004               # ключ pg_advisory_xact_lock пакета «Мои виды» (amemo/mine.py): «amemo» + 4
 MINE = "mine"                                # пакет своих видов в базе: понятия origin = 'mine'
+REHEARSE_LOCK_TIMEOUT_MS = 5000              # rehearse: ждать замков таблиц под живой службой не дольше
+REHEARSE_STATEMENT_TIMEOUT_MS = 60_000       # rehearse: один оператор миграции — не дольше
 
 
 BASE_NAME_MAX = 200
@@ -39,6 +43,20 @@ BASE_NAME_MAX = 200
 
 class MigrationError(RuntimeError):
     pass
+
+
+class RehearsalBusy(MigrationError):
+    """Пробный прогон миграций не состоялся сейчас (замок миграций занят, замок таблицы, таймаут) — повторить позже."""
+
+
+class RehearsalLimited(MigrationError):
+    """Миграции не прогнать одной транзакцией, хотя migrate (транзакция на файл) их применил бы."""
+
+
+# ошибки, которые даёт одна общая транзакция, а не сама миграция: новое значение перечисления в той же транзакции
+# (55P04), команда вне транзакции (25001: CREATE INDEX CONCURRENTLY), отложенные события триггеров (55006)
+ONE_TRANSACTION_LIMITS = (psycopg.errors.UnsafeNewEnumValueUsage, psycopg.errors.ActiveSqlTransaction,
+                          psycopg.errors.ObjectInUse)
 
 
 class BaseNameError(ValueError):
@@ -55,34 +73,87 @@ def require_autocommit(conn: psycopg.Connection) -> None:
         raise MigrationError("нужно соединение с autocommit=True (db.connect): иначе записи не фиксируются")
 
 
-def migrate(conn: psycopg.Connection) -> list[str]:
-    """Применить новые миграции; вернуть их имена."""
+def _check_encoding(conn: psycopg.Connection) -> None:
     require_autocommit(conn)
     encoding = conn.info.parameter_status("server_encoding")       # без запроса: сервер сообщает её при входе
     if encoding != "UTF8":
         raise MigrationError(f"нужна база в кодировке UTF8, а не {encoding}: имена и пути объектов хранятся в NFC")
+
+
+def _plan(conn: psycopg.Connection) -> list[tuple[Path, str, str]]:
+    """Миграции кода, которых нет в базе: (файл, текст, sha256) по порядку. Код старее базы или применённый файл
+    изменён — MigrationError. Таблицу учёта создаёт, если её нет (у rehearse — внутри откатываемой транзакции)."""
+    conn.execute("CREATE TABLE IF NOT EXISTS schema_migrations ("
+                 "name text PRIMARY KEY, sha256 text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())")
+    applied = dict(conn.execute("SELECT name, sha256 FROM schema_migrations").fetchall())
+    files = sorted(SQL_DIR.glob("[0-9][0-9][0-9][0-9]_*.sql"))
+    missing = sorted(set(applied) - {p.name for p in files})
+    if missing:
+        raise MigrationError(f"в базе применены миграции, которых нет в коде: {', '.join(missing)} — код старее базы")
+    plan = []
+    for path in files:
+        sql = path.read_text(encoding="utf-8")
+        digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+        if path.name in applied:
+            if applied[path.name] != digest:
+                raise MigrationError(f"{path.name}: файл изменён после применения — изменения пишутся новой миграцией")
+            continue
+        plan.append((path, sql, digest))
+    return plan
+
+
+def migrate(conn: psycopg.Connection) -> list[str]:
+    """Применить новые миграции; вернуть их имена."""
+    _check_encoding(conn)
     conn.execute("SELECT pg_advisory_lock(%s)", (MIGRATION_LOCK,))
     try:
-        conn.execute("CREATE TABLE IF NOT EXISTS schema_migrations ("
-                     "name text PRIMARY KEY, sha256 text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())")
-        applied = dict(conn.execute("SELECT name, sha256 FROM schema_migrations").fetchall())
-        files = sorted(SQL_DIR.glob("[0-9][0-9][0-9][0-9]_*.sql"))
-        missing = sorted(set(applied) - {p.name for p in files})
-        if missing:
-            raise MigrationError(f"в базе применены миграции, которых нет в коде: {', '.join(missing)} — код старее базы")
         done = []
-        for path in files:
-            sql = path.read_text(encoding="utf-8")
-            digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
-            if path.name in applied:
-                if applied[path.name] != digest:
-                    raise MigrationError(f"{path.name}: файл изменён после применения — изменения пишутся новой миграцией")
-                continue
+        for path, sql, digest in _plan(conn):
             with conn.transaction():
                 conn.execute(sql)
                 conn.execute("INSERT INTO schema_migrations (name, sha256) VALUES (%s, %s)", (path.name, digest))
             done.append(path.name)
         return done
+    finally:
+        conn.execute("SELECT pg_advisory_unlock(%s)", (MIGRATION_LOCK,))
+
+
+def rehearse(conn: psycopg.Connection, *, lock_timeout_ms: int = REHEARSE_LOCK_TIMEOUT_MS,
+             statement_timeout_ms: int = REHEARSE_STATEMENT_TIMEOUT_MS) -> list[str]:
+    """Пробный прогон миграций кода на рабочей базе (проверка новой версии перед обновлением, amemo/updates.py):
+    те же файлы и тот же замок, что у migrate, но всё — в одной транзакции, которая откатывается, каждый файл — под
+    своей точкой сохранения (ошибка называет файл). В базе не остаётся ничего, даже таблицы учёта. Вернуть имена
+    миграций, которые применил бы migrate (пусто — новых нет).
+
+    Замок миграций — pg_try_advisory_lock: занят (кто-то мигрирует) — RehearsalBusy, проверку повторят позже.
+    lock_timeout и statement_timeout — до любого DDL: пока миграция ждёт ACCESS EXCLUSIVE, за ней в очереди стоят
+    чтения службы. Не дождалась замка или не уложилась — RehearsalBusy. Ошибка, которой бы не было у migrate (у него
+    каждый файл — своя транзакция: ALTER TYPE … ADD VALUE и новое значение в следующем файле, команды вне транзакции),
+    — RehearsalLimited: это не отказ версии, а предел проверки."""
+    _check_encoding(conn)
+    if not conn.execute("SELECT pg_try_advisory_lock(%s)", (MIGRATION_LOCK,)).fetchone()[0]:
+        raise RehearsalBusy("замок миграций занят — базу сейчас мигрирует другой процесс")
+    try:
+        names = []
+        with conn.transaction():
+            conn.execute(f"SET LOCAL lock_timeout = {int(lock_timeout_ms)}")
+            conn.execute(f"SET LOCAL statement_timeout = {int(statement_timeout_ms)}")
+            for path, sql, digest in _plan(conn):
+                try:
+                    with conn.transaction():          # точка сохранения на файл
+                        conn.execute(sql)
+                        conn.execute("INSERT INTO schema_migrations (name, sha256) VALUES (%s, %s)",
+                                     (path.name, digest))
+                except (psycopg.errors.LockNotAvailable, psycopg.errors.QueryCanceled) as e:
+                    raise RehearsalBusy(f"{path.name}: {type(e).__name__}: {e}") from e
+                except ONE_TRANSACTION_LIMITS as e:
+                    raise RehearsalLimited(f"проверка не смогла прогнать миграции в одной транзакции: {path.name}: "
+                                           f"{type(e).__name__}: {e}") from e
+                except psycopg.Error as e:
+                    raise MigrationError(f"{path.name}: {type(e).__name__}: {e}") from e
+                names.append(path.name)
+            raise psycopg.Rollback()
+        return names
     finally:
         conn.execute("SELECT pg_advisory_unlock(%s)", (MIGRATION_LOCK,))
 

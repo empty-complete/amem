@@ -5,7 +5,7 @@ by и at у review_closed; missing…); расширение не заменяе
 ValueError, поэтому перевод идёт от частного к общему одной цепочкой (to_problem): отказ проверки (api.CheckRejected)
 и RecordNotFound раньше RecordError (api.Missing — подборки нет — тоже 404; api.Ambiguous — текст указал не на
 одну запись — 409 ambiguous с candidates: путей с текстом вместо ссылки у службы нет, перевод — для CLI и MCP),
-коды ReviewError, FolderError, MineError, TaskError и ObjectError раньше «прочего», EmbeddingError (503) раньше прочего ValueError —
+коды ReviewError, FolderError, MineError, TaskError, ObjectError и UpdateError (409 с кодом отказа обновления) раньше «прочего», EmbeddingError (503) раньше прочего ValueError —
 последней ступени перед 500: так библиотека отвечает на неверный ввод, и ответ — 400 с её сообщением.
 Необработанная ошибка — 500 internal: подробности уходят в журнал службы (logger amemo.service), в ответе их нет.
 Недоступная база — 503 без строки соединения: в тексте ошибки psycopg бывают адрес и порт сервера; значение,
@@ -27,7 +27,7 @@ from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from .. import api, bundle, db, embed, mine, objects, records, review, tasks, vocab
+from .. import api, bundle, db, embed, mine, objects, records, review, tasks, updates, vocab
 from ..canon import CanonError
 from ..check import CheckError
 from ..folders import FolderError
@@ -51,7 +51,10 @@ CODE_TITLES = {"read_only": "Только чтение", "review_closed": "Уж�
                "body_timeout": "Тело запроса не дошло", "quota_exceeded": "Нет места для подборок",
                "ambiguous": "Неоднозначно", "template_exists": "Код вида занят",
                "template_in_use": "У вида есть записи", "template_invalid": "Вид не прошёл проверку",
-               "task_closed": "Задача уже закрыта", "task_claimed": "Задачу держит другой агент"}
+               "task_closed": "Задача уже закрыта", "task_claimed": "Задачу держит другой агент",
+               "update_unsupported": "Обновляется не здесь", "backup_required": "Нужен бэкап",
+               "no_update": "Обновлений нет", "update_busy": "Обновление уже ставится",
+               "auto_update_off": "Автообновление выключено настройкой"}
 RESERVED = frozenset({"type", "title", "status", "code", "detail"})       # расширения их не заменяют
 REVIEW = {"closed": (409, "review_closed"), "forbidden": (403, "review_forbidden"),
           "claimed": (403, "review_forbidden"), "stale": (400, "review_bad"), "bad_outcome": (400, "review_bad"),
@@ -125,6 +128,8 @@ def to_problem(exc: BaseException) -> Problem:
     if isinstance(exc, tasks.TaskError):
         status, code = TASK.get(exc.code, (400, "bad_request"))
         return Problem(status, code, message)
+    if isinstance(exc, updates.UpdateError):
+        return Problem(400 if exc.code == "bad_request" else 409, exc.code, message)
     if isinstance(exc, bundle.BundleError):
         problem = Problem(422, exc.code or "bundle_invalid", message)
         problem.extra = dict(exc.details)        # ключи деталей — любые, в том числе detail и headers
@@ -173,6 +178,7 @@ async def handle(request: Request, exc: Exception) -> JSONResponse:
 # (ServerErrorMiddleware): он отвечает 500 и передаёт исключение серверу дальше
 HANDLED = (Problem, api.CheckRejected, api.Ambiguous, api.Forbidden, api.ReadOnly, api.Missing, api.BadRequest,
            records.RecordError, review.ReviewError, FolderError, mine.MineError, tasks.TaskError, bundle.BundleError,
+           updates.UpdateError,
            objects.ObjectError, CheckError,
            db.BaseNameError, vocab.VocabError, CanonError, PackError, embed.EmbeddingError, api.StoreUnavailable,
            api.QuotaExceeded, psycopg.OperationalError, psycopg.DataError, HTTPException, ValueError, Exception)

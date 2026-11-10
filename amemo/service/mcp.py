@@ -49,7 +49,7 @@ from pydantic import Field, ValidationError
 from starlette.datastructures import Headers
 from starlette.types import Receive, Scope, Send
 
-from .. import __version__, api, journal, private, tasks, usefulness
+from .. import __version__, api, journal, private, tasks, updates, usefulness
 from .. import lang as lang_
 from .. import settings as settings_
 from ..ids import uuid7
@@ -65,6 +65,9 @@ GET_MAX = 20                  # записей в одном amemo_get
 Lang = Annotated[Literal["ru", "en"] | None, Field(description="язык подписей: ru | en / label language")]
 BODY_LIMIT = 1 << 20          # байт тела запроса /mcp — как у записи HTTP (1 МиБ)
 IDLE_CUT = 30 * 60            # секунд тишины, после которых у клиента без сессии новая задача
+VERSION_EVERY = 300           # с между сверками версии amemo на диске у amemo mcp (stdio)
+UPDATED = "amemo_updated"     # метка текста «amemo обновлён — перезапустите агента» в ответе инструмента
+EXIT_GRACE = 0.5              # с после ответа «amemo обновлён»: ответ уходит клиенту, затем процесс завершается
 INSTRUCTIONS = (
     "amemo — база знаний из атомов с источниками. Поиск в три шага: amemo_search (короткий список и retrieval_id) → "
     "amemo_timeline(ref) — что вокруг находки → amemo_get(refs) — полные записи. Атом — утверждение с источником и "
@@ -119,6 +122,14 @@ class Runtime:
 
     def caller(self, ctx: Context) -> Caller:
         raise NotImplementedError
+
+    def updated(self) -> str | None:
+        """Текст «amemo обновлён — перезапустите агента», если код на диске уже новый, иначе None. Служба (/mcp)
+        перезапускается сама, поэтому по умолчанию — None."""
+        return None
+
+    def finish(self) -> None:
+        """Завершить процесс после текущего ответа (amemo mcp после обновления)."""
 
     def activity(self, conn, label: str) -> uuid.UUID:
         """Задача сессии с меткой label: из памяти процесса или usefulness.session_activity (та же метка — та же
@@ -221,7 +232,18 @@ def build(runtime: Runtime) -> MCPServer:
     async def call(ctx: Context, work: Callable, *, write: bool = False, where: str | None = None,
                    lang: str | None = None) -> CallToolResult:
         """work(conn, caller) в потоке на языке lang (иначе Settings.lang — AMEMO_LANG); ошибки — failure,
-        неоднозначность — ambiguous."""
+        неоднозначность — ambiguous. amemo на диске обновлён (runtime.updated) — этот вызов идёт как обычно (код
+        в памяти — прежний, целиком), к ответу добавляется текст «перезапустите агента», и процесс завершается после
+        ответа."""
+        notice = runtime.updated()
+        result = await answer(ctx, work, write=write, where=where, lang=lang)
+        if notice is not None:
+            result.content.append(TextContent(type="text", text=f"{UPDATED}: {notice}"))
+            runtime.finish()
+        return result
+
+    async def answer(ctx: Context, work: Callable, *, write: bool, where: str | None,
+                     lang: str | None) -> CallToolResult:
         try:
             caller = runtime.caller(ctx)
             if write and not caller.can_write:
@@ -614,7 +636,13 @@ OPEN_TIMEOUT = 10.0
 
 class StdioRuntime(Runtime):
     """Инструменты amemo mcp: свой маленький пул (check_connection — оборванное соединение заменяется новым),
-    агент процесса и одна задача сессии на процесс."""
+    агент процесса и одна задача сессии на процесс.
+
+    Обновление под живым процессом: при старте весь пакет импортируется заранее (updates.preload) — после замены
+    файлов процесс работает на коде из памяти, а не на смеси. Раз в VERSION_EVERY (и не чаще при вызовах) версия
+    на диске сверяется с той, что была при старте; сменилась — вызов, на котором это замечено, выполняется как
+    обычно, к его ответу добавляется amemo_updated «amemo обновлён — перезапустите агента», и процесс завершается
+    после этого ответа (разд. 2 п. 6.7 спецификации обновлений)."""
 
     def __init__(self, settings: settings_.Settings, *, agent: str, pool, base_id: str | None, provider=None,
                  provider_chosen: bool = False) -> None:
@@ -626,9 +654,35 @@ class StdioRuntime(Runtime):
         self.label = f"mcp:stdio:{uuid7()}"
         self._provider, self._chosen = provider, provider_chosen or provider is not None
         self._provider_lock = threading.Lock()
+        self.baseline = updates.disk_version()
+        self.new_version: str | None = None
+        self.next_version_check = time.monotonic() + VERSION_EVERY
+        self.done: anyio.Event | None = None      # serve_stdio: событие «пора завершаться»
+        self.exiting = False
 
     def connection(self):
         return self.pool.connection()
+
+    def refresh_version(self) -> str | None:
+        """Сверить версию на диске с версией при старте; сменилась — запомнить новую."""
+        self.next_version_check = time.monotonic() + VERSION_EVERY
+        disk = updates.disk_version()
+        if self.baseline is not None and disk is not None and disk != self.baseline:
+            self.new_version = disk
+        return self.new_version
+
+    def updated(self) -> str | None:
+        if self.new_version is None and time.monotonic() >= self.next_version_check:
+            self.refresh_version()
+        if self.new_version is None:
+            return None
+        return (f"amemo обновлён ({self.baseline} → {self.new_version}) — перезапустите агента: этот процесс "
+                f"amemo mcp работает на прежнем коде и после этого ответа завершится")
+
+    def finish(self) -> None:
+        self.exiting = True
+        if self.done is not None:
+            self.done.set()
 
     def provider(self):
         from .. import embed
@@ -670,5 +724,25 @@ def open_stdio(settings: settings_.Settings, *, agent: str, provider=None, ready
 
 
 def serve_stdio(runtime: StdioRuntime) -> None:
-    """Сервер MCP на stdin/stdout до конца ввода."""
-    anyio.run(build(runtime).run_stdio_async)
+    """Сервер MCP на stdin/stdout до конца ввода или до обновления amemo на диске (ответ amemo_updated)."""
+    updates.preload()                       # весь код — в память до того, как его заменит обновление
+    anyio.run(stdio_main, runtime, build(runtime).run_stdio_async)
+
+
+async def stdio_main(runtime: StdioRuntime, run_server: Callable) -> None:
+    """run_server() до конца ввода; рядом — сверка версии раз в VERSION_EVERY и выход через EXIT_GRACE после ответа
+    «amemo обновлён»."""
+    runtime.done = anyio.Event()
+    async with anyio.create_task_group() as group:
+        async def watch() -> None:
+            while not runtime.done.is_set():
+                with anyio.move_on_after(VERSION_EVERY):
+                    await runtime.done.wait()
+                if not runtime.done.is_set():
+                    await anyio.to_thread.run_sync(runtime.refresh_version)
+            await anyio.sleep(EXIT_GRACE)
+            group.cancel_scope.cancel()
+
+        group.start_soon(watch)
+        await run_server()
+        group.cancel_scope.cancel()

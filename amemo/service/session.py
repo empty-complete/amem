@@ -47,8 +47,10 @@ UPLOADS = {INSPECT: "загрузка подборки", "/api/v1/objects": "з�
 PUBLIC = frozenset({"/health"})          # без входа и в общей службе: проверка живости для compose и мониторинга
 UI_PUBLIC = ("/", "/ui")                 # статика интерфейса без входа и в общей службе; API за ней — по токену
 # подборки по токену только для чтения: экспорт и проверка загрузки ничего не пишут в базу, импорт — пробный
-# (dry_run: true; настоящий импорт такой токен не сделает — обработчик ответит 403 read_only)
-READ_ONLY_POSTS = frozenset({"/api/v1/bundles/export", "/api/v1/bundles/inspect", "/api/v1/bundles/import"})
+# (dry_run: true; настоящий импорт такой токен не сделает — обработчик ответит 403 read_only); проверка обновлений
+# ничего не меняет, кроме времени последней проверки
+READ_ONLY_POSTS = frozenset({"/api/v1/bundles/export", "/api/v1/bundles/inspect", "/api/v1/bundles/import",
+                             "/api/v1/updates/check"})
 # /mcp: протокол MCP — запросы POST (и DELETE сессии) даже для чтения; токен только для чтения туда пускается,
 # а инструменты записи сами отвечают ему read_only (amemo/service/mcp.py)
 MCP = "/mcp"

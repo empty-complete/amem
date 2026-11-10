@@ -524,6 +524,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Версия, последний релиз GitHub и состояние обновления; может любой с правом чтения */
+        get: operations["getUpdates"];
+        /**
+         * Переключатель автообновления (пишется в AMEMO_STATE/updates.json, а не в amemo.toml); только человек (person:) с правом записи
+         * @description auto_update = false в amemo.toml или AMEMO_AUTO_UPDATE выключает автообновление совсем: включить его переключателем нельзя — 409 auto_update_off. Модель — 403 forbidden, токен только для чтения — 403 read_only.
+         */
+        put: operations["putUpdates"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/updates/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить релизы сейчас (без тела); может любой с правом чтения. Сбой сети — не ошибка: итог в message; чаще раза в минуту — статус из кэша */
+        post: operations["checkUpdates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/updates/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Поставить доступную версию сейчас (без тела); только человек (person:) с правом записи
+         * @description Установка идёт в фоне: ответ 202 — статус с state installing, дальше — GET /updates. Отказы, известные заранее, — 409: update_unsupported (docker, исходники, pipx run — в detail команда словами), backup_required (у версии новые миграции, а бэкап невозможен — причина в detail), no_update (ставить нечего), update_busy (уже ставится).
+         */
+        post: operations["installUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/bundles/export": {
         parameters: {
             query?: never;
@@ -1197,6 +1255,37 @@ export interface components {
             created_at: string | null;
             size?: number;
             kind?: string;
+        };
+        UpdateStatus: {
+            /** @description Текущая версия amemo */
+            current: string;
+            /** @description Новее текущей версия из релиза GitHub с колесом на PyPI; null — новее нет (или ещё не проверяли) */
+            latest: {
+                version: string;
+                /** @description Страница релиза на GitHub (только https://github.com/empty-complete/amemo/…); null — релиз дал другой адрес */
+                url: string | null;
+            } | null;
+            /**
+             * @description pre — стоит предварительная версия (a, b, rc): видны и предварительные релизы
+             * @enum {string}
+             */
+            channel: "stable" | "pre";
+            /**
+             * @description Вид установки; docker и source сами не обновляются
+             * @enum {string}
+             */
+            install: "pipx" | "pip" | "uv" | "docker" | "source";
+            /** @description Автообновление включено */
+            auto: boolean;
+            /** @enum {string} */
+            state: "idle" | "checking" | "available" | "installing" | "ready" | "restarting" | "failed";
+            /**
+             * Format: date-time
+             * @description Последняя проверка релизов; null — ещё не было
+             */
+            checked_at: string | null;
+            /** @description Словами: что произошло и что делать */
+            message: string;
         };
         Selection: {
             tags?: string[];
@@ -2283,6 +2372,105 @@ export interface operations {
                     "application/json": components["schemas"]["Backup"][];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getUpdates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateStatus"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    putUpdates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "auto": false
+                 *     }
+                 */
+                "application/json": {
+                    auto: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateStatus"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    checkUpdates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateStatus"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    installUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Принято */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateStatus"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

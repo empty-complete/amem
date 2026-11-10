@@ -62,6 +62,27 @@ def _hermetic_ocr(monkeypatch, tmp_path_factory):
     monkeypatch.setenv("AMEMO_OCR_DATA", str(tmp_path_factory.mktemp("tessdata")))
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_updates(monkeypatch):
+    """Ни один тест не ходит в GitHub и PyPI, ничего не ставит и не перезапускает процесс: служба в тестах проверяет
+    релизы при старте (amemo/updates.py) — сеть «выключена», установка и os.execv — ошибка теста. Тесты обновлений
+    подставляют свои GitHub, pip и execv явно."""
+    from amemo import updates
+
+    def offline(url, headers=None, **kw):
+        raise updates.NetworkError("сеть в тестах выключена")
+
+    def no_install(argv, **kw):
+        raise AssertionError(f"тест запустил установку: {argv}")
+
+    def no_restart(path, args):
+        raise AssertionError("тест перезапустил процесс")
+
+    monkeypatch.setattr(updates, "http_get", offline)
+    monkeypatch.setattr(updates, "run_step", no_install)
+    monkeypatch.setattr(updates, "restart_process", no_restart)
+
+
 @pytest.fixture
 def docs(tmp_path) -> Path:
     return make_docs(tmp_path / "docs")

@@ -6,6 +6,11 @@ psycopg_pool на запрос (autocommit — как db.connect: каждый c
 человека — новый на каждый запуск службы. Подборки и загрузки старше суток (AMEMO_STATE) и брошенные временные файлы
 загрузки (.amemo-upload-*.part в корне AMEMO_DOCS) lifespan удаляет при запуске и затем раз в час фоновой задачей. /mcp — Streamable HTTP сервера MCP (amemo/service/mcp.py): его менеджер сессий
 lifespan запускает и останавливает вместе с пулом.
+
+Обновления (amemo/updates.py): Updater службы — app.state.updates. lifespan завершает переход после перезапуска
+(Updater.startup), затем фоновая задача проверяет релизы при старте и раз в CHECK_EVERY (автообновление — там же) и раз
+в TICK смотрит, не пора ли перезапуститься: стоит новая версия, нет запросов HTTP IDLE секунд (updates.Activity —
+внешний слой приложения) и ни одно соединение пула не занято. Перед os.execv пул закрывается.
 """
 from __future__ import annotations
 
@@ -22,7 +27,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
-from .. import api, db, embed, lang
+from .. import api, db, embed, lang, updates
 from ..ocfl_store import ObjectStore
 from ..settings import Settings, SettingsError, load_tokens
 from . import problems, session
@@ -35,8 +40,11 @@ SWEEP_EVERY = 3600.0      # с; подборки и загрузки старш�
 log = logging.getLogger("amemo.service")
 
 
-def create_app(settings: Settings, *, provider: embed.EmbeddingProvider | None = None) -> Starlette:
-    """Служба HTTP по настройкам; provider — эмбеддинги для смыслового канала (None — по AMEMO_BACKEND)."""
+def create_app(settings: Settings, *, provider: embed.EmbeddingProvider | None = None,
+               updater: updates.Updater | None = None, update_loop: bool = True) -> Starlette:
+    """Служба HTTP по настройкам; provider — эмбеддинги для смыслового канала (None — по AMEMO_BACKEND); updater —
+    обновления (None — по виду установки этого процесса), update_loop — фоновая проверка и перезапуск (тесты
+    выключают её, чтобы звать шаги сами)."""
     if not settings.dsn:
         raise SettingsError("база не задана: задайте AMEMO_DSN (или dsn в amemo.toml) и выполните amemo init")
     tokens = load_tokens(settings.tokens) if settings.tokens is not None else None
@@ -44,6 +52,8 @@ def create_app(settings: Settings, *, provider: embed.EmbeddingProvider | None =
     from . import mcp as mcp_
 
     endpoint = mcp_.HttpMcp(settings)        # /mcp: менеджер сессий SDK — в lifespan
+    updater = updater if updater is not None else updates.Updater(settings)
+    activity = updates.Activity()
 
     @contextlib.asynccontextmanager
     async def lifespan(app: Starlette):
@@ -52,10 +62,18 @@ def create_app(settings: Settings, *, provider: embed.EmbeddingProvider | None =
                               name="amemo")
         app.state.base_id = await anyio.to_thread.run_sync(_open, pool)
         app.state.pool = pool
+        updater.before_restart = pool.close
+        updater.idle = lambda: activity.quiet_for(updates.IDLE) and updates.pool_idle(pool)
+        updater.free = lambda: activity.inflight == 0 and updates.pool_idle(pool)
+        updater.before_install = lambda: _snapshot_ui(app, updater)
         try:
             await anyio.to_thread.run_sync(_sweep, settings)
+            await anyio.to_thread.run_sync(_updates_startup, updater)
+            await anyio.to_thread.run_sync(_preload, app)
             async with endpoint.run(app), anyio.create_task_group() as tasks:
                 tasks.start_soon(_sweeper, settings)
+                if update_loop:
+                    tasks.start_soon(_updates, updater)
                 try:
                     yield
                 finally:
@@ -68,7 +86,8 @@ def create_app(settings: Settings, *, provider: embed.EmbeddingProvider | None =
     app = Starlette(
         routes=[Route("/health", health, methods=["GET"]), *http_v1.ROUTES,
                 Route(session.MCP, endpoint, methods=["GET", "POST", "DELETE"]), *ui.ROUTES],
-        middleware=[Middleware(session.Guard, settings=settings, secret=secrets.token_urlsafe(32), tokens=tokens)],
+        middleware=[Middleware(updates.Track, activity=activity),
+                    Middleware(session.Guard, settings=settings, secret=secrets.token_urlsafe(32), tokens=tokens)],
         exception_handlers=problems.HANDLERS,
         lifespan=lifespan,
     )
@@ -78,7 +97,10 @@ def create_app(settings: Settings, *, provider: embed.EmbeddingProvider | None =
     app.state.provider_chosen = provider is not None
     app.state.store = ObjectStore(settings.data)      # только чтение копий: корень создаёт первая запись файла
     app.state.base_id = None
+    app.state.ui_root = None                          # lifespan запоминает корень сборки /ui (_preload)
     app.state.mcp = endpoint                          # /mcp: его runtime (задачи клиентов без сессии)
+    app.state.updates = updater
+    app.state.activity = activity
     return app
 
 
@@ -117,6 +139,55 @@ async def _sweeper(settings: Settings) -> None:
     while True:
         await anyio.sleep(SWEEP_EVERY)
         await anyio.to_thread.run_sync(_sweep, settings)
+
+
+def _preload(app: Starlette) -> None:
+    """Весь код пакета — в память при старте (updates.preload), корень сборки /ui — запомнить: обновление заменит
+    файлы на диске, а до перезапуска служба работает на прежнем коде и отдаёт прежнюю сборку."""
+    from . import problems as problems_, ui
+
+    for name, why in updates.preload():
+        log.warning("модуль %s не импортировался заранее: %s", name, why)
+    try:
+        app.state.ui_root = ui.static_root()
+    except problems_.Problem:
+        app.state.ui_root = None              # веба нет: /ui ответит 404 с подсказкой, как раньше
+
+
+def _snapshot_ui(app: Starlette, updater: updates.Updater) -> None:
+    """Перед установкой на место: копия текущей сборки /ui в AMEMO_STATE/updates/ui-<версия> — её служба и отдаёт
+    до перезапуска (файлы пакета заменит новая версия)."""
+    from . import ui
+
+    root = app.state.ui_root
+    if root is None:
+        return
+    target = updater.root / updates.VENVS / f"ui-{updater.current}"
+    if target.is_symlink():
+        return
+    app.state.ui_root = ui.snapshot(root, target)
+
+
+def _updates_startup(updater: updates.Updater) -> None:
+    try:
+        updater.startup()
+    except OSError as e:                         # AMEMO_STATE не пишется — служба работает и без обновлений
+        log.warning("состояние обновлений в %s не записано: %s", updater.root, e)
+
+
+async def _updates(updater: updates.Updater) -> None:
+    """Проверка релизов при старте и раз в CHECK_EVERY (с автообновлением), раз в TICK — перезапуск в простое.
+    Сбой шага не роняет службу: он в журнале, следующий — по расписанию."""
+    next_check = 0.0
+    while True:
+        try:
+            if updater.clock() >= next_check:
+                next_check = updater.clock() + updates.CHECK_EVERY
+                await anyio.to_thread.run_sync(updater.scheduled, abandon_on_cancel=True)
+            await anyio.to_thread.run_sync(updater.watch, updater.idle, updater.free, abandon_on_cancel=True)
+        except Exception:  # noqa: BLE001
+            log.exception("обновления: шаг не удался")
+        await anyio.sleep(updates.TICK)
 
 
 @contextlib.contextmanager
