@@ -1,0 +1,5 @@
+scheme: parameter_origin
+concepts:
+  - {code: datasheet, label: {ru: паспорт, en: datasheet}, definition: {ru: "Из паспорта или руководства изделия."}}
+  - {code: measured, label: {ru: измерено, en: measured}, definition: {ru: "Измеряется на площадке."}}
+  - {code: method, label: {ru: по методике, en: method}, definition: {ru: "Умолчание методики, подтверждает человек."}}

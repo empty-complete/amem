@@ -31,7 +31,9 @@ function Summary({ card }: { card: Card }) {
       s.blockers.length ? t("card.blockers", { list: s.blockers.join(", ").toLowerCase() }) : "",
     ]
       .filter(Boolean)
-      .join(", "),
+      .join(", ")
+      // второе предложение строки — с заглавной: «Известно 2 из 4. Нет обязательного: …»
+      .replace(/^./, (c) => c.toLocaleUpperCase()),
   ]
     .filter(Boolean)
     .join(" ")

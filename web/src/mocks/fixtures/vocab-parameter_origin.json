@@ -1,0 +1,20 @@
+[
+  {
+    "code": "datasheet",
+    "label": {
+      "ru": "паспорт",
+      "en": "datasheet"
+    },
+    "pack": "meteo",
+    "broader": null
+  },
+  {
+    "code": "method",
+    "label": {
+      "ru": "по методике",
+      "en": "method"
+    },
+    "pack": "meteo",
+    "broader": null
+  }
+]

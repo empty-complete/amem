@@ -15,6 +15,8 @@ const env = {
   AMEM_BACKUPS: join(state, "backups"),
   AMEM_BACKEND: "none",
   AMEM_QUERY_LOG: "off",
+  // пакет образца: классы датчиков с профилями — карточка сущности по профилю
+  AMEM_PACKS: join(process.cwd(), "..", "tools", "sample-pack", "meteo"),
 };
 
 export default defineConfig({

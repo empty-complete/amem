@@ -137,6 +137,22 @@ test("очередь по документам: пункт знает докум
   expect(problems).toEqual([]);
 });
 
+test("карточка по профилю пакета-образца: группы словами, «спросить», умолчание к принятию", async ({
+  page,
+}) => {
+  const problems = watch(page);
+  await page.goto(`./entity/${await refOf(page, "Датчик влажности В-2")}?tab=card`);
+  const measure = page.getByRole("region", { name: "Измерение", exact: true });
+  await expect(measure).toContainText(/диапазон влажности/i);
+  const env = page.getByRole("region", { name: "Условия работы", exact: true });
+  await expect(env).toContainText("спросить: изготовитель");
+  await expect(env).toContainText("нужно, если площадка зимой ниже −30 °C");
+  await expect(env).toContainText("паспорт");
+  await expect(env.getByRole("button", { name: "Принять" })).toBeVisible();
+  await axe(page);
+  expect(problems).toEqual([]);
+});
+
 test("папки: создать, перенести запись из меню, переименовать, удалить пустую", async ({ page }) => {
   const problems = watch(page);
   const ref = await refOf(page, "Проверить растяжки мачты после ветра");

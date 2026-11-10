@@ -1,0 +1,8 @@
+code: sensor
+version: 1.0.0
+target: entity
+applies_to: sensor
+description: {ru: "Датчик: условия работы — рабочая температура и степень защиты корпуса."}
+parameters:
+  - {property: operating_temperature, required: true, group: environment, origin: datasheet, ask: {ru: "изготовитель"}, hint: {ru: "паспорт датчика, раздел «Условия эксплуатации»"}, when: {ru: "если площадка зимой ниже −30 °C"}}
+  - {property: protection_class, required: false, group: environment, origin: method, default: {value_text: "IP65"}, hint: {ru: "табличка на корпусе"}}

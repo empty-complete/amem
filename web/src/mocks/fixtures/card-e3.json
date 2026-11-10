@@ -24,7 +24,9 @@
       "property": "range",
       "label": "Диапазон",
       "required": true,
-      "group": "Измерение",
+      "group": "measurement",
+      "origin": "datasheet",
+      "rule": "sensor@1.0.0",
       "state": "known",
       "value": {
         "lower_bound": 0,
@@ -45,7 +47,9 @@
       "property": "error",
       "label": "Погрешность",
       "required": true,
-      "group": "Измерение",
+      "group": "measurement",
+      "origin": "datasheet",
+      "rule": "sensor@1.0.0",
       "state": "conflict",
       "atoms": ["atm:0193b7c2-5e1a-7d40-9f2e-00000000000b", "atm:0193b7c2-5e1a-7d40-9f2e-000000000016"],
       "candidates": [
@@ -73,24 +77,30 @@
       "property": "operating_temperature",
       "label": "Рабочая температура",
       "required": true,
-      "group": "Условия",
+      "group": "environment",
+      "origin": "datasheet",
+      "rule": "sensor@1.0.0",
       "state": "missing",
-      "hint": "паспорт датчика, раздел «Условия эксплуатации»"
+      "ask": "изготовитель",
+      "hint": "паспорт датчика, раздел «Условия эксплуатации»",
+      "when": "если площадка зимой ниже −30 °C"
     },
     {
       "property": "heating",
       "label": "Обогрев",
       "required": false,
-      "group": "Условия",
+      "group": "environment",
+      "rule": "sensor@1.0.0",
       "state": "asked",
-      "ask": "Нужен ли обогрев В-2 зимой?",
       "atoms": ["atm:0193b7c2-5e1a-7d40-9f2e-000000000018"]
     },
     {
       "property": "ip",
       "label": "Степень защиты",
       "required": false,
-      "group": "Условия",
+      "group": "environment",
+      "origin": "method",
+      "rule": "sensor@1.0.0",
       "state": "known",
       "value": {
         "value_text": "IP65"
@@ -102,14 +112,17 @@
       "property": "pressure_response",
       "label": "Отклик на давление",
       "required": false,
-      "group": "Измерение",
+      "group": "measurement",
+      "rule": "sensor@1.0.0",
       "state": "na"
     },
     {
       "property": "poll_interval",
       "label": "Интервал опроса",
       "required": false,
-      "group": "Опрос",
+      "group": "polling",
+      "origin": "method",
+      "rule": "sensor@1.0.0",
       "state": "missing",
       "default": {
         "amount": 60,

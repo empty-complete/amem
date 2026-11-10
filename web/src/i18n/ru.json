@@ -256,7 +256,11 @@
     "what_value": "значение",
     "what_question": "вопрос",
     "what_default": "умолчание",
-    "question_label": "Какая {{what}}?"
+    "question_label": "Какая {{what}}?",
+    "question_open": "вопрос задан — открыть",
+    "ask_whom": "спросить: {{who}}",
+    "when": "нужно, {{when}}",
+    "rule": "Правило шаблона {{rule}}"
   },
   "changes": {
     "title": "Изменения",

@@ -15,14 +15,19 @@ test("объект: путь, итог словами, все состояния
   const line = "Известно 2 из 7. 1 расхождение, 1 открытый вопрос, нет обязательного: рабочая температура.";
   expect(screen.getByRole("img", { name: line })).toBeInTheDocument();
   expect(screen.getByText(line)).toBeInTheDocument();
-  const measure = screen.getByRole("region", { name: "Измерение" });
+  const measure = await screen.findByRole("region", { name: "Измерение" });
   expect(within(measure).getByText("0…100 %")).toBeInTheDocument();
   expect(within(measure).getByText("Не применяется")).toBeInTheDocument();
-  const cond = screen.getByRole("region", { name: "Условия" });
+  const cond = await screen.findByRole("region", { name: "Условия" });
   expect(within(cond).getByText("Нужно")).toBeInTheDocument();
   expect(within(cond).getByText(/Где искать: паспорт датчика/)).toBeInTheDocument();
   expect(within(cond).getByText("Вопрос открыт")).toBeInTheDocument();
   expect(within(cond).getByText("из: Метеостанция МС-1")).toBeInTheDocument();
+  // форма ядра: у кого спросить, когда нужно, откуда значение (словарь parameter_origin), вопрос — ссылкой
+  expect(within(cond).getByText(/спросить: изготовитель/)).toBeInTheDocument();
+  expect(within(cond).getByText(/нужно, если площадка зимой ниже −30 °C/)).toBeInTheDocument();
+  expect(await within(cond).findAllByText(/паспорт$/)).not.toHaveLength(0);
+  expect(within(cond).getByRole("link", { name: "вопрос задан — открыть" })).toBeInTheDocument();
   expect(screen.getByText("по умолчанию 60 с")).toBeInTheDocument();
 });
 
