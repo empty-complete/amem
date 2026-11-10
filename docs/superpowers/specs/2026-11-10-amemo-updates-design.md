@@ -29,9 +29,14 @@
    | Установка | Признак | Обновление |
    |---|---|---|
    | pipx | `sys.prefix` внутри venvs pipx и поставлен через `pipx install` (не временный venv `pipx run`) | `pipx install --force "amemo[web]==X"` (именно X, не «последняя») |
+   | uv | `uv-receipt.toml` в `sys.prefix` (`uv tool install` — основной путь docs/install-agent.md) | `uv tool install --force "amemo[web]==X"` |
    | pip в venv | venv пишется текущим пользователем, пакет не editable | `sys.executable -m pip install "amemo[web]==X"` без `--index-url`: зеркало и настройки pip пользователя работают |
    | Docker | `/.dockerenv` или `AMEMO_IN_CONTAINER` | не ставит; «Доступна X — обновите образ» и команда |
    | исходники (editable) | `direct_url.json` с `editable` | не ставит; только сообщает |
+   | не с PyPI | `direct_url.json` без `editable` (локальное колесо, git) — вид `source` | не ставит; «поставьте тем же способом» |
+
+   - Extras — те, что стоят сейчас (`web`, `embed`): `amemo[web,embed]==X`, а не всегда `[web]`.
+   - Windows: ставит, но не перезапускает сама (`os.execv` там не заменяет процесс) — «перезапустите службу».
 
    - После установки сверить `importlib.metadata.version("amemo") == X` и `amemo_web` той же версии. Не сошлось — `failed`.
    - Установка и `updates.json` — под файловой блокировкой (`fcntl`): `amemo update` из CLI и служба не ставят одновременно.
@@ -72,7 +77,7 @@
   - `current` — текущая версия;
   - `latest` — версия и адрес релиза или `null`;
   - `channel` — `stable` или `pre`;
-  - `install` — `pipx`, `pip`, `docker` или `source`;
+  - `install` — `pipx`, `pip`, `uv`, `docker` или `source`;
   - `auto` — `true` или `false`;
   - `state` — `idle`, `checking`, `available`, `installing`, `ready`, `restarting` или `failed`;
   - `checked_at`;
@@ -82,6 +87,10 @@
 - `POST /api/v1/updates/install` — поставить доступную сейчас; только человек с правом записи.
   - При `docker` и `source` — 409 `update_unsupported` с командой словами.
   - Без возможного бэкапа при новых миграциях — 409 `backup_required` с причиной.
+  - Ставить нечего — 409 `no_update`; уже ставится — 409 `update_busy`.
+  - Установка идёт в фоне: 202 и `UpdateStatus` (`installing`); дальше — `GET /updates`.
+- `PUT` при `auto_update = false` в настройках и `{auto: true}` — 409 `auto_update_off`: настройка выключает совсем,
+  переключатель действует, только пока она не выключена.
 
 ## 4. Веб
 
