@@ -13,6 +13,9 @@
 не обрывает. pg_dump и pg_restore запускаются без shell, параметры — списком;
 пароль из DSN передаётся через окружение процесса (PGPASSWORD) и не попадает ни в argv, ни в манифест, ни в ошибку.
 Нужен клиент PostgreSQL 18: каталог с pg_dump и pg_restore — в AMEMO_PG_BIN или в PATH.
+pg_restore идёт с --no-comments: у схемы amemo комментариев нет, а COMMENT ON EXTENSION vector из дампа требует
+владельца расширения — роль amemo без прав суперпользователя (своя установка PostgreSQL, Neon, Supabase), у которой
+vector создал суперпользователь, иначе не восстановила бы свою же копию.
 
 Готовая копия — это пара «дамп + манифест», у которой манифест читается и размер дампа сходится. Пишется она так:
 временный файл занимается атомарно (O_EXCL — два процесса в одну секунду его не делят), pg_dump пишет в него →
@@ -126,7 +129,8 @@ def _restore_via_sql(pg_restore: str, psql: str, dump: Path, conninfo: str, env:
     откатывает всё."""
     with tempfile.TemporaryFile() as restore_err, tempfile.TemporaryFile() as psql_err:
         producer = subprocess.Popen([pg_restore, "--single-transaction", "--file=-", "--no-owner",
-                                     "--no-privileges", str(dump)], stdout=subprocess.PIPE, stderr=restore_err, env=env)
+                                     "--no-privileges", "--no-comments", str(dump)],
+                                    stdout=subprocess.PIPE, stderr=restore_err, env=env)
         consumer = subprocess.Popen([psql, "--no-psqlrc", "--quiet", "--no-password", "--set=ON_ERROR_STOP=1",
                                      f"--dbname={conninfo}"],
                                     stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=psql_err, env=env)
@@ -647,8 +651,8 @@ def restore(source: Path, dsn: str, *, objects_root: Path | None = None) -> dict
             _check_store(tmp, snap["objects"]["file_versions"], "восстановление")
         if server >= 170000:
             _run([pg_restore, "--exit-on-error", "--single-transaction", "--no-owner", "--no-privileges",
-                  "--no-password", f"--dbname={conninfo}", str(manifest.parent / dump["file"])], env, password,
-                 "pg_restore")
+                  "--no-comments", "--no-password", f"--dbname={conninfo}", str(manifest.parent / dump["file"])],
+                 env, password, "pg_restore")
         else:
             _restore_via_sql(pg_restore, psql, manifest.parent / dump["file"], conninfo, env, password)
         with psycopg.connect(dsn, autocommit=True) as conn:
