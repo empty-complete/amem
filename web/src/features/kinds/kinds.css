@@ -3,7 +3,10 @@
 }
 .drawer {
   width: min(480px, 100%);
-  height: 100%;
+  /* высота окна, а не 100% строки сетки подложки: та растёт по содержимому, и длинная форма вида уходила
+     за край экрана без прокрутки — «Сохранить вид» и «Удалить вид» становились недостижимы */
+  height: 100dvh;
+  max-height: 100dvh;
   background: var(--overlay);
   color: var(--overlay-foreground);
   box-shadow: var(--overlay-shadow);

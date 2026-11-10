@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { apiFetch } from "../../api/auth";
 import { api, langHeaders } from "../../api/client";
 import { type ApiError, problemFromResponse } from "../../api/errors";
 import type { components } from "../../api/schema";
@@ -52,11 +53,10 @@ export function ImportFlow() {
     try {
       const fd = new FormData();
       fd.append("file", f);
-      const res = await globalThis.fetch(`${location.origin}/api/v1/bundles/inspect`, {
+      const res = await apiFetch(`${location.origin}/api/v1/bundles/inspect`, {
         method: "POST",
         headers: langHeaders(),
         body: fd,
-        credentials: "same-origin",
       });
       if (!res.ok) throw await problemFromResponse(res);
       setIns((await res.json()) as Inspect);

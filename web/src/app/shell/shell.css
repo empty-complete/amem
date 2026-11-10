@@ -313,3 +313,28 @@ kbd {
 .fname .fld {
   width: 100%;
 }
+
+/* вход в общую службу (токен): поверх интерфейса, пока служба отвечает 401 */
+.signin {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: var(--s-md);
+  background: color-mix(in oklab, var(--background) 82%, transparent);
+  backdrop-filter: blur(6px);
+}
+.signin__box {
+  display: grid;
+  gap: var(--s-sm);
+  width: min(420px, 100%);
+  padding: var(--s-lg);
+  border-radius: var(--r-panel);
+  background: var(--surface);
+  box-shadow: var(--overlay-shadow);
+}
+.signin__box .title {
+  margin: 0;
+  font-size: var(--t-section);
+}

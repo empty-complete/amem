@@ -3,9 +3,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useRef, useState } from "react";
 import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 import { useTranslation } from "react-i18next";
+import { apiFetch } from "../../api/auth";
 import { ApiError } from "../../api/errors";
 import { contentUrl, q } from "../../api/queries";
 import type { components } from "../../api/schema";
+import { AuthedImg } from "../../ui/FileLink";
 import { Icon } from "../../ui/icons";
 import { RegionState } from "../../ui/RegionState";
 import { SheetPreview } from "../source/SheetPreview";
@@ -20,11 +22,7 @@ type Obj = components["schemas"]["ObjectView"];
 async function upload(file: File): Promise<Obj> {
   const fd = new FormData();
   fd.append("file", file);
-  const res = await globalThis.fetch(`${location.origin}/api/v1/objects`, {
-    method: "POST",
-    body: fd,
-    credentials: "same-origin",
-  });
+  const res = await apiFetch(`${location.origin}/api/v1/objects`, { method: "POST", body: fd });
   if (!res.ok) {
     const p = (await res.json().catch(() => ({}))) as { title?: string; detail?: string };
     throw new ApiError(res.status, p.title ?? "Не удалось загрузить файл", p.detail);
@@ -64,7 +62,7 @@ function BoxPick({ src, alt, onPick }: { src: string; alt: string; onPick: (b: s
           onPick([box.x, box.y, box.w, box.h].map((v) => v.toFixed(3)).join(","));
       }}
     >
-      <img src={src} alt={alt} draggable={false} />
+      <AuthedImg src={src} alt={alt} draggable={false} />
       {box && (
         <span
           className="boxpick__rect"

@@ -4,15 +4,13 @@ import { expect, type Page, test } from "@playwright/test";
 // e2e против настоящей службы на образце tools/seed_sample.py (метеостанция МС-1). Ссылки на записи — через
 // поиск службы: идентификаторы у каждого запуска свои. Тесты идут по порядку и меняют базу.
 const WINDOW = 6500;
-// служба ещё не отдаёт шаблоны видов — это часть 4d; интерфейс живёт без них (виды из словаря ядра)
-const KNOWN_4D = /\/api\/v1\/templates/;
 
 function watch(page: Page) {
   const problems: string[] = [];
   page.on("console", (m) => {
     if (m.type() !== "error") return;
     const where = m.location().url;
-    if (KNOWN_4D.test(where) || /favicon/.test(where)) return;
+    if (/favicon/.test(where)) return;
     problems.push(`${m.text()} @ ${where}`);
   });
   page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
@@ -206,5 +204,63 @@ test("подборка: антология — zip и HTML-отчёт", async ({
   const html = await page.request.get(report as string);
   expect(await html.text()).toContain("Метеостанция");
   expect((await page.request.get(zip as string)).headers()["content-type"]).toContain("zip");
+  expect(problems).toEqual([]);
+});
+
+test("«Мои виды» на службе: свой вид, запись по его форме, удалить вид с записями — отказ словами", async ({
+  page,
+}) => {
+  // длинный путь по службе: сохранение вида, запись с окном отмены 6,5 с, снова конструктор
+  test.setTimeout(90_000);
+  const problems = watch(page);
+  await page.goto("./settings");
+  await page.getByRole("button", { name: "Настроить виды" }).click();
+  const dlg = page.getByRole("dialog", { name: "Мои виды" });
+  await dlg.getByRole("button", { name: "Вид", exact: true }).click();
+  await dlg.getByRole("textbox", { name: "Имя вида" }).fill("Обход площадки");
+  await dlg.getByRole("button", { name: "Добавить свойство" }).click();
+  await dlg.getByRole("textbox", { name: "Имя свойства" }).fill("Что нашли");
+  await dlg.getByRole("button", { name: "Сохранить вид" }).click();
+  await expect(dlg.getByText("Вид «Обход площадки» сохранён")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // форма вида — от службы: запись уходит с полем свойства и проходит проверку
+  await page.goto("./new?kind=obkhod_ploshchadki");
+  await page.getByRole("textbox", { name: "Заголовок" }).fill("Обход 10 ноября");
+  await page.getByRole("textbox", { name: "Что нашли" }).fill("растяжка ослабла");
+  await page.getByRole("main").getByRole("button", { name: "Записать" }).click();
+  await page.waitForTimeout(WINDOW);
+  const ref = await refOf(page, "Обход 10 ноября");
+  const rec = (await (await page.request.get(`/api/v1/records/${ref}`)).json()) as {
+    payload: { kind: string; qualifiers?: { value_text?: string }[] };
+  };
+  expect(rec.payload.kind).toBe("obkhod_ploshchadki");
+  expect(rec.payload.qualifiers?.[0]?.value_text).toBe("растяжка ослабла");
+
+  await page.goto("./settings");
+  await page.getByRole("button", { name: "Настроить виды" }).click();
+  await dlg.getByRole("button", { name: "Обход площадки" }).click();
+  await dlg.getByRole("button", { name: "Удалить вид" }).click();
+  await expect(dlg).toContainText("есть записи");
+  expect(problems.filter((p) => !p.includes("409"))).toEqual([]);
+});
+
+test("загрузка файла на службу: новый — объект, тот же ещё раз — тот же объект", async ({ page }) => {
+  const problems = watch(page);
+  const file = {
+    name: "Обход_ноябрь.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from("# Обход\nвсё в порядке\n"),
+  };
+  for (let i = 0; i < 2; i++) {
+    await page.goto("./new");
+    await page.getByRole("button", { name: "Добавить источник" }).click();
+    await page.locator('input[type="file"]').setInputFiles(file);
+    await expect(page.getByRole("heading", { name: "Обход_ноябрь.md" })).toBeVisible();
+  }
+  const found = (await (await page.request.get("/api/v1/objects?q=Обход_ноябрь")).json()) as {
+    items: unknown[];
+  };
+  expect(found.items).toHaveLength(1);
   expect(problems).toEqual([]);
 });

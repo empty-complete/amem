@@ -26,7 +26,7 @@ test("параметр: величина по пути content.values с еди�
   const d = {
     ...emptyDraft("sensor_reading"),
     label: "Влажность 87 %",
-    values: { about: [E3], value: { amount: 87 }, when: "2026-11-07" },
+    values: { about: [E3], relative_humidity: { amount: 87 }, valid_from: "2026-11-07" },
   };
   const p = toProposal(d, T("sensor_reading")).proposal.payload;
   expect(p.content).toEqual({ values: [{ property: "relative_humidity", amount: 87, unit: "%" }] });
@@ -120,4 +120,15 @@ test("пояснение «простыми словами» по умолчан
     { ru: "своё пояснение" },
     undefined,
   ]);
+});
+
+test("форма ядра: значение параметра — в content.values с кодом величины, у сущности нет part_of в теле", () => {
+  const par = { ...emptyDraft("parameter"), label: "Ток потребления МС-1: 0,4 А" };
+  par.values = { value: { property: "supply_current", amount: 0.4, unit: "A" } };
+  const p = toProposal(par, T("parameter")).proposal.payload as { content?: { values: unknown[] } };
+  expect(p.content?.values).toEqual([{ property: "supply_current", amount: 0.4, unit: "A" }]);
+  const ent = { ...emptyDraft("artifact", "entity"), label: "Мачта М-3", values: { codes: ["м-3"] } };
+  const e = toProposal(ent, T("artifact")).proposal.payload;
+  expect(e).not.toHaveProperty("part_of");
+  expect(e.codes).toEqual(["м-3"]);
 });

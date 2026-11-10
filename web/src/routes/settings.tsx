@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { auth, useAuthToken } from "../api/auth";
 import { q } from "../api/queries";
 import { changeLocale, type Locale } from "../app/i18n";
 import { applyTheme, readTheme, type Theme } from "../app/theme";
@@ -43,6 +44,7 @@ function Settings() {
   const { t, i18n } = useTranslation();
   const [theme, setTheme] = useState<Theme>(readTheme());
   const session = useQuery(q.session());
+  const token = useAuthToken();
   return (
     <section aria-labelledby="settings-title" style={{ display: "grid", gap: 24, maxWidth: 520 }}>
       <div className="page-head">
@@ -70,6 +72,14 @@ function Settings() {
         ]}
         onChange={(v) => changeLocale(v as Locale)}
       />
+      {token && (
+        <div>
+          <Button variant="outline" onPress={() => auth.clear()}>
+            {t("signin.leave")}
+          </Button>
+          <p className="muted">{t("signin.leave_hint")}</p>
+        </div>
+      )}
       {session.data && (
         <dl
           style={{

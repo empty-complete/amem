@@ -7,6 +7,7 @@ import { api } from "../../api/client";
 import { type ApiError, errorText } from "../../api/errors";
 import { contentUrl, q } from "../../api/queries";
 import type { components } from "../../api/schema";
+import { AuthedImg, FileLink } from "../../ui/FileLink";
 import { formatDate, formatSize } from "../../ui/format";
 import { Icon } from "../../ui/icons";
 import { KindChip } from "../../ui/KindChip";
@@ -221,7 +222,7 @@ function ObjectView_({ o }: { o: Obj }) {
         ) : last && o.sheets?.length ? (
           <SheetPreview id={o.id} version={last.n} sheets={o.sheets} cited={ranges} />
         ) : last && o.media_type?.startsWith("image/") ? (
-          <img className="objimg" src={contentUrl(o.id, last.n)} alt={name} />
+          <AuthedImg className="objimg" src={contentUrl(o.id, last.n)} alt={name} />
         ) : (
           <p className="muted">{t("source.no_preview")}</p>
         )}
@@ -285,10 +286,10 @@ function ObjectView_({ o }: { o: Obj }) {
       </div>
       {last && (
         <footer className="foot">
-          <a className="navlink" href={contentUrl(o.id, last.n)} target="_blank" rel="noreferrer">
+          <FileLink className="navlink" href={contentUrl(o.id, last.n)} target="_blank" rel="noreferrer">
             <Icon name="external" />
             {t("source.open_file")}
-          </a>
+          </FileLink>
           <span className="spacer" />
           <code className="ref">{o.id}</code>
         </footer>

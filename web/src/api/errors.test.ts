@@ -42,3 +42,15 @@ test("check_rejected: замечания и предупреждения вме�
   expect(err.issues.map((i) => i.code)).toEqual(["schema", "private_removed"]);
   expect((await problemFromResponse(new Response("", { status: 413 }))).title).toBe("Слишком большой запрос");
 });
+
+test("заголовок по коду точнее статуса: 503 timeout, 507 quota_exceeded, 408", async () => {
+  const pj = (status: number, code: string) =>
+    new Response(JSON.stringify({ title: "x", status, code, detail: "подробно" }), {
+      status,
+      headers: { "content-type": "application/problem+json" },
+    });
+  expect((await problemFromResponse(pj(503, "timeout"))).title).toMatch(/не уложилась в 15 с/);
+  expect((await problemFromResponse(pj(507, "quota_exceeded"))).title).toMatch(/исчерпано/);
+  const e = await problemFromResponse(new Response("", { status: 408 }));
+  expect(e.title).toBe("Служба не дождалась запроса");
+});
