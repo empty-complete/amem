@@ -22,6 +22,7 @@
 </p>
 
 <p align="center">
+  <a href="#установка-через-агента"><b>Установка</b></a> ·
   <a href="#быстрый-старт"><b>Быстрый старт</b></a> ·
   <a href="#возможности"><b>Возможности</b></a> ·
   <a href="#как-это-устроено"><b>Как устроено</b></a> ·
@@ -141,6 +142,20 @@ amemo хранит единицу поменьше и понадёжнее — *
 - **Скучное хранилище.** Данные лежат в обычном PostgreSQL 16+ с pgvector. Схема описана на LinkML,
   из неё генерируются модели Pydantic и JSON Schema.
 
+## Установка через агента
+
+Вставьте это в Claude Code, Codex или другого агента для кода:
+
+```text
+Установи amemo на этот компьютер по инструкции https://raw.githubusercontent.com/empty-complete/amemo/main/docs/install-agent.md
+```
+
+Агент начинает с пустой машины. Он смотрит, что уже стоит, ставит PostgreSQL с pgvector (в Docker, если он
+есть, иначе напрямую; в Windows — внутри WSL2), сам amemo, подключает его к вашим агентам и заканчивает
+`amemo doctor`. Перед `sudo`, перезагрузкой и большой загрузкой он спрашивает. Инструкция целиком —
+[`docs/install-agent.md`](docs/install-agent.md) (на английском, агент ответит на вашем языке); её команды CI
+проходит на Linux и macOS. Вручную — [установка одной командой](#установка-одной-командой).
+
 ## Быстрый старт
 
 Нужны Python 3.11+, Docker (для PostgreSQL) и Linux или macOS. В Windows — через WSL2.
@@ -255,8 +270,8 @@ amemo doctor                   # что работает и что поправ�
 ```
 
 `amemo init --dsn` запоминает строку подключения в `~/.config/amemo/amemo.toml` (права `0600`): агенты, хуки и CLI
-находят базу без `AMEMO_DSN` в окружении. PostgreSQL с pgvector — из `docker compose up -d --wait db` или свой.
-CI проходит эти шаги на каждом push.
+находят базу без `AMEMO_DSN` в окружении. PostgreSQL с pgvector — из `docker compose up -d --wait db`, прямой
+установкой ([`docs/install-agent.md`](docs/install-agent.md), шаг 3) или свой. CI проходит эти шаги на каждом push.
 
 ## Служба
 

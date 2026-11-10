@@ -22,6 +22,7 @@
 </p>
 
 <p align="center">
+  <a href="#install-with-your-agent"><b>Install</b></a> ·
   <a href="#quickstart"><b>Quickstart</b></a> ·
   <a href="#features"><b>Features</b></a> ·
   <a href="#how-it-works"><b>How it works</b></a> ·
@@ -142,6 +143,20 @@ file it came from, the full history of its changes, and the decision of a person
 - **Boring storage.** Data lives in plain PostgreSQL 16+ with pgvector. The schema is written in
   LinkML, with Pydantic models and JSON Schema generated from it.
 
+## Install with your agent
+
+Paste this into Claude Code, Codex or another coding agent:
+
+```text
+Install amemo on this machine. Follow https://raw.githubusercontent.com/empty-complete/amemo/main/docs/install-agent.md
+```
+
+The agent works from a bare machine. It checks what is already there, then sets up PostgreSQL with pgvector
+(in Docker if you have it, otherwise natively; on Windows inside WSL2), installs amemo, connects it to your
+agents and finishes with `amemo doctor`. It asks before `sudo`, a reboot or a large download. The full
+instructions are in [`docs/install-agent.md`](docs/install-agent.md); CI runs their commands on Linux and macOS.
+To do it by hand, see [One-command install](#one-command-install).
+
 ## Quickstart
 
 amemo needs Python 3.11+, Docker (for PostgreSQL) and Linux or macOS. On Windows, use WSL2.
@@ -258,7 +273,8 @@ amemo doctor                   # what works and what to fix
 
 `amemo init --dsn` remembers the connection string in `~/.config/amemo/amemo.toml` (mode `0600`), so agents, hooks
 and the CLI find the database without `AMEMO_DSN` in their environment. PostgreSQL with pgvector comes from
-`docker compose up -d --wait db` or your own server. CI runs these steps on every push.
+`docker compose up -d --wait db`, a native install ([`docs/install-agent.md`](docs/install-agent.md), step 3) or
+your own server. CI runs these steps on every push.
 
 ## Service
 
