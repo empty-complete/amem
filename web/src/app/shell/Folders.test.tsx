@@ -52,6 +52,7 @@ test("«Переместить в папку» уходит сразу; «Отм
   await user.click(await screen.findByRole("radio", { name: "Архив" }));
   await user.click(screen.getByRole("button", { name: "Переместить в папку" }));
   await waitFor(() => expect(db.records.find((r) => r.ref === ref)?.folder).toBe("Архив"));
-  await user.click(await screen.findByRole("button", { name: "Отменить" }));
+  // окно переноса ещё открыто (onClose здесь пустой) и прячет остальное от чтецов — тост ищем и под aria-hidden
+  await user.click(await screen.findByRole("button", { name: "Отменить", hidden: true }));
   await waitFor(() => expect(db.records.find((r) => r.ref === ref)?.folder).toBeNull());
 });
