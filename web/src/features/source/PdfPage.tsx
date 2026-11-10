@@ -9,7 +9,7 @@ import { markRange, scrollWithin } from "./mark";
 import { findQuote } from "./quote";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
-const DARK_KEY = "amem.pdf_dark";
+const ORIGINAL_KEY = "amem.pdf_original";
 
 type TextItem = { str: string; transform: number[]; width: number; height: number };
 
@@ -60,20 +60,21 @@ export default function PdfPage({
   const [state, setState] = useState<"loading" | "ok" | "missing" | "error">("loading");
 
   const [zoom, setZoom] = useState(false);
-  // тёмная страница — выбор человека, запоминается; кнопка видна только в тёмной теме (source.css)
-  const [dark, setDark] = useState(() => {
+  // «Как в файле» — выбор человека, запоминается: по умолчанию в тёмной теме страница перекрашена под палитру
+  // (как в читалках); кнопка видна только в тёмной теме (source.css)
+  const [original, setOriginal] = useState(() => {
     try {
-      return window.localStorage.getItem(DARK_KEY) === "1";
+      return window.localStorage.getItem(ORIGINAL_KEY) === "1";
     } catch {
       return false;
     }
   });
-  const toggleDark = () =>
-    setDark((d) => {
+  const toggleOriginal = () =>
+    setOriginal((o) => {
       try {
-        window.localStorage.setItem(DARK_KEY, d ? "0" : "1");
+        window.localStorage.setItem(ORIGINAL_KEY, o ? "0" : "1");
       } catch {}
-      return !d;
+      return !o;
     });
 
   useEffect(() => {
@@ -157,7 +158,7 @@ export default function PdfPage({
   }, [url, page, quotes, zoom]);
 
   return (
-    <div className="pdf" data-dark={dark || undefined}>
+    <div className="pdf" data-original={original || undefined}>
       {state === "missing" && <p className="pdf__note">{t("source.quote_missing")}</p>}
       {state === "error" && (
         <p className="pdf__note" role="alert">
@@ -165,8 +166,14 @@ export default function PdfPage({
         </p>
       )}
       <div className="pdf__tools">
-        <Button size="sm" variant="ghost" className="pdf__darkbtn" aria-pressed={dark} onPress={toggleDark}>
-          {t("source.dark_page")}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="pdf__darkbtn"
+          aria-pressed={original}
+          onPress={toggleOriginal}
+        >
+          {t("source.original_colors")}
         </Button>
         <Button size="sm" variant="ghost" aria-pressed={zoom} onPress={() => setZoom((z) => !z)}>
           {zoom ? t("source.zoom_fit") : t("source.zoom_in")}

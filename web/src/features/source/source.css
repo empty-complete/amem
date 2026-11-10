@@ -90,23 +90,27 @@
   justify-content: flex-end;
   gap: var(--s-2xs);
 }
-/* Страница PDF — бумага: цвета файла не трогаем (фото, чертежи, цветные схемы). В тёмной теме лист приглушён,
-   а «Тёмная страница» инвертирует холст с поворотом оттенков, чтобы цвета не уезжали; подсветка цитаты — слой
-   текста поверх холста, фильтр её не задевает. Кнопка — только в тёмной теме. */
+/* Страница PDF в тёмной теме — как в читалках (Zotero и др.): холст инвертирован с поворотом оттенков, чтобы цвета
+   не уезжали, и чуть сбалансирован: белый лист становится тёмно-серым под цвет панели, а не чёрным, текст — светлым,
+   без резкого контраста. Подсветка цитаты — слой текста поверх холста, фильтр её не задевает. «Как в файле»
+   возвращает исходные цвета (фото, цветные схемы) — кнопка только в тёмной теме. */
 .pdf__darkbtn {
   display: none;
 }
 :root[data-theme="dark"] .pdf__darkbtn {
   display: inline-flex;
 }
-:root[data-theme="dark"] .pdf__inner canvas {
-  filter: brightness(0.86);
-}
-:root[data-theme="dark"] .pdf[data-dark] .pdf__sheet {
+:root[data-theme="dark"] .pdf__sheet {
   background: var(--surface);
 }
-:root[data-theme="dark"] .pdf[data-dark] .pdf__inner canvas {
-  filter: invert(0.9) hue-rotate(180deg);
+:root[data-theme="dark"] .pdf__inner canvas {
+  filter: invert(0.88) hue-rotate(180deg) contrast(0.92) brightness(1.04);
+}
+:root[data-theme="dark"] .pdf[data-original] .pdf__sheet {
+  background: var(--paper);
+}
+:root[data-theme="dark"] .pdf[data-original] .pdf__inner canvas {
+  filter: brightness(0.9);
 }
 .pdf__zoom {
   overflow-x: auto;
