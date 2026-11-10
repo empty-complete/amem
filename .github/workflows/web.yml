@@ -27,6 +27,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Setup wizard of the Windows app (setup.html → dist-setup)
+        run: npm run build:setup
       - run: npm run chunks
       - run: npm run size
       - uses: actions/setup-python@v5

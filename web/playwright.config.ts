@@ -20,14 +20,30 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
     },
+    {
+      // мастер первого запуска приложения для Windows (setup.html) с заглушкой моста — проект «setup»
+      command: "npm run dev:setup",
+      url: "http://127.0.0.1:5175/setup.html",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
   ],
   projects: [
     {
       name: "desktop",
-      testIgnore: [/csp\.spec/, /service\//],
+      testIgnore: [/csp\.spec/, /service\//, /setup\.spec/],
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
     },
-    { name: "phone", testIgnore: [/csp\.spec/, /service\//], use: { ...devices["Pixel 7"] } },
+    { name: "phone", testIgnore: [/csp\.spec/, /service\//, /setup\.spec/], use: { ...devices["Pixel 7"] } },
+    {
+      name: "setup",
+      testMatch: /setup\.spec/,
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: "http://127.0.0.1:5175/",
+        viewport: { width: 1200, height: 800 },
+      },
+    },
     {
       name: "csp",
       testMatch: /csp\.spec/,
