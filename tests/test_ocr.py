@@ -13,7 +13,7 @@ import pytest
 
 from amemo import cli, settings, sources
 from amemo.cli.commands import ocr
-from samples import SCAN_PAGES, make_scanned_pdf
+from samples import SCAN_PAGES, SP_PAGES, make_scanned_pdf
 
 ENTRIES = 24
 
@@ -160,6 +160,33 @@ def test_ocr_reads_settings_and_passes_tessdata_to_pymupdf(tmp_path, monkeypatch
     monkeypatch.setenv("AMEMO_OCR", "none")
     got = sources.extract_text(scan)
     assert not seen and got.ocr_unavailable and got.pages is None              # «нечем распознать», как раньше
+
+
+@pytest.mark.parametrize("bad", ["cloud", "abbyy"])
+def test_bad_ocr_setting_does_not_break_extraction(tmp_path, monkeypatch, caplog, bad):
+    """Неверная настройка не роняет извлечение: одно предупреждение, сканы — «нечем распознать» (image)."""
+    monkeypatch.setenv("AMEMO_OCR", bad)
+    monkeypatch.setattr(sources, "_WARNED", set())
+    scan = make_scanned_pdf(tmp_path / "скан.pdf", SCAN_PAGES)
+    with caplog.at_level("WARNING", logger="amemo.sources"):
+        got = sources.extract_text(scan)
+        again = sources.extract_text(scan)
+    assert got.pages is None and got.ocr_unavailable and again.ocr_unavailable
+    mixed = sources.extract_text(make_scanned_pdf(tmp_path / "смешанный.pdf", [SP_PAGES[0], SCAN_PAGES[1]],
+                                                  text_pages=(0,)))
+    assert mixed.image == {2} and mixed.ocr == frozenset()
+    assert [r.getMessage() for r in caplog.records].count(caplog.records[0].getMessage()) == 1
+    assert "AMEMO_OCR" in caplog.records[0].getMessage()
+    with pytest.raises(settings.SettingsError):
+        settings.load()                                         # служба и CLI при старте по-прежнему отказывают
+
+
+def test_broken_config_does_not_break_extraction(tmp_path, monkeypatch):
+    config = tmp_path / "amemo.toml"
+    config.write_text("ocr = ", encoding="utf-8")
+    monkeypatch.setenv("AMEMO_CONFIG", str(config))
+    got = sources.extract_text(make_scanned_pdf(tmp_path / "скан.pdf", SCAN_PAGES))
+    assert got.pages is None and got.ocr_unavailable
 
 
 # --- amemo ocr ---

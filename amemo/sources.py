@@ -175,6 +175,9 @@ def _ocr(doc, pages: list[str], scans: list[int]) -> tuple[set[int], set[int]]:
     return ocr, set()
 
 
+_WARNED: set[str] = set()                # предупреждения о неверной настройке OCR — по разу на текст
+
+
 def ocr_languages(config=None) -> str | None:
     """Языки OCR, данные которых найдены (как «rus+eng»); None — OCR выключен или нечем распознать (ocr_setup)."""
     setup = ocr_setup(config)
@@ -185,10 +188,18 @@ def ocr_setup(config=None) -> OcrSetup | None:
     """Чем распознавать сканы по настройкам config (settings.Settings; None — settings.load()): None — OCR
     выключен (ocr = none) или языковых данных нет. Данные ищутся сначала в ocr_data (amemo ocr install), затем
     у системного tesseract (pymupdf.get_tessdata: TESSDATA_PREFIX или установленный tesseract); берётся первая
-    папка, где есть хоть один из ocr_languages, и из неё — те языки, чей .traineddata есть."""
+    папка, где есть хоть один из ocr_languages, и из неё — те языки, чей .traineddata есть. Неверная настройка
+    (SettingsError) — одно предупреждение в журнал и None: скан помечается «нечем распознать», как при none."""
     from . import settings
 
-    config = settings.load() if config is None else config
+    if config is None:
+        try:
+            config = settings.load()
+        except settings.SettingsError as e:      # служба и CLI откажут при старте; извлечение текста — нет
+            if str(e) not in _WARNED:
+                _WARNED.add(str(e))
+                log.warning("OCR недоступен: неверная настройка — %s", e)
+            return None
     if config.ocr == "none":
         return None
     wanted = config.ocr_languages
