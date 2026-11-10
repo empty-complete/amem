@@ -57,7 +57,8 @@ def test_put_creates_kind_template_and_pack(kb, store, docs):
     assert (by["mass"]["type"], by["mass"]["unit"], by["mass"]["required"]) == ("quantity", "kg", True)
     assert (by["valid"]["type"], by["valid"]["label"]) == ("period", {"ru": "Когда"})
     assert by["about"]["required"] and by["about"]["label"] == {"ru": "Что взвесили"}
-    # запись своего вида проходит те же проверки, что запись вида из пакета
+    # запись своего вида проходит те же проверки, что запись вида из пакета (без «о чём»: сущности в базе нет)
+    mine.put(kb, "weighing", draft(form=draft()["form"][1:]), agent=PERSON)
     atom = {"kind": "weighing", "label": {"ru": "Кронштейн весит 2 кг"}, "summary_plain": {"ru": "Два килограмма."},
             "basis": "author", "content": {"values": [{"property": "mass", "amount": 2, "unit": "kg"}]}}
     done = check.submit(kb, store, docs, [check.Proposal("atom", atom)], agent=PERSON)
@@ -145,7 +146,7 @@ def test_entity_kind(kb):
 
 
 def test_delete(kb, store, docs):
-    mine.put(kb, "weighing", draft(), agent=PERSON)
+    mine.put(kb, "weighing", draft(form=draft()["form"][1:]), agent=PERSON)
     atom = {"kind": "weighing", "label": {"ru": "Кронштейн весит 2 кг"}, "summary_plain": {"ru": "Два килограмма."},
             "basis": "author", "content": {"values": [{"property": "mass", "amount": 2, "unit": "kg"}]}}
     assert check.submit(kb, store, docs, [check.Proposal("atom", atom)], agent=PERSON).state != "rejected"
