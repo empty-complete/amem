@@ -22,7 +22,6 @@ error       сбой при чтении или сверке файла (оши�
 from __future__ import annotations
 
 import logging
-import os
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -39,7 +38,7 @@ FUZZY_MIN_LEN = 20        # нечёткий поиск — только для 
 FUZZY_SCORE = 85          # минимальная схожесть нечёткого совпадения, %
 FUZZY_SCORE_OCR = 75      # то же для страниц, распознанных OCR: знаки путаются (0/О, 1/l), цитата та же
 MIN_CHARS_PER_PAGE = 50   # меньше в среднем — у PDF нет текстового слоя; меньше на странице с картинкой — скан
-OCR_LANGUAGES = "rus+eng"  # языки tesseract по умолчанию; свои — AMEMO_OCR_LANGUAGES через «+»
+OCR_LANGUAGES = "rus+eng"  # языки tesseract по умолчанию (settings.DEFAULT_OCR_LANGUAGES); свои — ocr_languages
 
 # значок сверки для kb_get и веб-интерфейса; verdict-ов без значка в словаре нет
 MARKS = {"ok": "✓", "moved": "✓", "by_locator": "✓", "fuzzy": "≈",
@@ -78,6 +77,14 @@ class Extracted:
     ocr: frozenset[int] = frozenset()        # страницы (с 1), текст которых распознан OCR, а не взят из слоя
     image: frozenset[int] = frozenset()      # страницы-картинки без текстового слоя, не распознанные: OCR недоступен
     ocr_unavailable: bool = False            # в файле есть такие страницы (и при pages None тоже)
+
+
+@dataclass(frozen=True)
+class OcrSetup:
+    """Чем распознавать сканы: папка языковых данных tesseract и языки из неё (как «rus+eng»)."""
+    tessdata: Path
+    languages: str
+    system: bool = False                     # данные системного tesseract (TESSDATA_PREFIX, пакет ОС), не ocr_data
 
 
 class OcrError(Exception):
@@ -120,7 +127,7 @@ def extract_pages(file: Path) -> list[str] | None:
 def extract_text(file: Path) -> Extracted:
     """Текст файла по страницам с отметками OCR. Страница PDF без текстового слоя (короче MIN_CHARS_PER_PAGE
     знаков), но с картинкой — скан: она распознаётся tesseract через PyMuPDF, если есть языковые данные
-    (ocr_languages); иначе остаётся как есть и попадает в image. Сбой самого распознавания — OcrError."""
+    (ocr_setup); иначе остаётся как есть и попадает в image. Сбой самого распознавания — OcrError."""
     suffix = file.suffix.lower()
     if suffix in (".md", ".txt"):
         return Extracted([file.read_text(encoding="utf-8", errors="replace")])
@@ -151,14 +158,15 @@ def _ocr(doc, pages: list[str], scans: list[int]) -> tuple[set[int], set[int]]:
     Распознаются только картинки страницы (full=False) — в их собственном разрешении; текст слоя остаётся."""
     import pymupdf
 
-    languages = ocr_languages()
-    if not languages:
+    setup = ocr_setup()
+    if setup is None:
         return set(), {i + 1 for i in scans}
     ocr: set[int] = set()
     for i in scans:
         page = doc[i]                    # одна и та же Page: её TextPage живёт, пока жива страница (weakref)
         try:
-            text = page.get_text(textpage=page.get_textpage_ocr(language=languages, full=False))
+            text = page.get_text(textpage=page.get_textpage_ocr(language=setup.languages, full=False,
+                                                                 tessdata=str(setup.tessdata)))
         except pymupdf.mupdf.FzErrorBase as e:
             raise OcrError(f"страница {i + 1}: {e}") from e
         if len(text.strip()) > len(pages[i].strip()):
@@ -167,19 +175,46 @@ def _ocr(doc, pages: list[str], scans: list[int]) -> tuple[set[int], set[int]]:
     return ocr, set()
 
 
-def ocr_languages() -> str | None:
-    """Языки OCR, данные которых есть у tesseract (как «rus+eng»); None — OCR недоступен: языковых данных нет
-    (их ищет pymupdf.get_tessdata: TESSDATA_PREFIX или установленный tesseract). Языки — AMEMO_OCR_LANGUAGES,
-    по умолчанию OCR_LANGUAGES; берутся те из них, чей .traineddata есть."""
+def ocr_languages(config=None) -> str | None:
+    """Языки OCR, данные которых найдены (как «rus+eng»); None — OCR выключен или нечем распознать (ocr_setup)."""
+    setup = ocr_setup(config)
+    return setup.languages if setup is not None else None
+
+
+def ocr_setup(config=None) -> OcrSetup | None:
+    """Чем распознавать сканы по настройкам config (settings.Settings; None — settings.load()): None — OCR
+    выключен (ocr = none) или языковых данных нет. Данные ищутся сначала в ocr_data (amemo ocr install), затем
+    у системного tesseract (pymupdf.get_tessdata: TESSDATA_PREFIX или установленный tesseract); берётся первая
+    папка, где есть хоть один из ocr_languages, и из неё — те языки, чей .traineddata есть."""
+    from . import settings
+
+    config = settings.load() if config is None else config
+    if config.ocr == "none":
+        return None
+    wanted = config.ocr_languages
+    found = _languages_in(config.ocr_data, wanted)
+    if found:
+        return OcrSetup(Path(config.ocr_data), found)
+    system = system_tessdata()
+    found = _languages_in(system, wanted) if system is not None else None
+    return OcrSetup(system, found, system=True) if found else None
+
+
+def system_tessdata() -> Path | None:
+    """Папка данных системного tesseract (TESSDATA_PREFIX или установленный пакет) или None."""
     import pymupdf
 
     try:
-        tessdata = Path(pymupdf.get_tessdata())
+        return Path(pymupdf.get_tessdata())
     except Exception as e:              # RuntimeError «tesseract не найден» и что угодно из whereis
-        log.debug("OCR недоступен: %s", e)
+        log.debug("системного tesseract нет: %s", e)
         return None
-    wanted = [x.strip() for x in os.environ.get("AMEMO_OCR_LANGUAGES", OCR_LANGUAGES).split("+") if x.strip()]
-    return "+".join(x for x in wanted if (tessdata / f"{x}.traineddata").is_file()) or None
+
+
+def _languages_in(folder: Path | None, wanted) -> str | None:
+    if folder is None:
+        return None
+    return "+".join(x for x in wanted if (Path(folder) / f"{x}.traineddata").is_file()) or None
 
 
 def _invisible(ch: str) -> bool:

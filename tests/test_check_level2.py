@@ -287,7 +287,7 @@ def test_scan_without_ocr_says_so(kb, store, docs):
     когда OCR появляется, текст извлекается заново."""
     make_scanned_pdf(docs / SCAN, SCAN_PAGES)
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(sources, "ocr_languages", lambda: None)
+        mp.setattr(sources, "ocr_setup", lambda config=None: None)
         check, issues, _, report = one(kb, store, docs, scan_atom())
     assert check.verdict == "no_text"
     assert issues == [("no_text", "warning", "@a: sources[0]")]
@@ -302,7 +302,7 @@ def test_scan_without_ocr_says_so(kb, store, docs):
 
 def test_quote_on_scan_page_without_ocr_names_the_page(kb, store, docs, monkeypatch):
     """PDF с текстовым слоем, где одна страница — скан: цитата с неё не находится, и причина названа."""
-    monkeypatch.setattr(sources, "ocr_languages", lambda: None)
+    monkeypatch.setattr(sources, "ocr_setup", lambda config=None: None)
     make_scanned_pdf(docs / SCAN, [SP_PAGES[0], SCAN_PAGES[1]], text_pages=(0,))
     check, issues, _, report = one(kb, store, docs, scan_atom())
     assert check.verdict == "not_found"

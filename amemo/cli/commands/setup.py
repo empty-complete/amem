@@ -8,9 +8,11 @@ init — db.prepare (миграции, словари, base_id и четыре �
 строка подключения ещё и запоминается в amemo.toml ($AMEMO_CONFIG или ~/.config/amemo/amemo.toml, права 0600 — в ней
 бывает пароль), если файла настроек ещё нет. Корень хранилища создаётся, только если база не знает ни одного файла:
 пустая папка на месте хранилища, файлы которого база знает, — неподключённый том, а не новое хранилище (код 1).
+Распознавание сканов (amemo/cli/commands/ocr.py): --ocr rus,eng ставит языки tesseract; без флага в интерактивном
+терминале (stdin — tty, не --json, не CI) init спрашивает языки, если OCR ещё не настроен; Enter — пропустить.
 
 doctor — проверки по порядку: настройки, база (вход, миграции, id), хранилище, смысловой поиск (модель и провайдер),
-папка документов, файл токенов, агенты (Claude Code и Codex глобально и в проекте: --project или корень git над
+папка документов, OCR (режим, языки, папка данных; warn — ocr = tesseract, а данных нет), файл токенов, агенты (Claude Code и Codex глобально и в проекте: --project или корень git над
 текущей папкой), служба (/health по AMEMO_URL или на порту AMEMO_PORT, если он слушает). У каждой — ok, warn или fail
 с подсказкой; код 0 без fail, 1 — есть fail.
 """
@@ -27,6 +29,8 @@ from . import add
 def register(sub, shared) -> None:
     p = add(sub, shared, "init", "подготовить базу и хранилище", run_init)
     p.add_argument("--dsn", help="строка подключения PostgreSQL (запоминается в amemo.toml, если его нет)")
+    p.add_argument("--ocr", metavar="ЯЗЫКИ",
+                   help="распознавать сканы PDF: языки tesseract через запятую (rus,eng) — скачать и включить")
 
     p = add(sub, shared, "serve", "служба HTTP и веб-интерфейс", run_serve)
     p.add_argument("--host", help="адрес привязки (AMEMO_HOST, по умолчанию 127.0.0.1)")
@@ -93,16 +97,52 @@ def run_init(ctx, args) -> int:
     Path(ctx.settings.state).mkdir(parents=True, exist_ok=True)
     base = api.base(conn)
     result = {"base_id": base["base_id"], "name": base["name"], "migrations_applied": applied,
-              "store": str(root), "state": str(ctx.settings.state), "config_saved": saved}
+              "store": str(root), "state": str(ctx.settings.state), "config_saved": saved,
+              "ocr": _init_ocr(ctx, args)}
 
     def text(r):
         lines = [f"База готова: {r['base_id']}" + (f" ({r['name']})" if r["name"] else ""),
                  f"миграций применено: {len(r['migrations_applied'])}", f"хранилище: {r['store']}"]
         if r["config_saved"]:
             lines.append(f"строка подключения записана в {r['config_saved']}")
+        if r["ocr"]:
+            got = [x["language"] for x in r["ocr"]["installed"]] + r["ocr"]["already"]
+            lines.append(f"распознавание сканов: {', '.join(got)} ({r['ocr']['data']})")
         return "\n".join(lines)
     ctx.emit(result, text)
     return 0
+
+
+OCR_QUESTION = "Распознавать сканы PDF? Языки через пробел (Enter — пропустить): "
+
+
+def _asks(ctx) -> bool:
+    """Спросить про OCR: интерактивный терминал человека, не --json и не CI, OCR ещё не настроен."""
+    import sys
+
+    from ... import sources
+
+    try:
+        tty = sys.stdin.isatty()
+    except (AttributeError, ValueError, OSError):
+        return False
+    return (tty and not ctx.json and not ctx.env.get("CI", "").strip() and ctx.is_person
+            and ctx.settings.ocr == "auto" and sources.ocr_setup(ctx.settings) is None)
+
+
+def _init_ocr(ctx, args) -> dict | None:
+    """Языки OCR при init: --ocr или ответ на вопрос; None — пропущено."""
+    import sys
+
+    from . import ocr
+
+    answer = args.ocr
+    if answer is None and _asks(ctx):
+        print(OCR_QUESTION, end="", file=ctx.err, flush=True)
+        answer = sys.stdin.readline().strip()
+    if not answer or not answer.strip():
+        return None
+    return ocr.install(ctx, ocr.languages_of([answer]))
 
 
 # --- serve ---
@@ -264,6 +304,7 @@ def run_doctor(ctx, args) -> int:
             check("документы", "ok", str(settings.docs))
         else:
             check("документы", "fail", f"{settings.docs}: папки нет — проверьте AMEMO_DOCS или подключите том")
+        _check_ocr(settings, check)
         if settings.tokens is not None:
             try:
                 count = len(settings_.load_tokens(settings.tokens))
@@ -277,6 +318,29 @@ def run_doctor(ctx, args) -> int:
     ctx.emit({"ok": ok, "checks": checks},
              lambda r: "\n".join(f"{marks[c['status']]}  {c['name']}: {c['detail']}" for c in r["checks"]))
     return 0 if ok else ENV
+
+
+def _check_ocr(settings, check) -> None:
+    """OCR: режим, языки, папка; warn — ocr = tesseract, а языковых данных нет."""
+    from . import ocr
+
+    try:
+        found = ocr.status(settings)
+    except OSError as e:
+        check("OCR", "fail", f"папка языковых данных не читается: {e}")
+        return
+    if found["mode"] == "tesseract":
+        check("OCR", "ok", f"tesseract, {'+'.join(found['languages'])}: {found['tessdata']}"
+                           + (" (системный)" if found["system"] else ""))
+    elif settings.ocr == "tesseract":
+        check("OCR", "warn", f"ocr = tesseract, а языковых данных ({'+'.join(found['wanted'])}) нет в "
+                             f"{found['data']} и у системного tesseract — сканы не распознаются: "
+                             f"amemo ocr install {' '.join(found['wanted'])}")
+    elif settings.ocr == "none":
+        check("OCR", "ok", "выключено (ocr = none): сканы PDF не распознаются")
+    else:
+        check("OCR", "ok", f"не установлено: сканы PDF не распознаются — по желанию amemo ocr install rus eng "
+                           f"(данные — в {found['data']})")
 
 
 def _check_agents(ctx, args, check) -> None:

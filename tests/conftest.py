@@ -53,6 +53,15 @@ def _hermetic_backend(monkeypatch):
     monkeypatch.delenv("AMEMO_BACKEND", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_ocr(monkeypatch, tmp_path_factory):
+    """OCR тестов — по системному tesseract (в CI он есть), а не по данным amemo ocr install разработчика: своя
+    пустая папка ocr_data и режим по умолчанию (auto), языки — rus, eng."""
+    for var in ("AMEMO_OCR", "AMEMO_OCR_LANGUAGES"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("AMEMO_OCR_DATA", str(tmp_path_factory.mktemp("tessdata")))
+
+
 @pytest.fixture
 def docs(tmp_path) -> Path:
     return make_docs(tmp_path / "docs")

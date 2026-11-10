@@ -5,7 +5,7 @@
 # Тестовые базы — профиль test (ниже).
 
 x-amemo: &amemo
-  build: {context: ., target: service}
+  build: {context: ., target: service, args: {OCR_LANGS: "${AMEMO_OCR_LANGS:-}"}}
   image: amemo:local
   restart: unless-stopped
   depends_on:
@@ -39,7 +39,7 @@ services:
   amemo-web:
     <<: *amemo
     profiles: ["web"]
-    build: {context: ., target: web}
+    build: {context: ., target: web, args: {OCR_LANGS: "${AMEMO_OCR_LANGS:-}"}}
     image: amemo-web:local
     environment:
       <<: *amemo-env
