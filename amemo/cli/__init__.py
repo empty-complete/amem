@@ -70,6 +70,8 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None, *, env: Mapping[str, str] | None = None, runner=None) -> int:
     """Вход `amemo`: код выхода по разд. 5.1. env — окружение (по умолчанию os.environ); runner — замена uvicorn.run
     у `amemo serve` (тесты)."""
+    if argv is None:
+        _utf8_stdio()
     argv = list(sys.argv[1:] if argv is None else argv)
     environment = environ(env)
     if argv and argv[0] == "hook" and argv[1:] not in (["-h"], ["--help"]):
@@ -121,6 +123,22 @@ def _run(argv, environment, runner, made: list) -> int:
     if getattr(args, "agent", None) is not None or ctx.env.get("AMEMO_AS_MODEL", "").strip():
         ctx.agent                         # явный агент проверяется сразу, у любой команды, а не при первой записи
     return args.run(ctx, args) or OK
+
+
+def _utf8_stdio() -> None:
+    """Windows: stdin, stdout и stderr — в UTF-8. Консоль Windows и так в UTF-8, а канал и файл — в кодовой странице
+    ANSI (cp1252 и др.): кириллица сообщений там не кодируется, и `amemo doctor > файл` падал бы на первой строке."""
+    import os
+
+    if os.name != "nt":
+        return
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "")
+        if encoding != "utf8" and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except (OSError, ValueError, io.UnsupportedOperation):
+                pass
 
 
 def _silence_stdout() -> None:

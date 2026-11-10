@@ -19,6 +19,8 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .portable import O_BINARY, WINDOWS
+
 log = logging.getLogger("amemo.service")
 _lock = threading.Lock()            # строки параллельных поисков (пул потоков службы) не перемешиваются
 
@@ -35,9 +37,10 @@ def record(path: Path | None, *, recipe: str, query: str, agent: str, base_id: s
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with _lock:
-            fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | O_BINARY, 0o600)
             try:
-                if os.fstat(fd).st_mode & 0o077:      # файл был с правами шире (создан до службы, umask)
+                # файл был с правами шире (создан до службы, umask); у Windows прав POSIX нет — там ACL папки
+                if not WINDOWS and os.fstat(fd).st_mode & 0o077:
                     os.fchmod(fd, 0o600)
                 os.write(fd, line.encode("utf-8"))
             finally:

@@ -28,7 +28,6 @@ init() без блокировки базы не разбирал чужую з�
 """
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -40,6 +39,8 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+
+from .portable import file_lock, fsync_dir
 
 LAYOUT = "0004-hashed-n-tuple-storage-layout"
 LAYOUT_CONFIG = {"extensionName": LAYOUT, "digestAlgorithm": "sha256", "tupleSize": 3, "numberOfTuples": 3,
@@ -89,12 +90,7 @@ def _sidecar(raw: bytes) -> bytes:
     return f"{hashlib.sha256(raw).hexdigest()} inventory.json\n".encode("utf-8")
 
 
-def _fsync_dir(path: Path) -> None:
-    fd = os.open(path, os.O_RDONLY)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+_fsync_dir = fsync_dir              # на Windows — ничего: папку для fsync не открыть
 
 
 def _write(path: Path, raw: bytes) -> None:
@@ -118,12 +114,8 @@ class ObjectStore:
     def _locked(self):
         """Блокировка файла рядом с корнем: init() и запись в одном корне идут по очереди и между процессами."""
         self.lockfile.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.lockfile, "a") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                fcntl.flock(f, fcntl.LOCK_UN)
+        with file_lock(self.lockfile, 0o666):      # права — как у open(…, "a"): по umask
+            yield
 
     # корень
 
