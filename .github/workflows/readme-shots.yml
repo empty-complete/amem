@@ -1,6 +1,7 @@
 name: readme-shots
 # Снимки экрана README с настоящей службы на образцах: en — tools/seed_sample_en.py, ru — tools/seed_sample.py.
-# Результат — артефакт readme-shots-<язык>; в репозиторий снимки кладут руками (docs/assets/readme/<язык>/).
+# Результат — артефакты readme-shots-<язык> (снимки PNG) и readme-gifs-<язык> (анимации сцен, web/tools/readme-gifs.mjs);
+# в репозиторий их кладут руками (docs/assets/readme/<язык>/). Анимации идут после снимков: сцены меняют базу.
 on:
   workflow_dispatch:
   pull_request:
@@ -9,6 +10,7 @@ on:
       - "tools/sample_en/**"
       - "tools/sample-pack/**"
       - "web/tools/readme-shots.mjs"
+      - "web/tools/readme-gifs.mjs"
       - "tools/readme_agent_session.py"
       - ".github/workflows/readme-shots.yml"
 
@@ -97,6 +99,19 @@ jobs:
         with:
           name: readme-shots-${{ matrix.lang }}
           path: docs/assets/readme/${{ matrix.lang }}/*.png
+          retention-days: 14
+      - name: ffmpeg
+        run: command -v ffmpeg || { sudo apt-get update && sudo apt-get install -y ffmpeg; }
+      - name: Usage GIFs
+        working-directory: web
+        run: node tools/readme-gifs.mjs http://127.0.0.1:8770 "$SHOT_LANG"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: readme-gifs-${{ matrix.lang }}
+          path: |
+            docs/assets/readme/${{ matrix.lang }}/*.gif
+            docs/assets/readme/${{ matrix.lang }}/failed-*.png
           retention-days: 14
       - if: failure()
         run: cat /tmp/service.log || true
