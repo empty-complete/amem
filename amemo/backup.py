@@ -51,6 +51,7 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 from . import lang
 from .objects import OBJECTS_LOCK
+from .portable import fsync_path
 from .ocfl_store import ObjectStore, StoreError
 from .search import SEARCH_TEXT_VERSION
 
@@ -76,11 +77,13 @@ class BackupError(RuntimeError):
 def _tool(name: str) -> str:
     """pg_dump / pg_restore версии не ниже 18: из AMEMO_PG_BIN или PATH; иначе — понятная ошибка, а не пропуск."""
     folder = os.environ.get("AMEMO_PG_BIN")
-    path = str(Path(folder) / name) if folder else shutil.which(name)
+    # which и с папкой: на Windows имя дополняется .exe (PATHEXT)
+    path = shutil.which(name, path=folder) if folder else shutil.which(name)
     if not path or not os.access(path, os.X_OK):
         raise BackupError(f"нет {name}: нужен клиент PostgreSQL {PG_MAJOR} — каталог с ним в AMEMO_PG_BIN или в PATH")
     try:
-        out = subprocess.run([path, "--version"], capture_output=True, text=True, check=True, timeout=30).stdout
+        out = subprocess.run([path, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                             check=True, timeout=30).stdout
     except (OSError, subprocess.SubprocessError) as e:
         raise BackupError(f"{name} не запускается: {e}") from e
     match = re.search(r"\(PostgreSQL\) (\d+)", out)
@@ -90,7 +93,8 @@ def _tool(name: str) -> str:
 
 
 def _version(path: str) -> str:
-    return subprocess.run([path, "--version"], capture_output=True, text=True, check=True, timeout=30).stdout.strip()
+    return subprocess.run([path, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                          check=True, timeout=30).stdout.strip()
 
 
 def _client(dsn: str) -> tuple[str, dict, str | None]:
@@ -105,7 +109,8 @@ def _client(dsn: str) -> tuple[str, dict, str | None]:
 
 def _run(argv: list[str], env: dict, password: str | None, stage: str) -> None:
     try:
-        result = subprocess.run(argv, env=env, capture_output=True, text=True, check=False)
+        result = subprocess.run(argv, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                check=False)
     except OSError as e:
         raise BackupError(f"{stage}: {argv[0]} не запускается: {e}") from None
     if result.returncode != 0:
@@ -203,12 +208,7 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _fsync(path: Path) -> None:
-    fd = os.open(path, os.O_RDONLY)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+_fsync = fsync_path                     # файл или папка; папка на Windows — ничего (portable.fsync_dir)
 
 
 def _place(tmp: Path, final: Path) -> None:

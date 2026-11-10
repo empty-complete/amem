@@ -152,14 +152,16 @@ Install amemo on this machine. Follow https://raw.githubusercontent.com/empty-co
 ```
 
 The agent works from a bare machine. It checks what is already there, then sets up PostgreSQL with pgvector
-(in Docker if you have it, otherwise natively; on Windows inside WSL2), installs amemo, connects it to your
-agents and finishes with `amemo doctor`. It asks before `sudo`, a reboot or a large download. The full
-instructions are in [`docs/install-agent.md`](docs/install-agent.md); CI runs their commands on Linux and macOS.
+(in Docker if you have it, otherwise natively, Windows included), installs amemo, connects it to your agents
+and finishes with `amemo doctor`. It asks before `sudo`, a reboot or a large download. The full instructions are
+in [`docs/install-agent.md`](docs/install-agent.md); CI runs their commands on Linux, macOS and Windows.
 To do it by hand, see [One-command install](#one-command-install).
 
 ## Quickstart
 
-amemo needs Python 3.11+, Docker (for PostgreSQL) and Linux or macOS. On Windows, use WSL2.
+amemo needs Python 3.11+ and Docker (for PostgreSQL) on Linux, macOS or Windows. On Windows, run the commands in
+PowerShell with Docker Desktop, and the venv's pip is `.venv\Scripts\pip`; without Docker,
+[`docs/install-agent.md`](docs/install-agent.md) sets PostgreSQL up natively. WSL2 works too.
 
 **1. Start PostgreSQL and install the library**
 
@@ -582,8 +584,10 @@ http_headers = { "X-Amemo-Agent" = "model:codex" }
   project files only in a trusted project.
 - **Project files.** With `--project` the files get a bare `amemo` command, without this machine's path, so they
   can be committed; `amemo` must be on the agent's `PATH`. A global install uses the full path.
-- **Windows.** Hook commands are POSIX shell lines (`AMEMO_AS_MODEL=… amemo hook …`): they work on Linux, macOS and
-  WSL2, not in native Windows shells. Use WSL2.
+- **Windows.** Native Windows needs no shell for the hooks: Claude Code gets a program with arguments (`command`
+  and `args`), which runs the same with Git Bash or PowerShell, Codex a `cmd.exe` line. They carry no
+  `AMEMO_AS_MODEL` (that is POSIX shell syntax), and they need none: hooks only read. Agent settings are found
+  under `%USERPROFILE%`.
 - **Check.** `amemo doctor` shows what is installed (globally and for the project of the current folder) and whether
   its command still exists; then `claude mcp list` or `codex mcp list` confirms the agent sees the server.
 

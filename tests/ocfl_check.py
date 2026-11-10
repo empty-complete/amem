@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 import ocfl
+import pytest
 from ocfl import layout_registry
 from ocfl.digest import string_digest
 from ocfl.layout_0003_hash_and_id_n_tuple import Layout_0003_Hash_And_Id_N_Tuple
@@ -30,15 +31,23 @@ class Layout0004(Layout_0003_Hash_And_Id_N_Tuple):
         digest = string_digest(identifier, self.digest_algorithm).lower()
         parts = [digest[i * self.tuple_size:(i + 1) * self.tuple_size] for i in range(self.number_of_tuples)]
         tail = digest[self.tuple_size * self.number_of_tuples:] if self.short_object_root else digest
-        return os.path.join(*parts, tail)
+        return "/".join([*parts, tail])        # путь внутри корня (fsspec): всегда «/»
 
 
 layout_registry.add_layout(Layout0004().NAME, Layout0004)
+
+# ocfl-py 2.1 на Windows не валидирует корень вовсе: пути внутри корня он склеивает через os.path.join («\»),
+# а сравнивает с путями fsspec, где всегда «/» (path 27b/29b/011 vs start 27b\29b), — и так в нескольких модулях.
+# Там validate() пропускает тест, а assert_valid в test_ocfl_store — только саму проверку валидатором
+VALIDATOR = os.name != "nt"
+NO_VALIDATOR = "ocfl-py 2.1 не валидирует корень OCFL на Windows (пути с «\\» против путей fsspec с «/»)"
 
 
 def validate(root: Path) -> tuple[bool, str]:
     """Корень и все объекты валидны. validate() ocfl-py считает только ошибки обхода корня: испорченный объект
     видно лишь по good_objects < num_objects — поэтому сверяются и они; в сообщении — ошибки объектов и обхода."""
+    if not VALIDATOR:
+        pytest.skip(NO_VALIDATOR)
     store = ocfl.StorageRoot(root=str(root))
     ok = store.validate(log_warnings=False)
     report = f"{store.num_objects=} {store.good_objects=}\nобъекты: {store.errors}\nкорень: {store.log}"

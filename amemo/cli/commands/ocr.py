@@ -24,6 +24,7 @@ import struct
 import tomllib
 from pathlib import Path
 
+from ...portable import O_BINARY, home as home_
 from ..errors import ENV, NOT_FOUND, USAGE, CliError
 from . import add, group
 
@@ -159,7 +160,7 @@ def config_path(ctx) -> Path:
     """amemo.toml, который читает settings.load: $AMEMO_CONFIG или ~/.config/amemo/amemo.toml (HOME окружения)."""
     from ... import settings
 
-    home = Path(ctx.env.get("HOME") or Path.home())
+    home = home_(ctx.env)
     explicit = ctx.env.get("AMEMO_CONFIG", "").strip()
     return settings._expand(explicit, home) if explicit else home / ".config" / "amemo" / "amemo.toml"
 
@@ -207,9 +208,9 @@ def set_config(path: Path, values: dict) -> None:
     target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     mode = (target.stat().st_mode & 0o777) if target.exists() else 0o600   # в amemo.toml бывает пароль DSN
     tmp = target.with_name(f".{target.name}.{secrets.token_hex(6)}.tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | O_BINARY, 0o600)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
             f.write(result)
             f.flush()
             os.fsync(f.fileno())

@@ -12,7 +12,7 @@ import pytest
 from amemo import ocfl_store
 from amemo.ids import uuid7
 from amemo.ocfl_store import ObjectStore, StoreError, layout_path, ocfl_id
-from ocfl_check import object_path, validate
+from ocfl_check import VALIDATOR, object_path, validate
 
 USER = "model:claude"
 
@@ -40,6 +40,8 @@ def add(store, tmp_path, object_id, n, data: bytes, name="СП 20.13330.2016.pdf
 
 
 def assert_valid(store):
+    if not VALIDATOR:              # Windows: валидатора нет (ocfl_check.NO_VALIDATOR) — проверки самого amemo идут дальше
+        return
     ok, log = validate(store.root)
     assert ok, log
 

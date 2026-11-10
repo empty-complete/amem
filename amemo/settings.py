@@ -31,6 +31,8 @@ from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlsplit
 
+from . import portable
+
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8767            # 8765 на машинах разработчиков часто занят другими службами
 DEFAULT_MODEL_AGENT = "model:local"
@@ -104,7 +106,7 @@ def load(env: Mapping[str, str] | None = None, **explicit) -> Settings:
     unknown = set(explicit) - set(ENV)
     if unknown:
         raise TypeError(f"settings.load: неизвестные настройки {sorted(unknown)}")
-    home = Path(env.get("HOME") or Path.home())
+    home = portable.home(env)
     config, table = _config(env, home)
     raw: dict[str, tuple[object, str, Path | None]] = {}       # поле → (значение, источник, база относительных путей)
     for name, var in ENV.items():
@@ -180,7 +182,7 @@ def load_tokens(path: Path | str) -> tuple[Token, ...]:
     try:
         # O_NONBLOCK: канал (FIFO) на месте файла не вешает запуск — открытие возвращается сразу, а S_ISREG по fstat
         # отвергает его до чтения
-        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0))
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0) | portable.O_BINARY)
         with os.fdopen(fd, "rb") as f:
             info = os.fstat(f.fileno())          # права и владелец — того файла, который читаем
             raw = f.read() if stat.S_ISREG(info.st_mode) else None
@@ -192,7 +194,9 @@ def load_tokens(path: Path | str) -> tuple[Token, ...]:
         raise SettingsError(f"{path}: это не обычный файл")
     if os.name == "posix":
         # кто может писать в файл, тот впишет свой токен с правом записи; хэши сами по себе не раскрывают токены.
-        # Чужой файл (владелец — другой пользователь, кроме root) его владелец перепишет когда угодно
+        # Чужой файл (владелец — другой пользователь, кроме root) его владелец перепишет когда угодно.
+        # На Windows st_uid и биты прав не отражают доступ (его задают ACL): файл в профиле пользователя
+        # (%USERPROFILE%) другим пользователям по умолчанию закрыт, а проверять ACL — не дело amemo
         if info.st_uid not in (os.getuid(), 0):
             raise SettingsError(f"{path}: файл токенов принадлежит другому пользователю (uid {info.st_uid}) — "
                                 f"создайте его от пользователя службы")
@@ -240,14 +244,21 @@ def _os_user(env: Mapping[str, str]) -> str:
             return env[var]
     try:
         import pwd
+    except ImportError:                   # Windows: модуля pwd нет — имя, которое знает ОС
+        import getpass
+        try:
+            return getpass.getuser()
+        except (ImportError, KeyError, OSError):
+            return ""
+    try:
         return pwd.getpwuid(os.getuid()).pw_name
-    except (ImportError, KeyError, OSError):
+    except (KeyError, OSError):
         return ""
 
 
 def _expand(value: str, home: Path) -> Path:
     # «~» — домашняя папка из того же окружения, что и HOME настроек, а не из окружения процесса
-    if value == "~" or value.startswith("~/"):
+    if value == "~" or value.startswith(("~/", "~" + os.sep)):
         return Path(str(home) + value[1:])
     return Path(value)
 

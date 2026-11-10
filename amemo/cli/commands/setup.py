@@ -23,6 +23,7 @@ import logging
 import os
 from pathlib import Path
 
+from ...portable import O_BINARY, home
 from ..errors import ENV, USAGE, CliError
 from . import add
 
@@ -54,8 +55,7 @@ def register(sub, shared) -> None:
 
 def _config_path(ctx) -> Path:
     explicit = ctx.env.get("AMEMO_CONFIG", "").strip()
-    home = Path(ctx.env.get("HOME") or Path.home())
-    return Path(explicit).expanduser() if explicit else home / ".config" / "amemo" / "amemo.toml"
+    return Path(explicit).expanduser() if explicit else home(ctx.env) / ".config" / "amemo" / "amemo.toml"
 
 
 def _save_dsn(ctx, dsn: str) -> str | None:
@@ -66,8 +66,8 @@ def _save_dsn(ctx, dsn: str) -> str | None:
     if path.exists():
         return None
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | O_BINARY, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
         f.write(f"# настройки amemo (amemo init)\ndsn = {json.dumps(dsn, ensure_ascii=False)}\n")
     return str(path)
 

@@ -34,6 +34,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Mapping
 
+from ..portable import O_BINARY, home
+
 HOOKS_FORMAT = "claude-code-hooks/2026-11-09"     # дата сверки с документацией (см. описание модуля)
 DOCS = "https://code.claude.com/docs/en/hooks"
 EVENTS = ("SessionStart", "UserPromptSubmit", "PreCompact")
@@ -156,7 +158,7 @@ def _state(env: Mapping[str, str]) -> Path:
     except Exception:                     # noqa: BLE001 — неверный amemo.toml не мешает записать, почему хук молчит
         if env.get("AMEMO_STATE", "").strip():
             return Path(env["AMEMO_STATE"].strip()).expanduser()
-        return Path(env.get("HOME") or Path.home()) / ".local" / "state" / "amemo"
+        return home(env) / ".local" / "state" / "amemo"
 
 
 def log(env: Mapping[str, str], event: str, message: str) -> None:
@@ -165,7 +167,7 @@ def log(env: Mapping[str, str], event: str, message: str) -> None:
     try:
         path = _state(env) / "hooks.log"
         path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | O_BINARY, 0o600)
         try:
             os.write(fd, f"{datetime.now(timezone.utc).isoformat()} {event} {line}\n".encode("utf-8"))
         finally:

@@ -4,8 +4,8 @@
 sha256 (settings.token_hash) — строки [[token]] с hash, agent, write и created_at, как читает settings.load_tokens.
 Файл пишется целиком во временный рядом (O_EXCL, 0600) и встаёт на место переименованием: прерванная запись не
 оставляет полфайла, права у нового файла — 0600 сразу, без окна с правами по umask. Правка идёт под замком
-(flock на .<имя>.lock рядом): параллельные create и revoke не теряют записей. Файл-симлинк правится в своей цели
-(замена — рядом с целью, ссылка остаётся); ссылка в никуда — отказ. Прежний файл перед правкой
+(portable.file_lock на .<имя>.lock рядом): параллельные create и revoke не теряют записей. Файл-симлинк правится
+в своей цели (замена — рядом с целью, ссылка остаётся); ссылка в никуда — отказ. Прежний файл перед правкой
 читается load_tokens — с той же проверкой прав и владельца, что у службы.
 
 Токены выдаёт и отзывает только человек: модель, выдавшая себе токен person:, писала бы от имени человека.
@@ -15,13 +15,13 @@ sha256 (settings.token_hash) — строки [[token]] с hash, agent, write и
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import os
 import secrets
 import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ...portable import O_BINARY, file_lock
 from ..errors import AMBIGUOUS, NOT_FOUND, USAGE, CliError
 from . import add, group
 
@@ -65,15 +65,11 @@ def _target(path: Path) -> Path:
 
 @contextlib.contextmanager
 def _locked(path: Path):
-    """Замок на время правки (fcntl.flock на .<имя>.lock рядом): два token create не теряют запись друг друга —
-    второй читает файл уже после замены первым."""
+    """Замок на время правки (portable.file_lock на .<имя>.lock рядом): два token create не теряют запись друг
+    друга — второй читает файл уже после замены первым."""
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd = os.open(path.with_name(f".{path.name}.lock"), os.O_WRONLY | os.O_CREAT, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+    with file_lock(path.with_name(f".{path.name}.lock"), 0o600):
         yield
-    finally:
-        os.close(fd)                       # закрытие снимает flock
 
 
 def _person(ctx, what: str) -> None:
@@ -116,9 +112,9 @@ def _write(path: Path, entries: list[dict]) -> None:
         lines.append("")
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     tmp = path.with_name(f".{path.name}.{secrets.token_hex(6)}.tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | O_BINARY, 0o600)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(lines))
             f.flush()
             os.fsync(f.fileno())
