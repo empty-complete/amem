@@ -1210,7 +1210,8 @@ def task_create(conn: psycopg.Connection, *, agent: str, kind, object, version, 
 
 def task_list(conn: psycopg.Connection, *, state=None, object=None, limit=None, agent: str | None = None,
               full: bool = False) -> list[dict]:
-    """TaskView[] по времени постановки: фильтры state и object; agent — свободные и взятые им (amem_tasks)."""
+    """TaskView[] от новых к старым: фильтры state (без него — только незакрытые) и object; agent — свободные и
+    взятые им (amem_tasks)."""
     object = _str(object, "object") or None
     rows = tasks.list_(conn, state=_enum(state, "state", tasks.STATES),
                        object_id=_object_id(object) if object is not None else None, agent=agent,
@@ -1231,15 +1232,21 @@ def task_release(conn: psycopg.Connection, task_id, *, agent: str) -> dict:
 
 
 def task_done(conn: psycopg.Connection, task_id, *, agent: str, result=None) -> dict:
-    """Закрыть взятую задачу с итогом result (объект JSON; <private> вырезается)."""
+    """Закрыть взятую задачу с итогом result (объект JSON): {task, warnings}. <private> вырезается
+    (private_removed), строка, похожая на секрет, записывается как есть с предупреждением secret_like — как у submit."""
+    warnings: list[dict] = []
     if result is not None:
         if not isinstance(result, dict):
             raise BadRequest("result: нужен объект JSON, например {\"refs\": [\"atm:…\"], \"note\": \"…\"}")
-        result = _scrub(result, "result", [], strip=True)
+        removed: list[str] = []
+        found: list[tuple[str, list[str]]] = []
+        result = _scrub(result, "result", removed, strip=True, secrets=found)
         if len(json.dumps(result, ensure_ascii=False).encode()) > TASK_RESULT_MAX:
             raise BadRequest(f"result: больше {TASK_RESULT_MAX // 1024} КиБ — оставьте ссылки записей и короткую "
                              f"заметку")
-    return task_view(tasks.done(conn, _task_id(task_id), agent=agent, result=result), full=True)
+        warnings = _private_removed("result", removed) + _secret_like("result", found)
+    task = task_view(tasks.done(conn, _task_id(task_id), agent=agent, result=result), full=True)
+    return {"task": task, "warnings": warnings}
 
 
 def task_cancel(conn: psycopg.Connection, task_id, *, agent: str) -> dict:

@@ -154,8 +154,9 @@ def create(conn: psycopg.Connection, kind: str, object_id: uuid.UUID, version: i
 
 def list_(conn: psycopg.Connection, *, state: str | None = None, object_id: uuid.UUID | None = None,
           agent: str | None = None, limit: int = 100, now: datetime | None = None) -> list[dict]:
-    """Задачи по времени постановки. state — как его видит список (истёкшая аренда — open); agent — то, что
-    нужно агенту: свободные задачи и взятые им самим (state тогда не задают)."""
+    """Задачи от новых к старым. state — как его видит список (истёкшая аренда — open); без state — только
+    незакрытые (open и claimed): закрытые просят явно (state done или cancelled). agent — то, что нужно агенту:
+    свободные задачи и взятые им самим (state тогда не задают)."""
     if state is not None and state not in STATES:
         raise TaskError(f"state {state!r}: допустимы {', '.join(STATES)}", code="invalid")
     if not 1 <= limit <= LIST_MAX:
@@ -166,13 +167,15 @@ def list_(conn: psycopg.Connection, *, state: str | None = None, object_id: uuid
     if state is not None:
         where.append(f"{effective} = %(state)s")
         params["state"] = state
+    else:
+        where.append("state IN ('open', 'claimed')")
     if object_id is not None:
         where.append("object_id = %(object)s")
         params["object"] = object_id
     if agent is not None:
         where.append(f"({effective} = 'open' OR (state = 'claimed' AND claimed_by = %(agent)s))")
         params["agent"] = agent
-    sql = f"{_SELECT}{' WHERE ' + ' AND '.join(where) if where else ''} ORDER BY created_at, id LIMIT %(limit)s"
+    sql = f"{_SELECT}{' WHERE ' + ' AND '.join(where) if where else ''} ORDER BY created_at DESC, id DESC LIMIT %(limit)s"
     return [_row(row, now) for row in conn.execute(sql, params)]
 
 
@@ -210,7 +213,9 @@ def claim(conn: psycopg.Connection, task_id=None, *, agent: str, kind: str | Non
 
 
 def release(conn: psycopg.Connection, task_id, *, agent: str, now: datetime | None = None) -> dict:
-    """Вернуть взятую задачу в open; вернуть может только тот, кто её держит. Уже свободная — без изменений."""
+    """Вернуть взятую задачу в open; вернуть может только тот, кто её держит, и после истечения аренды: чужую с
+    живой арендой — claimed, чужую с истёкшей — forbidden (она и так свободна, а держатель ещё может её закрыть).
+    Свободная, которую никто не держит, — без изменений."""
     _require_autocommit(conn)
     _model_only(agent, "возвращает задачи")
     now = _now(now)
@@ -220,7 +225,10 @@ def release(conn: psycopg.Connection, task_id, *, agent: str, now: datetime | No
             raise _closed(task)
         if task["state"] == "claimed" and task["claimed_by"] != agent:
             raise _held(task)
-        if state == "claimed" and (holder == agent or task["state"] == "open"):
+        if state == "claimed" and holder != agent:
+            raise TaskError(f"задачу {task['id']} брал {holder}, а не {agent}: вернуть её может только он "
+                            f"(аренда истекла — задача и так свободна)", code="forbidden")
+        if state == "claimed":
             conn.execute("UPDATE task SET state = 'open', claimed_by = NULL, claimed_until = NULL WHERE id = %s",
                          (task["id"],))
     return {**task, "state": "open", "claimed_by": None, "claimed_until": None}

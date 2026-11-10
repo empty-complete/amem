@@ -305,11 +305,11 @@ def test_tasks_create_and_list(serve, pg, tmp_path):
     by_model = model.post(f"{V1}/tasks", json=other)                                    # модель тоже ставит
     assert by_model.status_code == 202, by_model.text
     every = contract.check(person.get(f"{V1}/tasks"), "/tasks")
-    assert [t["id"] for t in every] == [task_id, by_model.json()["task_id"]]
-    first = every[0]
+    assert [t["id"] for t in every] == [by_model.json()["task_id"], task_id]             # от новых к старым
+    first = every[1]
     assert (first["state"], first["note"], first["created_by"], first["claimed_by"]) == \
         ("open", "разобрать протокол", "person:ann", None)
-    assert every[1]["created_by"].startswith("model:")
+    assert every[0]["created_by"].startswith("model:")
     only = contract.check(person.get(f"{V1}/tasks", params={"object": other["object"]}), "/tasks")
     assert [t["object"] for t in only] == [other["object"]]
     assert contract.check(person.get(f"{V1}/tasks", params={"state": "done"}), "/tasks") == []

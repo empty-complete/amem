@@ -321,9 +321,10 @@ export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
   `GET /objects?q=` находит объекты по части имени или пути.
 - **Задачи агентам.** В вебе человек просит агента разобрать файл (`POST /tasks`); повтор возвращает ту же
   задачу. Агент берёт её через MCP: `amem_tasks` — свободные задачи и свои, `amem_task_claim` — взять с арендой
-  на 30 минут, `amem_task_release` — вернуть, `amem_task_done` — закрыть с итогом (ссылками на записанное).
-  Истёкшая аренда освобождает задачу для другого агента. `amem tasks list [--state]` показывает задачи
-  в терминале, `amem tasks cancel ID` отменяет (тот, кто поставил, или человек).
+  на 30 минут, `amem_task_release` — вернуть, `amem_task_done` — закрыть с итогом (ссылками на записанное),
+  `amem_task_cancel` — отменить поставленную им. Истёкшая аренда освобождает задачу для другого агента.
+  `GET /tasks` и `amem tasks list` показывают открытые и взятые задачи, от новых к старым (закрытые —
+  `--state done`); `amem tasks cancel ID` отменяет (тот, кто поставил, или человек).
 
 ## Docker compose
 
@@ -392,7 +393,7 @@ amem doctor [--project DIR]          база, хранилище, модель,
 
 ## MCP
 
-Сервер MCP даёт агенту 18 инструментов над теми же операциями, что HTTP API:
+Сервер MCP даёт агенту 19 инструментов над теми же операциями, что HTTP API:
 
 | Инструмент | Что делает |
 |---|---|
@@ -407,7 +408,7 @@ amem doctor [--project DIR]          база, хранилище, модель,
 | `amem_object_status(path)`, `amem_mark_object(path, status, note?)` | Что из документа уже атомизировано |
 | `amem_review_claim`, `amem_review_release`, `amem_review_resolve` | Для смыслового проверяющего |
 | `amem_tasks(object?, limit?)` | Задачи агентам: свободные и взятые вами |
-| `amem_task_claim(task?, kind?)`, `amem_task_release(task)`, `amem_task_done(task, result?)` | Взять задачу с арендой, вернуть, закрыть с итогом |
+| `amem_task_claim(task?, kind?)`, `amem_task_release(task)`, `amem_task_done(task, result?)`, `amem_task_cancel(task)` | Взять задачу с арендой, вернуть, закрыть с итогом, отменить свою |
 | `amem_vocab(scheme)` | Коды словаря с подписями |
 
 Поиск идёт в три шага, чтобы агент читал только нужное: `amem_search` даёт короткие карточки, `amem_timeline`

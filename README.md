@@ -325,8 +325,9 @@ A person writes in the web UI: a form for each kind, their own kinds, file uploa
 - **Tasks for agents.** In the web a person asks an agent to parse a file (`POST /tasks`); a repeat returns the
   same task. The agent picks it up over MCP: `amem_tasks` lists open tasks and its own, `amem_task_claim` takes one
   with a 30-minute lease, `amem_task_release` gives it back, and `amem_task_done` closes it with the result
-  (links to the records it wrote). An expired lease frees the task for another agent. `amem tasks list [--state]`
-  shows the tasks in the terminal, `amem tasks cancel ID` cancels one (the one who set it, or a person).
+  (links to the records it wrote), and `amem_task_cancel` cancels a task it set. An expired lease frees the task for
+  another agent. `GET /tasks` and `amem tasks list` show open and claimed tasks, newest first (`--state done` for
+  the closed ones); `amem tasks cancel ID` cancels one (the one who set it, or a person).
 
 ## Docker compose
 
@@ -395,7 +396,7 @@ amem doctor [--project DIR]          database, store, model, documents, agents, 
 
 ## MCP
 
-The MCP server gives an agent 18 tools over the same operations as the HTTP API:
+The MCP server gives an agent 19 tools over the same operations as the HTTP API:
 
 | Tool | What it does |
 |---|---|
@@ -410,7 +411,7 @@ The MCP server gives an agent 18 tools over the same operations as the HTTP API:
 | `amem_object_status(path)`, `amem_mark_object(path, status, note?)` | What has been atomized from a document |
 | `amem_review_claim`, `amem_review_release`, `amem_review_resolve` | For the semantic reviewer |
 | `amem_tasks(object?, limit?)` | Agent tasks: open ones and those you hold |
-| `amem_task_claim(task?, kind?)`, `amem_task_release(task)`, `amem_task_done(task, result?)` | Take a task with a lease, give it back, close it with the result |
+| `amem_task_claim(task?, kind?)`, `amem_task_release(task)`, `amem_task_done(task, result?)`, `amem_task_cancel(task)` | Take a task with a lease, give it back, close it with the result, cancel your own |
 | `amem_vocab(scheme)` | Vocabulary codes with labels |
 
 Search goes in three steps so the agent reads only what it needs: `amem_search` gives short cards,

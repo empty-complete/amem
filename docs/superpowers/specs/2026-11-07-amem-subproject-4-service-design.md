@@ -473,8 +473,8 @@ amem doctor                          проверка установки
 
 - **Таблица `task`** (миграция 0012): id (UUIDv7), `kind` (`parse`), объект и версия, `note`, `state` (`open | claimed | done | cancelled`), кто поставил и когда, кто взял и до какого времени (аренда 30 мин, как у очереди проверки), когда закрыта, `result` (что сделано — ссылки записей). Входит в счётчики бэкапа.
 - **Одна открытая задача на (kind, объект, версия).** Повтор `POST /tasks` возвращает тот же `task_id` (202).
-- **MCP:** `amem_tasks` (открытые и свои), `amem_task_claim`, `amem_task_release`, `amem_task_done` (с `result`). Истёкшую аренду берёт другой агент: в списке такая задача — `open` без `claimed_by`; закрыть её тот, кто брал, может, пока её не взял другой.
-- **Ответы.** `GET /tasks` — `TaskView` контракта (без `limit`: до 500 задач по времени постановки). MCP отдаёт ещё `created_at`, `done_at` и `result`. Закрыть не взятую задачу — 400 `bad_request`.
+- **MCP:** `amem_tasks` (открытые и свои), `amem_task_claim`, `amem_task_release`, `amem_task_done` (с `result`), `amem_task_cancel`. Истёкшую аренду берёт другой агент: в списке такая задача — `open` без `claimed_by`; закрыть или вернуть её тот, кто брал, может, пока её не взял другой; чужой агент её не возвращает (403 `forbidden`). `result` проходит `<private>` и `secret_like`, как тело `submit`: предупреждения — в `warnings` ответа `amem_task_done`.
+- **Ответы.** `GET /tasks` — `TaskView` контракта (без `limit`: до 500 задач, от новых к старым; без `state` — только незакрытые, `open` и `claimed`). MCP отдаёт ещё `created_at`, `done_at` и `result`. Закрыть не взятую задачу — 400 `bad_request`.
 - **CLI:** `amem tasks list [--state]`, `amem tasks cancel ID`.
 
 ### 6a.6. Права

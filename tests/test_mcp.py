@@ -61,7 +61,7 @@ def test_tools_list_matches_spec(env, kb, mode):
         async with connect(env, mode=mode) as client:
             tools = (await client.list_tools()).tools
         assert {t.name for t in tools} == set(mcp.TOOLS)
-        assert len(mcp.TOOLS) == 18
+        assert len(mcp.TOOLS) == 19
         for tool in tools:
             assert tool.description and len(tool.description) < 400, tool.name
         hints = {t.name: t.annotations.read_only_hint for t in tools}
@@ -69,6 +69,7 @@ def test_tools_list_matches_spec(env, kb, mode):
         idempotent = {t.name for t in tools if t.annotations.idempotent_hint}
         assert idempotent == {"amem_move", "amem_helpful", "amem_mark_object", "amem_task_release", "amem_task_done"}
         assert hints["amem_tasks"] and not hints["amem_task_claim"] and not hints["amem_task_done"]
+        assert not hints["amem_task_cancel"]
         mark = next(t for t in tools if t.name == "amem_mark_object")
         assert "хранилище" in mark.description
         schema = {t.name: t.input_schema for t in tools}
@@ -337,8 +338,38 @@ def test_task_from_http_claimed_and_done_through_mcp(http, env, kb, store, docs)
             err, body = await call(agent, "amem_task_claim", task="не-uuid")
             assert err and body["code"] == "bad_request"
     sync(main)
-    [view] = client.get("/api/v1/tasks").json()
+    assert client.get("/api/v1/tasks").json() == []                         # без state — только незакрытые
+    [view] = client.get("/api/v1/tasks", params={"state": "done"}).json()
     assert (view["id"], view["state"], view["claimed_by"]) == (task_id, "done", AGENT)
+
+
+def test_task_cancel_and_secret_like_through_mcp(http, env, kb, store, docs):
+    """amem_task_cancel: свою задачу модель отменяет, чужую (поставил человек) — forbidden; result задачи,
+    похожий на секрет, записывается с предупреждением secret_like, как у submit."""
+    from amem import objects, tasks
+
+    http()
+    version = objects.ingest(kb, store, docs, "Заметки/узел.md", agent=PERSON)
+    other = objects.ingest(kb, store, docs, "заметка.md", agent=PERSON)
+    by_person, _ = tasks.create(kb, "parse", version.object_id, version.n, agent=PERSON)
+
+    async def main():
+        async with connect(env) as agent:
+            err, body = await call(agent, "amem_task_cancel", task=str(by_person["id"]))
+            assert err and body["code"] == "forbidden" and body["status"] == 403
+            own, _ = tasks.create(kb, "parse", other.object_id, other.n, agent=AGENT)
+            err, cancelled = await call(agent, "amem_task_cancel", task=str(own["id"]))
+            assert not err and cancelled["task"]["state"] == "cancelled"
+            err, body = await call(agent, "amem_task_cancel", task=str(own["id"]))
+            assert err and body["code"] == "task_closed"
+            err, taken = await call(agent, "amem_task_claim", task=str(by_person["id"]))
+            assert not err
+            err, closed = await call(agent, "amem_task_done", task=str(by_person["id"]),
+                                     result={"refs": [], "note": f"токен {SECRET}"})
+            assert not err and closed["task"]["state"] == "done"
+            [warning] = closed["warnings"]
+            assert warning["code"] == "secret_like" and warning["path"] == "note" and SECRET not in str(warning)
+    sync(main)
 
 
 # --- /mcp службы ---

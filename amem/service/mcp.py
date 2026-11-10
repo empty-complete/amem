@@ -434,8 +434,16 @@ def build(runtime: Runtime) -> MCPServer:
             ctx: Context,
             result: Annotated[dict[str, Any] | None, Field(description="итог: {refs: [ссылки записей], note}")] = None
     ) -> CallToolResult:
-        return await call(ctx, lambda conn, caller: {"task": api.task_done(conn, task, agent=caller.agent,
-                                                                            result=result)}, write=True)
+        return await call(ctx, lambda conn, caller: api.task_done(conn, task, agent=caller.agent, result=result),
+                          write=True)
+
+    @server.tool(annotations=WRITE, description=(
+        "Отменить незакрытую задачу, которую поставили вы (человек отменяет любую). / Cancel an open task you "
+        "created."))
+    async def amem_task_cancel(task: Annotated[str, Field(description="id задачи")],
+                               ctx: Context) -> CallToolResult:
+        return await call(ctx, lambda conn, caller: {"task": api.task_cancel(conn, task, agent=caller.agent)},
+                          write=True)
 
     @server.tool(annotations=READ, description=(
         "Коды словаря с подписями: kind, entity_class, property, rel, … / Vocabulary codes with labels."))
@@ -455,7 +463,7 @@ def build(runtime: Runtime) -> MCPServer:
 TOOLS = ("amem_search", "amem_similar", "amem_timeline", "amem_get", "amem_card", "amem_submit", "amem_helpful",
          "amem_move", "amem_object_status", "amem_mark_object", "amem_review_claim", "amem_review_release",
          "amem_review_resolve", "amem_vocab", "amem_tasks", "amem_task_claim", "amem_task_release",
-         "amem_task_done")
+         "amem_task_done", "amem_task_cancel")
 
 
 # --- /mcp службы ---

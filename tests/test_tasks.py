@@ -79,6 +79,19 @@ def test_claim_lease_and_expiry(kb, note):
     assert e.value.code == "claimed"
 
 
+def test_release_only_by_holder_even_after_expiry(kb, note):
+    task, _ = tasks.create(kb, "parse", note.object_id, note.n, agent=PERSON, now=T0)
+    tasks.claim(kb, task["id"], agent=MODEL, now=T0)
+    later = T0 + tasks.LEASE + timedelta(minutes=1)
+    with pytest.raises(tasks.TaskError) as e:
+        tasks.release(kb, task["id"], agent=OTHER, now=later)                       # аренда истекла, но не его
+    assert e.value.code == "forbidden" and MODEL in str(e.value)
+    assert kb.execute("SELECT state, claimed_by FROM task").fetchone() == ("claimed", MODEL)
+    released = tasks.release(kb, task["id"], agent=MODEL, now=later)                # держатель — и после истечения
+    assert (released["state"], released["claimed_by"]) == ("open", None)
+    assert kb.execute("SELECT state, claimed_by FROM task").fetchone() == ("open", None)
+
+
 def test_release_done_and_closed(kb, note):
     task, _ = tasks.create(kb, "parse", note.object_id, note.n, agent=PERSON, now=T0)
     tasks.claim(kb, task["id"], agent=MODEL, now=T0)
@@ -117,7 +130,8 @@ def test_cancel_by_creator_or_person(kb, note, store, docs):
     task, _ = tasks.create(kb, "parse", other.object_id, other.n, agent=MODEL, now=T0)
     tasks.claim(kb, task["id"], agent=OTHER, now=T0)
     assert tasks.cancel(kb, task["id"], agent=PERSON)["state"] == "cancelled"        # человек — любую
-    assert [t["state"] for t in tasks.list_(kb)] == ["cancelled", "cancelled"]
+    assert tasks.list_(kb) == []                                                      # без state — незакрытые
+    assert [t["state"] for t in tasks.list_(kb, state="cancelled")] == ["cancelled", "cancelled"]
 
 
 def test_claim_and_done_are_for_the_model(kb, note):
@@ -139,11 +153,14 @@ def test_list_filters_and_agent_view(kb, note, store, docs):
     first, _ = tasks.create(kb, "parse", note.object_id, note.n, agent=PERSON, now=T0)
     second, _ = tasks.create(kb, "parse", other.object_id, other.n, agent=PERSON, now=T0 + timedelta(seconds=1))
     tasks.claim(kb, second["id"], agent=OTHER, now=T0)
-    assert [t["id"] for t in tasks.list_(kb, now=T0)] == [first["id"], second["id"]]
+    assert [t["id"] for t in tasks.list_(kb, now=T0)] == [second["id"], first["id"]]         # от новых
     assert [t["id"] for t in tasks.list_(kb, object_id=other.object_id, now=T0)] == [second["id"]]
     assert [t["id"] for t in tasks.list_(kb, state="claimed", now=T0)] == [second["id"]]
     assert [t["id"] for t in tasks.list_(kb, agent=MODEL, now=T0)] == [first["id"]]          # чужая взятая — нет
-    assert [t["id"] for t in tasks.list_(kb, agent=OTHER, now=T0)] == [first["id"], second["id"]]
+    assert [t["id"] for t in tasks.list_(kb, agent=OTHER, now=T0)] == [second["id"], first["id"]]
+    tasks.cancel(kb, first["id"], agent=PERSON, now=T0)
+    assert [t["id"] for t in tasks.list_(kb, now=T0)] == [second["id"]]                       # закрытые — по state
+    assert [t["id"] for t in tasks.list_(kb, state="cancelled", now=T0)] == [first["id"]]
     with pytest.raises(tasks.TaskError):
         tasks.list_(kb, state="busy")
 
@@ -165,8 +182,10 @@ def test_api_task_operations(kb, note):
     assert claimed["id"] == made["task_id"] and claimed["state"] == "claimed" and claimed["created_at"]
     with pytest.raises(api.BadRequest):
         api.task_done(kb, made["task_id"], agent=MODEL, result=["atm:x"])
-    done = api.task_done(kb, made["task_id"], agent=MODEL, result={"refs": [], "note": "a<private>b</private>"})
+    out = api.task_done(kb, made["task_id"], agent=MODEL, result={"refs": [], "note": "a<private>b</private>"})
+    done = out["task"]
     assert done["state"] == "done" and done["result"] == {"refs": [], "note": "a"}
+    assert [(w["code"], w["path"]) for w in out["warnings"]] == [("private_removed", "note")]
     with pytest.raises(api.BadRequest):
         api.task_list(kb, state="busy")
 
