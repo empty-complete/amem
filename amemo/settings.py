@@ -15,7 +15,7 @@ TESSDATA_PREFIX и системный tesseract; языки — ocr_languages (�
 сообщает о ней. Переключатель в вебе пишет в AMEMO_STATE/updates.json, а не сюда: конфиг пользователя служба
 не переписывает. Выключено здесь — выключено, что бы ни говорил переключатель.
 
-Свой PostgreSQL (amemo setup, amemo/localpg.py): pg_bin — каталог программ PostgreSQL 16+ (initdb, pg_ctl, postgres,
+Свой PostgreSQL (amemo setup, amemo/localpg.py): pg_bin — каталог программ PostgreSQL 18+ (initdb, pg_ctl, postgres,
 клиент pg_dump для бэкапа), pg_data — каталог кластера; amemo pg start|stop|status управляет им. AMEMO_PG_BIN — та же
 переменная, что и у бэкапа.
 

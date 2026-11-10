@@ -1,5 +1,5 @@
 """Ссылки по ключу (records.resolve), список записей (lookup.list_records) и подписи (lookup.labels) —
-подпроект 4, часть 4.0; на PostgreSQL 18 и 16."""
+подпроект 4, часть 4.0; на PostgreSQL 18."""
 import json
 from datetime import datetime
 

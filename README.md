@@ -17,7 +17,7 @@
   <a href="https://github.com/empty-complete/amemo/actions/workflows/web.yml"><img alt="Web UI" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amemo/web.yml?branch=main&label=web%20ui&style=flat-square"></a>
   <a href="LICENSE.txt"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-2a78d6?style=flat-square"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&logo=python&logoColor=white">
-  <img alt="PostgreSQL 16+ with pgvector" src="https://img.shields.io/badge/PostgreSQL-16%2B%20%C2%B7%20pgvector-4169e1?style=flat-square&logo=postgresql&logoColor=white">
+  <img alt="PostgreSQL 18 with pgvector" src="https://img.shields.io/badge/PostgreSQL-18%20%C2%B7%20pgvector-4169e1?style=flat-square&logo=postgresql&logoColor=white">
   <img alt="Status: early development" src="https://img.shields.io/badge/status-early%20development-eb6834?style=flat-square">
 </p>
 
@@ -42,7 +42,7 @@
 
 > [!IMPORTANT]
 > **amemo is young.** The core, the HTTP service with the web UI, the CLI, the MCP server and agent memory for
-> Claude Code and Codex work today and are tested in CI on PostgreSQL 18 and 16. The schema and the HTTP
+> Claude Code and Codex work today and are tested in CI on PostgreSQL 18. The schema and the HTTP
 > contract may still change. The screenshots on this page come from the real service on a sample base
 > (`tools/seed_sample_en.py`, a fictional network of weather stations).
 
@@ -141,7 +141,7 @@ file it came from, the full history of its changes, and the decision of a person
   the files. Ids survive the trip, and anything that differs from the local copy goes to review.
 - **Backups with proof.** A backup is a `pg_dump` plus a snapshot of the object store. It is verified
   by a real trial restore into a temporary database.
-- **Boring storage.** Data lives in plain PostgreSQL 16+ with pgvector. The schema is written in
+- **Boring storage.** Data lives in plain PostgreSQL 18 with pgvector. The schema is written in
   LinkML, with Pydantic models and JSON Schema generated from it.
 
 ## See it in action
@@ -311,7 +311,7 @@ your own server. CI runs these steps on every push.
 
 ### Own PostgreSQL in a data folder
 
-With PostgreSQL 16+ programs that include pgvector (for example the EDB zip on Windows, or `postgresql-18` and
+With PostgreSQL 18 programs that include pgvector (for example the EDB zip on Windows, or `postgresql-18` and
 `postgresql-18-pgvector` from PGDG), `amemo setup` needs no Docker, no service and no administrator rights:
 
 ```bash
@@ -832,8 +832,8 @@ ranking. They never change a status or skip a check.
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 
-# test databases: PostgreSQL 18 (port 5433) and 16 (port 5434)
-docker compose --profile test up -d --wait db-test db-test-pg16
+# test database: PostgreSQL 18 (port 5433)
+docker compose --profile test up -d --wait db-test
 
 # run the tests (backup tests need the PostgreSQL 18 client)
 .venv/bin/pytest -q
@@ -863,7 +863,7 @@ The web UI lives in [`web/`](web/) (React 19, HeroUI v3, TanStack). Run `npm run
 ## Contributing
 
 amemo is built in the open. Issues and discussions are welcome. For a larger change, please open an issue
-first so we can agree on the approach. Every pull request runs the `ci` workflow (tests on PostgreSQL 18 and 16)
+first so we can agree on the approach. Every pull request runs the `ci` workflow (tests on PostgreSQL 18)
 and the `commits` workflow (Conventional Commits in English); changes to `web/` also run the `web` workflow.
 
 ## Built with

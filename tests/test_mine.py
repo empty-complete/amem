@@ -1,7 +1,7 @@
 """Пакет «Мои виды» в базе (подпроект 4, часть 4d, задача 18; спецификация разд. 6a.3).
 
 Свои виды — понятия origin = 'mine', шаблоны в template и template_active, версии пакета mine в pack.
-Всё — на настоящей базе (PostgreSQL 18 и 16)."""
+Всё — на настоящей базе (PostgreSQL 18)."""
 import os
 from pathlib import Path
 

@@ -64,9 +64,9 @@ services:
       timeout: 3s
       retries: 20
 
-  # Тестовые базы: данные в памяти, без fsync. PostgreSQL 18 — основная, 16 — проверка совместимости.
-  # Перед тестами: docker compose --profile test up -d --wait db-test db-test-pg16 — только по именам,
-  # без имён поднялась бы и рабочая база.
+  # Тестовая база: данные в памяти, без fsync.
+  # Перед тестами: docker compose --profile test up -d --wait db-test — только по имени,
+  # без имени поднялась бы и рабочая база.
   db-test:
     image: pgvector/pgvector:0.8.1-pg18
     profiles: ["test"]
@@ -74,19 +74,6 @@ services:
     command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"]
     tmpfs: ["/var/lib/postgresql"]
     ports: ["127.0.0.1:5433:5432"]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U test -d test"]
-      interval: 2s
-      timeout: 3s
-      retries: 30
-
-  db-test-pg16:
-    image: pgvector/pgvector:0.8.1-pg16
-    profiles: ["test"]
-    environment: {POSTGRES_DB: test, POSTGRES_USER: test, POSTGRES_PASSWORD: test}
-    command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"]
-    tmpfs: ["/var/lib/postgresql/data"]
-    ports: ["127.0.0.1:5434:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U test -d test"]
       interval: 2s

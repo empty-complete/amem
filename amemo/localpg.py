@@ -1,6 +1,6 @@
 """Свой PostgreSQL amemo в папке пользователя (amemo setup, amemo pg): кластер без службы ОС и без прав администратора.
 
-Кластер — каталог pg_data, программы — каталог pg_bin (initdb, pg_ctl, postgres; PostgreSQL 16+ с расширением vector в
+Кластер — каталог pg_data, программы — каталог pg_bin (initdb, pg_ctl, postgres; PostgreSQL 18+ с расширением vector в
 его share). Сервер слушает только 127.0.0.1 на своём порту (по умолчанию первый свободный начиная с PORT_FROM), вход —
 scram-sha-256. Суперпользователь кластера — роль amemo: кластер принадлежит одному человеку и служит одной базе amemo,
 отдельная роль-владелец ничего не защищала бы. Пароль задаёт вызывающий (initdb читает его из временного файла с
@@ -21,7 +21,7 @@ from pathlib import Path
 
 from .portable import WINDOWS
 
-PG_MIN = 16                        # amemo поддерживает PostgreSQL 16+
+PG_MIN = 18                        # amemo работает с PostgreSQL 18 и новее: на младших версиях не проверяется
 PORT_FROM = 5436                   # 5432 часто занят чужим PostgreSQL, 5435 — базой compose; дальше — по порядку
 PORT_TRIES = 64
 ROLE = "amemo"

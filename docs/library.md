@@ -254,6 +254,6 @@ or in the folder given by `AMEMO_PG_BIN` or by `pg_bin` in `amemo.toml` (written
   everything is checked before anything is written;
 - `verify(source, dsn)` — a real trial restore into a temporary database and a search, then cleanup.
 
-Storage is PostgreSQL 16+ with pgvector; the schema of record is LinkML
+Storage is PostgreSQL 18 with pgvector; the schema of record is LinkML
 (`amemo/schema/amemo_v1.yaml`), from which the Pydantic models and JSON Schema
 are generated.

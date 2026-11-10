@@ -1,4 +1,4 @@
-"""amemo embed enable|status и строка «смысловой поиск» у amemo doctor: на настоящей базе (PostgreSQL 18 и 16).
+"""amemo embed enable|status и строка «смысловой поиск» у amemo doctor: на настоящей базе (PostgreSQL 18).
 
 Пакет fastembed подменён (сети и модели нет): файлы модели «появляются» в папке только после скачивания с
 разрешения (local_files_only=False), и до него провайдер из локальных файлов не создаётся — как у fastembed.

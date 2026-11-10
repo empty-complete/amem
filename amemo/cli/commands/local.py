@@ -40,7 +40,7 @@ def register(sub, shared) -> None:
     p = add(sub, shared, "setup", "своя установка: PostgreSQL в папке данных, amemo.toml, база, поиск, агенты",
             run_setup)
     p.add_argument("--pg-bin", metavar="DIR", type=Path, required=True,
-                   help="программы PostgreSQL 16+ с pgvector (initdb, pg_ctl, postgres)")
+                   help="программы PostgreSQL 18+ с pgvector (initdb, pg_ctl, postgres)")
     p.add_argument("--data", metavar="DIR", type=Path, help="папка данных (по умолчанию ~/amemo-data)")
     p.add_argument("--docs", metavar="DIR", type=Path, help="папка документов, которые цитирует amemo")
     p.add_argument("--port", type=int, help="порт PostgreSQL (по умолчанию — первый свободный от 5436)")
