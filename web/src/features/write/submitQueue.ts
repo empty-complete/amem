@@ -29,6 +29,8 @@ export interface Pending {
   /** Обратимое действие: выполняется сразу; «Отменить» — revert. */
   apply?: () => Promise<void>;
   revert?: () => Promise<void>;
+  /** Идущее apply: «Отменить» ждёт его, чтобы обратное действие не обогнало прямое. */
+  applying?: Promise<boolean>;
   timer: ReturnType<typeof setTimeout> | null;
   onDone?: (r: Submitted) => void;
   onIssues?: (issues: CheckIssue[], message: string) => void;
@@ -78,7 +80,7 @@ export function enqueue(p: Omit<Pending, "id" | "timer">, star?: Omit<Star, "id"
   const id = `@new-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
   const item: Pending = { ...p, id, timer: null };
   if (item.apply) {
-    void act(item, item.apply);
+    item.applying = act(item, item.apply);
     item.timer = setTimeout(() => drop(item.id), UNDO_MS);
     items.push(item);
     emit();
@@ -97,14 +99,16 @@ export function enqueue(p: Omit<Pending, "id" | "timer">, star?: Omit<Star, "id"
 }
 
 /** Обратимое действие: выполнить, по успеху — onDone; сбой — тост убрать и сказать словами. */
-async function act(p: Pending, fn: () => Promise<void>) {
+async function act(p: Pending, fn: () => Promise<void>): Promise<boolean> {
   try {
     await fn();
     p.onDone?.({} as Submitted);
+    return true;
   } catch (e) {
     drop(p.id);
     const err = e instanceof ApiError ? e : null;
     p.onIssues?.([], err?.detail ?? err?.title ?? "Нет связи со службой amemo");
+    return false;
   }
 }
 
@@ -120,7 +124,9 @@ export function undo(id: string) {
   if (!p) return;
   drop(id);
   if (p.apply) {
-    if (p.revert) void act(p, p.revert);
+    const revert = p.revert;
+    // обратное — только после прямого и только если оно удалось
+    if (revert) void p.applying?.then((ok) => ok && act(p, revert));
     return;
   }
   skyBus.retract(id);

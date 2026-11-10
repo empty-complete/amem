@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { MoveDialog } from "../../features/write/MoveDialog";
 import { resetQueue } from "../../features/write/submitQueue";
 import { UndoToasts } from "../../features/write/UndoToast";
@@ -11,6 +12,17 @@ afterEach(() => {
   resetQueue();
   vi.useRealTimers();
 });
+
+// окно переноса закрывается, как на странице записи: под открытым модальным окном тост недоступен
+function MoveHarness({ recordRef }: { recordRef: string }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <>
+      <MoveDialog recordRef={recordRef} current={null} open={open} onClose={() => setOpen(false)} />
+      <UndoToasts />
+    </>
+  );
+}
 
 const nav = () => screen.getByRole("navigation", { name: "Папки" });
 
@@ -43,16 +55,10 @@ test("переименование переносит записи; непуст
 test("«Переместить в папку» уходит сразу; «Отменить» возвращает в прежнюю папку", async () => {
   const user = userEvent.setup();
   const ref = "atm:0193b7c2-5e1a-7d40-9f2e-00000000001e";
-  await renderWithApp(
-    <>
-      <MoveDialog recordRef={ref} current={null} open onClose={() => {}} />
-      <UndoToasts />
-    </>,
-  );
+  await renderWithApp(<MoveHarness recordRef={ref} />);
   await user.click(await screen.findByRole("radio", { name: "Архив" }));
   await user.click(screen.getByRole("button", { name: "Переместить в папку" }));
   await waitFor(() => expect(db.records.find((r) => r.ref === ref)?.folder).toBe("Архив"));
-  // окно переноса ещё открыто (onClose здесь пустой) и прячет остальное от чтецов — тост ищем и под aria-hidden
-  await user.click(await screen.findByRole("button", { name: "Отменить", hidden: true }));
+  await user.click(await screen.findByRole("button", { name: "Отменить" }));
   await waitFor(() => expect(db.records.find((r) => r.ref === ref)?.folder).toBeNull());
 });
