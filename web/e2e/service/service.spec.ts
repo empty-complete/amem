@@ -210,6 +210,8 @@ test("подборка: антология — zip и HTML-отчёт", async ({
 test("«Мои виды» на службе: свой вид, запись по его форме, удалить вид с записями — отказ словами", async ({
   page,
 }) => {
+  // длинный путь по службе: сохранение вида, запись с окном отмены 6,5 с, снова конструктор
+  test.setTimeout(90_000);
   const problems = watch(page);
   await page.goto("./settings");
   await page.getByRole("button", { name: "Настроить виды" }).click();
