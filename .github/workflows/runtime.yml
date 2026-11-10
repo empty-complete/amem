@@ -91,7 +91,10 @@ jobs:
           Get-ChildItem $env:OUT | Format-Table Name, Length
       - name: Runtime as a person gets it — Cyrillic path, nothing in PATH, model offline
         run: |
-          $root = "$env:RUNNER_TEMP\Проверка комплекта"
+          # профиль на C: — как у человека; кириллица вне кодовой страницы ANSI раннера (1252): программы PostgreSQL
+          # получают короткие имена 8.3 (amemo/localpg.py native)
+          fsutil 8dot3name query C:
+          $root = "$env:USERPROFILE\Проверка комплекта"
           Expand-Archive (Get-Item "$env:OUT\amemo-runtime-*.zip").FullName "$root\runtime"
           Expand-Archive "$env:OUT\amemo-model-paraphrase-multilingual-MiniLM-L12-v2.zip" "$root\model"
           Remove-Item Env:PGPASSWORD, Env:PGUSER, Env:PGROOT, Env:PGBIN, Env:PGDATA -ErrorAction SilentlyContinue
@@ -134,7 +137,7 @@ jobs:
           '@ | & $py -I -X utf8 - $root
           if ($LASTEXITCODE) { exit 1 }
       - if: failure()
-        run: Get-Content "$env:RUNNER_TEMP\Проверка комплекта\Анна\amemo-data\pg\log\postgresql.log" -Tail 60 -ErrorAction SilentlyContinue
+        run: Get-Content "$env:USERPROFILE\Проверка комплекта\Анна\amemo-data\pg\log\postgresql.log" -Tail 60 -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         with:
           name: runtime-windows-x64

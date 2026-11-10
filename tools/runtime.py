@@ -268,6 +268,8 @@ def cmd_model(work: Path, out: Path) -> None:
                                       text=True, encoding="utf-8").stdout.strip().splitlines()[-1])
     for lock in [p for p in folder.rglob(".locks") if p.is_dir()]:
         shutil.rmtree(lock)
+    for path in sorted((p for p in folder.rglob("*") if p.is_file()), key=lambda p: -p.stat().st_size)[:12]:
+        log(f"  {mb(path.stat().st_size):>12}  {path.relative_to(folder).as_posix()}")
     license_text = fetch(APACHE, work / "downloads" / "LICENSE-2.0.txt").read_text(encoding="utf-8")
     (folder / "LICENSE-model.txt").write_text(license_text, encoding="utf-8")
     (folder / "NOTICE-model.txt").write_text(

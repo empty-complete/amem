@@ -86,6 +86,19 @@ def test_conf_lines_listen_only_on_tcp_loopback():
     assert lines["unix_socket_directories"] == "''"
 
 
+def test_native_paths_for_postgresql_on_windows(monkeypatch, tmp_path):
+    """Путь вне кодовой страницы ANSI — короткое имя 8.3; нет его — отказ с подсказкой; ANSI-путь — как есть."""
+    assert localpg.native(tmp_path) == str(tmp_path)              # не Windows (или ANSI) — без изменений
+    monkeypatch.setattr(localpg, "WINDOWS", True)
+    monkeypatch.setattr(localpg, "_ansi", lambda text: text.isascii())
+    assert localpg.native(Path("C:/amemo-data")) == str(Path("C:/amemo-data"))
+    monkeypatch.setattr(localpg, "_short", lambda text: "C:\\Users\\ANNA~1\\AMEMO-~1")
+    assert localpg.native(Path("C:/Users/Анна/amemo-data")) == "C:\\Users\\ANNA~1\\AMEMO-~1"
+    monkeypatch.setattr(localpg, "_short", lambda text: None)
+    with pytest.raises(localpg.LocalPgError, match="латинскими"):
+        localpg.native(Path("C:/Users/Анна/amemo-data"))
+
+
 def test_config_round_trips_through_settings(tmp_path):
     path = tmp_path / "cfg" / "amemo.toml"
     data = tmp_path / "данные \"с кавычками\""
