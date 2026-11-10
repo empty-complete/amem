@@ -1,4 +1,6 @@
 // Пословное сравнение ревизий: LCS по словам (знаки препинания — отдельные токены, пробелы сохраняются).
+import { LANGS, type Lang, type LangString } from "../../ui/lang";
+
 export type Op = "same" | "del" | "add";
 export interface Piece {
   text: string;
@@ -43,10 +45,24 @@ export function wordDiff(a: string, b: string): Piece[] {
 }
 
 type Payload = Record<string, unknown>;
+/** LangString (только ключи ru, en): один слот — его текст, несколько — каждый со своей приставкой, чтобы правка
+ * любого языка была видна в сравнении. */
+function langText(v: object): string | null {
+  const keys = Object.keys(v);
+  if (!keys.length || !keys.every((k) => (LANGS as readonly string[]).includes(k))) return null;
+  const s = v as LangString;
+  const filled = LANGS.filter((x) => typeof s[x] === "string" && (s[x] as string).trim());
+  if (filled.length === 1) return s[filled[0] as Lang] as string;
+  return filled.map((x) => `${x}: ${s[x]}`).join("\n");
+}
+
 const text = (v: unknown): string => {
   if (v == null) return "";
   if (typeof v === "string") return v;
-  if (typeof v === "object" && "ru" in (v as object)) return String((v as { ru: string }).ru ?? "");
+  if (typeof v === "object" && !Array.isArray(v)) {
+    const t = langText(v);
+    if (t !== null) return t;
+  }
   return JSON.stringify(v);
 };
 

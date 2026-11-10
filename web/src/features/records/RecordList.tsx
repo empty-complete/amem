@@ -7,6 +7,7 @@ import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
 import { RECORD_MIME } from "../../app/shell/Folders";
 import { KindChip } from "../../ui/KindChip";
+import { pickText } from "../../ui/lang";
 import { RegionState } from "../../ui/RegionState";
 import { RelativeTime } from "../../ui/RelativeTime";
 import { StatusText } from "../../ui/StatusText";
@@ -22,10 +23,10 @@ export function recordPath(ref: string) {
 }
 
 /** Подпись вида или класса словами, с заглавной буквы: в словарях ядра подписи строчные («факт»).
- * Нет английской — русская; нет в словаре — код как есть. */
+ * На языке интерфейса, иначе на другом (pickText); нет в словаре — код как есть. */
 export function kindLabel(vocab: Vocab | undefined, code: string, lang: string) {
   const v = vocab?.find((x) => x.code === code);
-  const text = lang.startsWith("en") ? (v?.label.en ?? v?.label.ru) : v?.label.ru;
+  const text = pickText(v?.label, lang);
   return text ? text.charAt(0).toLocaleUpperCase(lang) + text.slice(1) : code;
 }
 

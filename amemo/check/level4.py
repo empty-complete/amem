@@ -20,7 +20,7 @@ import uuid
 
 from rapidfuzz import fuzz
 
-from .. import embed, recipes, search
+from .. import embed, lang, recipes, search
 from ..records import PREFIX
 from .level1 import CODE_FIELD, Batch, Prepared
 from .report import Report
@@ -37,11 +37,13 @@ SUGGEST = {"atom": "merge", "entity": "same_as"}
 _PUNCT = re.compile(r"[^\w\s]+")
 _SPACE = re.compile(r"\s+")
 
-# Текстовые кандидаты: лексемы подписи (russian) — запрос «любое из слов» (simple, без повторного разбора).
+# Текстовые кандидаты: лексемы подписи по конфигурациям всех языков (amemo.lang.FTS: индекс ведёт слоты ru и en
+# разными стеммерами) — запрос «любое из слов» (simple, без повторного разбора).
 # Имена таблицы и столбца кода — только из CODE_FIELD; self — NULL у новой записи, поэтому IS DISTINCT FROM.
+_LEXEMES = " || ".join(f"to_tsvector('{config}', %(label)s)" for config in dict.fromkeys(lang.FTS.values()))
 _TEXT_SQL = """
 WITH q AS (SELECT to_tsquery('simple', string_agg(quote_literal(l), ' | ')) AS query
-             FROM unnest(tsvector_to_array(to_tsvector('russian', %(label)s))) l)
+             FROM unnest(tsvector_to_array(""" + _LEXEMES + """)) l)
 SELECT d.record_id, c.payload
   FROM q, search_document d
   JOIN {t} a ON a.id = d.record_id

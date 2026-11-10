@@ -10,7 +10,8 @@
 entity_class, rels) — «без фильтра», как параметр, которого в запросе нет; пустой range листа — окно по умолчанию
 библиотеки. Текст поиска проходит private.strip до поиска и журнала выдачи.
 
-Подписи записей — lookup.labels одним запросом на ответ (label — русская подпись показанной ревизии); запись,
+Подписи записей — lookup.labels одним запросом на ответ (label — подпись показанной ревизии на языке вызова,
+amemo.lang.current(), с заменой на другой слот); запись,
 которой нет, подписывается своей ссылкой. Записи называются atm:/ent:<UUID>, объекты — голым UUID, как id
 в ObjectView: так их и передаёт интерфейс в /objects/{id} и в about=obj:<id>.
 """
@@ -31,7 +32,7 @@ from pathlib import Path
 import psycopg
 from psycopg.rows import dict_row
 
-from . import __version__, backup, bundle, check, db, folders, forms, lookup, mine, objects, private, profile, \
+from . import __version__, backup, bundle, check, db, folders, forms, lang, lookup, mine, objects, private, profile, \
     recipes, records, review, tasks, usefulness, vocab
 from .anthology import export as anthology_export
 from .check import level1
@@ -208,10 +209,8 @@ def _moment(value, name: str) -> datetime | None:
 
 
 def _text(value) -> str | None:
-    """Подпись из LangString: ru, иначе en, иначе первая; строка — как есть."""
-    if isinstance(value, dict):
-        return value.get("ru") or value.get("en") or next((v for v in value.values() if isinstance(v, str)), None)
-    return value if isinstance(value, str) else None
+    """Подпись из LangString на языке вызова (amemo.lang.current()) с заменой на другой слот; строка — как есть."""
+    return lang.pick(value, lang.current())
 
 
 def _iso(value) -> str | None:
@@ -235,7 +234,7 @@ def _object_id(value) -> uuid.UUID:
 def _labels(conn: psycopg.Connection, refs) -> dict[str, dict]:
     """RefLabel для ссылок (atm:/ent:) одним запросом: ref, label, kind или entity_class."""
     refs = list(dict.fromkeys(r for r in refs if isinstance(r, str)))
-    found = lookup.labels(conn, refs) if refs else {}
+    found = lookup.labels(conn, refs, lang=lang.current()) if refs else {}
     out = {}
     for ref in refs:
         info = found.get(ref)
@@ -276,7 +275,7 @@ def search(conn: psycopg.Connection, q, *, agent: str, kind=None, status=None, e
         limit=_int(limit, "limit", low=1, high=100, default=10),
         target=_enum(target, "target", TARGETS), kind=_codes(kind, "kind"),
         entity_class=_codes(entity_class, "entity_class"), statuses=_statuses(status), provider=provider,
-        on_semantic_error="skip")
+        on_semantic_error="skip", lang=lang.current())
     return _search_result(conn, result)
 
 
@@ -294,7 +293,7 @@ def similar(conn: psycopg.Connection, *, agent: str, ref=None, q=None, limit=Non
             raise BadRequest("q: похожие на запись ищутся по параметру ref, а не по тексту atm:/ent:")
     result = recipes.similar(conn, query, agent=agent, activity=activity,
                              limit=_int(limit, "limit", low=1, high=100, default=10), provider=provider,
-                             on_semantic_error="skip")
+                             on_semantic_error="skip", lang=lang.current())
     return _search_result(conn, result)
 
 
@@ -395,12 +394,12 @@ def record_list(conn: psycopg.Connection, *, folder=None, kind=None, status=None
     page = lookup.list_records(conn, folder=folder or None, kinds=_codes(kind, "kind"), statuses=_statuses(status),
                                tag=tag or None, about=about or None,
                                limit=_int(limit, "limit", low=1, high=lookup.LIST_LIMIT, default=50),
-                               cursor=cursor or None)
+                               cursor=cursor or None, lang=lang.current())
     return {"items": _summaries(conn, page["items"]), "next_cursor": page["next_cursor"], "total": page["total"]}
 
 
 def _summaries(conn: psycopg.Connection, items: list[dict]) -> list[dict]:
-    """RecordSummary из сводок lookup: about — RefLabel одним запросом; запись без русской подписи — своей ссылкой."""
+    """RecordSummary из сводок lookup: about — RefLabel одним запросом; запись без подписи — своей ссылкой."""
     labels = _labels(conn, [ref for item in items for ref in item["about"]])
     return [{**item, "label": item["label"] or item["ref"],
              "about": [labels[ref] for ref in item["about"] if isinstance(ref, str)]} for item in items]
@@ -640,7 +639,7 @@ def pick(conn: psycopg.Connection, text, *, target=None) -> str:
     if not candidates:
         raise records.RecordNotFound(f"по тексту {query[:80]!r} записей нет — найдите запись поиском "
                                      f"(amemo search, amemo_search) и передайте её ссылку atm:/ent:")
-    labels = lookup.labels(conn, candidates[:PICK_CANDIDATES])
+    labels = lookup.labels(conn, candidates[:PICK_CANDIDATES], lang=lang.current())
     shown = []
     for ref in candidates[:PICK_CANDIDATES]:
         info = labels.get(ref) or {}
@@ -1025,7 +1024,7 @@ def record_folder(conn: psycopg.Connection, ref, folder, *, agent: str) -> dict:
         raise folders.FolderError(f"папки {folders.check(folder)!r} нет: модель переносит записи только в "
                                   f"существующие папки, новую создаёт человек", code="not_found")
     moved = folders.move(conn, ref, folder, agent=agent)
-    return _summaries(conn, [lookup.summary(conn, moved["ref"])])[0]
+    return _summaries(conn, [lookup.summary(conn, moved["ref"], lang=lang.current())])[0]
 
 
 # --- очередь проверки ---

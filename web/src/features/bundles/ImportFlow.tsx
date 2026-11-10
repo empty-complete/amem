@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "../../api/client";
+import { api, langHeaders } from "../../api/client";
 import { type ApiError, problemFromResponse } from "../../api/errors";
 import type { components } from "../../api/schema";
 import { Icon } from "../../ui/icons";
@@ -54,6 +54,7 @@ export function ImportFlow() {
       fd.append("file", f);
       const res = await globalThis.fetch(`${location.origin}/api/v1/bundles/inspect`, {
         method: "POST",
+        headers: langHeaders(),
         body: fd,
         credentials: "same-origin",
       });

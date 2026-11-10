@@ -132,9 +132,10 @@ def test_bad_code(kb, code):
     ({"form": [{"key": "x", "path": "no_such_field", "label": {"ru": "Нет"}, "type": "text"}]}, "form[0].path"),
     ({"form": [{"key": "x", "path": "content.values[property=nope]", "label": {"ru": "Нет"}, "type": "quantity"}]},
      "form[0].path"),
-    ({"form": [{"key": "x", "path": "tags", "label": {"ru": ""}, "type": "tags"}]}, "form[0].label.ru"),
+    ({"form": [{"key": "x", "path": "tags", "label": {"ru": ""}, "type": "tags"}]}, "form[0].label"),
     ({"form": [{"key": "x", "path": "tags", "label": {"ru": "Т"}, "type": "colour"}]}, "form[0].type"),
-    ({"label": {"ru": " "}}, "label.ru"),
+    ({"label": {"ru": " ", "en": ""}}, "label"),
+    ({"label": {"en": 1}}, "label.en"),
     ({"body": "maybe"}, "body"),
     ({"widgets": ["sources", "sources"]}, "widgets"),
 ])
@@ -145,6 +146,17 @@ def test_draft_failing_the_check_is_invalid_with_issues(kb, change, path):
     assert path in [i["path"] for i in e.value.issues], e.value.issues
     assert all(i["severity"] == "violation" and i["ref"] == "weighing" for i in e.value.issues)
     assert _versions(kb) == (None, None)
+
+
+def test_english_only_draft(kb):
+    """Подписи только по-английски — свой вид для английской базы: у LangString нужен хотя бы один слот."""
+    form = [{"key": "tags", "path": "tags", "label": {"en": "Tags"}, "hint": {"ru": " ", "en": "one word"},
+             "type": "tags"}]
+    view = mine.put(kb, "weighing", draft(label={"en": "Weighing"}, description={"en": "Mass on a date."}, form=form),
+                    agent=PERSON)
+    assert view["label"] == {"en": "Weighing"}
+    tags = next(f for f in view["form"] if f["key"] == "tags")       # первым в форме — всегда «о чём»
+    assert tags["label"] == {"en": "Tags"} and tags["hint"] == {"en": "one word"}
 
 
 def test_entity_classes_must_exist(kb):

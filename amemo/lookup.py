@@ -25,7 +25,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from . import folders, search
+from . import folders, lang as lang_, search
 from .objects import object_uuid
 from .records import (PREFIX, TARGET, RecordError, RecordNotFound, Target, as_uuid, check_target, parse_ref,
                       resolve)
@@ -165,6 +165,14 @@ def _codes(values, name: str) -> list[str] | None:
     return list(dict.fromkeys(items)) or None
 
 
+def _lang(value) -> str | None:
+    """Язык подписи: ru, en или None (порядок по умолчанию); иное — RecordError."""
+    try:
+        return lang_.check(value)
+    except lang_.LangError as e:
+        raise RecordError(str(e)) from None
+
+
 def _cursor(recorded_at: datetime, record_id: uuid.UUID) -> str:
     raw = f"{recorded_at.isoformat()}|{record_id}".encode()
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
@@ -213,15 +221,17 @@ def _revision_filters(t: Target, tag, about_id, source_id) -> list[str]:
     return where
 
 
-def _list_page(t: Target, where: list[str], after) -> str:
-    """Страница записей вида t: показанные ревизии под фильтром, по индексу (recorded_at, id записи) с конца."""
+def _list_page(t: Target, where: list[str], after, lang: str | None = None) -> str:
+    """Страница записей вида t: показанные ревизии под фильтром, по индексу (recorded_at, id записи) с конца;
+    подпись — на языке lang с заменой (amemo.lang.sql)."""
     kind = "kind" if t == "atom" else "entity_class"
     lists = ("coalesce(r.payload->'about', '[]') AS about, coalesce(r.payload->'tags', '[]') AS tags" if t == "atom"
              else "'[]'::jsonb AS about, '[]'::jsonb AS tags")
     if after:
         where = [*where, f"(r.recorded_at, r.{t}_id) < (%(after_at)s::timestamptz, %(after_id)s::uuid)"]
+    label = lang_.sql("r.payload->'label'", lang)
     return (f"(SELECT '{t}' AS target, r.{t}_id AS id, rec.{kind} AS kind_or_class, rec.status, rec.folder, "
-            f"r.payload->'label'->>'ru' AS label, {lists}, r.recorded_at, cs.agent "
+            f"{label} AS label, {lists}, r.recorded_at, cs.agent "
             f"FROM {t}_revision r JOIN {t} rec ON rec.id = r.{t}_id JOIN changeset cs ON cs.id = r.changeset_id "
             f"WHERE {' AND '.join([_shown(t), *where])} "
             f"ORDER BY r.recorded_at DESC, r.{t}_id DESC LIMIT %(take)s)")
@@ -259,7 +269,7 @@ def _object_ref(about: str) -> uuid.UUID | None:
 
 def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: Iterable[str] | None = None,
                  statuses: Iterable[str] | None = None, tag: str | None = None, about: str | None = None,
-                 limit: int = 50, cursor: str | None = None) -> dict:
+                 limit: int = 50, cursor: str | None = None, lang: str | None = None) -> dict:
     """Сводки записей для списка (панель папок, «Все записи»): новые сверху, страницами по курсору.
 
     Фильтры складываются (И):
@@ -280,11 +290,13 @@ def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: 
 
     Ответ: items, next_cursor (None — страница последняя), total — сколько записей под фильтром. Страница
     и total читаются в одной транзакции REPEATABLE READ — из одного снимка базы.
-    Сводка: ref, target, label (ru), kind_or_class, status, folder, about (ссылки ent:), tags, recorded_at, agent."""
+    Сводка: ref, target, label (на языке lang, иначе из другого слота — amemo.lang.order), kind_or_class, status,
+    folder, about (ссылки ent:), tags, recorded_at, agent."""
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= LIST_LIMIT:
         raise RecordError(f"limit {limit!r}: нужно целое число от 1 до {LIST_LIMIT}")
     kinds = _codes(kinds, "kinds")
     statuses = _codes(statuses, "statuses")
+    lang = _lang(lang)
     unknown = set(statuses or ()) - set(search._STATUSES)
     if unknown:
         raise RecordError(f"statuses: неизвестные статусы {', '.join(sorted(unknown))}")
@@ -315,7 +327,7 @@ def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: 
         revision_where = {t: _revision_filters(t, tag, about_id, source_id) for t in TARGET.values()}
         # у сущностей нет ни тегов, ни about-сущности: с этими фильтрами — только атомы
         targets = ["atom"] if tag or about_id else list(TARGET.values())
-        pages = [_list_page(t, [*_record_filters(t, path, kinds, statuses), *revision_where[t]], after)
+        pages = [_list_page(t, [*_record_filters(t, path, kinds, statuses), *revision_where[t]], after, lang)
                  for t in targets]
         # prepare=False: план — под значения фильтров. Подготовленный запрос PostgreSQL со временем исполняет общим
         # планом, а редкому тегу или маленькой папке нужен другой путь (индекс фильтра), чем частому (обход по времени)
@@ -337,26 +349,28 @@ def _summary(r: dict) -> dict:
             "tags": r["tags"], "recorded_at": r["recorded_at"].isoformat(), "agent": r["agent"]}
 
 
-def summary(conn: psycopg.Connection, ref: str) -> dict:
+def summary(conn: psycopg.Connection, ref: str, *, lang: str | None = None) -> dict:
     """Сводка одной записи — как строка list_records (по показанной ревизии): ответ службы после переноса записи
     в папку и других действий над одной записью. ref — atm:/ent: с UUID или ключом; нет записи — RecordNotFound."""
+    lang = _lang(lang)
     target, record_id = resolve(conn, ref)
     with conn.cursor(row_factory=dict_row) as cur:
-        row = cur.execute(_list_page(target, [f"r.{target}_id = %(id)s"], None),
+        row = cur.execute(_list_page(target, [f"r.{target}_id = %(id)s"], None, lang),
                           {"id": record_id, "take": 1}).fetchone()
     if row is None:                      # запись без ревизий не бывает (records.commit) — разве что удалена сейчас
         raise RecordNotFound(f"{ref}: такой записи нет")
     return _summary(row)
 
 
-def labels(conn: psycopg.Connection, refs: Iterable[str]) -> dict[str, dict]:
-    """Подписи записей одним запросом: {ref: {label, kind | entity_class, status}} — подпись (ru) показанной
-    ревизии (как в list_records), вид атома или класс сущности, статус.
+def labels(conn: psycopg.Connection, refs: Iterable[str], *, lang: str | None = None) -> dict[str, dict]:
+    """Подписи записей одним запросом: {ref: {label, kind | entity_class, status}} — подпись показанной ревизии
+    на языке lang с заменой (как в list_records), вид атома или класс сущности, статус.
 
     Ссылки — atm:/ent: с UUID или ключом; ключ ответа — ссылка как в запросе. Неизвестной или неверной ссылки
     в ответе нет: подписи нужны экрану, и одна битая ссылка не должна ронять весь ответ."""
     if isinstance(refs, str) or not isinstance(refs, Iterable):
         raise RecordError(f"refs: нужен набор ссылок, а не {type(refs).__name__}")
+    label = lang_.sql("r.payload->'label'", _lang(lang))
     by_id: dict[tuple[str, uuid.UUID], list[str]] = {}       # (вид, id) → ссылки запроса
     by_key: dict[tuple[str, str], list[str]] = {}            # (вид, ключ) → ссылки запроса
     for ref in refs:
@@ -374,12 +388,12 @@ def labels(conn: psycopg.Connection, refs: Iterable[str]) -> dict[str, dict]:
         params[f"{t}_ids"] = [record_id for target, record_id in by_id if target == t]
         params[f"{t}_keys"] = [key for target, key in by_key if target == t]
         kind = "kind" if t == "atom" else "entity_class"
-        branches.append(f"SELECT '{t}', rec.id, rec.key, rec.{kind}, rec.status, r.payload->'label'->>'ru' "
+        branches.append(f"SELECT '{t}', rec.id, rec.key, rec.{kind}, rec.status, {label} "
                         f"FROM {t} rec JOIN {t}_revision r ON r.{t}_id = rec.id AND {_shown(t)} "
                         f"WHERE rec.id = ANY(%({t}_ids)s::uuid[]) OR rec.key = ANY(%({t}_keys)s::text[])")
     out: dict[str, dict] = {}
-    for target, record_id, key, code, status, label in conn.execute(" UNION ALL ".join(branches), params):
-        info = {"label": label, "kind" if target == "atom" else "entity_class": code, "status": status}
+    for target, record_id, key, code, status, text in conn.execute(" UNION ALL ".join(branches), params):
+        info = {"label": text, "kind" if target == "atom" else "entity_class": code, "status": status}
         for ref in by_id.get((target, record_id), []) + by_key.get((target, key), []):
             out[ref] = dict(info)
     return out

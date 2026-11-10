@@ -5,8 +5,8 @@ import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
 import { Icon } from "../../ui/icons";
 import { KindChip } from "../../ui/KindChip";
+import { type LangString, pickText } from "../../ui/lang";
 import { StatusText } from "../../ui/StatusText";
-import { text } from "../record/doc";
 import { kindLabel, recordPath } from "../records/RecordList";
 import type { Star } from "./model";
 
@@ -26,8 +26,8 @@ export function StarCard({
   // временная звезда (@new-…) ещё не записана — читать нечего
   const rec = useQuery({ ...q.record(star.id), retry: false, enabled: !star.id.startsWith("@") });
   const vocab = useQuery(q.vocab(star.object ? "entity_class" : "kind"));
-  const p = rec.data?.payload as { summary_plain?: { ru: string }; description?: { ru: string } } | undefined;
-  const line = text(p?.summary_plain ?? p?.description, i18n.language);
+  const p = rec.data?.payload as { summary_plain?: LangString; description?: LangString } | undefined;
+  const line = pickText(p?.summary_plain ?? p?.description, i18n.language);
   return (
     <section className="starcard" data-floating={floating || undefined} aria-label={t("sky.selected")}>
       <div className="starcard__top">

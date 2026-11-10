@@ -4,6 +4,7 @@ import { Button, Dialog, DialogTrigger, Popover } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
 import { Icon } from "../../ui/icons";
+import { LANGS, useText } from "../../ui/lang";
 import { kindsStore } from "../kinds/store";
 import type { Template } from "./proposal";
 
@@ -24,8 +25,8 @@ export function KindPicker({
   /** Внутри другого всплывающего окна — список раскрывается на месте, а не вторым окном. */
   inline?: boolean;
 }) {
-  const { t, i18n } = useTranslation();
-  const en = i18n.language.startsWith("en");
+  const { t } = useTranslation();
+  const { text: shown } = useText();
   const list = useQuery(q.templates(target));
   const [text, setText] = useState("");
   const [open, setOpen] = useState(false);
@@ -33,7 +34,7 @@ export function KindPicker({
   const groups = useMemo(() => {
     const s = text.trim().toLowerCase();
     const items = (list.data ?? []).filter(
-      (x) => !s || x.label.ru?.toLowerCase().includes(s) || x.code.includes(s),
+      (x) => !s || LANGS.some((l) => x.label[l]?.toLowerCase().includes(s)) || x.code.includes(s),
     );
     const by = new Map<string, Template[]>();
     for (const x of items) by.set(x.pack, [...(by.get(x.pack) ?? []), x]);
@@ -68,8 +69,8 @@ export function KindPicker({
               }}
             >
               <i aria-hidden="true" />
-              <span className="palette__label">{(en ? x.label.en : x.label.ru) ?? x.code}</span>
-              {x.description?.ru && <span className="palette__meta">{x.description.ru}</span>}
+              <span className="palette__label">{shown(x.label) || x.code}</span>
+              {shown(x.description) && <span className="palette__meta">{shown(x.description)}</span>}
             </button>
           ))}
         </section>
@@ -90,7 +91,7 @@ export function KindPicker({
   );
   const chip = (
     <>
-      {(en ? cur?.label.en : cur?.label.ru) ?? value}
+      {shown(cur?.label) || value}
       <Icon name="down" size={12} />
     </>
   );
@@ -102,7 +103,7 @@ export function KindPicker({
           className="pill kind kindbtn"
           data-family={cur?.family ?? "work"}
           aria-expanded={open}
-          aria-label={t("edit.kind_change", { kind: cur?.label.ru ?? value })}
+          aria-label={t("edit.kind_change", { kind: shown(cur?.label) || value })}
           onClick={() => setOpen((o) => !o)}
         >
           {chip}
@@ -120,7 +121,7 @@ export function KindPicker({
       <Button
         className="pill kind kindbtn"
         data-family={cur?.family ?? "work"}
-        aria-label={t("edit.kind_change", { kind: cur?.label.ru ?? value })}
+        aria-label={t("edit.kind_change", { kind: shown(cur?.label) || value })}
       >
         {chip}
       </Button>

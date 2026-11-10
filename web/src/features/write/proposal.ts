@@ -1,5 +1,8 @@
 // Документ правки + шаблон вида → предложение check.submit (новая запись или ревизия) и обратно — замечания к полям.
+// Текст — в слот языка (ui/lang): правка — в тот слот, из которого текст показан, новое — в язык интерфейса.
 import type { components } from "../../api/schema";
+import { i18n } from "../../app/i18n";
+import { editSlot, hasText, type LangString, pickText, withText } from "../../ui/lang";
 
 export type Template = components["schemas"]["TemplateView"];
 export type FormField = components["schemas"]["FormField"];
@@ -57,7 +60,14 @@ export const emptyDraft = (kind = "note", target: "atom" | "entity" = "atom"): D
   sources: [],
 });
 
-const ls = (ru: string) => ({ ru });
+/** Текст value в поле key тела: в слот правки; пустой — слот убирается, а без текста в слотах — и поле. */
+function putText(payload: Record<string, unknown>, key: string, value: string, lang: string) {
+  const cur = payload[key] as LangString | null | undefined;
+  const next = withText(cur && typeof cur === "object" ? cur : null, value, lang);
+  if (!value) delete next[editSlot(cur, lang)];
+  if (hasText(next)) payload[key] = next;
+  else delete payload[key];
+}
 /** Имя новой записи внутри пакета (`@[a-z0-9_]+`). */
 export const NEW_REF = "@n0";
 const WIKI = /\[\[([^\]\n]+)\]\]/g;
@@ -106,7 +116,8 @@ const strip = (q: Quantity) =>
     Object.entries(q).filter(([k, x]) => x != null && x !== "" && k !== "property"),
   ) as Quantity;
 
-/** Документ → Proposal. base — текущее тело при правке: неизвестные форме поля сохраняются. */
+/** Документ → Proposal. base — текущее тело при правке: неизвестные форме поля и другие языковые слоты
+ * сохраняются; lang — язык правки (по умолчанию — интерфейса). */
 export function toProposal(
   d: Draft,
   t: Template | undefined,
@@ -114,27 +125,32 @@ export function toProposal(
     recordId?: string | null;
     base?: Record<string, unknown>;
     resolve?: (label: string) => string | undefined;
+    lang?: string;
   } = {},
 ): { proposal: Proposal; links: LinkProposal[] } {
+  const lang = opts.lang ?? i18n.language;
   const payload: Record<string, unknown> = structuredClone(opts.base ?? {});
   if (d.target === "entity") payload.entity_class = d.kind;
   else payload.kind = d.kind;
-  payload.label = ls(d.label.trim());
-  if (d.summary.trim()) payload.summary_plain = ls(d.summary.trim());
-  else delete payload.summary_plain;
-  if (d.body.trim() && t?.body !== "none") payload.body = ls(d.body.trim());
-  else delete payload.body;
+  putText(payload, "label", d.label.trim(), lang);
+  putText(payload, "summary_plain", d.summary.trim(), lang);
+  putText(payload, "body", t?.body !== "none" ? d.body.trim() : "", lang);
   // без шаблона (ещё не загрузился) простые ключи — это и есть пути в теле: about, tags, valid_from
   const form = t?.form ?? Object.keys(d.values).map((k) => ({ key: k, path: k, type: "text" }) as FormField);
   for (const f of form) if (f.key in d.values) put(payload, f, d.values[f.key]);
   if (d.extra.length) {
     const own = new Set(d.extra.map((x) => x.property));
-    const qs = ((payload.qualifiers ?? []) as { property: string }[]).filter((q) => !own.has(q.property));
+    const all = (payload.qualifiers ?? []) as { property: string; label?: LangString }[];
+    const before = new Map(all.map((q) => [q.property, q.label]));
     payload.qualifiers = [
-      ...qs,
+      ...all.filter((q) => !own.has(q.property)),
       ...d.extra
         .filter((x) => x.value.trim())
-        .map((x) => ({ property: x.property, label: ls(x.label), value_text: x.value.trim() })),
+        .map((x) => ({
+          property: x.property,
+          label: withText(before.get(x.property), x.label, lang),
+          value_text: x.value.trim(),
+        })),
     ];
   }
   if (d.sources.length) {
@@ -170,8 +186,8 @@ export function withSummary<T extends { proposals: Proposal[] }>(body: T): T {
   return {
     ...body,
     proposals: body.proposals.map((p) => {
-      const pl = p.payload as { label?: { ru?: string }; summary_plain?: { ru?: string } };
-      if (p.target !== "atom" || pl.summary_plain?.ru?.trim() || !pl.label?.ru?.trim()) return p;
+      const pl = p.payload as { label?: LangString; summary_plain?: LangString };
+      if (p.target !== "atom" || hasText(pl.summary_plain) || !hasText(pl.label)) return p;
       return { ...p, payload: { ...p.payload, summary_plain: { ...pl.label } } };
     }),
   };
@@ -206,13 +222,15 @@ export function issuesToFields(issues: CheckIssue[], t: Template | undefined): F
   return out;
 }
 
-/** Тело записи → документ правки по форме шаблона (обратный путь для правки своей записи). */
+/** Тело записи → документ правки по форме шаблона (обратный путь для правки своей записи); текст — на языке
+ * lang с заменой (по умолчанию — интерфейса), тот же слот toProposal потом и правит. */
 export function fromPayload(
   p: Record<string, unknown>,
   t: Template | undefined,
   target: "atom" | "entity",
+  lang: string = i18n.language,
 ): Draft {
-  const s = (x: unknown) => ((x as { ru?: string } | undefined)?.ru ?? "") as string;
+  const s = (x: unknown) => pickText(x as LangString | null | undefined, lang);
   const d = emptyDraft(String(p.kind ?? p.entity_class ?? "note"), target);
   d.label = s(p.label);
   d.summary = s(p.summary_plain ?? p.description);
@@ -235,9 +253,9 @@ export function fromPayload(
   const known = new Set(
     (t?.form ?? []).filter((f) => f.path.startsWith("qualifiers")).map((f) => propIn(f.path) ?? f.key),
   );
-  d.extra = ((p.qualifiers ?? []) as { property: string; label?: { ru: string }; value_text?: string }[])
+  d.extra = ((p.qualifiers ?? []) as { property: string; label?: LangString; value_text?: string }[])
     .filter((q) => !known.has(q.property))
-    .map((q) => ({ property: q.property, label: q.label?.ru ?? q.property, value: q.value_text ?? "" }));
+    .map((q) => ({ property: q.property, label: s(q.label) || q.property, value: q.value_text ?? "" }));
   d.sources = ((p.sources ?? []) as DraftSource[]).map((x) => ({ ...x, selectors: x.selectors ?? [] }));
   d.basis = p.basis as Draft["basis"];
   return d;

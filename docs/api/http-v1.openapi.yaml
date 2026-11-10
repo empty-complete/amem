@@ -8,6 +8,11 @@ info:
     Ответы — то, что уже отдаёт библиотека (recipes, lookup, review, profile, bundle), плюс подписи записей,
     нужные экрану. Агент записи служба берёт из сессии; UI его не передаёт.
     Изменения — только правкой этого файла в PR, который проходит обе стороны.
+
+    Язык текста: тела записей несут LangString (слоты ru, en; нужен хотя бы один) целиком, а строковые подписи
+    ответов (label в RecordSummary, RefLabel, SearchHit и др.) и фрагмент находки (snippet) служба выбирает по
+    заголовку Accept-Language (ru или en, веса q): слот этого языка, а если он пуст — другой. Без заголовка
+    или без поддерживаемого языка — ru, затем en.
 servers:
   - url: /api/v1
 
@@ -692,6 +697,15 @@ components:
           schema: { $ref: "#/components/schemas/Problem" }
 
   schemas:
+    LangString:
+      type: object
+      description: "Текст на нескольких языках (LangString схемы v1): нужен хотя бы один из слотов ru, en"
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        ru: { type: string }
+        en: { type: string }
+
     Problem:
       type: object
       required: [type, title, status]
@@ -734,7 +748,7 @@ components:
         rel: { type: string, pattern: "^[a-z][a-z0-9_]*$", description: "Вид связи из словаря rel" }
         src: { type: string, pattern: "^((atm|ent):([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$", description: "Начало: запись базы (atm:/ent: с UUID или ключом) или @имя записи этого пакета" }
         dst: { type: string, pattern: "^((atm|ent):([0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9_.]*)|@[a-z0-9_]+)$", description: "Конец — как src" }
-        note: { type: object, required: [ru], properties: { ru: { type: string }, en: { type: string } }, description: "Пояснение (LangString)" }
+        note: { $ref: "#/components/schemas/LangString", description: "Пояснение" }
         qualifiers:
           type: array
           description: "Уточнения (Qualifier схемы v1)"
@@ -743,7 +757,7 @@ components:
             required: [property]
             properties:
               property: { type: string, pattern: "^[a-z][a-z0-9_]*$" }
-              label: { type: object, required: [ru], properties: { ru: { type: string }, en: { type: string } } }
+              label: { $ref: "#/components/schemas/LangString" }
               value_text: { type: string }
               amount: { type: number }
               lower_bound: { type: number }
@@ -1203,7 +1217,7 @@ components:
       type: object
       required: [label, target, family, form, body, widgets]
       properties:
-        label: { type: object, required: [ru], properties: { ru: { type: string }, en: { type: string } } }
+        label: { $ref: "#/components/schemas/LangString" }
         target: { type: string, enum: [atom, entity] }
         family: { type: string, enum: [source, work, object] }
         description: { type: object, properties: { ru: { type: string }, en: { type: string } } }

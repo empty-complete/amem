@@ -20,7 +20,7 @@ from pathlib import Path
 
 import psycopg
 
-from . import bundle, lookup
+from . import bundle, lang, lookup
 from .bundle import BundleError, Selection
 
 ANTHOLOGY_STATUSES = ("verified",)
@@ -56,8 +56,13 @@ def select(conn: psycopg.Connection, selection: Selection = Selection()) -> list
     return [f"atm:{aid}" for aid in sorted(kept, key=str)]
 
 
+def _text(value) -> str:
+    """Текст LangString на языке вызова (amemo.lang.current()) с заменой на другой слот; пусто — «»."""
+    return lang.pick(value, lang.current()) or ""
+
+
 def _label(payload: dict) -> str:
-    return (payload.get("label") or {}).get("ru") or ""
+    return _text(payload.get("label"))
 
 
 def _value_text(v: dict) -> str:
@@ -125,7 +130,7 @@ def report(conn: psycopg.Connection, refs: list[str], *, title: str = "Анто�
                 f"<h3>{e(_label(p))}</h3>"
                 f"<p class=meta>{e(p.get('kind', ''))}{' · ' + e(vals) if vals else ''}"
                 f"{' · основание: ' + e(basis) if basis and not srcs else ''}</p>"
-                f"{'<p>' + e((p.get('summary_plain') or {}).get('ru', '')) + '</p>' if p.get('summary_plain') else ''}"
+                f"{'<p>' + e(_text(p.get('summary_plain'))) + '</p>' if p.get('summary_plain') else ''}"
                 f"{'<ul class=src>' + ''.join(srcs) + '</ul>' if srcs else ''}"
                 f"<p class=ref>atm:{r['record_id']}</p>"
                 "</article>")

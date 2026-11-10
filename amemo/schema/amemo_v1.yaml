@@ -421,11 +421,13 @@ classes:
     description: Любое значение (ячейка таблицы, отчёт проверки).
 
   LangString:
-    description: Текст на нескольких языках; русский обязателен.
+    description: Текст на нескольких языках; нужен хотя бы один из слотов ru, en.
     attributes:
-      ru:
-        required: true
+      ru: {}
       en: {}
+    any_of:
+      - slot_conditions: {ru: {required: true}}
+      - slot_conditions: {en: {required: true}}
 
   Selector:
     description: Место внутри файла. refined_by уточняет его — лист → диапазон, страница → цитата.

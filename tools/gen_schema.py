@@ -13,6 +13,8 @@ import os
 import sys
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = "amemo/schema/amemo_v1.yaml"    # относительный путь: генератор записывает его в model_v1.py
 PYDANTIC = ROOT / "amemo" / "model_v1.py"
@@ -35,7 +37,54 @@ def _patch_pydantic(text: str) -> str:
     if text.count(anchor) != 1:
         _fail("вывод gen-pydantic изменился: в ConfiguredBaseModel нет единственной строки «strict = False,» — "
               "некуда вставить allow_inf_nan = False")
-    return text.replace(anchor, anchor + "        allow_inf_nan = False,\n")
+    text = text.replace(anchor, anchor + "        allow_inf_nan = False,\n")
+    # (c) any_of класса («нужно хотя бы одно из полей», LangString) gen-pydantic кладёт только в linkml_meta —
+    # проверку ставим сами: model_validator по тем же полям.
+    rules = any_of_rules()
+    if rules:
+        imported = "    field_validator,\n"
+        if text.count(imported) != 1:
+            _fail("вывод gen-pydantic изменился: нет единственной строки «field_validator,» в импорте pydantic — "
+                  "некуда добавить model_validator")
+        text = text.replace(imported, imported + "    model_validator,\n")
+    for name, fields in rules.items():
+        header = f"class {name}(ConfiguredBaseModel):\n"
+        if text.count(header) != 1:
+            _fail(f"вывод gen-pydantic изменился: нет единственного «{header.strip()}» — некуда добавить проверку any_of")
+        start = text.index(header)
+        end = text.find("\n\n\nclass ", start)
+        if end < 0:
+            _fail(f"вывод gen-pydantic изменился: не найден конец класса {name}")
+        names = ", ".join(fields)
+        check = (f"\n\n    @model_validator(mode=\"after\")\n"
+                 f"    def _any_of(self):\n"
+                 f"        \"\"\"any_of схемы: нужно хотя бы одно из полей {names}.\"\"\"\n"
+                 f"        if all(getattr(self, name) is None for name in {tuple(fields)!r}):\n"
+                 f"            raise ValueError(\"нужно хотя бы одно из полей: {names}\")\n"
+                 f"        return self")
+        text = text[:end] + check + text[end:]
+    return text
+
+
+def any_of_rules() -> dict[str, list[str]]:
+    """Классы схемы с any_of из ветвей «поле обязательно»: класс → поля, из которых нужно хотя бы одно.
+
+    Другие формы any_of генератор не переносит в Pydantic — такая схема отвергается, а не проверяется наполовину."""
+    classes = yaml.safe_load((ROOT / SOURCE).read_text(encoding="utf-8"))["classes"]
+    rules = {}
+    for name, cls in classes.items():
+        branches = (cls or {}).get("any_of")
+        if not branches:
+            continue
+        fields = []
+        for branch in branches:
+            condition = (branch or {}).get("slot_conditions") or {}
+            if set(branch or {}) != {"slot_conditions"} or len(condition) != 1 \
+                    or next(iter(condition.values())) != {"required": True}:
+                _fail(f"{name}.any_of: поддержаны только ветви slot_conditions: {{поле: {{required: true}}}}")
+            fields.append(next(iter(condition)))
+        rules[name] = fields
+    return rules
 
 
 def generate() -> dict[Path, str]:
@@ -61,6 +110,17 @@ def generate() -> dict[Path, str]:
         _fail("вывод генератора JSON Schema изменился: $defs.Any.type не список — посмотрите amemo_v1.schema.json")
     if "array" not in any_type:
         any_type.append("array")
+    # Ветвь anyOf («поле обязательно») генератор пишет с пустой схемой поля, и null проходил бы её; ветвь требует
+    # значение того же типа, что поле, но без null — как model_validator из (c) в Pydantic.
+    for name in any_of_rules():
+        cls = js.get("$defs", {}).get(name, {})
+        for branch in cls.get("anyOf", []):
+            for field in branch.get("properties", {}):
+                kinds = cls["properties"][field].get("type")
+                if not isinstance(kinds, list) or "null" not in kinds:
+                    _fail(f"вывод генератора JSON Schema изменился: $defs.{name}.properties.{field}.type — "
+                          "не список с null")
+                branch["properties"][field] = {"type": [k for k in kinds if k != "null"]}
     return {PYDANTIC: py, JSON_SCHEMA: json.dumps(js, ensure_ascii=False, indent=2) + "\n"}
 
 

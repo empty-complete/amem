@@ -693,9 +693,11 @@ ranking. They never change a status or skip a check.
 
 **Good to know**
 
-- Schema v1 requires the `ru` slot of every label; other languages are optional. A base kept in English
-  writes its English text there, as the sample does. Full-text search is tuned for Russian, and the optional
-  local vector model is multilingual.
+- Text has two slots, `ru` and `en`; a record needs at least one, so a base can be kept in English only, as
+  the sample is. Labels and snippets come in the language asked for — the UI language (`Accept-Language`),
+  `--lang` in the CLI, `lang` in MCP tools, otherwise `AMEMO_LANG` — and fall back to the other slot. Full-text
+  search indexes `ru` with the Russian configuration and `en` with the English one; the optional local vector
+  model is multilingual.
 - Vectors are local and optional: `pip install -e ".[embed]"` adds fastembed, and a model is downloaded
   only with explicit permission. `AMEMO_BACKEND=none` turns the semantic channel off, and lexical search
   keeps working.

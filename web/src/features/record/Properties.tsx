@@ -4,9 +4,9 @@ import { useTranslation } from "react-i18next";
 import type { components } from "../../api/schema";
 import { agentName, formatDate, formatValue, type ValueLike } from "../../ui/format";
 import { Icon, type IconName } from "../../ui/icons";
+import { type LangString, pickText } from "../../ui/lang";
 import { useFamily } from "../../ui/useFamily";
 import { recordPath } from "../records/RecordList";
-import { type LangString, text } from "./doc";
 
 type View = components["schemas"]["RecordView"];
 type Value = ValueLike & {
@@ -45,7 +45,7 @@ function Row({ icon, name, children }: { icon: IconName; name: string; children:
 
 /** Значение параметра одной строкой: «±2 % в диапазоне 10…90 %». */
 export function valueLine(v: Value, lang: string) {
-  const q = (v.qualifiers ?? []).map((x) => `${text(x.label, lang)} ${formatValue(x, lang)}`.trim());
+  const q = (v.qualifiers ?? []).map((x) => `${pickText(x.label, lang)} ${formatValue(x, lang)}`.trim());
   return [formatValue(v, lang), ...q].filter(Boolean).join(" ");
 }
 
@@ -78,7 +78,7 @@ export function Properties({ view, kindLabel }: { view: View; kindLabel: string 
         <Row icon="ruler" name={t("record.p_values")}>
           {values.map((v) => (
             <span key={v.property} className="num">
-              {text(v.label, lang) && <span className="muted">{text(v.label, lang)} </span>}
+              {pickText(v.label, lang) && <span className="muted">{pickText(v.label, lang)} </span>}
               {valueLine(v, lang)}
             </span>
           ))}
@@ -117,7 +117,7 @@ export function Properties({ view, kindLabel }: { view: View; kindLabel: string 
       {(p.qualifiers ?? [])
         .filter((q) => q.value_text)
         .map((q) => (
-          <Row key={q.property} icon="dash" name={text(q.label, lang) || q.property}>
+          <Row key={q.property} icon="dash" name={pickText(q.label, lang) || q.property}>
             {q.value_text}
           </Row>
         ))}

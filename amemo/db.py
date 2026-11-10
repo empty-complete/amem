@@ -1,7 +1,7 @@
 """Подключение к PostgreSQL схемы v1, миграции SQL, загрузка словарей и шаблонов.
 
   prepare(conn) — то, что делает сервер при старте: миграции → словари и шаблоны → base_id и четыре папки новой
-  базы → счётчик id.
+  базы → поисковая проекция, если её версия в базе старее кода (search.ensure_projection) → счётчик id.
   set_base_name(conn, name), base_name(conn) — имя базы для людей (ключ base_name в meta); base_id от него
   не зависит.
 
@@ -26,7 +26,7 @@ from pathlib import Path
 import psycopg
 from psycopg.types.json import Jsonb
 
-from . import canon, folders, ids, packs
+from . import canon, folders, ids, packs, search
 
 SQL_DIR = Path(__file__).with_name("sql")
 MIGRATION_LOCK = 0x616D656D00000001          # ключ pg_advisory_lock для миграций: «amemo» + 1
@@ -226,6 +226,7 @@ def prepare(conn: psycopg.Connection) -> list[str]:
                             "RETURNING key", (Jsonb(str(ids.uuid7())),)).fetchone()
         if born is not None:
             folders.seed_defaults(conn)
+    search.ensure_projection(conn)
     seed_ids(conn)
     return applied
 

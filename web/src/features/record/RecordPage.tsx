@@ -9,6 +9,7 @@ import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
 import { agentName, formatDate } from "../../ui/format";
 import { Icon } from "../../ui/icons";
+import { pickText } from "../../ui/lang";
 import { RegionState } from "../../ui/RegionState";
 import { StatusText } from "../../ui/StatusText";
 import { useCopy } from "../../ui/useCopy";
@@ -22,7 +23,7 @@ import { RecordEditor } from "../write/RecordEditor";
 import { AgentView } from "./AgentView";
 import { Body, type WikiTarget } from "./Body";
 import { type Content, RecordContent } from "./Content";
-import { recordToDocument, text } from "./doc";
+import { recordToDocument } from "./doc";
 import { type Payload, Properties, valueLine } from "./Properties";
 import { HistoryWidget, LinksWidget, SimilarWidget, SourcesWidget } from "./Widgets";
 import "./record.css";
@@ -84,7 +85,7 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
   const { copy, message } = useCopy(t("record.copy_failed"));
   const doc = useMemo(() => recordToDocument(p, view.about, view.sources as never, lang), [p, view, lang]);
   const kind = p.kind ?? p.entity_class ?? "";
-  const label = text(p.label, lang);
+  const label = pickText(p.label, lang);
   const main = p.content?.values?.[0];
 
   const target = useCallback(
@@ -103,8 +104,8 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
     });
 
   const pending = view.open_items.find((i) => i.state === "queued" || i.state === "claimed");
-  const summary = text(p.summary_plain ?? p.description, lang);
-  const body = text(p.body, lang);
+  const summary = pickText(p.summary_plain ?? p.description, lang);
+  const body = pickText(p.body, lang);
 
   return (
     <div className="recpage">

@@ -5,7 +5,7 @@ report (PDF), a maintenance log (xlsx) and field notes (Markdown), about 70 reco
 a domain pack with station and sensor profiles (tools/sample_en/pack) and an open review queue. Everything is
 written through amemo.api, the way agents and people write, so statuses and the queue are real.
 
-Schema v1 requires the `ru` slot of a label; an English base keeps its English text there (README, "Good to know").
+Text goes to the `en` slot of every LangString: schema v1 needs one of `ru`, `en`, and the English UI shows `en`.
 
 Settings are the service's (settings.load: AMEMO_DSN, AMEMO_DATA, AMEMO_DOCS, AMEMO_AGENT, amemo.toml); the pack is
 added to AMEMO_PACKS here, the service needs the same AMEMO_PACKS to show the profiles.
@@ -98,7 +98,7 @@ Fog and short days drain the battery faster than the manual says.
 
 
 def text(value: str) -> dict:
-    return {"ru": value}       # schema v1: the `ru` slot is required; this base is English
+    return {"en": value}       # an English base: LangString needs one of ru, en
 
 
 def page(path: str, n: int, label: str, quote: str) -> dict:

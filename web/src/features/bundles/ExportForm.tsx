@@ -7,6 +7,7 @@ import type { ApiError } from "../../api/errors";
 import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
 import { Icon } from "../../ui/icons";
+import { type LangString, pickText } from "../../ui/lang";
 
 type Status = components["schemas"]["Status"];
 const STATUSES: Status[] = ["verified", "auto_verified", "needs_review", "draft", "deprecated", "superseded"];
@@ -41,8 +42,7 @@ export function ExportForm() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [res, setRes] = useState<Result | null>(null);
-  const lab = (l: { ru?: string; en?: string }) =>
-    (i18n.language.startsWith("en") ? (l.en ?? l.ru) : l.ru) ?? "";
+  const lab = (l: LangString) => pickText(l, i18n.language);
   const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
   const build = async () => {

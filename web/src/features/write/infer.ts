@@ -1,10 +1,11 @@
 // Вид и поля из текста (разд. 5.9): подсказка, а не приговор — плашка вида меняется одним нажатием.
 import { unitLabel } from "../../ui/format";
+import { LANGS, type LangString } from "../../ui/lang";
 
 export type InferredKind = "question" | "decision" | "lesson" | "parameter" | "note";
 export interface Property {
   code: string;
-  label: { ru: string; en?: string };
+  label: LangString;
   unit?: string | null;
 }
 export interface ObjectHint {
@@ -43,12 +44,14 @@ function unitTable(props: Property[]) {
 
 const toNum = (s: string) => Number(s.replace("−", "-").replace(",", "."));
 
-/** Найти величину по подписи: «Влажность в будке» → relative_humidity по совпадению слова и единицы. */
+/** Найти величину по подписи: «Влажность в будке» → relative_humidity по совпадению слова и единицы; подписи
+ * величины — на всех языках: человек пишет на своём, а не на языке интерфейса. */
 function guessProperty(label: string, unit: string, props: Property[]) {
   const words = label.toLowerCase().split(/\s+/);
+  const names = (p: Property) => LANGS.map((x) => p.label[x]?.toLowerCase() ?? "").filter(Boolean);
   return props.find(
     (p) =>
-      p.unit === unit && words.some((w) => w.length > 3 && p.label.ru.toLowerCase().includes(w.slice(0, 5))),
+      p.unit === unit && words.some((w) => w.length > 3 && names(p).some((n) => n.includes(w.slice(0, 5)))),
   )?.code;
 }
 
