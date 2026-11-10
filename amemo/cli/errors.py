@@ -22,6 +22,9 @@ BY_CODE = {
     "bundle_pack_missing": ENV,           # в базе нет пакета, на который опирается подборка: окружение получателя
     "db_unavailable": ENV, "store_unavailable": ENV, "semantic_unavailable": ENV, "timeout": ENV,
     "quota_exceeded": ENV, "internal": ENV,
+    # обновления (amemo update): вид установки и бэкап — окружение; уже ставится, выключено настройкой — конфликт
+    "update_unsupported": ENV, "backup_required": ENV, "update_check_failed": ENV,
+    "update_busy": CONFLICT, "auto_update_off": CONFLICT,
 }
 BY_STATUS = {400: USAGE, 401: USAGE, 403: USAGE, 404: NOT_FOUND, 408: ENV, 409: CONFLICT, 413: USAGE, 415: USAGE,
              416: USAGE, 422: USAGE, 503: ENV, 507: ENV}
@@ -48,6 +51,10 @@ HINTS = {
     "bundle_pack_conflict": "свои виды подборки расходятся со своими видами базы: смотрите collisions",
     "semantic_unavailable": "смысловой поиск: amemo embed status (включить — amemo embed enable)",
     "backup": "клиент PostgreSQL 18 — в AMEMO_PG_BIN или PATH; восстановление — только в пустую базу",
+    "update_unsupported": "образ Docker и рабочую копию обновляет человек: команда — в сообщении",
+    "backup_required": "клиент PostgreSQL 18 — в AMEMO_PG_BIN или PATH; затем amemo update install",
+    "update_check_failed": "проверьте сеть до api.github.com и pypi.org и повторите amemo update check",
+    "auto_update_off": "auto_update = true в amemo.toml (или уберите AMEMO_AUTO_UPDATE=false)",
     "tokens": "задайте AMEMO_TOKENS — путь к файлу токенов, например ~/.config/amemo/amemo-tokens.toml",
 }
 

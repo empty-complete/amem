@@ -49,7 +49,9 @@ RUN install -d /usr/share/amemo/tessdata \
 RUN useradd --system --uid 10001 --user-group --home-dir /var/lib/amemo amemo \
  && install -d -o amemo -g amemo /var/lib/amemo /var/lib/amemo/objects /var/lib/amemo/state /var/lib/amemo/backups \
       /var/lib/amemo/docs
+# AMEMO_IN_CONTAINER: служба в образе не обновляет себя сама (amemo/updates.py), только сообщает о новой версии
 ENV HOME=/var/lib/amemo \
+    AMEMO_IN_CONTAINER=1 \
     AMEMO_DATA=/var/lib/amemo/objects \
     AMEMO_STATE=/var/lib/amemo/state \
     AMEMO_BACKUPS=/var/lib/amemo/backups \

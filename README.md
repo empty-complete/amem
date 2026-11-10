@@ -307,6 +307,30 @@ export AMEMO_DSN=postgresql://amemo:amemo@127.0.0.1:5435/amemo
 - **Web UI.** `/ui` needs the web package: `pip install 'amemo[web]'`. Without it `/ui` answers 404 with a hint,
   and the API works as usual.
 
+### Updates
+
+The service watches the [GitHub releases](https://github.com/empty-complete/amemo/releases) of amemo: at start and
+every 6 hours, quietly when there is no network. A pre-release (`a`, `b`, `rc`) follows pre-releases too; a stable
+version follows stable ones only. Installed with pipx, `uv tool install` or pip in a venv, it updates itself by
+default: the new version is installed into a temporary venv and checked against your database first (migrations run
+in a transaction that is rolled back), a backup is made before new migrations (no PostgreSQL 18 client, no update),
+then the exact version is installed in place and the service restarts when idle (no requests for 2 minutes).
+A version that failed is not retried. Long-running `amemo mcp` processes answer «amemo updated — restart the agent»
+and exit.
+
+```bash
+amemo update             # check now: current version, latest release, what happens next (--json)
+amemo update install     # install the available version now (a person only)
+amemo update auto off    # stop updating by itself; the web UI has the same switch in Settings
+```
+
+- **Turn it off for good** with `auto_update = false` in `amemo.toml` or `AMEMO_AUTO_UPDATE=false`: the service
+  then only reports «version X is available». The switch in the web UI is stored in `AMEMO_STATE/updates.json`, not
+  in `amemo.toml`.
+- **Docker and source checkouts** are never updated by the service: it reports the new version and the command —
+  `git pull` and `docker compose up -d --build` for the image, `git pull` and `pip install -e .` for a working copy.
+  The same goes for `pipx run` and a wheel installed from a local file.
+
 ## Writing from the web
 
 A person writes in the web UI: a form for each kind, their own kinds, file uploads and tasks for agents.

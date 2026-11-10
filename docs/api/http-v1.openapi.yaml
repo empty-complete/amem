@@ -29,6 +29,7 @@ tags:
   - { name: tasks }
   - { name: bundles }
   - { name: base }
+  - { name: updates }
 
 paths:
   /session:
@@ -582,6 +583,57 @@ paths:
         "200":
           description: OK
           content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Backup" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /updates:
+    get:
+      tags: [updates]
+      operationId: getUpdates
+      summary: "Версия, последний релиз GitHub и состояние обновления; может любой с правом чтения"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateStatus" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+    put:
+      tags: [updates]
+      operationId: putUpdates
+      summary: "Переключатель автообновления (пишется в AMEMO_STATE/updates.json, а не в amemo.toml); только человек (person:) с правом записи"
+      description: >-
+        auto_update = false в amemo.toml или AMEMO_AUTO_UPDATE выключает автообновление совсем: включить его
+        переключателем нельзя — 409 auto_update_off. Модель — 403 forbidden, токен только для чтения — 403 read_only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [auto], properties: { auto: { type: boolean } } }
+            example: { auto: false }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateStatus" } } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /updates/check:
+    post:
+      tags: [updates]
+      operationId: checkUpdates
+      summary: "Проверить релизы сейчас (без тела); может любой с правом чтения. Сбой сети — не ошибка: итог в message"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateStatus" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
+  /updates/install:
+    post:
+      tags: [updates]
+      operationId: installUpdate
+      summary: "Поставить доступную версию сейчас (без тела); только человек (person:) с правом записи"
+      description: >-
+        Установка идёт в фоне: ответ 202 — статус с state installing, дальше — GET /updates. Отказы, известные заранее, —
+        409: update_unsupported (docker, исходники, pipx run — в detail команда словами), backup_required (у версии
+        новые миграции, а бэкап невозможен — причина в detail), no_update (ставить нечего), update_busy (уже ставится).
+      responses:
+        "202": { description: Принято, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateStatus" } } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
         default: { $ref: "#/components/responses/Problem" }
 
   /bundles/export:
@@ -1247,6 +1299,25 @@ components:
         created_at: { type: [string, "null"], format: date-time, description: "null — время не прочесть ни из манифеста, ни из имени" }
         size: { type: integer }
         kind: { type: string }
+
+    UpdateStatus:
+      type: object
+      required: [current, latest, channel, install, auto, state, checked_at, message]
+      properties:
+        current: { type: string, description: "Текущая версия amemo" }
+        latest:
+          type: [object, "null"]
+          description: "Новее текущей версия из релиза GitHub с колесом на PyPI; null — новее нет (или ещё не проверяли)"
+          required: [version, url]
+          properties:
+            version: { type: string }
+            url: { type: string, description: "Страница релиза на GitHub" }
+        channel: { type: string, enum: [stable, pre], description: "pre — стоит предварительная версия (a, b, rc): видны и предварительные релизы" }
+        install: { type: string, enum: [pipx, pip, uv, docker, source], description: "Вид установки; docker и source сами не обновляются" }
+        auto: { type: boolean, description: "Автообновление включено" }
+        state: { type: string, enum: [idle, checking, available, installing, ready, restarting, failed] }
+        checked_at: { type: [string, "null"], format: date-time, description: "Последняя проверка релизов; null — ещё не было" }
+        message: { type: string, description: "Словами: что произошло и что делать" }
 
     Selection:
       type: object

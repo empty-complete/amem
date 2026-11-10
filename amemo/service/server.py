@@ -84,16 +84,27 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--port", type=int, help=f"порт (AMEMO_PORT, по умолчанию {settings_.DEFAULT_PORT})")
     ap.add_argument("--no-auth", action="store_true",
                     help="разрешить адрес не loopback без AMEMO_TOKENS (закрытая сеть, compose)")
+    ap.add_argument("--check", action="store_true",
+                    help="проверить эту версию на рабочей базе без записи (импорт, приложение и /ui, миграции с "
+                         "откатом) и выйти: JSON в stdout; так обновление проверяет новую версию до замены")
     return ap
 
 
 def main(argv: Sequence[str] | None = None, *, env: Mapping[str, str] | None = None, **kw) -> int:
-    """Вход `python -m amemo.service`: код 0 после остановки, 2 — неверная настройка или открытость без входа."""
+    """Вход `python -m amemo.service`: код 0 после остановки, 2 — неверная настройка или открытость без входа.
+    --check — проверка версии перед обновлением (amemo/updates.py: run_check): 0 — прошла, 1 — нет, 3 — база
+    недоступна или занята (повторить позже)."""
     args = parser().parse_args(argv)
     if not logging.getLogger().handlers:
         logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     try:
         settings = settings_.load(env, host=args.host, port=args.port)
+        if args.check:
+            if not settings.dsn:
+                raise SettingsError("база не задана: задайте AMEMO_DSN (или dsn в amemo.toml)")
+            from .. import updates
+
+            return updates.run_check(settings)
         serve(settings, no_auth=args.no_auth, **kw)
     except SettingsError as e:
         print(f"amemo: {e}", file=sys.stderr)

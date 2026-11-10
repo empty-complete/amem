@@ -37,6 +37,9 @@ statement_timeout = HEAVY_TIMEOUT_MS: превышение база обрыва
 Явный поиск (/search, /similar) пишет строку в журнал запросов (amemo/journal.py, AMEMO_QUERY_LOG): ошибка файла
 поиск не роняет.
 
+Обновления (/updates, amemo/updates.py): статус и проверка — любому с правом чтения, переключатель и установка — только
+человеку с правом записи; установка идёт в фоне (202), отказы, известные заранее, — 409 с кодом.
+
 Контракт служба отдаёт по /api/v1/openapi.json — копию из пакета (amemo/service/http-v1.openapi.yaml).
 """
 from __future__ import annotations
@@ -663,6 +666,38 @@ async def import_bundle(request: Request) -> JSONResponse:
         can_write=request.state.can_write)))
 
 
+# --- обновления (amemo/updates.py) ---
+
+def _person_writer(request: Request, what: str) -> None:
+    """Обновлением управляет только человек с правом записи: модель — 403 forbidden (токен только для чтения
+    session.Guard отвергает раньше — 403 read_only)."""
+    if not request.state.agent.startswith("person:"):
+        raise api.Forbidden(f"{what} только человек (person:), а не {request.state.agent}")
+    if not request.state.can_write:
+        raise api.ReadOnly(f"вход {request.state.agent} — только для чтения")
+
+
+def get_updates(request: Request) -> JSONResponse:
+    return JSONResponse(request.app.state.updates.status())
+
+
+async def put_updates(request: Request) -> JSONResponse:
+    _person_writer(request, "автообновление включает и выключает")
+    body = await _body(request)
+    if not isinstance(body.get("auto"), bool):
+        raise problems.Problem(400, "bad_request", "тело: нужно поле auto — true или false")
+    return JSONResponse(await run_in_threadpool(request.app.state.updates.set_auto, body["auto"]))
+
+
+def check_updates(request: Request) -> JSONResponse:
+    return JSONResponse(request.app.state.updates.check())
+
+
+def install_update(request: Request) -> JSONResponse:
+    _person_writer(request, "обновление ставит")
+    return JSONResponse(request.app.state.updates.start_install(), status_code=202)
+
+
 @functools.cache
 def contract() -> dict:
     """Контракт из пакета как JSON-объект (YAML читается один раз)."""
@@ -709,6 +744,10 @@ ROUTES = [
     Route(f"{API}/packs/mine/templates/{{code}}", delete_my_template, methods=["DELETE"]),
     Route(f"{API}/base", get_base, methods=["GET"]),
     Route(f"{API}/backups", get_backups, methods=["GET"]),
+    Route(f"{API}/updates", get_updates, methods=["GET"]),
+    Route(f"{API}/updates", put_updates, methods=["PUT"]),
+    Route(f"{API}/updates/check", check_updates, methods=["POST"]),
+    Route(f"{API}/updates/install", install_update, methods=["POST"]),
     Route(f"{API}/bundles/export", export_bundle, methods=["POST"]),
     Route(f"{API}/bundles/inspect", inspect_bundle, methods=["POST"]),
     Route(f"{API}/bundles/import", import_bundle, methods=["POST"]),

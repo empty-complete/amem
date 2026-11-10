@@ -2,13 +2,17 @@
 
 Порядок источников: явный аргумент → окружение (AMEMO_…) → amemo.toml ($AMEMO_CONFIG, затем ~/.config/amemo/amemo.toml).
 Ключи amemo.toml — имена полей Settings (dsn, data, docs, state, backups, host, port, agent, model_agent, ui_origins,
-allowed_hosts, tokens, query_log, state_quota, ocr, ocr_data, ocr_languages, lang); неизвестный ключ — ошибка, а не тихий пропуск опечатки. Относительный путь в amemo.toml считается
+allowed_hosts, tokens, query_log, state_quota, ocr, ocr_data, ocr_languages, lang, auto_update); неизвестный ключ — ошибка, а не тихий пропуск опечатки. Относительный путь в amemo.toml считается
 от папки файла, в окружении и аргументе — от текущей папки; «~» раскрывается везде.
 
 Распознавание сканов (OCR) — расширение на выбор: ocr = none | tesseract (cloud зарезервирован и пока — ошибка
 настройки). Не задано — auto: tesseract, если языковые данные найдены (sources.ocr_setup), иначе none. Данные —
 ocr_data (по умолчанию ~/.local/share/amemo/tessdata, рядом с хранилищем копий; ставит amemo ocr install), затем
 TESSDATA_PREFIX и системный tesseract; языки — ocr_languages (по умолчанию rus, eng).
+
+Обновления (amemo/updates.py): auto_update = true по умолчанию — служба ставит новую версию сама; false — только
+сообщает о ней. Переключатель в вебе пишет в AMEMO_STATE/updates.json, а не сюда: конфиг пользователя служба
+не переписывает. Выключено здесь — выключено, что бы ни говорил переключатель.
 
 Токены общей службы — amemo-tokens.toml с правами 0600: строки [[token]] с hash = "sha256:…", agent и write. Сам токен
 в файле не хранится: служба сравнивает sha256 предъявленного токена с записанными. Файл принадлежит пользователю
@@ -62,8 +66,9 @@ ENV = {
     "ui_origins": "AMEMO_UI_ORIGINS", "allowed_hosts": "AMEMO_ALLOWED_HOSTS", "tokens": "AMEMO_TOKENS",
     "query_log": "AMEMO_QUERY_LOG", "state_quota": "AMEMO_STATE_QUOTA",
     "ocr": "AMEMO_OCR", "ocr_data": "AMEMO_OCR_DATA", "ocr_languages": "AMEMO_OCR_LANGUAGES",
-    "lang": "AMEMO_LANG",
+    "lang": "AMEMO_LANG", "auto_update": "AMEMO_AUTO_UPDATE",
 }
+BOOLEAN = {"true": True, "1": True, "yes": True, "on": True, "false": False, "0": False, "no": False, "off": False}
 
 
 class SettingsError(ValueError):
@@ -91,6 +96,7 @@ class Settings:
     ocr_languages: tuple[str, ...]  # языки tessdata по порядку: rus, eng
     lang: str | None                # язык подписей CLI и MCP без явного (ru | en); None — ru, затем en (amemo.lang)
     config: Path | None             # прочитанный amemo.toml, если был
+    auto_update: bool = True        # ставить новые версии самой (amemo/updates.py); false — только сообщать
 
 
 @dataclass(frozen=True)
@@ -156,6 +162,7 @@ def load(env: Mapping[str, str] | None = None, **explicit) -> Settings:
         ocr=_ocr(raw.get("ocr")),
         ocr_data=path("ocr_data") or home / ".local" / "share" / "amemo" / "tessdata",
         ocr_languages=_ocr_languages(raw.get("ocr_languages")),
+        auto_update=_bool(raw.get("auto_update"), default=True),
     )
 
 
@@ -403,6 +410,17 @@ def _quota(entry) -> int:
         raise SettingsError(f"{where}: предел {value!r} — нужно целое число байт больше нуля или с единицей "
                             f"(500M, 10G, 1T — двоичные: МиБ, ГиБ, ТиБ)")
     return number * QUOTA_UNITS[unit]
+
+
+def _bool(entry, *, default: bool) -> bool:
+    if entry is None:
+        return default
+    value, where, _ = entry
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lower() in BOOLEAN:
+        return BOOLEAN[value.strip().lower()]
+    raise SettingsError(f"{where}: нужно true или false, получено {value!r}")
 
 
 def _ocr(entry) -> str:
