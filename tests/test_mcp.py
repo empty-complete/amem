@@ -1,4 +1,4 @@
-"""MCP (подпроект 4, часть 4b, задача 11): инструменты amemo_* через клиент SDK на настоящей базе (PostgreSQL 18 и 16).
+"""MCP (подпроект 4, часть 4b, задача 11): инструменты amemo_* через клиент SDK на настоящей базе (PostgreSQL 18).
 
 Клиент SDK в памяти процесса (Client(server): протокол 2026-07-28 и, mode="legacy", рукопожатие initialize) — над
 StdioRuntime, как у `amemo mcp`; /mcp службы — сырым JSON-RPC через starlette.testclient (Host, Origin, токены, агент)

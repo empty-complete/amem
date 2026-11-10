@@ -1,5 +1,5 @@
 """Папки (подпроект 4, часть 4.0): правила пути, перенос без ревизии, журнал, реестр, переименование, дерево,
-четыре папки новой базы и события folder в what_changed — на PostgreSQL 18 и 16."""
+четыре папки новой базы и события folder в what_changed — на PostgreSQL 18."""
 import json
 import shutil
 import threading

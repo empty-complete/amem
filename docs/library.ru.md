@@ -246,6 +246,6 @@ bundle.import_(conn, store, Path("out/shared"), agent="person:boris", trust="kee
   до записи;
 - `verify(source, dsn)` — настоящее пробное восстановление во временную базу и поиск, затем уборка.
 
-Хранилище — PostgreSQL 16+ с pgvector; единственное описание схемы — LinkML
+Хранилище — PostgreSQL 18 с pgvector; единственное описание схемы — LinkML
 (`amemo/schema/amemo_v1.yaml`), из него генерируются модели Pydantic и JSON Schema.
 

@@ -29,6 +29,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from . import canon, folders, ids, packs, search
+from .localpg import PG_MIN
 
 SQL_DIR = Path(__file__).with_name("sql")
 MIGRATION_LOCK = 0x616D656D00000001          # ключ pg_advisory_lock для миграций: «amemo» + 1
@@ -80,6 +81,13 @@ def _check_encoding(conn: psycopg.Connection) -> None:
         raise MigrationError(f"нужна база в кодировке UTF8, а не {encoding}: имена и пути объектов хранятся в NFC")
 
 
+def _check_version(conn: psycopg.Connection) -> None:
+    major = conn.info.server_version // 10000                      # без запроса: сервер сообщает её при входе
+    if major < PG_MIN:
+        raise MigrationError(f"нужен PostgreSQL {PG_MIN} или новее, а сервер — {major}: перенесите базу на новый "
+                             "сервер (pg_upgrade или pg_dump и pg_restore)")
+
+
 def _plan(conn: psycopg.Connection) -> list[tuple[Path, str, str]]:
     """Миграции кода, которых нет в базе: (файл, текст, sha256) по порядку. Код старее базы или применённый файл
     изменён — MigrationError. Таблицу учёта создаёт, если её нет (у rehearse — внутри откатываемой транзакции)."""
@@ -105,6 +113,7 @@ def _plan(conn: psycopg.Connection) -> list[tuple[Path, str, str]]:
 def migrate(conn: psycopg.Connection) -> list[str]:
     """Применить новые миграции; вернуть их имена."""
     _check_encoding(conn)
+    _check_version(conn)
     conn.execute("SELECT pg_advisory_lock(%s)", (MIGRATION_LOCK,))
     try:
         done = []
@@ -131,6 +140,7 @@ def rehearse(conn: psycopg.Connection, *, lock_timeout_ms: int = REHEARSE_LOCK_T
     каждый файл — своя транзакция: ALTER TYPE … ADD VALUE и новое значение в следующем файле, команды вне транзакции),
     — RehearsalLimited: это не отказ версии, а предел проверки."""
     _check_encoding(conn)
+    _check_version(conn)
     if not conn.execute("SELECT pg_try_advisory_lock(%s)", (MIGRATION_LOCK,)).fetchone()[0]:
         raise RehearsalBusy("замок миграций занят — базу сейчас мигрирует другой процесс")
     try:
@@ -287,7 +297,7 @@ def seed_ids(conn: psycopg.Connection) -> None:
         "AND t.table_type = 'BASE TABLE' ORDER BY c.table_name")]
     if not tables:
         return
-    # у uuid нет агрегата max в PostgreSQL 16 — берём первый id по убыванию
+    # первый id по убыванию в каждой таблице — по её индексу
     union = " UNION ALL ".join(f"(SELECT id FROM {t} ORDER BY id DESC LIMIT 1)" for t in tables)
     row = conn.execute(f"SELECT id FROM ({union}) AS ids ORDER BY id DESC LIMIT 1").fetchone()
     if row is not None:

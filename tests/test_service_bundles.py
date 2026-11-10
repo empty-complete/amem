@@ -1,7 +1,7 @@
 """Подборки HTTP v1 (подпроект 4, часть 4a, задача 8): экспорт и антология, скачивание и отчёт, загрузка с проверкой
 (inspect), пробный и настоящий импорт; владелец подборки, срок хранения, пределы загрузки. И журнал запросов
 (amemo/journal.py): строка на явный поиск через HTTP. Каждый ответ сверяется со схемой контракта
-docs/api/http-v1.openapi.yaml; starlette.testclient на настоящей базе (PostgreSQL 18 и 16), порт не слушается."""
+docs/api/http-v1.openapi.yaml; starlette.testclient на настоящей базе (PostgreSQL 18), порт не слушается."""
 import io
 import json
 import time

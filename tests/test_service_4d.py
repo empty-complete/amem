@@ -1,6 +1,6 @@
 """Пути части 4d HTTP v1 (подпроект 4, часть 4d; спецификация разд. 6a): ответы — по строгой схеме контракта.
 
-starlette.testclient на настоящей базе (PostgreSQL 18 и 16), порт не слушается."""
+starlette.testclient на настоящей базе (PostgreSQL 18), порт не слушается."""
 import os
 from pathlib import Path
 

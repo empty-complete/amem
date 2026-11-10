@@ -6,7 +6,7 @@ Follow these steps in order. They work from a bare machine: no Python, no Docker
 
 When you are done, the machine has:
 
-- PostgreSQL 16 or newer with the pgvector extension, and a database for amemo;
+- PostgreSQL 18 with the pgvector extension, and a database for amemo;
 - the `amemo` command (Python package `amemo` from PyPI, with the web UI);
 - amemo connected to the user's coding agents (Claude Code, Codex): MCP server, hooks and skills;
 - `amemo doctor` with no `FAIL` lines.
@@ -64,7 +64,7 @@ With WSL2, "Linux" below includes WSL.
 
 ## 3. PostgreSQL with pgvector
 
-amemo needs PostgreSQL 16 or newer (18 is what CI tests first) with the `vector` extension. Use the first option
+amemo needs PostgreSQL 18 with the `vector` extension. Use the first option
 that fits.
 
 ### A. A server the user already has
@@ -149,7 +149,7 @@ current macOS user: `psql -d postgres`.
    ```
 
    It goes to `C:\Program Files\PostgreSQL\18` and runs as the Windows service `postgresql-x64-18`. If another
-   PostgreSQL holds port 5432, pass another `--serverport`. If PostgreSQL 16 or newer is already installed, reuse it
+   PostgreSQL holds port 5432, pass another `--serverport`. If PostgreSQL 18 is already installed, reuse it
    (ask the user for its `postgres` password) and go on with pgvector.
 
 2. pgvector has no official Windows build: build it with the Visual Studio C++ build tools (a download of about

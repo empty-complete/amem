@@ -88,11 +88,9 @@ def docs(tmp_path) -> Path:
     return make_docs(tmp_path / "docs")
 
 
-# Тестовые базы схемы v1 — PostgreSQL 18 и 16 (проверка совместимости).
-# Запуск: docker compose --profile test up -d --wait db-test db-test-pg16
-TEST_DSNS = os.environ.get(
-    "AMEMO_TEST_DSNS",
-    "postgresql://test:test@localhost:5433/test,postgresql://test:test@localhost:5434/test").split(",")
+# Тестовая база схемы v1 — PostgreSQL 18; в AMEMO_TEST_DSNS — свой адрес (или несколько через запятую).
+# Запуск: docker compose --profile test up -d --wait db-test
+TEST_DSNS = os.environ.get("AMEMO_TEST_DSNS", "postgresql://test:test@localhost:5433/test").split(",")
 
 
 @contextlib.contextmanager
@@ -106,7 +104,7 @@ def _schema(dsn: str):
         admin = psycopg.connect(dsn, autocommit=True, connect_timeout=3)
     except psycopg.OperationalError as e:
         pytest.fail(f"нет тестовой базы {dsn} — запустите: docker compose --profile test up -d --wait "
-                    f"db-test db-test-pg16 ({e})", pytrace=False)
+                    f"db-test ({e})", pytrace=False)
     schema = f"t_{uuid.uuid4().hex[:12]}"
     admin.execute(f'CREATE SCHEMA "{schema}"')
     # расширения ставятся на всю базу, в public; миграция повторяет CREATE EXTENSION IF NOT EXISTS
@@ -152,7 +150,7 @@ def pgdb(request):
         admin = psycopg.connect(dsn, autocommit=True, connect_timeout=3)
     except psycopg.OperationalError as e:
         pytest.fail(f"нет тестовой базы {dsn} — запустите: docker compose --profile test up -d --wait "
-                    f"db-test db-test-pg16 ({e})", pytrace=False)
+                    f"db-test ({e})", pytrace=False)
     created = []
 
     def new_database() -> str:

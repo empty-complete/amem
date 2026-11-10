@@ -1,6 +1,6 @@
 """Пути чтения HTTP v1 (подпроект 4, часть 4a, задача 6): каждый ответ сверяется со схемой контракта
 docs/api/http-v1.openapi.yaml; операции amemo/api.py — нормализация пустых фильтров и проверка параметров.
-starlette.testclient на настоящей базе (PostgreSQL 18 и 16), порт не слушается."""
+starlette.testclient на настоящей базе (PostgreSQL 18), порт не слушается."""
 import json
 import os
 from pathlib import Path

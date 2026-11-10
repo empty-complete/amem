@@ -5,24 +5,16 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      # На pull request — только PostgreSQL 18 (вдвое быстрее); обе версии — на push в main.
-      AMEMO_TEST_DSNS: ${{ github.event_name == 'pull_request' && 'postgresql://test:test@localhost:5433/test' || 'postgresql://test:test@localhost:5433/test,postgresql://test:test@localhost:5434/test' }}
+      AMEMO_TEST_DSNS: postgresql://test:test@localhost:5433/test
     defaults:
       run:
         shell: bash          # явный bash — это bash -eo pipefail: упавший pytest | tee валит шаг
     services:
-      # тестовые базы, как в docker-compose.yml: 18 на 5433, 16 на 5434
+      # тестовая база, как в docker-compose.yml: PostgreSQL 18 на 5433
       db-test:
         image: pgvector/pgvector:0.8.1-pg18
         env: {POSTGRES_DB: test, POSTGRES_USER: test, POSTGRES_PASSWORD: test}
         ports: ["5433:5432"]
-        options: >-
-          --health-cmd "pg_isready -U test -d test"
-          --health-interval 2s --health-timeout 3s --health-retries 30
-      db-test-pg16:
-        image: pgvector/pgvector:0.8.1-pg16
-        env: {POSTGRES_DB: test, POSTGRES_USER: test, POSTGRES_PASSWORD: test}
-        ports: ["5434:5432"]
         options: >-
           --health-cmd "pg_isready -U test -d test"
           --health-interval 2s --health-timeout 3s --health-retries 30
@@ -49,7 +41,7 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check amemo tests tools
       - run: pytest -q -p no:cacheprovider -rA | tee pytest.log
-      - name: Restore tests ran once on PostgreSQL 18 and once on 16
+      - name: Restore tests ran on PostgreSQL 18
         run: |
           for test in test_dump_restores_records_marks_and_search test_snapshot_restore_opens_the_old_file_version test_verify_restores_into_a_temporary_database_and_searches; do
             for db in $(echo "$AMEMO_TEST_DSNS" | tr ',' '\n' | sed -E 's#.*:([0-9]+)/.*#pg\1#'); do

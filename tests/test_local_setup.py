@@ -4,7 +4,7 @@
 изменений — агент с --embed/--ocr, переменные окружения, чужой amemo.toml, старый PostgreSQL, amemo pg без своего
 кластера. Отказы проверяются на поддельных программах PostgreSQL (скрипты sh, поэтому не на Windows).
 
-С PostgreSQL: AMEMO_TEST_PG_SERVER_BIN — каталог initdb, pg_ctl и postgres 16+ с pgvector (в CI —
+С PostgreSQL: AMEMO_TEST_PG_SERVER_BIN — каталог initdb, pg_ctl и postgres 18+ с pgvector (в CI —
 /usr/lib/postgresql/18/bin из пакетов PGDG). Полный setup во временной папке, повторный запуск ничего не ломает,
 amemo pg stop|status|start. Без переменной тест пропускается.
 """
@@ -141,11 +141,11 @@ def test_missing_pg_programs(run, tmp_path):
 
 @posix_only
 def test_old_postgresql_is_refused(run, tmp_path):
-    code, out, err = run("setup", "--pg-bin", str(fake_bin(tmp_path / "bin", "15.8")), "--data", str(tmp_path / "d"),
+    code, out, err = run("setup", "--pg-bin", str(fake_bin(tmp_path / "bin", "16.4")), "--data", str(tmp_path / "d"),
                        "--json")
     assert code == 1, err
     problem = json.loads(out)
-    assert problem["code"] == "pg_bin" and "16" in problem["detail"]
+    assert problem["code"] == "pg_bin" and "PostgreSQL 16" in problem["detail"] and "нужен 18" in problem["detail"]
 
 
 @posix_only
@@ -181,7 +181,7 @@ def test_pg_without_own_cluster(run):
 
 # --- с PostgreSQL ---
 
-@pytest.mark.skipif(not SERVER_BIN, reason="нужен AMEMO_TEST_PG_SERVER_BIN — каталог initdb, pg_ctl, postgres 16+")
+@pytest.mark.skipif(not SERVER_BIN, reason="нужен AMEMO_TEST_PG_SERVER_BIN — каталог initdb, pg_ctl, postgres 18+")
 def test_setup_creates_cluster_base_and_config(run, env, tmp_path):
     data = tmp_path / "amemo-data"
     cluster = localpg.Cluster(Path(SERVER_BIN), data / "pg")

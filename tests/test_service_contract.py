@@ -1,8 +1,7 @@
 """Служба (подпроект 4, часть 4a, задача 9): полнота контракта (каждый путь docs/api/http-v1.openapi.yaml — маршрут
 службы, лишних нет), запуск (python -m amemo.service, проверка открытости, --no-auth), адрес и AMEMO_ALLOWED_HOSTS,
 таймауты (медленное тело — 408, statement_timeout у /graph — 503 timeout), предел места подборок владельца
-(AMEMO_STATE_QUOTA — 507). starlette.testclient и настоящий uvicorn в подпроцессе — на настоящей базе (PostgreSQL 18
-и 16)."""
+(AMEMO_STATE_QUOTA — 507). starlette.testclient и настоящий uvicorn в подпроцессе — на настоящей базе (PostgreSQL 18)."""
 import json
 import os
 import re

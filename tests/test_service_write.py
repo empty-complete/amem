@@ -1,6 +1,6 @@
 """Пути записи HTTP v1 (подпроект 4, часть 4a, задача 7): очередь проверки, submit, папки. Каждый ответ сверяется
 со схемой контракта docs/api/http-v1.openapi.yaml; агент — только из сессии (cookie человека, токен, иначе модель);
-ошибки 400/403/404/409/413/415/422. starlette.testclient на настоящей базе (PostgreSQL 18 и 16), порт не слушается."""
+ошибки 400/403/404/409/413/415/422. starlette.testclient на настоящей базе (PostgreSQL 18), порт не слушается."""
 import json
 import uuid
 from datetime import datetime, timezone

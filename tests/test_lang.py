@@ -1,6 +1,6 @@
 """Языки текста записей (docs/superpowers/specs/2026-11-09-amemo-text-languages-design.md): amemo.lang, подписи
 и фрагменты на языке запроса с заменой на другой слот, полнотекстовый поиск по слотам en, перестройка проекции
-поиска, язык у HTTP (Accept-Language), MCP (lang) и CLI (--lang, AMEMO_LANG); база — PostgreSQL 18 и 16."""
+поиска, язык у HTTP (Accept-Language), MCP (lang) и CLI (--lang, AMEMO_LANG); база — PostgreSQL 18."""
 import json
 
 import pytest

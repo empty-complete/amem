@@ -1,4 +1,4 @@
-"""Миграции SQL, загрузка словарей и шаблонов, продолжение счётчика id, защита истории — на PostgreSQL 18 и 16."""
+"""Миграции SQL, загрузка словарей и шаблонов, продолжение счётчика id, защита истории — на PostgreSQL 18."""
 import shutil
 import threading
 import unicodedata
@@ -49,6 +49,24 @@ def test_migrate_needs_utf8_database():
     conn = Conn()
     with pytest.raises(db.MigrationError, match="кодировке UTF8, а не SQL_ASCII"):
         db.migrate(conn)
+    assert conn.executed == []
+
+
+@pytest.mark.parametrize("run", [db.migrate, db.rehearse])
+def test_migrate_needs_postgresql_18(run):
+    """Сервер старше PostgreSQL 18 отвергается до первой миграции и до пробного прогона: на младших версиях amemo
+    не проверяется."""
+    class Conn:
+        autocommit = True
+        info = type("Info", (), {"parameter_status": lambda _, name: "UTF8", "server_version": 160011})()
+        executed: list = []
+
+        def execute(self, sql, params=None):
+            self.executed.append(sql)
+
+    conn = Conn()
+    with pytest.raises(db.MigrationError, match="нужен PostgreSQL 18 или новее, а сервер — 16"):
+        run(conn)
     assert conn.executed == []
 
 

@@ -17,7 +17,7 @@
   <a href="https://github.com/empty-complete/amemo/actions/workflows/web.yml"><img alt="Веб-UI" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amemo/web.yml?branch=main&label=web%20ui&style=flat-square"></a>
   <a href="LICENSE.txt"><img alt="Лицензия AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-2a78d6?style=flat-square"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&logo=python&logoColor=white">
-  <img alt="PostgreSQL 16+ с pgvector" src="https://img.shields.io/badge/PostgreSQL-16%2B%20%C2%B7%20pgvector-4169e1?style=flat-square&logo=postgresql&logoColor=white">
+  <img alt="PostgreSQL 18 с pgvector" src="https://img.shields.io/badge/PostgreSQL-18%20%C2%B7%20pgvector-4169e1?style=flat-square&logo=postgresql&logoColor=white">
   <img alt="Состояние: ранняя разработка" src="https://img.shields.io/badge/status-early%20development-eb6834?style=flat-square">
 </p>
 
@@ -42,7 +42,7 @@
 
 > [!IMPORTANT]
 > **amemo молод.** Ядро, HTTP-служба с веб-UI, CLI, сервер MCP и память агентов для Claude Code и Codex уже
-> работают и проверяются в CI на PostgreSQL 18 и 16. Схема и HTTP-контракт ещё могут меняться. Снимки на этой
+> работают и проверяются в CI на PostgreSQL 18. Схема и HTTP-контракт ещё могут меняться. Снимки на этой
 > странице сняты с настоящей службы на образце базы (`tools/seed_sample.py`, метеостанция с датчиками).
 
 ## Зачем amemo
@@ -140,7 +140,7 @@ amemo хранит единицу поменьше и понадёжнее — *
   Идентификаторы сохраняются, а всё, что расходится с местной копией, идёт на проверку.
 - **Бэкап с доказательством.** Бэкап — это `pg_dump` и снимок хранилища объектов. Он проверяется
   настоящим пробным восстановлением во временную базу.
-- **Скучное хранилище.** Данные лежат в обычном PostgreSQL 16+ с pgvector. Схема описана на LinkML,
+- **Скучное хранилище.** Данные лежат в обычном PostgreSQL 18 с pgvector. Схема описана на LinkML,
   из неё генерируются модели Pydantic и JSON Schema.
 
 ## Как это выглядит в работе
@@ -308,7 +308,7 @@ amemo doctor                   # что работает и что поправ�
 
 ### Свой PostgreSQL в папке данных
 
-Если есть программы PostgreSQL 16+ с pgvector (например, zip EDB в Windows или `postgresql-18` и
+Если есть программы PostgreSQL 18 с pgvector (например, zip EDB в Windows или `postgresql-18` и
 `postgresql-18-pgvector` из PGDG), `amemo setup` обходится без Docker, службы ОС и прав администратора:
 
 ```bash
@@ -825,8 +825,8 @@ sources:
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 
-# тестовые базы: PostgreSQL 18 (порт 5433) и 16 (порт 5434)
-docker compose --profile test up -d --wait db-test db-test-pg16
+# тестовая база: PostgreSQL 18 (порт 5433)
+docker compose --profile test up -d --wait db-test
 
 # запуск тестов (тестам бэкапа нужен клиент PostgreSQL 18)
 .venv/bin/pytest -q
@@ -857,7 +857,7 @@ docker compose --profile test up -d --wait db-test db-test-pg16
 ## Участие
 
 amemo делается открыто. Вопросы и обсуждения приветствуются. Перед большой правкой откройте, пожалуйста,
-issue, чтобы договориться о подходе. Каждый pull request проходит workflow `ci` (тесты на PostgreSQL 18 и 16)
+issue, чтобы договориться о подходе. Каждый pull request проходит workflow `ci` (тесты на PostgreSQL 18)
 и workflow `commits` (Conventional Commits на английском), а правки в `web/` — ещё и workflow `web`.
 
 ## На чём построен

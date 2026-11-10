@@ -1,6 +1,6 @@
 """Служба (подпроект 4, часть 4a, задача 5): настройки, private.strip, защита Host/Origin/415, сессия и cookie
 человека, общая служба по токенам, перевод исключений в problem+json — starlette.testclient на настоящей базе
-(PostgreSQL 18 и 16), порт не слушается."""
+(PostgreSQL 18), порт не слушается."""
 import hashlib
 import logging
 import os
