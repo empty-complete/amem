@@ -10,7 +10,10 @@ Claude Code (https://code.claude.com/docs/en/mcp, …/hooks, …/skills, …/set
 - хуки — settings.json (~/.claude/settings.json, проект — .claude/settings.json): hooks.СОБЫТИЕ — список групп
   {matcher?, hooks: [{type: command, command, timeout}]}; timeout — секунды; команда идёт через оболочку;
 - навыки — ~/.claude/skills/ИМЯ/SKILL.md и .claude/skills/ИМЯ/SKILL.md; frontmatter name, description;
-- CLAUDE_CONFIG_DIR переносит ~/.claude, а с ним и .claude.json.
+- CLAUDE_CONFIG_DIR переносит ~/.claude, а с ним и .claude.json;
+- Windows: оболочка хука — Git Bash, а без него PowerShell (поле shell — bash | powershell); форма exec —
+  command (программа) и args (её аргументы) — идёт без оболочки и одинакова в обоих случаях: на Windows хук
+  amemo ставится так. Домашняя папка — %USERPROFILE%.
 
 Codex CLI (https://github.com/openai/codex, rust-v0.165.0: codex-rs/config/src/mcp_types.rs, hook_config.rs,
 loader/README.md, ext/skills/src/host_roots.rs; https://developers.openai.com/codex/config-reference):
@@ -18,8 +21,10 @@ loader/README.md, ext/skills/src/host_roots.rs; https://developers.openai.com/co
   (встроенная таблица); проект — .codex/config.toml, Codex читает его только у доверенного проекта;
 - хуки — hooks.json рядом с config.toml ($CODEX_HOME/hooks.json, проект — .codex/hooks.json), формат как
   у Claude Code ({"hooks": {СОБЫТИЕ: [{matcher?, hooks: [{type: command, command, timeout}]}]}}); вывод
-  SessionStart и UserPromptSubmit — hookSpecificOutput.additionalContext. PreCompact у Codex не превращает
-  stdout в указания к сжатию, поэтому amemo его у Codex не ставит. Новые хуки Codex может попросить одобрить;
+  SessionStart и UserPromptSubmit — hookSpecificOutput.additionalContext; формы exec нет: команда идёт через
+  $SHELL -lc, а на Windows — через %COMSPEC% /C (cmd.exe; codex-rs/hooks/src/engine/command_runner.rs).
+  PreCompact у Codex не превращает stdout в указания к сжатию, поэтому amemo его у Codex не ставит. Новые хуки
+  Codex может попросить одобрить;
 - инструкции — AGENTS.md ($CODEX_HOME/AGENTS.md, проект — AGENTS.md в корне);
 - навыки — ~/.agents/skills/ИМЯ/SKILL.md ($CODEX_HOME/skills — устаревшее место), проект — .agents/skills.
 """
@@ -28,6 +33,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
+
+from ..portable import WINDOWS, home as home_
 
 CLAUDE_FORMAT = "claude-code/2026-11-09"
 CODEX_FORMAT = "codex-cli/2026-11-09"
@@ -54,6 +61,7 @@ class Layout:
     agents_md: Path | None = None
     skills: Path | None = None
     use_cli: bool = False           # MCP глобально — через `claude mcp add`, если команда есть
+    hook_form: str = "sh"           # sh — строка для sh -c; exec — command и args без оболочки; cmd — для cmd.exe /C
     notes: tuple[str, ...] = ()     # объявления этой установки (автовыбор, ограничения формата)
 
 
@@ -61,18 +69,22 @@ AGENTS = ("claude-code", "codex")
 
 
 def _home(env: Mapping[str, str]) -> Path:
-    return Path(env.get("HOME") or Path.home())
+    return home_(env)
 
 
-def layout(agent: str, env: Mapping[str, str], project: Path | None = None) -> Layout:
-    """Где и что ставить агенту agent глобально или в проект project."""
+def layout(agent: str, env: Mapping[str, str], project: Path | None = None, *,
+           windows: bool | None = None) -> Layout:
+    """Где и что ставить агенту agent глобально или в проект project; windows — форма хуков для Windows (None —
+    по этой машине, WINDOWS)."""
     home = _home(env)
+    windows = WINDOWS if windows is None else windows
     if agent == "claude-code":
+        form = "exec" if windows else "sh"
         if project is not None:
             return Layout(agent, "claude-code", CLAUDE_FORMAT, project, mcp_json=project / ".mcp.json",
                           hooks_json=project / ".claude" / "settings.json",
                           hook_events=("SessionStart", "UserPromptSubmit", "PreCompact"),
-                          skills=project / ".claude" / "skills",
+                          skills=project / ".claude" / "skills", hook_form=form,
                           notes=("Claude Code спросит одобрения сервера amemo из .mcp.json проекта",))
         notes = ()
         config_dir = env.get("CLAUDE_CONFIG_DIR", "").strip()
@@ -85,12 +97,13 @@ def layout(agent: str, env: Mapping[str, str], project: Path | None = None) -> L
         return Layout(agent, "claude-code", CLAUDE_FORMAT, None, mcp_json=user_json,
                       hooks_json=base / "settings.json",
                       hook_events=("SessionStart", "UserPromptSubmit", "PreCompact"),
-                      skills=base / "skills", use_cli=True, notes=notes)
+                      skills=base / "skills", use_cli=True, hook_form=form, notes=notes)
     if agent == "codex":
         events = ("SessionStart", "UserPromptSubmit")
+        form = "cmd" if windows else "sh"
         if project is not None:
             return Layout(agent, "codex", CODEX_FORMAT, project, mcp_toml=project / ".codex" / "config.toml",
-                          hooks_json=project / ".codex" / "hooks.json", hook_events=events,
+                          hooks_json=project / ".codex" / "hooks.json", hook_events=events, hook_form=form,
                           agents_md=project / "AGENTS.md", skills=project / ".agents" / "skills",
                           notes=("Codex читает .codex/config.toml и .codex/hooks.json только у доверенного "
                                  "проекта: отметьте проект доверенным в Codex",
@@ -100,6 +113,6 @@ def layout(agent: str, env: Mapping[str, str], project: Path | None = None) -> L
         notes = (f"CODEX_HOME задана: настройки Codex — в {base}",) if codex_home else ()
         return Layout(agent, "codex", CODEX_FORMAT, None, mcp_toml=base / "config.toml",
                       hooks_json=base / "hooks.json", hook_events=events, agents_md=base / "AGENTS.md",
-                      skills=home / ".agents" / "skills",
+                      skills=home / ".agents" / "skills", hook_form=form,
                       notes=notes + ("Codex может попросить одобрить новые хуки",))
     raise ValueError(f"агент {agent!r} не поддерживается: допустимы {', '.join(AGENTS)}")

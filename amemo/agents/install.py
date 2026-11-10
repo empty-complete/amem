@@ -3,7 +3,8 @@
 Что ставится (пути и форматы — amemo/agents/platforms.py):
 - сервер MCP `amemo` — команда `amemo mcp --agent model:ИМЯ` с AMEMO_AS_MODEL=ИМЯ в окружении: без неё модель,
   запущенная из обычного терминала, писала бы от имени человека;
-- хуки — `AMEMO_AS_MODEL=ИМЯ amemo hook СОБЫТИЕ` с timeout HOOK_TIMEOUT;
+- хуки — `AMEMO_AS_MODEL=ИМЯ amemo hook СОБЫТИЕ` с timeout HOOK_TIMEOUT; на Windows — без оболочки sh
+  (Layout.hook_form): у Claude Code форма exec (command и args), у Codex — строка для cmd.exe /C;
 - навыки ядра (amemo/packs/core/skills) и у Codex — блок в AGENTS.md.
 
 Правила:
@@ -42,6 +43,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Mapping
 
+from ..portable import WINDOWS, home
 from . import platforms
 from .platforms import HOOK_TIMEOUT, SERVER, SKILLS, Layout
 
@@ -52,8 +54,11 @@ CLAUDE_TIMEOUT = 60                         # с на `claude mcp add|remove`
 CODEX_ENV_VARS = ("AMEMO_DSN", "AMEMO_CONFIG", "AMEMO_STATE", "PGPASSFILE", "PGSERVICE")
 PROJECT_COMMAND = ["amemo"]                  # в файлах проекта — без пути этой машины
 
-# элемент хука amemo: команда кончается на `amemo hook СОБЫТИЕ` (или `-m amemo.cli hook СОБЫТИЕ`), путь — любой
-_OUR_HOOK = re.compile(r"(?:^|[\s/'\"])amemo(?:\.cli)?['\"]? hook [A-Za-z]+\s*$")
+# элемент хука amemo: команда кончается на `amemo hook СОБЫТИЕ` (или `-m amemo.cli hook СОБЫТИЕ`), путь — любой,
+# и с «\» Windows, программа — и amemo.exe
+_OUR_HOOK = re.compile(r"(?:^|[\s/\\'\"])amemo(?:\.cli|(?i:\.exe))?['\"]? hook [A-Za-z]+\s*$")
+# слово командной строки cmd.exe, которое нужно взять в кавычки
+_CMD_SPECIAL = re.compile(r'[\s&|<>^()%!,;="]')
 # «+nl» у метки начала: установщик добавил перевод строки в конец файла без него — uninstall его уберёт
 _TOML_BEGIN, _TOML_END = "# amemo:begin", "# amemo:end"
 _MD_BEGIN, _MD_END = "<!-- amemo:begin", "<!-- amemo:end -->"
@@ -96,11 +101,11 @@ class Report:
         return {"agent": self.agent, "format": self.format, "project": str(self.project) if self.project else None,
                 "dry_run": self.dry_run, "changed": bool(self.changes or self.commands),
                 "changes": [{"path": str(c.path), "action": c.action} for c in self.changes],
-                "commands": [shlex.join(c) for c in self.commands], "notes": self.notes, "warnings": self.warnings}
+                "commands": [show(c) for c in self.commands], "notes": self.notes, "warnings": self.warnings}
 
     def lines(self) -> list[str]:
         verb = "будет " if self.dry_run else ""
-        out = [f"{'будет выполнено' if self.dry_run else 'выполнено'}: {shlex.join(c)}" for c in self.commands]
+        out = [f"{'будет выполнено' if self.dry_run else 'выполнено'}: {show(c)}" for c in self.commands]
         for c in self.changes:
             out.append(f"{verb}{c.action}: {c.path}")
             if self.dry_run and c.path.name != "SKILL.md":
@@ -114,6 +119,11 @@ class Report:
 
 # --- команда amemo ---
 
+def show(argv: list[str]) -> str:
+    """Команда для сообщения — в кавычках той оболочки, где её будут повторять: cmd.exe на Windows, sh иначе."""
+    return subprocess.list2cmdline(argv) if WINDOWS else shlex.join(argv)
+
+
 def amemo_command(env: Mapping[str, str]) -> tuple[list[str], str | None]:
     """Как агенту запускать amemo: `amemo` из PATH полным путём (у агента PATH бывает другим), иначе текущий
     интерпретатор с -m amemo.cli. Второе — объявление автовыбора."""
@@ -121,7 +131,7 @@ def amemo_command(env: Mapping[str, str]) -> tuple[list[str], str | None]:
     if found:
         return [str(Path(found).absolute())], None
     command = [sys.executable, "-m", "amemo.cli"]
-    return command, f"amemo нет в PATH: агент будет звать {shlex.join(command)}"
+    return command, f"amemo нет в PATH: агент будет звать {show(command)}"
 
 
 def mcp_entry(command: list[str], model: str) -> dict:
@@ -133,9 +143,40 @@ def hook_command(command: list[str], model: str, event: str) -> str:
     return f"AMEMO_AS_MODEL={model} {shlex.join([*command, 'hook', event])}"
 
 
+def cmd_line(argv: list[str]) -> str:
+    """Строка для cmd.exe /C: программа — всегда в кавычках (в пути бывают пробелы и «&»), прочие слова — если в них
+    пробел или знак cmd. Кавычек в путях Windows не бывает."""
+    return " ".join(f'"{word}"' if i == 0 or not word or _CMD_SPECIAL.search(word) else word
+                    for i, word in enumerate(argv))
+
+
+def hook_handler(command: list[str], model: str, event: str, form: str = "sh") -> dict:
+    """Элемент хука amemo в форме платформы (Layout.hook_form):
+    - sh — строка `AMEMO_AS_MODEL=ИМЯ amemo hook СОБЫТИЕ` для sh -c;
+    - exec (Claude Code на Windows) — command (программа) и args без оболочки: одинаково под Git Bash и PowerShell;
+    - cmd (Codex на Windows) — строка для cmd.exe /C.
+    В exec и cmd нет AMEMO_AS_MODEL: присваивание перед командой — синтаксис sh, а хук только читает базу и от имени
+    агента не пишет."""
+    if form == "exec":
+        return {"type": "command", "command": command[0], "args": [*command[1:], "hook", event],
+                "timeout": HOOK_TIMEOUT}
+    line = cmd_line([*command, "hook", event]) if form == "cmd" else hook_command(command, model, event)
+    return {"type": "command", "command": line, "timeout": HOOK_TIMEOUT}
+
+
+def _is_amemo(word: str) -> bool:
+    return word == "amemo.cli" or re.split(r"[\\/]", word)[-1].lower() in ("amemo", "amemo.exe")
+
+
 def is_our_hook(handler) -> bool:
-    return isinstance(handler, dict) and isinstance(handler.get("command"), str) and \
-        bool(_OUR_HOOK.search(handler["command"]))
+    if not isinstance(handler, dict) or not isinstance(handler.get("command"), str):
+        return False
+    args = handler.get("args")
+    if args is not None:                  # форма exec: command — программа, args — её аргументы
+        argv = [handler["command"], *args] if isinstance(args, list) else []
+        return len(argv) >= 3 and all(isinstance(word, str) for word in argv) and argv[-2] == "hook" and \
+            bool(re.fullmatch(r"[A-Za-z]+", argv[-1])) and _is_amemo(argv[-3])
+    return bool(_OUR_HOOK.search(handler["command"]))
 
 
 # --- файлы ---
@@ -253,9 +294,9 @@ def drop_mcp(data: dict) -> dict:
     return data
 
 
-def put_hooks(data: dict, commands: Mapping[str, str]) -> dict:
-    """Хуки amemo: по группе {hooks: [команда]} на событие из commands; прочие события — без хуков amemo. Уже
-    стоящая ровно так группа не трогается (порядок чужих хуков не меняется)."""
+def put_hooks(data: dict, handlers: Mapping[str, dict]) -> dict:
+    """Хуки amemo: по группе {hooks: [элемент]} на событие из handlers (элементы — hook_handler); прочие события —
+    без хуков amemo. Уже стоящая ровно так группа не трогается (порядок чужих хуков не меняется)."""
     data = json.loads(json.dumps(data))
     hooks = data.get("hooks")
     if hooks is not None and not isinstance(hooks, dict):
@@ -266,8 +307,8 @@ def put_hooks(data: dict, commands: Mapping[str, str]) -> dict:
         if groups is not None and not isinstance(groups, list):
             raise InstallError(f"hooks.{event} — не список")
         wanted = None
-        if event in commands:
-            wanted = {"hooks": [{"type": "command", "command": commands[event], "timeout": HOOK_TIMEOUT}]}
+        if event in handlers:
+            wanted = {"hooks": [dict(handlers[event])]}
         ours = [g for g in groups or [] if isinstance(g, dict) and any(map(is_our_hook, g.get("hooks") or []))]
         if wanted is not None and ours == [wanted]:
             continue
@@ -548,8 +589,8 @@ def plan(agent: str, env: Mapping[str, str], project: Path | None = None, *, rem
 
     # хуки
     if lay.hooks_json is not None:
-        commands = {event: hook_command(command, lay.model, event) for event in lay.hook_events}
-        change = _json_change(lay.hooks_json, drop_hooks if remove else (lambda d: put_hooks(d, commands)), mode,
+        handlers = {event: hook_handler(command, lay.model, event, lay.hook_form) for event in lay.hook_events}
+        change = _json_change(lay.hooks_json, drop_hooks if remove else (lambda d: put_hooks(d, handlers)), mode,
                               removing=remove)
         if change is not None:
             report.changes.append(change)
@@ -623,18 +664,18 @@ def apply(report: Report, env: Mapping[str, str]) -> Report:
 
 def _run(command: list[str], env: Mapping[str, str]) -> None:
     try:
-        done = subprocess.run(command, env=dict(env), capture_output=True, text=True, timeout=CLAUDE_TIMEOUT,
-                              stdin=subprocess.DEVNULL)
+        done = subprocess.run(command, env=dict(env), capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=CLAUDE_TIMEOUT, stdin=subprocess.DEVNULL)
     except (OSError, subprocess.TimeoutExpired) as e:
-        raise AgentCommandError(f"{shlex.join(command)}: {e}") from None
+        raise AgentCommandError(f"{show(command)}: {e}") from None
     if done.returncode != 0:
         tail = (done.stderr or done.stdout or "").strip().splitlines()[-1:] or [""]
-        raise AgentCommandError(f"{shlex.join(command)}: код {done.returncode} {tail[0]}".rstrip())
+        raise AgentCommandError(f"{show(command)}: код {done.returncode} {tail[0]}".rstrip())
 
 
 def _empty_folders(report: Report, env: Mapping[str, str]) -> list[Path]:
     """Пустые папки над удалёнными файлами — до корня проекта или HOME (их самих не считаем)."""
-    stop = {report.project or Path(env.get("HOME") or Path.home())}
+    stop = {report.project or home(env)}
     found: list[Path] = []
     for change in report.changes:
         if change.after is not None:
@@ -684,8 +725,15 @@ def _runnable(command: list[str], env: Mapping[str, str]) -> bool:
     return shutil.which(exe, path=env.get("PATH")) is not None
 
 
-def _hook_argv(command: str) -> list[str]:
-    """Команда хука без присваиваний окружения в начале (`AMEMO_AS_MODEL=… amemo hook …` → [amemo, hook, …])."""
+def _hook_argv(handler: dict, form: str = "sh") -> list[str]:
+    """Команда хука как argv: форма exec — command и args; строка cmd.exe — слова и слова в кавычках, «\\» — не
+    экран; строка sh — без присваиваний окружения в начале (`AMEMO_AS_MODEL=… amemo hook …` → [amemo, hook, …])."""
+    command, args = handler["command"], handler.get("args")
+    if isinstance(args, list):
+        return [command, *map(str, args)]
+    if form == "cmd":
+        words = re.findall(r'"[^"]*"|[^\s"]+', command)
+        return [w[1:-1] if len(w) >= 2 and w[0] == w[-1] == '"' else w for w in words]
     try:
         words = shlex.split(command)
     except ValueError:
@@ -737,7 +785,7 @@ def inspect(agent: str, env: Mapping[str, str], project: Path | None = None) -> 
                 continue
             got += 1
             for handler in ours:
-                argv = _hook_argv(handler["command"])
+                argv = _hook_argv(handler, lay.hook_form)
                 if not _runnable(argv, env):
                     broken.append(f"хук {event} зовёт {argv[0] if argv else handler['command']!r} — такой команды нет")
         if got:

@@ -515,3 +515,65 @@ def test_reports_tell_about_backups_and_empty_folders(home, env):
     report = install.uninstall("claude-code", {**env, "HOME": str(clean)})
     (note,) = [n for n in report.notes if "пустые папки" in n]
     assert str(clean / ".claude" / "skills") in note and str(clean / ".claude") in note
+
+
+# --- Windows: хуки без оболочки sh ---
+
+def test_hook_forms_for_windows_are_recognised_and_parsed():
+    exe = r"C:\Users\Ann Lee\.local\bin\amemo.EXE"
+    # Claude Code: exec — программа и аргументы, без оболочки (Git Bash или PowerShell — всё равно)
+    handler = install.hook_handler([exe], "claude-code", "SessionStart", "exec")
+    assert handler == {"type": "command", "command": exe, "args": ["hook", "SessionStart"],
+                       "timeout": platforms.HOOK_TIMEOUT}
+    assert install.is_our_hook(handler) and install._hook_argv(handler) == [exe, "hook", "SessionStart"]
+    python = install.hook_handler([r"C:\Python312\python.exe", "-m", "amemo.cli"], "x", "PreCompact", "exec")
+    assert install.is_our_hook(python)
+    # Codex: строка для cmd.exe /C — программа в кавычках, «\» — не экран
+    handler = install.hook_handler([exe], "codex", "UserPromptSubmit", "cmd")
+    assert handler["command"] == f'"{exe}" hook UserPromptSubmit'
+    assert install.is_our_hook(handler)
+    assert install._hook_argv(handler, "cmd") == [exe, "hook", "UserPromptSubmit"]
+    assert install.is_our_hook(install.hook_handler(["amemo"], "codex", "SessionStart", "cmd"))
+    # чужое — не наше
+    assert not install.is_our_hook({"command": "node", "args": ["check.js", "hook", "SessionStart"]})
+    assert not install.is_our_hook({"command": exe, "args": ["mcp"]})
+    assert not install.is_our_hook({"command": exe, "args": "hook SessionStart"})
+
+
+def test_windows_install_writes_exec_hooks_for_claude_and_cmd_hooks_for_codex(home, env, project, monkeypatch):
+    monkeypatch.setattr(platforms, "WINDOWS", True)
+    stub = Path(env["PATH"]) / "amemo"
+    stub.write_text("#!/bin/sh\n")
+    stub.chmod(0o755)
+
+    install.install("claude-code", env, project)
+    ours = amemo_hooks(read_json(project / ".claude" / "settings.json"))
+    for event in ("SessionStart", "UserPromptSubmit", "PreCompact"):
+        (hook,) = ours[event]
+        assert hook == {"type": "command", "command": "amemo", "args": ["hook", event],
+                        "timeout": platforms.HOOK_TIMEOUT}
+    assert install.install("claude-code", env, project).changes == []          # повтор ничего не меняет
+    found = install.inspect("claude-code", env, project)
+    assert found is not None and found.status == "ok", found
+
+    install.install("codex", env, project)
+    ours = amemo_hooks(read_json(project / ".codex" / "hooks.json"))
+    for event in ("SessionStart", "UserPromptSubmit"):
+        (hook,) = ours[event]
+        assert hook["command"] == f'"amemo" hook {event}'
+    found = install.inspect("codex", env, project)
+    assert found is not None and found.status in ("ok", "warn") and "такой команды нет" not in found.detail, found
+
+    install.uninstall("claude-code", env, project)
+    install.uninstall("codex", env, project)
+    assert not (project / ".claude" / "settings.json").exists() and not (project / ".codex" / "hooks.json").exists()
+
+
+def test_windows_home_is_userprofile(monkeypatch, tmp_path):
+    from amemo import portable
+
+    monkeypatch.setattr(portable, "WINDOWS", True)
+    profile = tmp_path / "profile"
+    lay = platforms.layout("claude-code", {"USERPROFILE": str(profile), "HOME": str(tmp_path / "msys")})
+    assert lay.mcp_json == profile / ".claude.json" and lay.hooks_json == profile / ".claude" / "settings.json"
+    assert portable.home({"HOME": str(tmp_path)}) == tmp_path
