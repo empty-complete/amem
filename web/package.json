@@ -11,6 +11,8 @@
     "dev:mock": "VITE_MOCK=1 vite",
     "build": "tsc -b && vite build",
     "build:mock": "VITE_MOCK=1 vite build --mode mock --outDir dist-mock",
+    "dev:setup": "vite --config vite.setup.config.ts",
+    "build:setup": "tsc -b && vite build --config vite.setup.config.ts",
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "lint": "biome check .",

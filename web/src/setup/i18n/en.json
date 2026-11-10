@@ -1,0 +1,130 @@
+{
+  "title": "Install amemo",
+  "window": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "close": "Close"
+  },
+  "steps": {
+    "label": "Setup steps",
+    "lang": "Language",
+    "data": "Data folder",
+    "docs": "Documents",
+    "features": "Features",
+    "agents": "Connect",
+    "install": "Install",
+    "done": "Done"
+  },
+  "nav": {
+    "back": "Back",
+    "next": "Next",
+    "install": "Install",
+    "skip": "Skip"
+  },
+  "lang": {
+    "title": "amemo language",
+    "lead": "amemo labels and hints for agents use this language. You can change it later in Settings.",
+    "ru": "Русский",
+    "en": "English"
+  },
+  "data": {
+    "title": "Where to keep the base",
+    "lead": "The record base and copies of the files records cite live here. You can move it later with a backup.",
+    "choose": "Choose…",
+    "space": "{{free}} free, about {{need}} needed",
+    "low": "Not enough space: {{free}} free, about {{need}} needed. Choose a folder on another drive.",
+    "notEmpty": "The folder already has files. amemo puts its own next to them, but an empty folder is better.",
+    "ansi": "PostgreSQL cannot open this path: it has characters outside the Windows code page. Choose a folder with Latin letters.",
+    "useFallback": "Use {{path}}"
+  },
+  "docs": {
+    "title": "Documents folder",
+    "lead": "amemo quotes files from here: standards, calculations, letters. Records point to a page and a line instead of retelling the document.",
+    "none": "Not chosen — you can set it later in Settings",
+    "choose": "Choose…",
+    "clear": "Not now"
+  },
+  "features": {
+    "title": "Features",
+    "lead": "What amemo can do right after installation.",
+    "search": "Semantic search",
+    "searchNote": "Finds records by meaning, not only by words. Always installed: it is part of amemo, the ~250 MB model comes with the program.",
+    "ocr": "Recognise scans",
+    "ocrNote": "PDFs without a text layer become quotable. Tick the languages of your documents.",
+    "ocrLangs": "Scan languages",
+    "langs": {
+      "rus": "Russian",
+      "eng": "English",
+      "ukr": "Ukrainian",
+      "deu": "German",
+      "fra": "French",
+      "spa": "Spanish"
+    }
+  },
+  "agents": {
+    "title": "Connect agents",
+    "lead": "amemo becomes the agent's memory: it finds records on a topic and proposes new ones with sources.",
+    "claude": "Claude app",
+    "claudeNote": "Cowork and Claude Code: the amemo server, skills and hooks. At the end the wizard shows where to upload the plugin.",
+    "codex": "Codex",
+    "codexNote": "The amemo server and instructions in AGENTS.md.",
+    "found": "found on this computer",
+    "notFound": "not found"
+  },
+  "install": {
+    "title": "Installing amemo",
+    "lead": "This takes a few minutes. You can minimize the window.",
+    "stages": {
+      "download": "Downloading the program and model",
+      "database": "Database",
+      "store": "File store",
+      "search": "Semantic search",
+      "ocr": "Scan recognition",
+      "agents": "Connecting agents"
+    },
+    "state": {
+      "waiting": "waiting",
+      "running": "running",
+      "done": "done",
+      "skipped": "not chosen",
+      "failed": "error"
+    },
+    "bytes": "{{received}} of {{total}} · {{rate}}/s · {{left}} left",
+    "failed": "Installation stopped",
+    "retry": "Retry",
+    "done": "Done"
+  },
+  "carousel": {
+    "label": "What amemo does",
+    "prev": "Previous example",
+    "next": "Next example",
+    "pause": "Pause",
+    "play": "Play",
+    "go": "Example {{n}}",
+    "sky": "All records on one sky: sources, work and objects, and the links between them.",
+    "write": "Write in one line: claim, source, page — amemo checks the rest.",
+    "source": "The claim beside its source: the quote is highlighted on the real PDF page.",
+    "review": "Review: a person confirms or fixes what an agent proposed.",
+    "card": "Object card: everything known about a building, a joint or a material."
+  },
+  "done": {
+    "title": "amemo is ready",
+    "lead": "Where to start:",
+    "find": "Find — ask your agent about a topic or search in amemo.",
+    "write": "Write — ask your agent to remember a finding with its source.",
+    "check": "Check — confirm what agents proposed in Review.",
+    "shortcut": "Desktop shortcut",
+    "autostart": "Start when I sign in to Windows",
+    "open": "Open amemo"
+  },
+  "size": {
+    "b": "{{n}} B",
+    "kb": "{{n}} KB",
+    "mb": "{{n}} MB",
+    "gb": "{{n}} GB"
+  },
+  "time": {
+    "s": "{{n}} s",
+    "m": "{{n}} min"
+  }
+}

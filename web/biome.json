@@ -7,9 +7,12 @@
       "!src/api/schema.d.ts",
       "!python",
       "!dist-mock",
+      "!dist-setup",
+      "!setup-shots",
       "!test-results",
       "!playwright-report",
       "!index.html",
+      "!setup.html",
       "!.impeccable",
       "!DESIGN.md"
     ]

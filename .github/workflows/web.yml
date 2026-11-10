@@ -27,6 +27,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Setup wizard of the Windows app (setup.html → dist-setup)
+        run: npm run build:setup
       - run: npm run chunks
       - run: npm run size
       - uses: actions/setup-python@v5
@@ -37,6 +39,13 @@ jobs:
         run: pip install -q -e ".[dev]" && pytest -q tests
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: setup-shots
+          path: web/setup-shots
+          retention-days: 14
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

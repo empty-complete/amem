@@ -1,0 +1,584 @@
+/* Мастер первого запуска (setup.html): те же токены, что у веб-интерфейса (theme.css, DESIGN.md) — «тихий список»,
+   одна тёмная кнопка на экран, системный шрифт, обе темы. Окно приложения — от 720×480. */
+
+#root {
+  height: 100%;
+}
+.muted {
+  color: var(--muted);
+}
+.wz {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  user-select: none;
+}
+
+/* свой заголовок окна — только в приложении (decorations: false) */
+.wz__bar {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  flex: none;
+  padding-left: var(--s-sm);
+  border-bottom: 1px solid var(--separator);
+  background: var(--surface);
+}
+.wz__bar-title {
+  font-size: var(--t-meta);
+  color: var(--muted);
+}
+.wz__bar-buttons {
+  display: flex;
+  height: 100%;
+  margin-left: auto;
+}
+.wz__bar-buttons button {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  transition: background 120ms var(--ease);
+}
+.wz__bar-buttons button:hover {
+  background: var(--surface-tertiary);
+}
+.wz__bar-buttons .wz__bar-close:hover {
+  background: var(--danger);
+  color: var(--danger-foreground);
+}
+.wz__bar-buttons svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.wz__body {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+
+/* шаги слева */
+.wz__rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-lg);
+  padding: var(--s-lg) var(--s-md);
+  border-right: 1px solid var(--separator);
+  background: var(--surface-secondary);
+}
+.wz__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s-xs);
+  font-size: var(--t-section);
+  font-weight: 500;
+}
+.wz__brand img {
+  border-radius: 7px;
+}
+.wz__ver {
+  margin-left: auto;
+  font-size: var(--t-meta);
+  font-weight: 400;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.wz__rail ol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wz__rail li {
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+  padding: var(--s-xs) var(--s-sm);
+  border-radius: 8px;
+  font-size: var(--t-label);
+  color: var(--ink-2);
+}
+.wz__rail li[data-state="current"] {
+  background: var(--select);
+  color: var(--foreground);
+  font-weight: 500;
+}
+.wz__rail li[data-state="next"] {
+  color: var(--muted);
+}
+.wz__num-dot {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: var(--t-meta);
+  font-variant-numeric: tabular-nums;
+}
+li[data-state="current"] .wz__num-dot {
+  border-color: var(--press);
+  background: var(--press);
+  color: var(--press-ink);
+}
+li[data-state="done"] .wz__num-dot {
+  border-color: var(--success);
+  color: var(--success);
+}
+.wz__num-dot svg,
+.wz__tick svg,
+.wz__mark svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* содержимое шага */
+.wz__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.wz__content {
+  flex: 1;
+  overflow: auto;
+  padding: var(--s-xl) var(--s-xl) var(--s-lg);
+  animation: wz-in 220ms var(--ease);
+}
+@keyframes wz-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.wz__content > * {
+  max-width: 640px;
+}
+.wz[data-step="install"] .wz__content > * {
+  max-width: none;
+}
+.wz h1 {
+  margin: 0 0 var(--s-xs);
+  font-size: var(--t-title);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+  outline: none;
+}
+.wz__lead {
+  margin: 0 0 var(--s-lg);
+  color: var(--ink-2);
+  max-width: 62ch;
+}
+.wz__meta {
+  margin: var(--s-2xs) 0 0;
+  font-size: var(--t-meta);
+  color: var(--muted);
+}
+.wz__meta[data-state="danger"] {
+  color: var(--danger);
+}
+.wz__num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* выбор языка — две карточки */
+.wz__choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 220px));
+  gap: var(--s-sm);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.wz__card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+  padding: var(--s-md);
+  border-radius: var(--r-panel);
+  background: var(--surface);
+  box-shadow: var(--surface-shadow);
+  cursor: pointer;
+  transition: box-shadow 120ms var(--ease);
+}
+.wz__card[data-checked] {
+  box-shadow: 0 0 0 2px var(--press);
+}
+.wz__card input {
+  accent-color: var(--press);
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+.wz__card-title {
+  font-size: var(--t-section);
+}
+
+/* папка */
+.wz__folder {
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+}
+.wz__path {
+  flex: 1;
+  min-width: 0;
+  padding: var(--s-xs) var(--s-sm);
+  border-radius: 8px;
+  background: var(--field-background);
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, monospace;
+  font-size: var(--t-label);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: text;
+}
+.wz__note {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-xs);
+  margin: var(--s-md) 0 0;
+  padding: var(--s-sm) var(--s-md);
+  border-radius: 8px;
+  background: var(--surface-secondary);
+  border-left: 3px solid var(--warning);
+}
+.wz__note[data-state="danger"] {
+  border-left-color: var(--danger);
+}
+.wz__note p {
+  margin: 0;
+}
+.wz__link {
+  margin-top: var(--s-xs);
+}
+
+/* списки возможностей и агентов */
+.wz__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: var(--r-panel);
+  background: var(--surface);
+  box-shadow: var(--surface-shadow);
+}
+.wz__row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: var(--s-sm);
+  padding: var(--s-md);
+}
+.wz__row + .wz__row {
+  border-top: 1px solid var(--separator);
+}
+.wz__row > input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 3px 0 0 3px;
+  accent-color: var(--press);
+}
+.wz__row-title {
+  margin: 0;
+  font-weight: 500;
+}
+.wz__tick {
+  color: var(--success);
+  padding-top: 2px;
+}
+.wz__found {
+  margin-left: var(--s-2xs);
+  padding: 1px var(--s-xs);
+  border-radius: 6px;
+  background: var(--surface-secondary);
+  font-size: var(--t-meta);
+  font-weight: 400;
+  color: var(--muted);
+}
+.wz__found[data-found] {
+  background: var(--fam-object-wash);
+  color: var(--foreground);
+}
+.wz__langs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-xs);
+  margin: var(--s-sm) 0 0;
+  padding: 0;
+  border: 0;
+}
+.wz__langs legend {
+  width: 100%;
+  margin-bottom: var(--s-xs);
+}
+.wz__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2xs);
+  padding: var(--s-2xs) var(--s-sm) var(--s-2xs) var(--s-xs);
+  border-radius: 999px;
+  background: var(--surface-secondary);
+  font-size: var(--t-label);
+  cursor: pointer;
+}
+.wz__pill[data-checked] {
+  background: var(--select);
+}
+.wz__pill input {
+  margin: 0;
+  accent-color: var(--press);
+}
+
+/* установка: шаги слева, знакомство справа */
+.wz__install {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  gap: var(--s-xl);
+  align-items: start;
+}
+.wz__stages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wz__stage {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: var(--s-sm);
+}
+.wz__stage[data-state="waiting"] .wz__row-title,
+.wz__stage[data-state="skipped"] .wz__row-title {
+  color: var(--muted);
+  font-weight: 400;
+}
+.wz__mark {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.wz__mark[data-state="running"] {
+  border-color: var(--surface-tertiary);
+  border-top-color: var(--press);
+  animation: wz-spin 900ms linear infinite;
+}
+.wz__mark[data-state="done"] {
+  border-color: var(--success);
+  color: var(--success);
+}
+.wz__mark[data-state="failed"] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+@keyframes wz-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+.wz__stage progress {
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin: var(--s-2xs) 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-tertiary);
+  appearance: none;
+}
+.wz__stage progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: var(--surface-tertiary);
+}
+.wz__stage progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: var(--press);
+}
+.wz__stage progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: var(--press);
+}
+.wz__error {
+  margin: var(--s-xs) 0 0;
+  color: var(--danger);
+  font-size: var(--t-meta);
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+
+/* карусель «что умеет amemo»: анимации README на тёмном небе — единственная выразительная поверхность */
+.car {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-sm);
+  min-width: 0;
+}
+.car__frame {
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  border-radius: var(--r-panel);
+  background: var(--sky);
+  box-shadow: var(--surface-shadow);
+}
+.car__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  animation: wz-fade 220ms var(--ease);
+}
+@keyframes wz-fade {
+  from {
+    opacity: 0;
+  }
+}
+.car__cap {
+  min-height: 3em;
+  margin: 0;
+  color: var(--ink-2);
+}
+.car__ctl {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2xs);
+}
+.car__dots {
+  display: flex;
+  gap: var(--s-2xs);
+  margin: 0 var(--s-xs);
+}
+.car__dot {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+.car__dot::before {
+  content: "";
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin: auto;
+  border-radius: 999px;
+  background: var(--border);
+}
+.car__dot[aria-current]::before {
+  width: 20px;
+  background: var(--press);
+}
+.car__btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+  transition: background 120ms var(--ease);
+}
+.car__btn:hover {
+  background: var(--surface-secondary);
+}
+.car__btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* готово */
+.wz__tips {
+  margin-bottom: var(--s-lg);
+}
+.wz__tip {
+  margin: 0;
+  padding-top: 1px;
+}
+.wz__tip .wz__meta {
+  font-size: var(--t-body);
+  color: var(--ink-2);
+}
+.wz__checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-xs);
+}
+.wz__check {
+  display: flex;
+  align-items: center;
+  gap: var(--s-xs);
+  cursor: pointer;
+}
+.wz__check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--press);
+}
+
+/* низ: Назад слева, главное действие справа — одна тёмная кнопка */
+.wz__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s-xs);
+  padding: var(--s-md) var(--s-xl);
+  border-top: 1px solid var(--separator);
+}
+.wz__spacer {
+  flex: 1;
+}
+.wz__primary {
+  font-weight: 500; /* вариант primary HeroUI — заливка accent, то есть press */
+}
+
+@media (max-width: 52rem) {
+  .wz__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wz__rail {
+    display: none;
+  }
+  .wz__content {
+    padding: var(--s-lg) var(--s-md);
+  }
+  .wz__foot {
+    padding: var(--s-sm) var(--s-md);
+  }
+  .wz__install {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
