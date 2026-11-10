@@ -3,6 +3,9 @@
 Вектор принадлежит ревизии и модели. Синхронизация пересчитывает только текущие документы,
 у которых изменился версионированный хэш поискового текста; вектора старых ревизий сохраняются.
 fastembed — необязательная зависимость: её модуль и модель загружаются только при первом вызове.
+Файлы модели лежат в models_dir() (AMEMO_MODELS, иначе FASTEMBED_CACHE_PATH, иначе ~/.local/share/amemo/models), а не
+во временной папке fastembed по умолчанию: её чистит перезагрузка, и смысловой поиск молча ломался бы. Скачивает модель
+только amemo embed enable (amemo/cli/commands/embed.py) — с разрешения человека.
 """
 from __future__ import annotations
 
@@ -13,6 +16,7 @@ import os
 import threading
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import psycopg
@@ -65,19 +69,35 @@ class EmbeddingProvider:
         raise NotImplementedError
 
 
+DEFAULT_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+
+
+def models_dir(env=None) -> Path:
+    """Папка файлов модели: AMEMO_MODELS, иначе FASTEMBED_CACHE_PATH (переменная самого fastembed), иначе
+    ~/.local/share/amemo/models — рядом с хранилищем копий, а не во временной папке."""
+    env = os.environ if env is None else env
+    for var in ("AMEMO_MODELS", "FASTEMBED_CACHE_PATH"):
+        value = env.get(var, "").strip()
+        if value:
+            return Path(value).expanduser()
+    home = Path(env.get("HOME") or Path.home())
+    return home / ".local" / "share" / "amemo" / "models"
+
+
 class FastembedProvider(EmbeddingProvider):
     """Ленивый fastembed; без allow_download разрешены только файлы локального кэша. Модель создаётся под замком:
-    служба зовёт провайдер из пула потоков, и первые параллельные поиски иначе создали бы её каждый свою."""
+    служба зовёт провайдер из пула потоков, и первые параллельные поиски иначе создали бы её каждый свою.
+    cache_dir не задан — models_dir()."""
 
     backend = "fastembed"
 
-    def __init__(self, model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", *,
+    def __init__(self, model_name: str = DEFAULT_MODEL, *,
                  version: str = "1", dims: int = 384, cache_dir: str | None = None,
                  allow_download: bool = False):
         self.name = model_name
         self.version = version
         self.dims = dims
-        self.cache_dir = cache_dir
+        self.cache_dir = cache_dir if cache_dir is not None else str(models_dir())
         self.allow_download = allow_download
         self._model = None
         self._lock = threading.Lock()

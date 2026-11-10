@@ -11,7 +11,8 @@ init — db.prepare (миграции, словари, base_id и четыре �
 Распознавание сканов (amemo/cli/commands/ocr.py): --ocr rus,eng ставит языки tesseract; без флага в интерактивном
 терминале (stdin — tty, не --json, не CI) init спрашивает языки, если OCR ещё не настроен; Enter — пропустить.
 
-doctor — проверки по порядку: настройки, база (вход, миграции, id), хранилище, смысловой поиск (модель и провайдер),
+doctor — проверки по порядку: настройки, база (вход, миграции, id), хранилище, смысловой поиск (модель, провайдер,
+пробный вектор и покрытие — amemo/cli/commands/embed.py; включает его amemo embed enable),
 папка документов, OCR (режим, языки, папка данных; warn — ocr = tesseract, а данных нет), файл токенов, агенты (Claude Code и Codex глобально и в проекте: --project или корень git над
 текущей папкой), служба (/health по AMEMO_URL или на порту AMEMO_PORT, если он слушает). У каждой — ok, warn или fail
 с подсказкой; код 0 без fail, 1 — есть fail.
@@ -234,7 +235,7 @@ PORT_PROBE = 0.3                     # с на «порт слушает?»
 
 
 def run_doctor(ctx, args) -> int:
-    from ... import api, recipes, settings as settings_
+    from ... import api, settings as settings_
     from ..context import pending_migrations
 
     checks = []
@@ -292,12 +293,9 @@ def run_doctor(ctx, args) -> int:
         else:
             check("хранилище", "warn", f"{root}: корня ещё нет — его создаст amemo init или первая запись файла")
         if ready:
-            found = recipes.availability(conn, ctx.provider())
-            if found["semantic"] == "used":
-                check("смысловой поиск", "ok", "модель и провайдер на месте")
-            else:
-                check("смысловой поиск", "warn", f"недоступен ({found['reason']}): работают марки и полнотекстовый "
-                                                 f"— модель: AMEMO_BACKEND и pip install 'amemo[embed]'")
+            from . import embed
+
+            check("смысловой поиск", *embed.doctor_line(embed.state(ctx, conn)))
         if settings.docs is None:
             check("документы", "warn", "AMEMO_DOCS не задан — источники с path получат замечание source_unresolved")
         elif Path(settings.docs).is_dir():

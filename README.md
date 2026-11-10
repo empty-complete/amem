@@ -265,9 +265,10 @@ cd web && npm ci && npm run dev:mock              # then open http://127.0.0.1:5
 ### One-command install
 
 ```bash
-pipx install 'amemo[web]'      # or pip install / uv tool install; [web] adds the web UI at /ui
+pipx install 'amemo[web]'      # or pip install / uv tool install; [web] adds the web UI at /ui, [embed] semantic search
 amemo init --dsn postgresql://amemo:amemo@127.0.0.1:5435/amemo   # database, object store; the DSN goes to amemo.toml
 amemo install claude-code      # MCP server, hooks and skills; `amemo install codex` for Codex CLI
+amemo embed enable             # optional, with amemo[web,embed]: semantic search, downloads a ~250 MB model
 amemo doctor                   # what works and what to fix
 ```
 
@@ -370,8 +371,8 @@ docker compose --profile web up -d --wait amemo-web   # the same with the web UI
 - **Profile `web`.** `amemo-web` is the same service built with `amemo[web]`. It shares the port and the volumes, so
   run either `amemo` or `amemo-web`.
 - **Image.** `docker build -t amemo .` (target `service`) or `--target web`; `--build-arg AMEMO_EXTRAS=embed` adds
-  the local embedding model. `AMEMO_OCR_LANGS="rus eng"` in `.env` builds an image that recognises scans
-  ([OCR](#scanned-pdfs-ocr)).
+  fastembed for [semantic search](#semantic-search), which `docker compose exec amemo amemo embed enable --yes` then
+  turns on. `AMEMO_OCR_LANGS="rus eng"` in `.env` builds an image that recognises scans ([OCR](#scanned-pdfs-ocr)).
 
 ## CLI
 
@@ -395,6 +396,7 @@ amemo tasks list|cancel              tasks for agents
 amemo token create|list|revoke         tokens of a shared service
 amemo base [name [NAME]]               database summary and name
 amemo ocr install|list|remove          languages for recognising scans (OCR)
+amemo embed enable|status              semantic search: download the model, embed, switch on
 amemo doctor [--project DIR]          database, store, model, documents, OCR, agents, service
 ```
 
@@ -446,6 +448,36 @@ amemo ocr remove deu
   but there is no data.
 - **Cloud.** Cloud recognition comes later: the value `ocr = "cloud"` is reserved and for now fails with «not
   supported yet».
+
+## Semantic search
+
+Codes and full-text search work out of the box. The semantic channel finds records by meaning, across languages,
+and is an optional extension: a local multilingual model
+(`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` through fastembed, about 250 MB) and a vector for
+each record. Nothing leaves the machine, and the model is downloaded only when a person allows it.
+
+```bash
+uv tool install 'amemo[web,embed]'   # or pip install 'amemo[embed]': adds the fastembed package
+amemo embed enable                   # asks, downloads the model, embeds every record, switches the channel on
+amemo embed status                   # active model, how many records have a vector, what to do next
+```
+
+- **What `enable` does.** It checks the database and the package, then downloads the model into `AMEMO_MODELS`
+  (by default `~/.local/share/amemo/models`; `FASTEMBED_CACHE_PATH` works too). It asks first; where nobody can
+  answer (`--json`, scripts, CI) pass `--yes`, otherwise nothing is downloaded and the exit code is 2. Then it
+  registers the model in the database, computes a vector for every current record and makes the model active.
+- **New records.** A write does not compute its vector yet. Run `amemo embed enable` again now and then: it
+  downloads nothing and embeds only the records added or changed since. `amemo embed status` shows how many lack a
+  vector, and search results report the share as `embedding_coverage`.
+- **Who enables.** Only a person: a model gets exit code 2 from `amemo embed enable`, since it downloads a model
+  and changes the installation. `amemo embed status` is for everyone.
+- **Turning it off.** `AMEMO_BACKEND=none` turns the semantic channel off; lexical search keeps working and results
+  say `semantic: unavailable`.
+- **Checking.** `amemo doctor` shows a «semantic search» line: the active model and its coverage, or why the
+  channel is unavailable and which command fixes it.
+- **Docker.** Build the image with `--build-arg AMEMO_EXTRAS=embed`, then run
+  `docker compose exec amemo amemo embed enable --yes`. The image keeps the model on the `amemo-state` volume
+  (`AMEMO_MODELS=/var/lib/amemo/state/models`), so it survives a rebuilt container.
 
 ## MCP
 
@@ -698,9 +730,9 @@ ranking. They never change a status or skip a check.
   `--lang` in the CLI, `lang` in MCP tools, otherwise `AMEMO_LANG` — and fall back to the other slot. Full-text
   search indexes `ru` with the Russian configuration and `en` with the English one; the optional local vector
   model is multilingual.
-- Vectors are local and optional: `pip install -e ".[embed]"` adds fastembed, and a model is downloaded
-  only with explicit permission. `AMEMO_BACKEND=none` turns the semantic channel off, and lexical search
-  keeps working.
+- Vectors are local and optional: `pip install -e ".[embed]"` adds fastembed, and `amemo embed enable`
+  downloads the model only with a person's permission ([Semantic search](#semantic-search)).
+  `AMEMO_BACKEND=none` turns the semantic channel off, and lexical search keeps working.
 - Backups need the PostgreSQL 18 client (`pg_dump`, `pg_restore`, `psql`) in `PATH` or in `AMEMO_PG_BIN`.
 
 ## Development

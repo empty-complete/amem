@@ -2,8 +2,9 @@
 #   service — amemo serve (по умолчанию);
 #   web     — то же плюс статика веб-интерфейса (amemo[web]: пакет amemo-web из web/python), служба отдаёт её по /ui.
 # Сборка: docker build -t amemo .   или   docker build --target web -t amemo-web .
-# Внутри — клиент PostgreSQL 18 (pg_dump, pg_restore) для amemo backup; семантическая модель — по
-# --build-arg AMEMO_EXTRAS=embed (fastembed, образ заметно больше). Распознавание сканов PDF — по
+# Внутри — клиент PostgreSQL 18 (pg_dump, pg_restore) для amemo backup; смысловой поиск — по
+# --build-arg AMEMO_EXTRAS=embed (fastembed, образ заметно больше), а включает его в запущенной службе
+# amemo embed enable --yes: модель (~250 МБ) ложится в AMEMO_MODELS на томе состояния. Распознавание сканов PDF — по
 # --build-arg OCR_LANGS="rus eng" (языки tesseract, amemo ocr install при сборке; пусто — без OCR).
 
 FROM node:24-bookworm-slim AS ui
@@ -52,6 +53,7 @@ ENV HOME=/var/lib/amemo \
     AMEMO_DATA=/var/lib/amemo/objects \
     AMEMO_STATE=/var/lib/amemo/state \
     AMEMO_BACKUPS=/var/lib/amemo/backups \
+    AMEMO_MODELS=/var/lib/amemo/state/models \
     AMEMO_HOST=0.0.0.0 \
     AMEMO_PORT=8767
 WORKDIR /var/lib/amemo
