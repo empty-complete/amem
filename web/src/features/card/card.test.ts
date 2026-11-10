@@ -15,3 +15,8 @@ test("группы — в порядке полей профиля", () => {
     "polling",
   ]);
 });
+
+test("имя обязательного поля — через name: английская подпись словаря вместо подписи службы", () => {
+  const s = summarize(card as never, (f) => f.property);
+  expect(s.blockers).toEqual(["operating_temperature"]);
+});

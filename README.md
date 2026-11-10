@@ -34,16 +34,15 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/sky-dark.png">
-    <img alt="The sky: the whole memory as a constellation of atoms and objects" src="docs/assets/readme/en/sky-light.png" width="100%">
+    <img alt="The sky: the whole sample base as a constellation of records and objects, with folders and family filters" src="docs/assets/readme/en/sky-light.png" width="100%">
   </picture>
 </p>
 
 > [!IMPORTANT]
-> **amem is in early development.** The core library works today: storage with revisions, hybrid search,
-> automatic checks, the review queue, entity cards, bundles and backups, tested in CI on PostgreSQL 18
-> and 16. The HTTP service and the web UI run on it; the screenshots of the sky, a record, the review
-> queue and an entity card are taken from the service. The agent picture is a placeholder until agent
-> memory ships.
+> **amem is young.** The core, the HTTP service with the web UI, the CLI, the MCP server and agent memory for
+> Claude Code and Codex work today and are tested in CI on PostgreSQL 18 and 16. The schema and the HTTP
+> contract may still change. The screenshots on this page come from the real service on a sample base
+> (`tools/seed_sample_en.py`, a fictional network of weather stations).
 
 ## Why amem
 
@@ -108,7 +107,7 @@ file it came from, the full history of its changes, and the decision of a person
     <td width="50%" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/card-dark.png">
-        <img alt="An entity card with completeness and grouped parameters" src="docs/assets/readme/en/card-light.png">
+        <img alt="An entity card: completeness, grouped parameters with known, missing and conflicting values" src="docs/assets/readme/en/card-light.png">
       </picture>
       <h3>Entity cards</h3>
       A profile says which parameters an object needs. The card shows what is known, missing or in
@@ -116,12 +115,12 @@ file it came from, the full history of its changes, and the decision of a person
     </td>
     <td width="50%" valign="top">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/agent-dark.svg">
-        <img alt="An agent session that searches amem, fetches records and marks what helped (placeholder)" src="docs/assets/readme/en/agent-light.svg">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/en/agent-dark.png">
+        <img alt="An agent session over MCP: amem_search, amem_get with the source quote, amem_helpful" src="docs/assets/readme/en/agent-light.png">
       </picture>
       <h3>Memory for agents</h3>
       Claude Code and Codex ask amem first. They read short cards, fetch only the records they need, and
-      mark what helped, which costs fewer tokens than reading raw files. <i>Arrives with the MCP server.</i>
+      mark what helped, which costs fewer tokens than reading raw files.
     </td>
   </tr>
 </table>
@@ -238,7 +237,6 @@ open review queue), in an empty database:
 .venv/bin/pip install -e . -e web/python          # the service and the web UI package
 (cd web && npm ci && npm run build)               # Node 24+; the build goes into the amem-web package
 export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem AMEM_DOCS=~/amem-sample/docs
-export AMEM_PACKS=$PWD/tools/sample-pack/meteo          # sample pack: sensors with profiles
 .venv/bin/python tools/seed_sample.py             # the sample: 22 records, 2 open review items
 .venv/bin/python -m amem.service                  # then open http://127.0.0.1:8767/ui/
 ```
@@ -252,7 +250,7 @@ cd web && npm ci && npm run dev:mock              # then open http://127.0.0.1:5
 ### One-command install
 
 ```bash
-pip install amem              # or pipx / uv tool install; until the PyPI release: pip install -e . from a clone
+pipx install 'amem[web]'      # or pip install / uv tool install; [web] adds the web UI at /ui
 amem init --dsn postgresql://amem:amem@127.0.0.1:5435/amem   # database, object store; the DSN goes to amem.toml
 amem install claude-code      # MCP server, hooks and skills; `amem install codex` for Codex CLI
 amem doctor                   # what works and what to fix
@@ -598,8 +596,9 @@ ranking. They never change a status or skip a check.
 
 **Good to know**
 
-- Schema v1 requires a Russian label (`ru`); other languages are optional. Full-text search is tuned
-  for Russian, and the optional local vector model is multilingual.
+- Schema v1 requires the `ru` slot of every label; other languages are optional. A base kept in English
+  writes its English text there, as the sample does. Full-text search is tuned for Russian, and the optional
+  local vector model is multilingual.
 - Vectors are local and optional: `pip install -e ".[embed]"` adds fastembed, and a model is downloaded
   only with explicit permission. `AMEM_BACKEND=none` turns the semantic channel off, and lexical search
   keeps working.

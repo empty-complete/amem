@@ -1,0 +1,16 @@
+code: station
+version: 1.0.0
+target: entity
+applies_to: station
+description: {ru: "Профиль метеостанции: питание, данные, установка.", en: "Weather station profile: power, data, installation."}
+parameters:
+  - {property: supply_voltage, required: true, group: power, origin: manual}
+  - {property: power_consumption, required: true, group: power, origin: datasheet}
+  - {property: solar_panel_power, required: false, group: power, origin: manual}
+  - {property: battery_capacity, required: true, group: power, origin: manual}
+  - {property: battery_autonomy, required: true, group: power, origin: manual}
+  - {property: sampling_interval, required: true, group: data, origin: manual}
+  - {property: transmit_interval, required: false, group: data, origin: manual}
+  - {property: data_retention, required: false, group: data, origin: manual}
+  - {property: operating_temperature, required: true, group: installation, origin: manual}
+  - {property: mast_height, required: true, group: installation, origin: manual}

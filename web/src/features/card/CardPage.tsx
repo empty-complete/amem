@@ -12,7 +12,7 @@ import { HistoryList } from "../record/Widgets";
 import { kindLabel, RecordRow, recordPath } from "../records/RecordList";
 import { Sky } from "../sky/Sky";
 import { useSubmit } from "../write/useSubmit";
-import { CardTable, ExtraValues, type Fill } from "./CardTable";
+import { CardTable, ExtraValues, type Fill, usePropertyName } from "./CardTable";
 import { type Card, ORDER, summarize } from "./card";
 import { Notes } from "./Notes";
 import "../record/record.css";
@@ -21,7 +21,8 @@ import "./card.css";
 
 function Summary({ card }: { card: Card }) {
   const { t } = useTranslation();
-  const s = summarize(card);
+  const name = usePropertyName();
+  const s = summarize(card, (f) => name(f.property, f.label));
   const line = [
     t("card.summary", { known: s.parts.known, total: s.total }),
     [

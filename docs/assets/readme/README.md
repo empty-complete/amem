@@ -1,44 +1,33 @@
-# Картинки README
+# README pictures
 
-- `banner-light.svg`, `banner-dark.svg` — баннер в шапке `README.md` и `README.ru.md`. Не заглушка.
-- `en/*.png`, `ru/*.png` — **настоящие снимки** `sky`, `record`, `review`, `card`: веб-UI на службе с образцом
-  `tools/seed_sample.py`, окно 1600×900, светлая и тёмная тема. Снимает их `web/tools/readme-shots.mjs`.
-- `en/*.svg`, `ru/*.svg` — **заглушка** `agent`: каркас экрана в цветах веб-UI и табличка
-  «Placeholder · screenshot coming soon».
-- Английские — для `README.md`, русские — для `README.ru.md`; у каждой картинки светлый (`-light`) и тёмный
-  (`-dark`) вариант, README выбирает по теме GitHub через `<picture>`.
+- `banner-light.svg`, `banner-dark.svg` — the header of `README.md` and `README.ru.md`, drawn by
+  `tools/readme_assets.py` in the web UI colours.
+- `en/*.png` — screenshots for `README.md`, taken from the real service on the English sample
+  `tools/seed_sample_en.py`: a fictional network of four weather stations with a small domain pack
+  (`tools/sample_en/pack`).
+- `ru/*.png` — screenshots for `README.ru.md`, from the Russian sample `tools/seed_sample.py`.
 
-Всё здесь генерирует `tools/readme_assets.py` (запуск из корня: `python3 tools/readme_assets.py .`).
-Цвета — токены веб-UI из спецификации подпроекта 5, разд. 4.2.
+Every screen has a light (`-light`) and a dark (`-dark`) version, 1600×900; the README picks one by the
+GitHub theme with `<picture>`.
 
-## Чем заменить
-
-| Заглушка | Экран | Что должно быть видно |
+| Screen | Page | What it shows |
 |---|---|---|
-| `sky` | `/` — главная | Небо уложено, выбран объект, справа его карточка, сверху фильтры семей. Лучше всего — короткий GIF или MP4: укладка звёзд и вспышка новой записи |
-| `record` | `/atom/:ref` — запись | Факт со статусом «Проверено», свойства, тело; справа страница PDF с подсвеченной цитатой, ниже «Окрестность» |
-| `review` | `/review/:itemId` — проверка | Слева очередь, выбран пункт; утверждение, цитата и небо; внизу «Отклонить» и «Подтвердить» |
-| `card` | `/entity/:ref?tab=card` — объект | Полоса полноты, параметры по группам с состояниями (известно, нет, расхождение), справа небо объекта |
-| `agent` | терминал агента | Вопрос → `amem_search` → `amem_get` → ответ со ссылкой на источник → `amem_helpful`. Запись asciinema или GIF — после подпроекта 4b (CLI и MCP) |
+| `sky` | `/` (en) or `/?center=` (ru) | The whole base as a constellation, family filters, folders |
+| `record` | `/atom/:ref` | A parameter with its value, body and formula; the PDF page with the quote highlighted |
+| `review` | `/review/:itemId` | The queue on the left; the claim, the quote and the neighbourhood; the decision |
+| `card` | `/entity/:ref?tab=card` | The entity card: completeness, grouped parameters (known, missing, conflict) |
+| `agent` | — | A real MCP session against `amem mcp`: `amem_search` → `amem_get` → `amem_helpful`, drawn as a terminal |
 
-## Как переснять снимки со службы
+## Retaking the screenshots
+
+Nothing heavy runs locally: the `readme-shots` workflow seeds each sample into a fresh PostgreSQL, starts
+the service, records the MCP session (`tools/readme_agent_session.py`) and shoots the screens with
+`web/tools/readme-shots.mjs`. It runs on pull requests that touch the samples or the scripts, and by hand:
 
 ```bash
-export AMEM_DSN=postgresql://…/пустая_база AMEM_DOCS=/tmp/amem-sample/docs
-.venv/bin/python tools/seed_sample.py && .venv/bin/python -m amem.service --port 8770 &
-cd web && npm run build && node tools/readme-shots.mjs http://127.0.0.1:8770
+gh workflow run readme-shots --ref <branch>
+gh run download <run-id> -n readme-shots-en -D docs/assets/readme/en
+gh run download <run-id> -n readme-shots-ru -D docs/assets/readme/ru
 ```
 
-Снимки делает CI (задача `web-service`, артефакт `readme-shots`); карточка — по профилю пакета-образца
-`tools/sample-pack/meteo`. Агента (`agent`) — после памяти агентов.
-
-## Как снять (старый способ, на моках)
-
-1. Веб-UI на образцах: `cd web && npm ci && npm run dev:mock`, затем `http://127.0.0.1:5173/ui/`.
-2. Окно 1600×900 (или 3200×1800 для чёткости на Retina), тема — светлая и тёмная, язык — английский
-   для `en/` и русский для `ru/`.
-3. Сохранить как `<экран>-light.png` и `<экран>-dark.png` рядом с заглушками (GIF и MP4 — до 10 МБ)
-   и поменять расширения в `README.md` и `README.ru.md`. Если тёмного снимка нет — убрать строку
-   `<source>` у этой картинки. Заглушки `.svg` после замены удалить.
-
-Снимать только на образцах данных из моков: ни реальных баз, ни путей, ни имён людей и компаний.
+Only the samples are shot: no real bases, paths, or names of people and companies.
