@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: amemo HTTP API for the web UI
   version: 1.0.0
-  license: { name: MIT, identifier: MIT }
+  license: { name: GNU AGPL v3.0 only, identifier: AGPL-3.0-only }
   description: >-
     Контракт v1 между службой amemo (подпроект 4) и веб-интерфейсом (подпроект 5).
     Ответы — то, что уже отдаёт библиотека (recipes, lookup, review, profile, bundle), плюс подписи записей,

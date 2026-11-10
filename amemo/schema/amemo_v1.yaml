@@ -6,7 +6,7 @@ description: >-
   и amemo/schema/amemo_v1.schema.json (JSON Schema): python tools/gen_schema.py.
   Коды полей, видов и связей — латиницей и неизменны; подписи — в аннотациях label_ru / label_en.
 version: 1.0.0
-license: MIT
+license: AGPL-3.0-only
 prefixes:
   linkml: https://w3id.org/linkml/
   amemo: amemo/

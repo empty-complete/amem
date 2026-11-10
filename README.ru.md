@@ -15,7 +15,7 @@
 <p align="center">
   <a href="https://github.com/empty-complete/amemo/actions/workflows/ci.yml"><img alt="Тесты" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amemo/ci.yml?branch=main&label=tests&style=flat-square"></a>
   <a href="https://github.com/empty-complete/amemo/actions/workflows/web.yml"><img alt="Веб-UI" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amemo/web.yml?branch=main&label=web%20ui&style=flat-square"></a>
-  <a href="LICENSE.txt"><img alt="Лицензия MIT" src="https://img.shields.io/badge/license-MIT-2a78d6?style=flat-square"></a>
+  <a href="LICENSE.txt"><img alt="Лицензия AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-2a78d6?style=flat-square"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&logo=python&logoColor=white">
   <img alt="PostgreSQL 16+ с pgvector" src="https://img.shields.io/badge/PostgreSQL-16%2B%20%C2%B7%20pgvector-4169e1?style=flat-square&logo=postgresql&logoColor=white">
   <img alt="Состояние: ранняя разработка" src="https://img.shields.io/badge/status-early%20development-eb6834?style=flat-square">
@@ -736,6 +736,16 @@ issue, чтобы договориться о подходе. Каждый pull 
 
 ## Лицензия
 
-MIT, см. [LICENSE.txt](LICENSE.txt). © 2026 Филипп Белобородов (Philipp Beloborodov).
+GNU Affero General Public License v3.0 (AGPL-3.0-only), см. [LICENSE.txt](LICENSE.txt).
+© 2026 empty-complete.
+
+amemo можно свободно использовать, изучать, менять и распространять. Кто распространяет изменённую версию или
+запускает её как сервис для других людей по сети, обязан открыть полный исходный код на тех же условиях.
+
+Пакеты домена в `amemo/packs` (словари и шаблоны) — это данные, они остаются под лицензией MIT и годятся для
+повторного использования где угодно.
+
+Коммерческая лицензия без условий AGPL (например, для закрытого облачного сервиса) — по договорённости с автором:
+откройте issue на GitHub. Версии, выпущенные до перехода на AGPL, остаются доступны под MIT.
 
 <p align="center"><sub>amemo — инструмент для того, чтобы хорошо помнить.</sub></p>
