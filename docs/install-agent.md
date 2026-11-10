@@ -91,12 +91,13 @@ sudo apt-get update
 sudo apt-get install -y postgresql-common ca-certificates
 sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y     # the PostgreSQL project's own repository
 sudo apt-get install -y postgresql-18 postgresql-18-pgvector
-pg_lsclusters                                                      # the port of cluster "18 main"
+pg_lsclusters                                                      # the line "18 main" and its port
 ```
 
-If cluster `18 main` is `down`, start it with `sudo pg_ctlcluster 18 main start` (works with and without systemd;
-in WSL without systemd, repeat it after each restart of WSL). Note its port: it is 5432, or 5433 and up when
-another PostgreSQL already holds 5432. Superuser commands are `sudo -u postgres psql -p PORT`.
+If there is no `18 main` line (some systems turn off the automatic cluster), create it with
+`sudo pg_createcluster 18 main --start`. If it is `down`, start it with `sudo pg_ctlcluster 18 main start` (works
+with and without systemd; in WSL without systemd, repeat it after each restart of WSL). Note its port: it is 5432,
+or 5433 and up when another PostgreSQL already holds 5432. Superuser commands are `sudo -u postgres psql -p PORT`.
 
 **Other Linux distributions:** use the PostgreSQL repository for the distribution
 (<https://www.postgresql.org/download/linux/>), packages `postgresql18-server` and `pgvector_18` on Fedora and
@@ -217,9 +218,11 @@ curl -fsS http://127.0.0.1:8767/health
 Open <http://127.0.0.1:8767/ui/> (from WSL it opens in a Windows browser too). Stop the service afterwards unless
 the user wants it running.
 
-Backups (`amemo backup create`, `amemo backup verify`) need the PostgreSQL 18 client (`pg_dump`, `pg_restore`)
-on PATH. Option C has it; with option B, install `postgresql-client-18` from the same PostgreSQL repository on
-Linux, or `brew install postgresql@18` on macOS.
+Backups (`amemo backup create`, `amemo backup verify`) need the PostgreSQL 18 client (`pg_dump`, `pg_restore`).
+Option C has it; with option B, install `postgresql-client-18` from the same PostgreSQL repository on Linux, or
+`brew install postgresql@18` on macOS. On Debian and Ubuntu, `pg_dump` in PATH is a wrapper that may pick an older
+installed version, so point amemo at version 18: add `export AMEMO_PG_BIN=/usr/lib/postgresql/18/bin` to the
+user's `~/.profile`. Check with `amemo backup create`: it refuses a client older than 18.
 
 ## 8. Report
 

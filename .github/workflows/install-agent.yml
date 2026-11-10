@@ -49,9 +49,13 @@ jobs:
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get install -y postgresql-18 postgresql-18-pgvector
           pg_lsclusters
+          if ! pg_lsclusters -h | awk '$1 == 18 && $2 == "main"' | grep -q .; then
+            sudo pg_createcluster 18 main --start      # у машин GitHub create_main_cluster выключен
+          fi
           if pg_lsclusters -h | awk '$1 == 18 && $2 == "main" {print $4}' | grep -q '^down'; then
             sudo pg_ctlcluster 18 main start
           fi
+          pg_lsclusters
           port=$(pg_lsclusters -h | awk '$1 == 18 && $2 == "main" {print $3}')
           cd /tmp
           sudo -u postgres psql -p "$port" -v ON_ERROR_STOP=1 <<SQL
@@ -64,6 +68,7 @@ jobs:
           CREATE EXTENSION IF NOT EXISTS vector;
           SQL
           echo "DSN=postgresql://amemo:$PW@127.0.0.1:$port/amemo" >> "$GITHUB_ENV"
+          echo "AMEMO_PG_BIN=/usr/lib/postgresql/18/bin" >> "$GITHUB_ENV"   # pg_wrapper выбрал бы клиент 16 машины
 
       - name: PostgreSQL — Docker container, PostgreSQL 18 client for backups
         if: matrix.postgres == 'docker'
@@ -79,6 +84,7 @@ jobs:
           sudo apt-get install -y postgresql-common ca-certificates
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get install -y postgresql-client-18
+          echo "AMEMO_PG_BIN=/usr/lib/postgresql/18/bin" >> "$GITHUB_ENV"   # pg_wrapper выбрал бы клиент 16 машины
 
       - name: PostgreSQL — Homebrew, role amemo without superuser
         if: matrix.postgres == 'brew'
@@ -144,6 +150,7 @@ jobs:
 
       - name: amemo backup create and verify
         run: |
-          pg_dump --version
-          manifest=$(amemo backup create --json | python3 -c 'import json, sys; print(json.load(sys.stdin)["manifest"])')
+          "${AMEMO_PG_BIN:+$AMEMO_PG_BIN/}pg_dump" --version
+          amemo backup create --json > "$RUNNER_TEMP/backup.json" || { cat "$RUNNER_TEMP/backup.json"; exit 1; }
+          manifest=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["manifest"])' "$RUNNER_TEMP/backup.json")
           amemo backup verify "$manifest"
