@@ -299,6 +299,7 @@ cd web && npm ci && npm run dev:mock              # then open http://127.0.0.1:5
 pipx install 'amemo[web]'      # or pip install / uv tool install; [web] adds the web UI at /ui, [embed] semantic search
 amemo init --dsn postgresql://amemo:amemo@127.0.0.1:5435/amemo   # database, object store; the DSN goes to amemo.toml
 amemo install claude-code      # MCP server, hooks and skills; `amemo install codex` for Codex CLI
+amemo install cowork           # optional: a plugin zip for Claude Cowork, uploaded by you in the Claude app
 amemo embed enable             # optional, with amemo[web,embed]: semantic search, downloads a ~250 MB model
 amemo doctor                   # what works and what to fix
 ```
@@ -643,6 +644,21 @@ http_headers = { "X-Amemo-Agent" = "model:codex" }
   under `%USERPROFILE%`.
 - **Check.** `amemo doctor` shows what is installed (globally and for the project of the current folder) and whether
   its command still exists; then `claude mcp list` or `codex mcp list` confirms the agent sees the server.
+
+**Claude Cowork and the Claude app.** `amemo install cowork` builds a plugin zip, `~/amemo-plugin.zip` by default
+(`--out FILE` picks another path). A person uploads it once in the Claude app or on claude.ai: **Customize → Plugins →
+Add → Upload plugin**. Claude can't add a plugin to your account from the command line, and a plugin installed with
+`claude plugin install` stays on that machine.
+
+- **What's inside.** The MCP server `amemo` with this machine's full path to `amemo` (`mcp --agent model:cowork`,
+  `AMEMO_AS_MODEL=cowork`) and the three skills. No hooks: Cowork loads plugin hooks in cloud sessions too, where
+  `amemo` doesn't exist.
+- **Where it works.** The local MCP server runs in Cowork sessions on your computer in the Claude app. Cloud
+  sessions and chat on claude.ai don't start local servers, so they don't see amemo.
+- **Claude Code too.** A plugin on your account also syncs into Claude Code. Where `amemo install claude-code` is
+  already there, you get the server twice: keep one.
+- **Updates and removal.** Run `amemo install cowork` again after moving amemo, then upload the new zip.
+  `amemo uninstall cowork` deletes only the zip; remove the plugin itself in **Customize → Plugins**.
 
 **Scheduling `amemo-verify`.** The semantic reviewer is an agent run on a schedule of your choice, for example
 every night with cron:

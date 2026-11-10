@@ -299,6 +299,19 @@ args = ["-d", "Ubuntu", "--", "/home/USER/.local/bin/amemo", "mcp", "--agent", "
 Hooks and skills need the agent inside WSL; tell the user that this setup gives the tools but not the automatic
 memory hooks.
 
+
+**Claude Cowork** (the Claude desktop app). Ask the user whether they use Cowork. If they do, build the plugin
+where the Cowork sessions run (on Windows, in native Windows, not in WSL):
+
+```bash
+amemo install cowork           # writes ~/amemo-plugin.zip (on Windows %USERPROFILE%\amemo-plugin.zip)
+```
+
+You can't add it to their account: only a person can, in the Claude app or on claude.ai under **Customize →
+Plugins → Add → Upload plugin**. Give them the path of the zip and wait until they say it's done. The plugin's
+MCP server works only in Cowork sessions on this computer, not in cloud sessions. The plugin also syncs into Claude
+Code: if `amemo install claude-code` is there too, tell the user the server appears twice and that one can go.
+
 ## 7. Check
 
 ```bash
@@ -340,7 +353,7 @@ Tell the user, briefly:
 - where PostgreSQL runs (Docker container, system service or their server), its port, the role and the database
   (not the password: it is in `~/.config/amemo/amemo.toml`, on Windows under `%USERPROFILE%`);
 - where the config, the object store and the documents folder are;
-- which agents are connected, and that they need a restart;
+- which agents are connected, and that they need a restart; for Cowork, whether the user uploaded the plugin;
 - how to open the web UI: `amemo serve`, then <http://127.0.0.1:8767/ui/>;
 - the last `amemo doctor` output, and anything you skipped and why.
 
