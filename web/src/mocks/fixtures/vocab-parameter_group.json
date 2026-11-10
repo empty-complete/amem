@@ -1,0 +1,29 @@
+[
+  {
+    "code": "measurement",
+    "label": {
+      "ru": "Измерение",
+      "en": "Measurement"
+    },
+    "pack": "meteo",
+    "broader": null
+  },
+  {
+    "code": "environment",
+    "label": {
+      "ru": "Условия",
+      "en": "Conditions"
+    },
+    "pack": "meteo",
+    "broader": null
+  },
+  {
+    "code": "polling",
+    "label": {
+      "ru": "Опрос",
+      "en": "Polling"
+    },
+    "pack": "meteo",
+    "broader": null
+  }
+]

@@ -1,8 +1,9 @@
 name: core
-version: 1.3.0
+version: 1.4.1
 title: Ядро amemo
 description: >-
   Базовый словарь: виды атомов, классы сущностей, виды связей и селекторы,
   общие для любого домена: вид note, класс artifact, селектор bbox; у видов — семья family (source
-  или work). Шаблоны-интерфейсы has_label, has_source, has_value и шаблоны decision, note.
+  или work). Шаблоны-интерфейсы has_label, has_source, has_value и шаблоны decision, note, parameter; у decision и
+  parameter — блок ui (поля формы и блоки страницы).
 license: MIT

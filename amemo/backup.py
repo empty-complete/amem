@@ -57,7 +57,7 @@ PG_MAJOR = 18                    # клиент не старше сервера
 NAME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$")
 COUNTED = ("atom", "atom_revision", "entity", "entity_revision", "link", "source", "object", "object_version",
            "atom_use", "changeset", "review_item", "verification", "atom_property", "import_history", "folder",
-           "folder_log")
+           "folder_log", "task")
 VERIFY_AGENT = "model:amemo-backup-verify"
 CHUNK = 1 << 20
 HEADER_LINES = 50               # SET в заголовке SQL от pg_restore — в первых строках, до данных

@@ -10,7 +10,7 @@
 - запись (POST, PUT, PATCH, DELETE) с телом — только application/json, иначе 415. Запись без тела (DELETE папки)
   проверять нечего: межсайтовый запрос без тела всё равно несёт Origin и упирается в проверку выше. /mcp защищён так
   же (и Sec-Fetch-Site — у любого метода, как /api/v1).
-  Исключение — /bundles/inspect: multipart/form-data, и Origin для него обязателен.
+  Исключение — загрузки (UPLOADS: POST /bundles/inspect и /objects): multipart/form-data, и Origin обязателен.
 
 Кто пишет — request.state.agent и request.state.can_write:
 - локальная служба: запрос с cookie amemo_session этого запуска — человек (AMEMO_AGENT), без неё — модель
@@ -43,6 +43,7 @@ LOCAL_HOSTS = ("127.0.0.1", "localhost", "[::1]")
 WILDCARD_HOSTS = frozenset({"0.0.0.0", "::", "[::]", ""})      # адрес «на всех интерфейсах» — не имя службы
 API_PREFIX = "/api/v1/"
 INSPECT = "/api/v1/bundles/inspect"
+UPLOADS = {INSPECT: "загрузка подборки", "/api/v1/objects": "загрузка файла"}    # POST multipart с Origin
 PUBLIC = frozenset({"/health"})          # без входа и в общей службе: проверка живости для compose и мониторинга
 UI_PUBLIC = ("/", "/ui")                 # статика интерфейса без входа и в общей службе; API за ней — по токену
 # подборки по токену только для чтения: экспорт и проверка загрузки ничего не пишут в базу, импорт — пробный
@@ -145,13 +146,13 @@ class Guard:
                                      "служба отвечает только своей странице и AMEMO_UI_ORIGINS")
         if method in WRITE_METHODS:
             media = headers.get("content-type", "").partition(";")[0].strip().lower()
-            if path == INSPECT:
+            if path in UPLOADS and method == "POST":
                 if origin is None:
-                    return problems.response(403, "bad_origin", "загрузка подборки: нужен заголовок Origin "
+                    return problems.response(403, "bad_origin", f"{UPLOADS[path]}: нужен заголовок Origin "
                                              "(запрос со страницы интерфейса)")
                 if media != "multipart/form-data":
                     return problems.response(415, "unsupported_media_type",
-                                             "загрузка подборки: нужен multipart/form-data")
+                                             f"{UPLOADS[path]}: нужен multipart/form-data")
             elif (media or _has_body(headers)) and media != "application/json":
                 return problems.response(415, "unsupported_media_type",
                                          f"запись принимает только application/json, а не {media or 'тело без типа'}")

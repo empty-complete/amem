@@ -215,7 +215,8 @@
     "zoom_in": "Zoom in",
     "zoom_fit": "Fit width",
     "task_set": "Task set: an agent will pick it up over MCP",
-    "task_open": "Task is with the agents"
+    "task_open": "Task is with the agents",
+    "original_colors": "Original colours"
   },
   "card": {
     "tab_card": "Card",
@@ -256,7 +257,11 @@
     "what_value": "value",
     "what_question": "question",
     "what_default": "default",
-    "question_label": "What is the {{what}}?"
+    "question_label": "What is the {{what}}?",
+    "question_open": "question asked — open",
+    "ask_whom": "ask: {{who}}",
+    "when": "needed {{when}}",
+    "rule": "Rule of template {{rule}}"
   },
   "changes": {
     "title": "Changes",

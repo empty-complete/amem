@@ -15,6 +15,8 @@ const env = {
   AMEMO_BACKUPS: join(state, "backups"),
   AMEMO_BACKEND: "none",
   AMEMO_QUERY_LOG: "off",
+  // пакет образца: классы датчиков с профилями — карточка сущности по профилю
+  AMEMO_PACKS: join(process.cwd(), "..", "tools", "sample-pack", "meteo"),
 };
 
 export default defineConfig({

@@ -5,17 +5,20 @@
 пунктами. Всё пишется через amemo.api, как пишут агенты и человек, — значит, проходит автопроверку, а статусы и
 очередь получаются настоящие.
 
-Настройки — те же, что у службы (settings.load: AMEMO_DSN, AMEMO_DATA, AMEMO_DOCS, AMEMO_AGENT, amemo.toml).
+Настройки — те же, что у службы (settings.load: AMEMO_DSN, AMEMO_DATA, AMEMO_DOCS, AMEMO_AGENT, amemo.toml). Пакет образца
+tools/sample-pack/meteo (датчики с профилями) должен быть в AMEMO_PACKS и у образца, и у службы.
 Запуск: python tools/seed_sample.py [--force]; база с записями без --force — отказ (код 2).
 """
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+SAMPLE_PACK = ROOT / "tools" / "sample-pack" / "meteo"     # классы датчиков с профилями — для карточки сущности
 FIXTURES = ROOT / "web" / "src" / "mocks" / "fixtures"
 MODEL = "model:extractor"
 MANUAL = "Метео/Руководство_МС-1.pdf"
@@ -75,9 +78,9 @@ def entities() -> list[dict]:
     return [
         ent("@site", "project", "Метеоплощадка", description=ru("Площадка с метеостанцией МС-1 у корпуса.")),
         ent("@ms1", "artifact", "Метеостанция МС-1", codes=["мс-1"]),
-        ent("@t1", "artifact", "Датчик температуры Т-1", codes=["т-1"]),
-        ent("@v2", "artifact", "Датчик влажности В-2", codes=["в-2"]),
-        ent("@d3", "artifact", "Датчик давления Д-3", codes=["д-3"]),
+        ent("@t1", "sensor", "Датчик температуры Т-1", codes=["т-1"]),
+        ent("@v2", "humidity_sensor", "Датчик влажности В-2", codes=["в-2"]),
+        ent("@d3", "sensor", "Датчик давления Д-3", codes=["д-3"]),
         ent("@mast", "artifact", "Мачта М-2", codes=["м-2"]),
         ent("@manual", "document", "Руководство МС-1"),
     ]
@@ -215,6 +218,11 @@ def main(argv=None) -> int:
     from amemo import api, db, settings
     from amemo.ocfl_store import ObjectStore
 
+    # пакет образца нужен и образцу, и службе: без него классов sensor нет — добавляем к AMEMO_PACKS, если забыли
+    paths = [p for p in os.environ.get("AMEMO_PACKS", "").split(os.pathsep) if p]
+    if not any(Path(p).resolve() == SAMPLE_PACK for p in paths):
+        os.environ["AMEMO_PACKS"] = os.pathsep.join([*paths, str(SAMPLE_PACK)])
+        print(f"amemo: AMEMO_PACKS += {SAMPLE_PACK} — укажите его и службе", file=sys.stderr)
     s = settings.load()
     if s.docs is None:
         print("amemo: нужна папка документов — AMEMO_DOCS", file=sys.stderr)

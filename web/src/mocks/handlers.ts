@@ -6,6 +6,8 @@ import searchSemanticOff from "./fixtures/search-semantic-off.json";
 import session from "./fixtures/session.json";
 import vocabClass from "./fixtures/vocab-entity_class.json";
 import vocabKind from "./fixtures/vocab-kind.json";
+import vocabGroup from "./fixtures/vocab-parameter_group.json";
+import vocabOrigin from "./fixtures/vocab-parameter_origin.json";
 
 const problem = (status: number, title: string, detail?: string) =>
   HttpResponse.json(
@@ -43,4 +45,12 @@ export const handlers = [
   }),
   http.get("/api/v1/vocab/kind", () => HttpResponse.json(vocabKind)),
   http.get("/api/v1/vocab/entity_class", () => HttpResponse.json(vocabClass)),
+  // прочие словари пакетов (parameter_group, parameter_origin…): неизвестная схема — пустой список, как у службы
+  http.get("/api/v1/vocab/:scheme", ({ params }) =>
+    HttpResponse.json(
+      ({ parameter_group: vocabGroup, parameter_origin: vocabOrigin } as Record<string, unknown[]>)[
+        String(params.scheme)
+      ] ?? [],
+    ),
+  ),
 ];

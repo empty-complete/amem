@@ -55,6 +55,7 @@ def common() -> argparse.ArgumentParser:
 
 
 def parser() -> argparse.ArgumentParser:
+    from .. import __version__
     from .commands import COMMANDS
 
     shared = common()
@@ -62,6 +63,7 @@ def parser() -> argparse.ArgumentParser:
                  "проверки, подборки, бэкап, служба HTTP.",
                  epilog="Коды выхода: 0 — успех, 1 — окружение, 2 — неверный вызов, 3 — неоднозначность, "
                         "4 — не найдено, 5 — отказ проверки, 6 — конфликт.")
+    ap.add_argument("--version", action="version", version=f"{PROG} {__version__}")
     sub = ap.add_subparsers(dest="command", metavar="КОМАНДА", parser_class=_Parser)
     for module in COMMANDS:
         module.register(sub, shared)

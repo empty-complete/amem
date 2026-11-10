@@ -89,6 +89,13 @@ def test_python_m_and_script_show_help():
         assert done.returncode == 0 and "create" in done.stdout
 
 
+def test_version(run):
+    from amemo import __version__
+
+    code, out, _ = run("--version")
+    assert code == 0 and out == f"amemo {__version__}\n"
+
+
 def test_usage_errors_exit_2(run):
     assert run()[0] == 2                                        # без команды — справка
     code, _, err = run("search")
@@ -462,6 +469,31 @@ def test_review_list_claim_release_resolve_stats(run, kb, store, docs, start):
     assert code == 0 and mine == http
 
 
+# --- задачи агентам ---
+
+def test_tasks_list_and_cancel(run, kb, store, docs, start):
+    from amemo import tasks
+
+    version = objects.ingest(kb, store, docs, "Заметки/узел.md", agent=PERSON)
+    task, _ = tasks.create(kb, "parse", version.object_id, version.n, agent="model:bot", note="разобрать узел")
+    task_id = str(task["id"])
+    code, out, _ = run("tasks", "list", "--json")
+    assert code == 0 and js(out) == start().get(f"{V1}/tasks").json()
+    assert task_id in run("tasks")[1] and "разобрать узел" in run("tasks", "list")[1]
+    assert js(run("tasks", "list", "--state", "done", "--json")[1]) == []
+    assert run("tasks", "list", "--state", "busy")[0] == 2
+    assert "Задач нет." in run("tasks", "list", "--object", str(objects.ingest(
+        kb, store, docs, "заметка.md", agent=PERSON).object_id))[1]
+    code, _, err = run("tasks", "cancel", task_id, extra={"AMEMO_AS_MODEL": "other"})
+    assert code == 2 and "отменить" in err                        # чужая модель — forbidden (403)
+    code, out, _ = run("tasks", "cancel", task_id, "--json")       # человек — любую
+    assert code == 0 and js(out)["state"] == "cancelled"
+    code, _, err = run("tasks", "cancel", task_id)
+    assert code == 6 and "закрыта" in err                          # уже закрыта — task_closed (409)
+    assert run("tasks", "cancel", "019a0000-0000-7000-8000-000000000000")[0] == 4
+    assert run("tasks", "cancel", "не-uuid")[0] == 2
+
+
 # --- папки ---
 
 def test_folders(run, base, start):
@@ -573,7 +605,7 @@ def test_token_create_list_revoke(run, tmp_path):
     code, out, _ = run("token", "create", "person:anna", "--json", extra=extra)
     made = js(out)
     token = made["token"]
-    assert code == 0 and token.startswith("amemo_") and len(token) == 48
+    assert code == 0 and token.startswith("amemo_") and len(token) == len("amemo_") + 43
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     text = path.read_text(encoding="utf-8")
     assert token not in text and settings.token_hash(token) in text

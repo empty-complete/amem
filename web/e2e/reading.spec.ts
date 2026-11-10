@@ -36,7 +36,7 @@ test("от записи к объекту: полнота, «Нужно», ра�
   await page.getByLabel("Свойства").getByRole("link", { name: "Датчик влажности В-2" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Датчик влажности В-2" })).toBeVisible();
   await expect(page.getByRole("img", { name: /Известно 2 из 7/ })).toBeVisible();
-  await expect(page.getByText("Нужно")).toBeVisible();
+  await expect(page.getByText("Нужно", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /2 значения/ }).click();
   await expect(page.getByRole("list", { name: "Кандидаты" })).toContainText("расхождение до 12 %");
 });
@@ -77,4 +77,29 @@ test("содержание записи: формула с обозначени�
   const table = page.getByRole("region", { name: "Таблица", exact: true });
   await expect(table.getByRole("columnheader", { name: "В-2, %" })).toBeVisible();
   await expect(table.getByRole("row")).toHaveCount(5);
+});
+
+test("страница PDF в тёмной теме: перекрашена под палитру, «Как в файле» возвращает цвета и запоминается", async ({
+  page,
+}) => {
+  await page.goto("./atom/atm:0193b7c2-5e1a-7d40-9f2e-00000000000b");
+  const btn = page.getByRole("button", { name: "Как в файле" });
+  const canvas = page.locator(".pdf__inner canvas").first();
+  await expect(canvas).toBeVisible({ timeout: 15_000 });
+  await expect(btn).toBeHidden();
+  const filter = () => canvas.evaluate((c) => getComputedStyle(c).filter);
+  expect(await filter()).toBe("none");
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = "dark";
+  });
+  await expect(btn).toBeVisible();
+  expect(await filter()).toContain("invert");
+  await btn.click();
+  await expect(btn).toHaveAttribute("aria-pressed", "true");
+  expect(await filter()).not.toContain("invert");
+  await page.reload();
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = "dark";
+  });
+  await expect(page.getByRole("button", { name: "Как в файле" })).toHaveAttribute("aria-pressed", "true");
 });

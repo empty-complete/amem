@@ -148,7 +148,7 @@ def test_same_version_other_content_is_rejected(pg, monkeypatch, tmp_path):
 def test_pack_table_stores_version_and_digest(pg):
     db.prepare(pg)
     rows = pg.execute("SELECT name, version, digest FROM pack").fetchall()
-    assert [(r[0], r[1]) for r in rows] == [("core", "1.3.0")]
+    assert [(r[0], r[1]) for r in rows] == [("core", "1.4.1")]
     assert all(len(r[2]) == 64 for r in rows)
     db.prepare(pg)                                             # повторно — без ошибок и дублей
     assert pg.execute("SELECT count(*) FROM pack").fetchone()[0] == 1

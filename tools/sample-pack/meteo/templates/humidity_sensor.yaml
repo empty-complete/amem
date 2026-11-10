@@ -1,0 +1,9 @@
+code: humidity_sensor
+version: 1.0.0
+target: entity
+applies_to: humidity_sensor
+description: {ru: "Датчик влажности: как датчик, плюс диапазон и погрешность измерения влажности."}
+extends: [sensor]
+parameters:
+  - {property: humidity_range, required: true, group: measurement, origin: datasheet, hint: {ru: "руководство, раздел 4.2"}}
+  - {property: humidity_error, required: true, group: measurement, origin: datasheet, hint: {ru: "руководство, раздел 4.2"}}

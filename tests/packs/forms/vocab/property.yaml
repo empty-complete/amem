@@ -1,0 +1,4 @@
+scheme: property
+concepts:
+  - {code: humidity, label: {ru: влажность, en: humidity}, definition: {ru: "Относительная влажность воздуха."}, unit: "%"}
+  - {code: pressure, label: {ru: давление, en: pressure}, definition: {ru: "Давление воздуха."}, unit: kPa}

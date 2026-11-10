@@ -17,6 +17,7 @@ UTF8: миграции и данные в UTF-8, имена и пути объе
 """
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import unicodedata
 from datetime import datetime, timezone
@@ -29,6 +30,8 @@ from . import canon, folders, ids, packs, search
 
 SQL_DIR = Path(__file__).with_name("sql")
 MIGRATION_LOCK = 0x616D656D00000001          # ключ pg_advisory_lock для миграций: «amemo» + 1
+MINE_LOCK = 0x616D656D00000004               # ключ pg_advisory_xact_lock пакета «Мои виды» (amemo/mine.py): «amemo» + 4
+MINE = "mine"                                # пакет своих видов в базе: понятия origin = 'mine'
 
 
 BASE_NAME_MAX = 200
@@ -94,6 +97,21 @@ def _upsert_concept(conn, c, origin: str, now: datetime) -> None:
         (c.scheme, c.code, Jsonb(data), origin, now))
 
 
+def _check_mine(conn: psycopg.Connection, loaded: list[packs.Pack]) -> None:
+    """Свои виды — вместе с новыми пакетами-файлами, той же проверкой, что при правке вида (mine._check): из пакета
+    исчезла величина или класс, на которые ссылается свой вид, — MigrationError с кодом вида, а не тихий пропуск.
+    Каждый вид проверяется отдельно (шаблоны mine не наследуют друг друга), чтобы назвать именно его."""
+    from . import mine                          # mine импортирует db: локальный импорт
+
+    pack = mine.as_pack(conn)
+    for t in pack.templates:
+        try:
+            packs._check_templates([*loaded, dataclasses.replace(pack, templates=[t])])
+        except packs.PackError as e:
+            raise MigrationError(f"свой вид {t.code} («Мои виды») не сходится с пакетами: {e} — верните код в пакет "
+                                 f"или поправьте свой вид {t.code}") from e
+
+
 def load_vocab(conn: psycopg.Connection) -> None:
     """Пакеты домена — в таблицы pack, concept и template; служебные перечни схемы — в concept.
 
@@ -101,14 +119,34 @@ def load_vocab(conn: psycopg.Connection) -> None:
     становится постоянной). Ошибки загрузки (всё откатывается):
     - пакет с тем же именем и версией уже загружен с другим содержимым — поднимите версию;
     - шаблон с той же code и version, но другим содержимым — поднимите version;
-    - из пакета исчез код, которым пользуются записи, — внешний ключ не даёт удалить понятие.
+    - из пакета исчез код, которым пользуются записи, — внешний ключ не даёт удалить понятие;
+    - пакет из файла принёс код своего вида («Мои виды», amemo/mine.py) — переименуйте одно из двух;
+    - пакет из файла потерял код (величину, класс сущности), на который ссылается свой вид, — ошибка с кодом вида;
+    - пакет из файла называется mine — имя занято пакетом своих видов в базе.
+
+    Свои виды переживают пересборку: понятия origin = 'mine' не считаются осиротевшими, а их шаблоны (последняя
+    версия каждого кода) возвращаются в template_active.
     """
     require_autocommit(conn)
     now = datetime.now(timezone.utc)
     with conn.transaction():
+        conn.execute("SELECT pg_advisory_xact_lock(%s)", (MINE_LOCK,))
         for c in packs.service_concepts():
             _upsert_concept(conn, c, "schema", now)
         loaded = packs.load_packs()
+        if any(p.name == MINE for p in loaded):
+            raise MigrationError(f"пакет из файла с именем {MINE}: имя занято пакетом своих видов в базе («Мои виды») — "
+                                 f"уберите его из AMEMO_PACKS (свои виды из подборки вливает импорт)")
+        mine = {code: scheme for scheme, code in conn.execute(
+            "SELECT scheme, code FROM concept WHERE origin = %s AND scheme IN ('kind', 'entity_class')", (MINE,))}
+        for p in loaded:
+            clash = sorted({c.code for c in p.concepts if mine.get(c.code) == c.scheme}
+                           | {t.code for t in p.templates if t.code in mine})
+            if clash:
+                raise MigrationError(f"пакет {p.name}: код {', '.join(clash)} уже занят своим видом («Мои виды») — "
+                                     f"переименуйте вид пакета или удалите свой вид")
+        if mine:
+            _check_mine(conn, loaded)
         for p in loaded:
             row = conn.execute("SELECT digest FROM pack WHERE name = %s AND version = %s",
                                (p.name, p.version)).fetchone()
@@ -137,11 +175,17 @@ def load_vocab(conn: psycopg.Connection) -> None:
         for p in loaded:
             for t in p.templates:
                 conn.execute("INSERT INTO template_active (code, version) VALUES (%s, %s)", (t.code, t.version))
+        # свои виды: последняя версия шаблона каждого кода (версии mine — 1.0.N, сравниваются по числам)
+        for code in sorted(mine):
+            versions = [v for (v,) in conn.execute("SELECT version FROM template WHERE code = %s", (code,))]
+            if versions:
+                latest = max(versions, key=lambda v: tuple(int(x) if x.isdigit() else -1 for x in v.split(".")))
+                conn.execute("INSERT INTO template_active (code, version) VALUES (%s, %s)", (code, latest))
         # осиротевшие понятия: код исчез из пакета или пакет больше не загружается;
         # используемые записями удалить нельзя — внешний ключ, ошибка называет пакет и код
         keep = {(c.scheme, c.code) for p in loaded for c in p.concepts}
         names = {p.name for p in loaded}
-        gone = conn.execute("SELECT scheme, code, origin FROM concept WHERE origin NOT IN ('schema', 'agent') "
+        gone = conn.execute("SELECT scheme, code, origin FROM concept WHERE origin NOT IN ('schema', 'agent', 'mine') "
                             "ORDER BY scheme, code").fetchall()
         for scheme, code, origin in gone:
             if origin in names and (scheme, code) in keep:

@@ -18,7 +18,10 @@ skills/*.md (тексты для агентов — раздаёт устано�
 - один code шаблона — не больше чем в одном пакете, одна пара (target, applies_to) — не больше чем у одного шаблона;
 - код applies_to есть в словаре загружаемых пакетов (kind, entity_class или rel — по target);
 - extends ведёт на шаблон того же target, наследование без циклов;
-- пути правил ведут на настоящие поля схемы (check_path), коды selector_types, entity_classes, links — из словарей.
+- пути правил ведут на настоящие поля схемы (check_path), коды selector_types, entity_classes, links — из словарей;
+- ключи блока ui.fields — пути правил шаблона, его предков по extends и интерфейсов его target, поля, которые
+  форма показывает всегда (UI_BASE), или величина content.values[property=X] / qualifiers[property=X] из словаря
+  property (_check_ui); required в ui.fields — только у величины; блок ui бывает только у atom и entity.
 
 Служебные перечни (Status, Rank, ValueState, SourceRole, Visibility) остаются закрытыми
 перечислениями amemo/schema/amemo_v1.yaml и грузятся в concept с origin='schema' — как раньше.
@@ -31,6 +34,7 @@ import functools
 import hashlib
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,6 +60,10 @@ ANNOTATIONS = {"label_ru", "label_en", "definition_ru", "definition_en", "invers
 # тело записи, от которого идут пути правил шаблона, и схема понятий, из которой берётся applies_to
 ROOTS = {"atom": "AtomPayload", "entity": "EntityPayload", "link": "LinkPayload"}
 APPLIES_TO = {"atom": "kind", "entity": "entity_class", "link": "rel"}
+# поля, которые форма вида показывает всегда (amemo/forms.py): их подписи ui.fields может задать без правила
+UI_BASE = {"atom": ("about", "tags"), "entity": ("codes",)}
+# путь величины в ui.fields: список тела записи и код property
+UI_PROPERTY = re.compile(r"(content\.values|qualifiers)\[property=([a-z][a-z0-9_]*)\]")
 
 
 class PackError(ValueError):
@@ -110,6 +118,11 @@ def service_concepts() -> list[Concept]:
 @functools.lru_cache(maxsize=None)
 def _classes(schema_file: Path) -> dict:
     return _read(schema_file)["classes"]
+
+
+def schema_classes() -> frozenset[str]:
+    """Имена классов схемы v1: поле с таким range — составное (Scope, Content, LangString…), а не значение."""
+    return frozenset(_classes(SCHEMA_FILE))
 
 
 def field_attrs(class_name: str) -> dict:
@@ -185,6 +198,52 @@ def _check_template(t: Template, file: Path, by_code: dict[str, Template], codes
             if bad := unknown("entity_class", req.to_classes):
                 raise PackError(f"{file}: links: {req.rel}: to_classes {bad} — нет в словаре entity_class")
     _check_parameters(t, file, codes, properties)
+    _check_ui(t, file, by_code, codes)
+
+
+def _rule_paths(t: Template, by_code: dict[str, Template]) -> set[str]:
+    """Пути правил, действующих на запись шаблона: свои, предков по extends и интерфейсов того же target."""
+    paths: set[str] = set()
+    seen: set[str] = set()
+
+    def collect(code: str) -> None:
+        if code in seen or code not in by_code:     # цикл и неизвестный extends отвергают другие проверки
+            return
+        seen.add(code)
+        for parent in by_code[code].extends or []:
+            collect(parent)
+        paths.update(rule.path for rule in by_code[code].fields or [])
+
+    collect(t.code)
+    for code, other in by_code.items():
+        if other.target == t.target and not other.applies_to:
+            collect(code)
+    return paths
+
+
+def _check_ui(t: Template, file: Path, by_code: dict[str, Template], codes: dict[str, set[str]]) -> None:
+    """Блок ui: только у atom и entity; путь поля — правило, поле формы или величина словаря; без повторов."""
+    if t.ui is None:
+        return
+    if t.target not in UI_BASE:
+        raise PackError(f"{file}: ui — только у шаблонов atom и entity, а не {t.target}")
+    allowed = _rule_paths(t, by_code) | set(UI_BASE[t.target])
+    seen: set[str] = set()
+    for field in t.ui.fields or []:
+        where = f"{file}: шаблон {t.code}: ui.fields: {field.path}"
+        if field.path in seen:
+            raise PackError(f"{where} — путь повторяется")
+        seen.add(field.path)
+        prop = UI_PROPERTY.fullmatch(field.path)
+        if prop is not None:
+            if t.target != "atom":
+                raise PackError(f"{where} — величины есть только у тела атома")
+            if prop.group(2) not in codes.get("property", set()):
+                raise PackError(f"{where} — property {prop.group(2)} нет в словаре property загружаемых пакетов")
+        elif field.path not in allowed:
+            raise PackError(f"{where} — нет правила с таким путём ни у шаблона, ни у его предков и интерфейсов")
+        elif field.required is not None:
+            raise PackError(f"{where} — required в ui только у величины: обязательность поля задаёт его правило")
 
 
 def _check_parameters(t: Template, file: Path, codes: dict[str, set[str]], properties: dict[str, str | None]) -> None:

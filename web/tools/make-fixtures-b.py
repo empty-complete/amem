@@ -133,23 +133,30 @@ records[A(0x22)] = view(A(0x22), {
 card = {
     "format": "amem.card/1", "entity": B2, "profile": "sensor", "templates": ["sensor"],
     "ancestors": [SITE, ST],
+    # форма ядра (profile.card): group — код правила, ask — у кого спросить, hint — где искать, when — когда нужно,
+    # origin — словарь parameter_origin, rule — шаблон правила; asked — вопрос в atoms
     "fields": [
-        {"property": "range", "label": "Диапазон", "required": True, "group": "Измерение", "state": "known",
+        {"property": "range", "label": "Диапазон", "required": True, "group": "measurement", "origin": "datasheet",
+         "rule": "sensor@1.0.0", "state": "known",
          "value": {"lower_bound": 0, "upper_bound": 100, "unit": "%"}, "atoms": [A(0x1D)], "by": "model", "status": "verified",
          "sources": [{"object": MANUAL, "label": "Руководство МС-1, с. 12"}]},
-        {"property": "error", "label": "Погрешность", "required": True, "group": "Измерение", "state": "conflict",
+        {"property": "error", "label": "Погрешность", "required": True, "group": "measurement", "origin": "datasheet",
+         "rule": "sensor@1.0.0", "state": "conflict",
          "atoms": [A(0x0B), A(0x16)], "candidates": [
              {"value": {"value_text": "±2", "unit": "%"}, "atom": A(0x0B), "quote": Q12, "source": "Руководство МС-1, с. 12"},
              {"value": {"value_text": "до 12", "unit": "%"}, "atom": A(0x16), "quote": "расхождение до 12 % при инее", "source": "Наблюдения, ноябрь, B4:C9"}]},
-        {"property": "operating_temperature", "label": "Рабочая температура", "required": True, "group": "Условия",
-         "state": "missing", "hint": "паспорт датчика, раздел «Условия эксплуатации»"},
-        {"property": "heating", "label": "Обогрев", "required": False, "group": "Условия", "state": "asked",
-         "ask": "Нужен ли обогрев В-2 зимой?", "atoms": [A(0x18)]},
-        {"property": "ip", "label": "Степень защиты", "required": False, "group": "Условия", "state": "known",
+        {"property": "operating_temperature", "label": "Рабочая температура", "required": True, "group": "environment",
+         "origin": "datasheet", "rule": "sensor@1.0.0", "state": "missing", "ask": "изготовитель",
+         "hint": "паспорт датчика, раздел «Условия эксплуатации»", "when": "если площадка зимой ниже −30 °C"},
+        {"property": "heating", "label": "Обогрев", "required": False, "group": "environment", "rule": "sensor@1.0.0",
+         "state": "asked", "atoms": [A(0x18)]},
+        {"property": "ip", "label": "Степень защиты", "required": False, "group": "environment", "origin": "method",
+         "rule": "sensor@1.0.0", "state": "known",
          "value": {"value_text": "IP65"}, "atoms": [A(0x10)], "inherited_from": "Метеостанция МС-1"},
-        {"property": "pressure_response", "label": "Отклик на давление", "required": False, "group": "Измерение", "state": "na"},
-        {"property": "poll_interval", "label": "Интервал опроса", "required": False, "group": "Опрос", "state": "missing",
-         "default": {"amount": 60, "unit": "s"}, "basis": "default"},
+        {"property": "pressure_response", "label": "Отклик на давление", "required": False, "group": "measurement",
+         "rule": "sensor@1.0.0", "state": "na"},
+        {"property": "poll_interval", "label": "Интервал опроса", "required": False, "group": "polling", "origin": "method",
+         "rule": "sensor@1.0.0", "state": "missing", "default": {"amount": 60, "unit": "s"}, "basis": "default"},
     ],
     "extra": [], "summary": {"known": 2, "total": 7},
 }
@@ -211,7 +218,16 @@ similar_a3 = {"recipe": "similar", "semantic": "used", "candidate_count": 3, "re
     hit(0x0A, "Погрешность температуры Т-1: ±0,3 °C", "parameter", T1, 0.74),
     hit(0x16, "В-2 завышает влажность при обмерзании", "lesson", B2, 0.69)]}
 
-files = {"records-b.json": records, "card-e3.json": card, "objects-b.json": objects, "text-manual.json": text_manual,
+vocab_group = [
+    {"code": "measurement", "label": {"ru": "Измерение", "en": "Measurement"}, "pack": "meteo", "broader": None},
+    {"code": "environment", "label": {"ru": "Условия", "en": "Conditions"}, "pack": "meteo", "broader": None},
+    {"code": "polling", "label": {"ru": "Опрос", "en": "Polling"}, "pack": "meteo", "broader": None},
+]
+vocab_origin = [
+    {"code": "datasheet", "label": {"ru": "паспорт", "en": "datasheet"}, "pack": "meteo", "broader": None},
+    {"code": "method", "label": {"ru": "по методике", "en": "method"}, "pack": "meteo", "broader": None},
+]
+files = {"vocab-parameter_group.json": vocab_group, "vocab-parameter_origin.json": vocab_origin, "records-b.json": records, "card-e3.json": card, "objects-b.json": objects, "text-manual.json": text_manual,
          "sheet-v2.json": sheet, "changes.json": changes, "history-a3.json": history_a3, "links-a3.json": links_a3,
          "similar-a3.json": similar_a3}
 for name, data in files.items():

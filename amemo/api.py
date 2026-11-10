@@ -32,8 +32,8 @@ from pathlib import Path
 import psycopg
 from psycopg.rows import dict_row
 
-from . import __version__, backup, bundle, check, db, folders, lang, lookup, objects, private, profile, \
-    recipes, records, review, usefulness, vocab
+from . import __version__, backup, bundle, check, db, folders, forms, lang, lookup, mine, objects, private, profile, \
+    recipes, records, review, tasks, usefulness, vocab
 from .anthology import export as anthology_export
 from .check import level1
 from .ids import uuid7
@@ -721,6 +721,11 @@ def object_view(conn: psycopg.Connection, object_id) -> dict:
     view = lookup.object_view(conn, oid)
     if view is None:
         raise objects.ObjectError(f"obj:{oid}: такого объекта нет", code="not_found")
+    return _object_card(conn, view)
+
+
+def _object_card(conn: psycopg.Connection, view: dict) -> dict:
+    """lookup.object_view → ObjectView контракта: подписи цитирующих записей, число цитат у версий."""
     labels = _labels(conn, [c["record"] for c in view["cited_by"]])
     citations = [{**c, "record": labels[c["record"]]} for c in view["cited_by"]]
     counts: dict[int, int] = {}
@@ -837,6 +842,60 @@ def object_status(conn: psycopg.Connection, path) -> dict:
     return out
 
 
+OBJECT_SEARCH_LIMIT = 20               # объектов на страницу поиска по умолчанию (контракт: 1–100)
+
+
+def object_search(conn: psycopg.Connection, *, q=None, limit=None, cursor=None) -> dict:
+    """{items: ObjectView[], next_cursor}: объекты по части имени или пути без учёта регистра (lookup.object_search);
+    пустой q — последние объекты."""
+    page = lookup.object_search(conn, _str(q, "q"), cursor=_str(cursor, "cursor"),
+                                limit=_int(limit, "limit", low=1, high=lookup.OBJECT_LIMIT,
+                                           default=OBJECT_SEARCH_LIMIT))
+    return {"items": [_object_card(conn, v) for v in page["items"]], "next_cursor": page["next_cursor"]}
+
+
+def object_upload_begin(docs: Path | None) -> Path:
+    """Временный файл загрузки в корне папки документов (.amemo-upload-<id>.part): служба пишет туда тело потоком,
+    затем object_upload кладёт его по пути — в той же файловой системе. Нет папки документов — ObjectError
+    docs_unavailable (503) до чтения тела."""
+    return objects.docs_root(docs) / f".amemo-upload-{uuid7()}.part"
+
+
+PART_STALE = 3600.0      # с; временный файл загрузки без записи дольше часа — брошен (служба упала посреди загрузки)
+
+
+def object_upload_sweep(docs: Path | None, *, older_than: float = PART_STALE) -> int:
+    """Убрать брошенные временные файлы загрузки (.amemo-upload-*.part) в корне папки документов: их оставляет
+    служба, упавшая посреди загрузки. Файл, в который пишут сейчас, свежий (mtime) — его не трогаем. Вернуть число
+    удалённых; нет папки документов — 0."""
+    if docs is None or not Path(docs).is_dir():
+        return 0
+    edge = time.time() - older_than
+    removed = 0
+    for part in Path(docs).glob(".amemo-upload-*.part"):
+        try:
+            if part.is_file() and not part.is_symlink() and part.stat().st_mtime < edge:
+                part.unlink()
+                removed += 1
+        except FileNotFoundError:
+            continue
+    return removed
+
+
+def object_upload(conn: psycopg.Connection, store: ObjectStore, docs: Path | None, part: Path, *, filename=None,
+                  path=None, agent: str) -> tuple[dict, bool]:
+    """Загруженный файл (part) — в папку документов по path или Загрузки/<filename> и в базу (objects.upload):
+    (ObjectView, True — файл записан сейчас: 201; False — тот же файл уже лежал: 200). Другой файл по пути —
+    ObjectError path_taken (409); путь с «..», абсолютный — 400. part удаляется в любом случае."""
+    try:
+        key = objects.upload_path(_str(path, "path"), _str(filename, "filename"))
+    except BaseException:
+        Path(part).unlink(missing_ok=True)
+        raise
+    version, created = objects.upload(conn, store, docs, part, key, agent=agent)
+    return object_view(conn, version.object_id), created
+
+
 def object_mark(conn: psycopg.Connection, store: ObjectStore, docs: Path | None, path, status, *, agent: str,
                 note=None) -> dict:
     """Отметить, что из документа атомизировано (objects.mark: parsed, partial, skipped). Документа ещё нет в базе —
@@ -864,6 +923,27 @@ def vocab_entries(conn: psycopg.Connection, scheme) -> list[dict]:
     if not _str(scheme, "scheme"):
         raise BadRequest("scheme: нужно имя схемы словаря")
     return vocab.entries(conn, scheme)
+
+
+def templates(conn: psycopg.Connection, *, target=None) -> list[dict]:
+    """TemplateView[] — форма каждого вида атома и класса сущности (amemo/forms.py); target — atom или entity."""
+    return forms.views(conn, target=_enum(target, "target", TARGETS))
+
+
+def template_put(conn: psycopg.Connection, code, draft, *, agent: str) -> dict:
+    """TemplateView своего вида после правки по черновику (TemplateDraft); правит только человек (403 forbidden).
+    Занятый пакетом из файла код — MineError exists (409), черновик не по проверке — invalid (422 с issues)."""
+    _person_only(agent, "свои виды правит")
+    code = _str(code, "code")
+    if not isinstance(draft, dict):
+        raise BadRequest("тело: ожидается объект TemplateDraft")
+    return mine.put(conn, code, draft, agent=agent)
+
+
+def template_delete(conn: psycopg.Connection, code, *, agent: str) -> None:
+    """Удалить свой вид; есть записи этого вида — MineError in_use (409), своего вида нет — not_found (404)."""
+    _person_only(agent, "свои виды удаляет")
+    mine.delete(conn, _str(code, "code"), agent=agent)
 
 
 def base(conn: psycopg.Connection) -> dict:
@@ -1079,6 +1159,98 @@ def review_stats(conn: psycopg.Connection, *, days=None) -> dict:
     return {"now": stats["now"], "days": stats["days"], "queue": stats["queue"], "done": stats["done"],
             "changesets": stats["changesets"], "records": stats["records"], "verdicts": stats["sources"],
             "audit": stats["audit"]}
+
+
+# --- задачи агентам ---
+
+TASK_LIMIT = tasks.LIST_MAX         # задач в ответе списка по умолчанию: у GET /tasks нет limit
+TASK_NOTE_MAX = 4000                # знаков в заметке задачи (столбец task.note — тот же предел)
+TASK_RESULT_MAX = 64 << 10          # байт итога задачи в JSON: ссылки записей и короткая заметка
+
+
+def task_view(task: dict, *, full: bool = False) -> dict:
+    """TaskView контракта; full — ещё когда поставлена и закрыта и итог (ответы MCP: агенту они нужны, вебу
+    контракт их не обещает)."""
+    view = {"id": str(task["id"]), "kind": task["kind"], "object": str(task["object_id"]),
+            "version": task["version"], "note": task["note"], "state": task["state"],
+            "created_by": task["created_by"], "claimed_by": task["claimed_by"],
+            "claimed_until": _iso(task["claimed_until"])}
+    if full:
+        view.update(created_at=_iso(task["created_at"]), done_at=_iso(task["done_at"]), result=task["result"])
+    return view
+
+
+def _task_id(value) -> uuid.UUID:
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(_str(value, "task_id") or "")
+    except ValueError:
+        raise BadRequest(f"task_id {value!r}: нужен UUID задачи") from None
+
+
+def task_create(conn: psycopg.Connection, *, agent: str, kind, object, version, note=None) -> tuple[dict, bool]:
+    """Поставить задачу ({task_id}, создана ли): незакрытая задача на ту же версию уже есть — её id. Ставят человек
+    и модель; объект — UUID или obj:<UUID>, версия — её номер."""
+    if kind in (None, ""):
+        raise BadRequest(f"kind: нужен вид задачи — {', '.join(tasks.KINDS)}")
+    kind = _enum(kind, "kind", tasks.KINDS)
+    if object in (None, ""):
+        raise BadRequest("object: нужен id объекта")
+    if version is None:
+        raise BadRequest("version: нужен номер версии объекта")
+    note = _note(note)
+    if note is not None and len(note) > TASK_NOTE_MAX:
+        raise BadRequest(f"note: больше {TASK_NOTE_MAX} знаков")
+    task, created = tasks.create(conn, kind, _object_id(object), _int(version, "version", low=1, high=VERSION_MAX),
+                                 agent=agent, note=note)
+    return {"task_id": str(task["id"])}, created
+
+
+def task_list(conn: psycopg.Connection, *, state=None, object=None, limit=None, agent: str | None = None,
+              full: bool = False) -> list[dict]:
+    """TaskView[] от новых к старым: фильтры state (без него — только незакрытые) и object; agent — свободные и
+    взятые им (amemo_tasks)."""
+    object = _str(object, "object") or None
+    rows = tasks.list_(conn, state=_enum(state, "state", tasks.STATES),
+                       object_id=_object_id(object) if object is not None else None, agent=agent,
+                       limit=_int(limit, "limit", low=1, high=tasks.LIST_MAX, default=TASK_LIMIT))
+    return [task_view(row, full=full) for row in rows]
+
+
+def task_claim(conn: psycopg.Connection, task_id=None, *, agent: str, kind=None) -> dict | None:
+    """Взять задачу (только модель): названную или самую старую свободную; None — свободных нет."""
+    task = tasks.claim(conn, None if task_id in (None, "") else _task_id(task_id), agent=agent,
+                       kind=_enum(kind, "kind", tasks.KINDS))
+    return task_view(task, full=True) if task is not None else None
+
+
+def task_release(conn: psycopg.Connection, task_id, *, agent: str) -> dict:
+    """Вернуть взятую задачу (только тот, кто держит)."""
+    return task_view(tasks.release(conn, _task_id(task_id), agent=agent), full=True)
+
+
+def task_done(conn: psycopg.Connection, task_id, *, agent: str, result=None) -> dict:
+    """Закрыть взятую задачу с итогом result (объект JSON): {task, warnings}. <private> вырезается
+    (private_removed), строка, похожая на секрет, записывается как есть с предупреждением secret_like — как у submit."""
+    warnings: list[dict] = []
+    if result is not None:
+        if not isinstance(result, dict):
+            raise BadRequest("result: нужен объект JSON, например {\"refs\": [\"atm:…\"], \"note\": \"…\"}")
+        removed: list[str] = []
+        found: list[tuple[str, list[str]]] = []
+        result = _scrub(result, "result", removed, strip=True, secrets=found)
+        if len(json.dumps(result, ensure_ascii=False).encode()) > TASK_RESULT_MAX:
+            raise BadRequest(f"result: больше {TASK_RESULT_MAX // 1024} КиБ — оставьте ссылки записей и короткую "
+                             f"заметку")
+        warnings = _private_removed("result", removed) + _secret_like("result", found)
+    task = task_view(tasks.done(conn, _task_id(task_id), agent=agent, result=result), full=True)
+    return {"task": task, "warnings": warnings}
+
+
+def task_cancel(conn: psycopg.Connection, task_id, *, agent: str) -> dict:
+    """Отменить незакрытую задачу: тот, кто поставил, или человек."""
+    return task_view(tasks.cancel(conn, _task_id(task_id), agent=agent), full=True)
 
 
 # --- submit ---

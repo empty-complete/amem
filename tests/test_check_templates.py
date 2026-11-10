@@ -139,11 +139,11 @@ def _prepare(pg, monkeypatch, *extra: Path) -> dict[str, dict]:
 
 def test_active_reads_bodies_of_active_versions(pg, monkeypatch):
     active = _prepare(pg, monkeypatch)
-    assert set(active) == {"has_label", "has_source", "has_value", "decision", "note", "rule", "idea"}
+    assert set(active) == {"has_label", "has_source", "has_value", "decision", "note", "parameter", "rule", "idea"}
     assert active["rule"]["version"] == "1.0.0" and active["rule"]["applies_to"] == "rule"
     monkeypatch.delenv("AMEMO_PACKS")
     db.prepare(pg)
-    assert set(templates.active(pg)) == {"has_label", "has_source", "has_value", "decision", "note"}
+    assert set(templates.active(pg)) == {"has_label", "has_source", "has_value", "decision", "note", "parameter"}
 
 
 def test_rules_of_kind_with_own_template(pg, monkeypatch):
@@ -159,7 +159,7 @@ def test_rules_of_kind_with_own_template(pg, monkeypatch):
 
 def test_decision_is_always_high_risk(pg, monkeypatch):
     rules = templates.rules_for(_prepare(pg, monkeypatch), "atom", "decision")
-    assert rules.templates == (*INTERFACES, "decision@1.0.0")
+    assert rules.templates == (*INTERFACES, "decision@1.1.0")
     assert rules.high_risk == frozenset({"always"})
 
 

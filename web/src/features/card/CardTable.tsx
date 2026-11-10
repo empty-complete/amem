@@ -1,12 +1,13 @@
 import { Button } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
 import { formatValue, unitLabel, type ValueLike } from "../../ui/format";
 import { Icon } from "../../ui/icons";
 import { useText } from "../../ui/lang";
+import { humanize, useVocabLabel } from "../../ui/useVocabLabel";
 import { recordPath } from "../records/RecordList";
 import type { CardField } from "./card";
 
@@ -69,17 +70,53 @@ function FillForm({ f, fill, onDone }: { f: CardField; fill: Fill; onDone: () =>
   );
 }
 
+/** Подписи словаря величин строчные («рабочая температура») — в названии поля с заглавной, как подписи видов. */
+const cap = (s: string) => s.charAt(0).toLocaleUpperCase() + s.slice(1);
+
 type Candidate = { value?: ValueLike; atom?: string; quote?: string; source?: string };
 type Src = { label?: string };
 
+/** Подстрока поля по форме ядра: где искать (hint) и у кого спросить (ask) — когда значения нет; когда поле нужно
+ * (when); откуда обычно берётся значение (origin, словарь parameter_origin); у asked — ссылка на заданный вопрос. */
 function Sub({ f }: { f: CardField }) {
   const { t } = useTranslation();
+  const origin = useVocabLabel("parameter_origin");
+  const parts: ReactNode[] = [];
   const src = (f.sources as Src[] | undefined)?.[0]?.label;
-  if (f.inherited_from) return <>{t("card.inherited", { from: f.inherited_from })}</>;
-  if (f.state === "conflict") return <>{t("card.waits")}</>;
-  if (f.state === "asked" && f.ask) return <>{t("card.you_asked", { ask: f.ask })}</>;
-  if (f.state === "missing" && f.hint) return <>{t("card.where", { hint: f.hint })}</>;
-  return src ? src : null;
+  if (f.inherited_from) parts.push(t("card.inherited", { from: f.inherited_from }));
+  if (f.state === "conflict") parts.push(t("card.waits"));
+  if (f.state === "asked") {
+    // вопрос — атом из atoms (ядро дописывает вопросы в конец); старая форма — текст ask
+    const question = f.atoms?.at(-1);
+    parts.push(
+      question ? (
+        <Link key="q" {...recordPath(question)}>
+          {t("card.question_open")}
+        </Link>
+      ) : (
+        t("card.you_asked", { ask: f.ask ?? "" })
+      ),
+    );
+  }
+  if (f.state === "missing") {
+    if (f.hint) parts.push(t("card.where", { hint: f.hint }));
+    if (f.ask) parts.push(t("card.ask_whom", { who: f.ask }));
+  }
+  if (f.state === "known" && src) parts.push(src);
+  if (f.when && f.state !== "known") parts.push(t("card.when", { when: f.when }));
+  if (f.origin) parts.push(origin(f.origin) ?? humanize(f.origin));
+  if (!parts.length) return null;
+  return (
+    <>
+      {parts.map((p, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: части строки не переставляются
+        <span key={i}>
+          {i > 0 && " · "}
+          {p}
+        </span>
+      ))}
+    </>
+  );
 }
 
 function Value({ f, open, toggle, fill }: { f: CardField; open: boolean; toggle: () => void; fill?: Fill }) {
@@ -167,8 +204,8 @@ function Row({ f, fill }: { f: CardField; fill?: Fill }) {
   const atom = f.atoms?.[0];
   return (
     <li className="crow" data-state={f.state}>
-      <span className="crow__name">
-        {atom ? <Link {...recordPath(atom)}>{name}</Link> : name}
+      <span className="crow__name" title={f.rule ? t("card.rule", { rule: f.rule }) : undefined}>
+        {atom && f.state !== "asked" ? <Link {...recordPath(atom)}>{cap(name)}</Link> : cap(name)}
         <span className="crow__sub">
           <Sub f={f} />
         </span>
@@ -201,11 +238,15 @@ export function CardTable({
   fill?: Fill;
 }) {
   const { t } = useTranslation();
+  // группа правила — код; подпись — из необязательного словаря пакета parameter_group
+  const groupLabel = useVocabLabel("parameter_group");
+  const title = (name: string | null) =>
+    name ? (groupLabel(name) ?? (/^[a-z][a-z0-9_]*$/.test(name) ? humanize(name) : name)) : t("card.other");
   return (
     <div className="ctable">
       {groups.map((g) => (
-        <section key={g.name ?? "-"} aria-label={g.name ?? t("card.other")}>
-          <h2>{g.name ?? t("card.other")}</h2>
+        <section key={g.name ?? "-"} aria-label={title(g.name)}>
+          <h2>{title(g.name)}</h2>
           <ul>
             {g.fields.map((f) => (
               <Row key={f.property} f={f} fill={fill} />

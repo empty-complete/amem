@@ -32,7 +32,8 @@ ENUM_COLUMNS = [
 NOT_ENUM = {("status_log", "target"), ("search_document", "target"), ("search_code", "target"),
             ("embedding", "target"), ("review_item", "target"), ("import_history", "target"),
             ("folder_log", "target"),
-            ("object_text", "text_source")}     # откуда текст страницы в кэше — деталь хранения, не модели
+            ("object_text", "text_source"),     # откуда текст страницы в кэше — деталь хранения, не модели
+            ("task", "state")}     # задачи агентам — состояние службы (TaskView); kind из одного значения — не список
 
 # поля записей схемы, которых нет в теле ревизии, → где они хранятся (у концов связи — пара столбцов)
 RECORD_COLUMNS = {

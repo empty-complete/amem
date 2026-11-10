@@ -248,7 +248,7 @@ cd web && npm ci && npm run dev:mock              # затем откройте 
 ### Установка одной командой
 
 ```bash
-pip install amemo              # или pipx / uv tool install; до выхода на PyPI — pip install -e . из клона
+pipx install 'amemo[web]'      # или pip install / uv tool install; [web] добавляет веб-UI по /ui
 amemo init --dsn postgresql://amemo:amemo@127.0.0.1:5435/amemo   # база и хранилище; DSN запоминается в amemo.toml
 amemo install claude-code      # сервер MCP, хуки и навыки; `amemo install codex` — для Codex CLI
 amemo doctor                   # что работает и что поправить
@@ -285,6 +285,46 @@ export AMEMO_DSN=postgresql://amemo:amemo@127.0.0.1:5435/amemo
   выключает его. Свой журнал служба пишет в stderr.
 - **Веб-UI.** Для `/ui` нужен пакет веба: `pip install 'amemo[web]'`. Без него `/ui` отвечает 404 с подсказкой,
   а API работает как обычно.
+
+## Запись из веба
+
+Человек пишет в веб-UI: форма для каждого вида, свои виды, загрузка файлов и задачи агентам.
+
+- **Формы по шаблонам.** `GET /templates` даёт форму каждому виду атома и классу сущности, со своим шаблоном или
+  без. Поля берутся из правил шаблона, поэтому форма просит то, что потом проверит `check.submit`. Необязательный
+  блок `ui` в шаблоне пакета задаёт тело, виджеты и подписи полей; на проверку он не влияет:
+
+  ```yaml
+  code: reading
+  version: 1.0.0
+  target: atom
+  applies_to: reading
+  fields:
+    - {path: about, required: true, entity_classes: [artifact]}
+    - {path: content.values, required: true}
+  ui:
+    body: none                       # wanted | required | none
+    widgets: [sources, values_table] # sources, links, around, values_table, similar, children
+    fields:
+      - {path: "content.values[property=humidity]", label: {ru: Влажность, en: Air humidity}}
+  ```
+
+- **Мои виды.** Человек заводит свой вид из веба (`PUT /packs/mine/templates/{code}`). Он живёт в базе как пакет
+  `mine` и проходит те же проверки, что пакет из файлов, — как и его записи. Каждая правка — новая версия шаблона;
+  код, занятый пакетом из файлов, не принимается (`409 template_exists`). Удалить вид можно, только пока у него
+  нет записей (`409 template_in_use`). Правит и удаляет виды только человек, модель получает `403 forbidden`.
+  `POST /bundles/export` с `with_packs` увозит свои виды с подборкой; импорт добавляет недостающие, а тот же код
+  с другим содержимым — коллизия `bundle_pack_conflict`.
+- **Загрузка и поиск файлов.** `POST /objects` (multipart: `file`, необязательный `path`) кладёт файл в папку
+  документов `AMEMO_DOCS`, по умолчанию как `Загрузки/<имя файла>`, и разбирает его. Тот же файл по этому пути —
+  `200`, другой файл там — `409 object_path_taken`, и он не тронут; без `AMEMO_DOCS` — `503 docs_unavailable`.
+  `GET /objects?q=` находит объекты по части имени или пути.
+- **Задачи агентам.** В вебе человек просит агента разобрать файл (`POST /tasks`); повтор возвращает ту же
+  задачу. Агент берёт её через MCP: `amemo_tasks` — свободные задачи и свои, `amemo_task_claim` — взять с арендой
+  на 30 минут, `amemo_task_release` — вернуть, `amemo_task_done` — закрыть с итогом (ссылками на записанное),
+  `amemo_task_cancel` — отменить поставленную им. Истёкшая аренда освобождает задачу для другого агента.
+  `GET /tasks` и `amemo tasks list` показывают открытые и взятые задачи, от новых к старым (закрытые —
+  `--state done`); `amemo tasks cancel ID` отменяет (тот, кто поставил, или человек).
 
 ## Docker compose
 
@@ -331,6 +371,7 @@ amemo review list|claim|release|resolve|stats
 amemo folders tree|create|delete|rename|move
 amemo export|inspect|import FILE.zip   подборки (import без --apply — пробный)
 amemo backup create|list|restore|verify
+amemo tasks list|cancel              задачи агентам
 amemo token create|list|revoke         токены общей службы
 amemo base [name [ИМЯ]]                сводка и имя базы
 amemo doctor [--project DIR]          база, хранилище, модель, документы, агенты, служба
@@ -352,7 +393,7 @@ amemo doctor [--project DIR]          база, хранилище, модель
 
 ## MCP
 
-Сервер MCP даёт агенту 14 инструментов над теми же операциями, что HTTP API:
+Сервер MCP даёт агенту 19 инструментов над теми же операциями, что HTTP API:
 
 | Инструмент | Что делает |
 |---|---|
@@ -366,6 +407,8 @@ amemo doctor [--project DIR]          база, хранилище, модель
 | `amemo_move(ref, folder)` | Переложить запись в существующую папку |
 | `amemo_object_status(path)`, `amemo_mark_object(path, status, note?)` | Что из документа уже атомизировано |
 | `amemo_review_claim`, `amemo_review_release`, `amemo_review_resolve` | Для смыслового проверяющего |
+| `amemo_tasks(object?, limit?)` | Задачи агентам: свободные и взятые вами |
+| `amemo_task_claim(task?, kind?)`, `amemo_task_release(task)`, `amemo_task_done(task, result?)`, `amemo_task_cancel(task)` | Взять задачу с арендой, вернуть, закрыть с итогом, отменить свою |
 | `amemo_vocab(scheme)` | Коды словаря с подписями |
 
 Поиск идёт в три шага, чтобы агент читал только нужное: `amemo_search` даёт короткие карточки, `amemo_timeline`
@@ -580,6 +623,7 @@ sources:
 - [x] **Служба HTTP:** `amemo serve` по [контракту v1](docs/api/http-v1.openapi.yaml)
 - [x] **CLI и сервер MCP:** поиск в три шага, отметки полезности, вырезание `<private>`
 - [x] **Память агентов:** хуки Claude Code, Codex CLI, `amemo install`, навыки ядра
+- [x] **Запись из веба:** формы по шаблонам, свои виды, загрузка файлов, задачи агентам
 - [x] **Веб-UI:** все экраны — на службе и на моках; сквозные проверки против службы
 - [ ] **asearch:** поиск по файлам как плагин amemo
 

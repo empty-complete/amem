@@ -1073,7 +1073,8 @@
         "confidence_person",
         "bundle_pack_missing",
         "bundle_key_collision",
-        "bundle_object_conflict"
+        "bundle_object_conflict",
+        "bundle_pack_conflict"
       ],
       "title": "CheckCode",
       "type": "string"
@@ -1758,6 +1759,21 @@
       ],
       "title": "FieldRule",
       "type": "object"
+    },
+    "FieldType": {
+      "description": "Тип поля формы вида (amemo/forms.py); без явного типа выводится из пути поля.",
+      "enum": [
+        "object",
+        "record",
+        "quantity",
+        "date",
+        "period",
+        "choice",
+        "tags",
+        "text"
+      ],
+      "title": "FieldType",
+      "type": "string"
     },
     "Formula": {
       "additionalProperties": false,
@@ -2839,6 +2855,17 @@
         "target": {
           "$ref": "#/$defs/TemplateTarget"
         },
+        "ui": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TemplateUi"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Как показывать вид в интерфейсе — форма, текст, блоки страницы (TemplateUi)."
+        },
         "version": {
           "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
           "type": "string"
@@ -2852,6 +2879,16 @@
       "title": "Template",
       "type": "object"
     },
+    "TemplateBody": {
+      "description": "Текст записи в форме вида (Template.ui.body) — подсказка интерфейсу, на проверку записи не влияет.",
+      "enum": [
+        "wanted",
+        "required",
+        "none"
+      ],
+      "title": "TemplateBody",
+      "type": "string"
+    },
     "TemplateTarget": {
       "description": "",
       "enum": [
@@ -2860,6 +2897,106 @@
         "link"
       ],
       "title": "TemplateTarget",
+      "type": "string"
+    },
+    "TemplateUi": {
+      "additionalProperties": false,
+      "description": "Как показывать вид в интерфейсе (спецификация подпроекта 4, разд. 6a.2): текст записи, блоки страницы, подписи и типы полей формы. На проверку записей не влияет; ключи fields сверяет проверка пакета (packs.py).",
+      "properties": {
+        "body": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TemplateBody"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/TemplateUiField"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "widgets": {
+          "items": {
+            "$ref": "#/$defs/TemplateWidget"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "title": "TemplateUi",
+      "type": "object"
+    },
+    "TemplateUiField": {
+      "additionalProperties": false,
+      "description": "Подпись, подсказка и тип поля формы. path — путь правила поля шаблона (FieldRule.path) или величина content.values[property=X] / qualifiers[property=X]; один path — не больше одного раза. required — только у величины: обязательна ли она в форме (правило content.values просит лишь хотя бы одно значение).",
+      "properties": {
+        "hint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LangString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "path": {
+          "pattern": "^[a-z_][a-z0-9_]*(\\[\\])?(\\.[a-z_][a-z0-9_]*(\\[\\])?)*(\\[property=[a-z][a-z0-9_]*\\])?$",
+          "type": "string"
+        },
+        "required": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FieldType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "TemplateUiField",
+      "type": "object"
+    },
+    "TemplateWidget": {
+      "description": "Блок страницы записи вида (Template.ui.widgets) — подсказка интерфейсу.",
+      "enum": [
+        "sources",
+        "links",
+        "around",
+        "values_table",
+        "similar",
+        "children"
+      ],
+      "title": "TemplateWidget",
       "type": "string"
     },
     "Value": {

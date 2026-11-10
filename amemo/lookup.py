@@ -9,7 +9,8 @@ at — только время с часовым поясом: время без
 Для экранов: list_records — страница сводок записей (папка, вид, статус, тег, about — сущность или объект),
 summary — сводка одной записи, labels — подписи ссылок одним запросом; get отдаёт и папку записи (folder).
 Объекты: get_object — объект с версиями, object_status — последняя отметка, object_view — карточка (status,
-cited_by, pages, sheets), object_by_path — объект по пути; revision_sources и revisions_sources — источники ревизий.
+cited_by, pages, sheets), object_by_path — объект по пути, object_search — поиск по имени и пути с курсором;
+revision_sources и revisions_sources — источники ревизий.
 """
 from __future__ import annotations
 
@@ -552,3 +553,53 @@ def object_view(conn: psycopg.Connection, object_id: uuid.UUID | str) -> dict | 
     is_book = any(n.lower().endswith(_SHEET_SUFFIXES) for n in names)
     view["sheets"] = [p.split("\n", 1)[0] for p in pages] if is_book and pages is not None else None
     return view
+
+
+OBJECT_LIMIT = 100          # объектов на страницу поиска, не больше; дальше — по курсору
+
+
+def _object_cursor(object_id: uuid.UUID) -> str:
+    return base64.urlsafe_b64encode(f"obj|{object_id}".encode()).decode().rstrip("=")
+
+
+def _object_after(cursor) -> uuid.UUID | None:
+    """Курсор next_cursor поиска объектов → id последнего объекта прошлой страницы; None или «» — с начала."""
+    if cursor is None or cursor == "":
+        return None
+    try:
+        if not isinstance(cursor, str):
+            raise ValueError("не строка")
+        text = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)).decode()
+        tag, _, object_id = text.partition("|")
+        if tag != "obj":
+            raise ValueError("не курсор объектов")
+        return uuid.UUID(object_id)
+    except ValueError as e:            # и binascii.Error, и UnicodeDecodeError — подклассы ValueError
+        raise RecordError(f"cursor {cursor!r}: не курсор поиска объектов — нужен next_cursor прошлой страницы") from e
+
+
+def object_search(conn: psycopg.Connection, q: str | None = None, *, limit: int = 20, cursor=None) -> dict:
+    """Объекты по части имени файла, адреса страницы или пути в папке документов, без учёта регистра:
+    {items: [object_view], next_cursor}. Пустой q — все объекты; порядок — от новых к старым (id — UUIDv7),
+    курсор — id последнего объекта страницы. Регистр сравнивается по lower() базы (правила LC_CTYPE сервера);
+    запрос — в NFC, «\\» в нём — «/», как у путей объектов."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= OBJECT_LIMIT:
+        raise RecordError(f"limit {limit!r}: нужно целое от 1 до {OBJECT_LIMIT}")
+    if q is not None and not isinstance(q, str):
+        raise RecordError(f"q {q!r}: нужна строка")
+    text = unicodedata.normalize("NFC", (q or "").strip().replace("\\", "/")) or None
+    after = _object_after(cursor)
+    where = []
+    if text is not None:
+        # strpos, а не LIKE: «%» и «_» в запросе — обычные знаки
+        where.append("(strpos(lower(coalesce(o.original_name, '')), lower(%(q)s)) > 0 "
+                     "OR strpos(lower(coalesce(o.url, '')), lower(%(q)s)) > 0 "
+                     "OR EXISTS (SELECT 1 FROM object_path p WHERE p.object_id = o.id "
+                     "AND strpos(lower(p.path), lower(%(q)s)) > 0))")
+    if after is not None:
+        where.append("o.id < %(after)s")
+    rows = conn.execute(f"SELECT o.id FROM object o WHERE {' AND '.join(where) or 'TRUE'} "
+                        "ORDER BY o.id DESC LIMIT %(take)s", {"q": text, "after": after, "take": limit + 1}).fetchall()
+    page = [r[0] for r in rows[:limit]]
+    items = [view for view in (object_view(conn, oid) for oid in page) if view is not None]
+    return {"items": items, "next_cursor": _object_cursor(page[-1]) if len(rows) > limit else None}

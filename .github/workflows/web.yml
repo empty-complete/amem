@@ -58,6 +58,7 @@ jobs:
           --health-interval 2s --health-timeout 3s --health-retries 30
     env:
       AMEMO_DSN: postgresql://test:test@127.0.0.1:5432/test
+      AMEMO_PACKS: ${{ github.workspace }}/tools/sample-pack/meteo
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

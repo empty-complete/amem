@@ -6,6 +6,8 @@
       версии получают пункт source_changed (review.on_new_version) в той же транзакции;
     - иначе — новый объект. Файл копируется в хранилище один раз.
   web(conn, url) / message(conn, title) — объект без файла: одна версия без digest.
+  upload(conn, store, docs, part, path, agent=…) — загруженный файл: в папку документов по пути (не затирая
+    другой файл: ObjectError path_taken) и ingest; docs_root — папка документов или ObjectError docs_unavailable.
   adopt(conn, store, record, files=…, agent=…) — объект из подборки с тем же id, его версии и файлы, какие пришли.
   resolve_sources(conn, store, docs, payload, agent=…) — path источников тела → object, object_version, digest.
   text(conn, store, object_id, n) — текст версии по страницам, в NFC; кэш object_text по digest.
@@ -33,6 +35,7 @@ id объекта в этих функциях и в lookup — UUID или сс
 """
 from __future__ import annotations
 
+import errno
 import hashlib
 import mimetypes
 import os
@@ -61,7 +64,8 @@ STATUSES = {s.value for s in model_v1.ObjectStatus}
 
 
 class ObjectError(ValueError):
-    """Ошибка данных объекта; code (если есть) — машинный признак для службы: not_found, invalid, too_large."""
+    """Ошибка данных объекта; code (если есть) — машинный признак для службы: not_found, invalid, too_large,
+    path_taken (по пути загрузки другой файл), docs_unavailable (нет папки документов)."""
 
     def __init__(self, *args, code: str | None = None):
         super().__init__(*args)
@@ -205,6 +209,104 @@ def ingest(conn: psycopg.Connection, store: ObjectStore, docs: Path, path: str, 
             review.on_new_version(conn, object_id, n, agent=agent, at=at)
         store.add_version(object_id, n, file, name, digest, user=agent, message=f"amemo: {key}")
     return Version(object_id, n, digest, "file", created=True)
+
+
+UPLOADS = "Загрузки"                     # папка загрузок в папке документов: путь по умолчанию — Загрузки/<имя>
+# os.link не умеет здесь ссылку (файловая система без жёстких ссылок, другой том) — тогда os.replace после проверки
+NO_LINKS = frozenset({errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP, errno.EXDEV})
+
+
+def _digest(file: Path) -> str:
+    with open(file, "rb") as f:
+        return "sha256:" + hashlib.file_digest(f, "sha256").hexdigest()
+
+
+def upload_path(path: str | None, filename: str | None) -> str:
+    """Путь загрузки в папке документов: path, иначе Загрузки/<имя файла> (имя — последняя часть того, что прислал
+    браузер). Ключ — в NFC, «\\» — «/», без «.» и «..», не абсолютный; иначе ObjectError (invalid)."""
+    if path is not None and path.strip():
+        rel = _clean(path)
+    else:
+        name = PurePosixPath(_clean(filename or "")).name
+        if not name or name in (".", ".."):
+            raise ObjectError("загрузка: у файла нет имени — передайте path", code="invalid")
+        rel = f"{UPLOADS}/{name}"
+    _check_relative(rel)
+    key = _nfc(posixpath.normpath(rel))
+    if key in ("", "."):
+        raise ObjectError(f"{rel}: нужен путь файла в папке документов", code="invalid")
+    return key
+
+
+def docs_root(docs: Path | None) -> Path:
+    """Папка документов для загрузки: не задана или не папка — ObjectError(docs_unavailable)."""
+    if docs is None or not _is(Path.is_dir, Path(docs)):
+        raise ObjectError("папка документов недоступна: задайте AMEMO_DOCS (папка должна существовать)",
+                          code="docs_unavailable")
+    return Path(docs).resolve()
+
+
+def upload(conn: psycopg.Connection, store: ObjectStore, docs: Path | None, part: Path, path: str, *,
+           agent: str) -> tuple[Version, bool]:
+    """Положить загруженный файл part (временный, в папке документов) по пути path и принять его (ingest).
+    Ответ — версия и True, если файл записан сейчас.
+
+    - по пути уже лежит тот же файл (тот же digest) — его ingest, part не нужен;
+    - по пути лежит другой файл или папка — ObjectError(path_taken), файл на диске не тронут;
+    - иначе part становится файлом по пути одним шагом (os.link — не затирает того, кто успел раньше; где ссылок
+      нет, NO_LINKS, — os.replace после проверки; длинное имя — ObjectError(invalid), прочий сбой — ObjectError) и
+      разбирается ingest; сбой ingest удаляет записанный файл. Если то же содержимое уже есть у объекта по другому
+      пути, ingest новой версии не создаёт — второй элемент ответа False (200, а не 201).
+    part удаляется в любом случае."""
+    root = docs_root(docs)
+    try:
+        key = upload_path(path, None)
+        target = sources.safe_join(root, key)
+        if target is None:
+            raise ObjectError(f"{key}: путь выводит из папки документов", code="invalid")
+        digest = _digest(part)
+
+        def same() -> bool:
+            """По пути уже есть файл: тот же (digest) — True, его и принять; другой файл или папка — path_taken."""
+            existing = _locate(root, key, Path.exists) or (target if os.path.lexists(target) else None)
+            if existing is None:
+                return False
+            if not _is(Path.is_file, existing) or _digest(existing) != digest:
+                raise ObjectError(f"{key}: по этому пути уже лежит другой файл или папка — выберите другой путь",
+                                  code="path_taken")
+            return True
+
+        if same():
+            return ingest(conn, store, root, key, agent=agent), False
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+        except (FileExistsError, NotADirectoryError) as e:
+            raise ObjectError(f"{key}: часть пути — файл, а не папка", code="path_taken") from e
+        except OSError as e:
+            raise ObjectError(f"{key}: папку для файла не создать ({e.strerror or e})") from e
+        try:
+            os.link(part, target)                     # не затирает файл, который успел появиться
+        except FileExistsError:
+            if not same():
+                raise ObjectError(f"{key}: путь занят во время загрузки — повторите", code="path_taken") from None
+            return ingest(conn, store, root, key, agent=agent), False
+        except OSError as e:
+            if e.errno == errno.ENAMETOOLONG:
+                raise ObjectError(f"{key}: слишком длинное имя файла или пути", code="invalid") from None
+            if e.errno not in NO_LINKS:
+                raise ObjectError(f"{key}: файл не записать в папку документов ({e.strerror or e})") from None
+            if same():                                # в этой файловой системе нет жёстких ссылок
+                return ingest(conn, store, root, key, agent=agent), False
+            os.replace(part, target)
+        try:
+            # файл записан, но такое содержимое уже есть у объекта по другому пути: ingest не создаёт версию — 200
+            v = ingest(conn, store, root, key, agent=agent)
+            return v, v.created
+        except BaseException:
+            target.unlink(missing_ok=True)
+            raise
+    finally:
+        Path(part).unlink(missing_ok=True)
 
 
 def adopt(conn: psycopg.Connection, store: ObjectStore, record: dict, *, files: dict[str, Path],

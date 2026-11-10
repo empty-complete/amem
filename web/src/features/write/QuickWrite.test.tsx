@@ -64,7 +64,7 @@ test("объект: пустое обязательное поле — знач�
   const cond = await screen.findByRole("region", { name: "Условия" });
   await user.click(within(cond).getByRole("button", { name: "Нужно" }));
   await user.type(within(cond).getByRole("textbox", { name: "Рабочая температура" }), "-40{Enter}");
-  const poll = screen.getByRole("region", { name: "Опрос" });
+  const poll = await screen.findByRole("region", { name: "Опрос" });
   await user.click(within(poll).getByRole("button", { name: "Принять" }));
   await act(() => vi.advanceTimersByTimeAsync(UNDO_MS + 100));
   expect(await within(cond).findByText("−40 °C")).toBeInTheDocument();

@@ -3,8 +3,8 @@
 Библиотека синхронная, поэтому обработчики — обычные функции: Starlette зовёт их в пуле потоков, соединение берётся из
 psycopg_pool на запрос (autocommit — как db.connect: каждый conn.transaction() — настоящая транзакция). lifespan
 открывает пул и готовит базу (db.prepare — миграции, словари, base_id), при остановке закрывает пул. Секрет cookie
-человека — новый на каждый запуск службы. Подборки и загрузки старше суток (AMEMO_STATE) lifespan удаляет при запуске
-и затем раз в час фоновой задачей. /mcp — Streamable HTTP сервера MCP (amemo/service/mcp.py): его менеджер сессий
+человека — новый на каждый запуск службы. Подборки и загрузки старше суток (AMEMO_STATE) и брошенные временные файлы
+загрузки (.amemo-upload-*.part в корне AMEMO_DOCS) lifespan удаляет при запуске и затем раз в час фоновой задачей. /mcp — Streamable HTTP сервера MCP (amemo/service/mcp.py): его менеджер сессий
 lifespan запускает и останавливает вместе с пулом.
 """
 from __future__ import annotations
@@ -101,9 +101,16 @@ def _sweep(settings: Settings) -> None:
         removed = api.bundle_sweep(settings.state)
     except OSError as e:
         log.warning("подборки в %s не вычищены: %s", settings.state, e)
-        return
+        removed = 0
     if removed:
         log.info("удалено подборок и загрузок старше суток: %d", removed)
+    try:
+        parts = api.object_upload_sweep(settings.docs)
+    except OSError as e:
+        log.warning("временные файлы загрузки в папке документов не вычищены: %s", e)
+        return
+    if parts:
+        log.info("удалено брошенных временных файлов загрузки в папке документов: %d", parts)
 
 
 async def _sweeper(settings: Settings) -> None:

@@ -12,7 +12,8 @@ from v1_support import same_database
 
 MIGRATIONS = ["0001_core.sql", "0002_objects.sql", "0003_packs.sql", "0004_hub.sql", "0005_search.sql",
               "0006_check.sql", "0007_ontology.sql", "0008_folders.sql", "0009_record_list.sql",
-              "0010_graph_overview.sql", "0011_object_text_ocr.sql"]
+              "0010_graph_overview.sql", "0011_object_text_ocr.sql", "0012_tasks.sql",
+              "0013_rename_amemo.sql"]
 
 
 def test_migration_files_are_listed():
@@ -25,6 +26,14 @@ def test_migrate_applies_once(pg):
     assert db.migrate(pg) == []
     names = [r[0] for r in pg.execute("SELECT name FROM schema_migrations ORDER BY name")]
     assert names == MIGRATIONS
+
+
+def test_trigger_functions_are_renamed(pg):
+    """0013: функции триггеров — amemo_*, прежних amem_* нет; сообщения «amemo: …» — test_truncate_is_forbidden."""
+    db.migrate(pg)
+    names = {r[0] for r in pg.execute("SELECT proname FROM pg_proc WHERE proname LIKE 'amem%'")}
+    assert names == {"amemo_forbid_change", "amemo_revision_review", "amemo_link_retire", "amemo_source_check",
+                     "amemo_review_item_check"}
 
 
 def test_migrate_needs_utf8_database():

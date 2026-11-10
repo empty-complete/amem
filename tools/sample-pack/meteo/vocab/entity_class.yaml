@@ -1,0 +1,4 @@
+scheme: entity_class
+concepts:
+  - {code: sensor, label: {ru: датчик, en: sensor}, definition: {ru: "Датчик метеостанции."}, broader: artifact}
+  - {code: humidity_sensor, label: {ru: датчик влажности, en: humidity sensor}, definition: {ru: "Датчик относительной влажности воздуха."}, broader: sensor}

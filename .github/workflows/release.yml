@@ -1,0 +1,114 @@
+name: release
+# amemo и amemo-web на PyPI. Выпуск — метка vX.Y.Z… на коммите из main (git tag v0.1.0a1 && git push origin v0.1.0a1).
+# На pull request с правками поставки — та же сборка и проверки, без загрузки.
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths: ["pyproject.toml", "amemo/__init__.py", "web/python/**", "README.md", "tools/release.py",
+            ".github/workflows/release.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash                        # bash -eo pipefail: упавшая команда конвейера валит шаг
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    env:
+      TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0               # метка проверяется на принадлежность main
+      - name: The tag is on main
+        if: env.TAG != ''
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Web UI build (static files of amemo-web)
+        working-directory: web
+        run: npm ci && npm run build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q build twine packaging
+      - name: Versions agree with each other and with the tag
+        id: version
+        run: |
+          version="$(python tools/release.py versions ${TAG:+--tag "$TAG"})"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: README for PyPI — relative links and images point to GitHub
+        run: |
+          python tools/release.py readme "${TAG:-$GITHUB_SHA}"
+          if grep -n '©' README.md; then exit 1; fi
+      - name: sdist and wheels
+        run: |
+          python -m build -o dist .
+          python -m build -o dist web/python
+          ls -l dist
+      - name: No license text inside the packages (the author's name stays in the repository only)
+        run: |
+          for f in dist/*.whl; do if unzip -Z1 "$f" | grep -i -E 'LICEN[CS]E'; then exit 1; fi; done
+          for f in dist/*.tar.gz; do if tar -tzf "$f" | grep -i -E 'LICEN[CS]E'; then exit 1; fi; done
+      - run: twine check --strict dist/*
+      - name: amemo[web] from the built wheels in a clean environment
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python -m venv "$RUNNER_TEMP/clean"
+          "$RUNNER_TEMP/clean/bin/pip" install -q --find-links dist "amemo[web]==$VERSION"
+          "$RUNNER_TEMP/clean/bin/amemo" --version | grep -Fx "amemo $VERSION"
+          "$RUNNER_TEMP/clean/bin/python" -c "import amemo_web; assert (amemo_web.static_dir() / 'index.html').is_file()"
+          for f in dist/*.whl; do unzip -l "$f" | tail -1; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 30
+
+  publish:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi                       # секрет PYPI_API_TOKEN; окружение пускает только метки v*
+      url: https://pypi.org/project/amemo/${{ needs.build.outputs.version }}/
+    permissions:
+      contents: read
+      id-token: write                  # для Trusted Publishing, когда токен сменится на него
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          attestations: false          # аттестации — только при Trusted Publishing
+
+  # команды README «с нуля»: pipx install с PyPI в чистой машине
+  verify:
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - name: pipx install 'amemo[web]' from PyPI
+        run: |
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            pipx install "amemo[web]==$VERSION" && break
+            [ "$attempt" = 10 ] && exit 1
+            echo "PyPI ещё не отдаёт $VERSION: попытка $attempt"; sleep 30
+          done
+          amemo --version | grep -Fx "amemo $VERSION"
+          pipx runpip amemo show amemo-web | grep -Fx "Version: $VERSION"
