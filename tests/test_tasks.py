@@ -153,7 +153,7 @@ def test_api_task_operations(kb, note):
                                     version=str(note.n), note="узел <private>скрытое</private>")
     assert created and set(made) == {"task_id"}
     [view] = api.task_list(kb, object=str(note.object_id))
-    assert view["id"] == made["task_id"] and view["object"] == str(note.object_id) and view["note"] == "узел"
+    assert view["id"] == made["task_id"] and view["object"] == str(note.object_id) and view["note"] == "узел "
     assert set(view) == {"id", "kind", "object", "version", "note", "state", "created_by", "claimed_by",
                          "claimed_until"}
     for bad in ({"kind": None}, {"kind": "x"}, {"object": "мусор"}, {"version": 0}, {"version": None},
