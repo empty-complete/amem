@@ -124,26 +124,29 @@ jobs:
           if ($installed.ExitCode) { throw "postgresql-18 installer: exit code $($installed.ExitCode)" }
           Get-Service postgresql*
           & "$env:PGROOT\bin\psql.exe" --version
-      - name: pgvector from source (nmake /F Makefile.win)
+      - name: pgvector from source — docs/install-agent.md, step 3C Windows
         shell: cmd
         run: |
           for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VS=%%i"
           call "%VS%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
-          git clone --quiet --depth 1 --branch %PGVECTOR% https://github.com/pgvector/pgvector.git "%RUNNER_TEMP%\pgvector" || exit /b 1
-          cd /d "%RUNNER_TEMP%\pgvector"
+          cd /d %TEMP%
+          curl.exe -fsSL --retry 5 -o pgvector.zip https://github.com/pgvector/pgvector/archive/refs/tags/%PGVECTOR%.zip || exit /b 1
+          tar -xf pgvector.zip || exit /b 1
+          cd pgvector-%PGVECTOR:~1%
           nmake /NOLOGO /F Makefile.win || exit /b 1
           nmake /NOLOGO /F Makefile.win install || exit /b 1
-      - name: Role and database amemo (not a superuser), extensions vector and btree_gist
+      - name: Role and database amemo — docs/install-agent.md, Role and database (Windows)
         run: |
           $env:PGPASSWORD = "root"
-          $psql = "$env:PGROOT\bin\psql.exe"
-          & $psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 `
-            -c "CREATE ROLE amemo LOGIN CREATEDB PASSWORD 'amemo-ci'" -c "CREATE DATABASE amemo OWNER amemo"
-          if ($LASTEXITCODE) { exit 1 }
-          & $psql -h 127.0.0.1 -U postgres -d amemo -v ON_ERROR_STOP=1 `
-            -c "CREATE EXTENSION IF NOT EXISTS vector" -c "CREATE EXTENSION IF NOT EXISTS btree_gist"
-          if ($LASTEXITCODE) { exit 1 }
-          & $psql -h 127.0.0.1 -U postgres -d template1 -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector"
+          @'
+          CREATE ROLE amemo LOGIN CREATEDB PASSWORD 'amemo-ci';
+          CREATE DATABASE amemo OWNER amemo;
+          \c amemo
+          CREATE EXTENSION IF NOT EXISTS vector;
+          CREATE EXTENSION IF NOT EXISTS btree_gist;
+          \c template1
+          CREATE EXTENSION IF NOT EXISTS vector;
+          '@ | & "$env:PGROOT\bin\psql.exe" -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1
           if ($LASTEXITCODE) { exit 1 }
       - name: Wheel of this branch, uv tool install
         id: wheel
