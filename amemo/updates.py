@@ -500,8 +500,8 @@ class Updater:
         message = data.get("message") if isinstance(data.get("message"), str) else None
         if state in ("idle", "available"):
             plain = "available" if latest else "idle"
-            if plain != state or state == "available":
-                message = None             # «доступна …» — по виду установки и переключателю, а не из файла
+            if plain != state:
+                message = None             # без своего сообщения «доступна …» — по виду установки и переключателю
             state = plain
         if self._install_busy():
             state = "installing"
