@@ -142,7 +142,12 @@ paths:
       tags: [read]
       operationId: getRecord
       summary: Запись с текущей ревизией, источниками, открытыми пунктами и полезностью
-      parameters: [{ $ref: "#/components/parameters/Ref" }]
+      parameters:
+        - { $ref: "#/components/parameters/Ref" }
+        - name: revision
+          in: query
+          description: "Показать эту ревизию (сравнение, возврат): тело, источники, автор и время — её; статус, папка и пункты — записи. Нет такой — 404"
+          schema: { type: integer, minimum: 1 }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RecordView" } } } }
         "404": { $ref: "#/components/responses/Problem" }

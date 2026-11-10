@@ -1,9 +1,10 @@
-import { act, screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef } from "react";
 import { db } from "../../mocks/db";
 import { renderWithApp } from "../../test/render";
 import { CardPage } from "../card/CardPage";
+import { draftKey, loadDraft } from "./drafts";
 import { placeStore } from "./place";
 import { QuickWrite } from "./QuickWrite";
 import { resetQueue, UNDO_MS } from "./submitQueue";
@@ -27,6 +28,7 @@ function Harness() {
 }
 
 afterEach(() => {
+  window.localStorage.clear();
   resetQueue();
   placeStore.openQuick(false);
   placeStore.setStar(null);
@@ -73,19 +75,18 @@ test("объект: пустое обязательное поле — знач�
   expect(screen.getByRole("img", { name: /Известно 4 из 7/ })).toBeInTheDocument();
 });
 
-test("объект: «Добавить заметку» — строка в списке сразу, запись после окна", async () => {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
-  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-  await renderWithApp(<CardPage entityRef={E3} />, `/entity/${E3}`);
+test("объект: «Добавить заметку» — строка не пишет в базу, а открывает редактор с черновиком", async () => {
+  const user = userEvent.setup();
+  const { router } = await renderWithApp(<CardPage entityRef={E3} />, `/entity/${E3}`);
+  const before = db.records.length;
   await user.type(
     await screen.findByRole("textbox", { name: "Добавить заметку" }),
     "Решили поставить козырёк{Enter}",
   );
-  const notes = screen.getByRole("region", { name: "Заметки и решения" });
-  expect(within(notes).getByText("Решили поставить козырёк")).toBeInTheDocument();
-  expect(within(notes).getByText("записывается")).toBeInTheDocument();
-  await act(() => vi.advanceTimersByTimeAsync(UNDO_MS + 100));
-  expect(await within(notes).findByRole("link", { name: /Решили поставить козырёк/ })).toBeInTheDocument();
+  await waitFor(() => expect(router.state.location.pathname).toBe("/new"));
+  expect(router.state.location.search).toMatchObject({ about: E3, kind: "decision" });
+  expect(db.records.length).toBe(before);
+  expect(loadDraft(draftKey("new", E3))?.label).toBe("Решили поставить козырёк");
 });
 
 test("@объект ищется по всей базе: без выбора из подсказки — первая находка поиска", async () => {

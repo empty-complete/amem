@@ -407,14 +407,22 @@ def _summaries(conn: psycopg.Connection, items: list[dict]) -> list[dict]:
 
 # --- запись ---
 
-def record(conn: psycopg.Connection, ref) -> dict:
+def record(conn: psycopg.Connection, ref, *, revision=None) -> dict:
     """RecordView: показанная ревизия записи (текущая; у записи, чьи ревизии все отклонены, — последняя), источники,
-    открытые пункты очереди и полезность."""
+    открытые пункты очереди и полезность. revision — показать эту ревизию (сравнение, «Вернуть эту ревизию»):
+    тело, источники, автор и время — её; статус, папка и пункты — записи. Такой ревизии нет — RecordNotFound."""
+    n = _int(revision, "revision", low=1)
     target, record_id = records.resolve(conn, _ref(ref))          # нет записи — RecordNotFound (404)
     t = target
     current = lookup.get(conn, target, record_id)
     with conn.cursor(row_factory=dict_row) as cur:
-        if current is not None:
+        if n is not None:
+            found = [r for r in lookup.history(conn, target, record_id) if r["n"] == n]
+            if not found:
+                raise records.RecordNotFound(f"{ref}: ревизии {n} нет")
+            shown = found[0] | cur.execute(f"SELECT status, folder FROM {t} WHERE id = %s", (record_id,)).fetchone()
+            shown["recorded_at"] = shown["recorded_at"].isoformat()
+        elif current is not None:
             shown = cur.execute(f"SELECT id, n, payload FROM {t}_revision WHERE {t}_id = %s AND n = %s",
                                 (record_id, current["revision"])).fetchone()
             shown |= {"review_state": current["review_state"], "recorded_at": current["recorded_at"],

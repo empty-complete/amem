@@ -335,6 +335,16 @@ def test_records_list_bad_folder_is_422(serve, world):
 
 # --- запись ---
 
+def test_record_view_of_a_revision(serve, world):
+    client = serve()
+    path = "/records/{ref}"
+    now = contract.check(client.get(f"{V1}/records/{world.w0}"), path)
+    first = contract.check(client.get(f"{V1}/records/{world.w0}", params={"revision": "1"}), path)
+    assert first == now                                     # ревизия одна — она и показана
+    problem(client.get(f"{V1}/records/{world.w0}", params={"revision": "2"}), 404, "not_found", path)
+    problem(client.get(f"{V1}/records/{world.w0}", params={"revision": "0"}), 400, "bad_request", path)
+
+
 def test_record_view(serve, world):
     client = serve()
     body = contract.check(client.get(f"{V1}/records/{world.w0}"), "/records/{ref}")

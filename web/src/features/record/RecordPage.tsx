@@ -261,7 +261,7 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
                     <h2>{t("sky.widget")}</h2>
                     <Sky centerRef={view.ref} height={340} />
                   </section>
-                  <HistoryWidget recordRef={view.ref} />
+                  <HistoryWidget recordRef={view.ref} view={view} />
                   <SimilarWidget recordRef={view.ref} />
                 </div>
               </>
