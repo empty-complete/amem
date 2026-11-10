@@ -31,7 +31,7 @@ from pathlib import Path
 import psycopg
 from psycopg.rows import dict_row
 
-from . import __version__, backup, bundle, check, db, folders, forms, lookup, objects, private, profile, \
+from . import __version__, backup, bundle, check, db, folders, forms, lookup, mine, objects, private, profile, \
     recipes, records, review, usefulness, vocab
 from .anthology import export as anthology_export
 from .check import level1
@@ -870,6 +870,22 @@ def vocab_entries(conn: psycopg.Connection, scheme) -> list[dict]:
 def templates(conn: psycopg.Connection, *, target=None) -> list[dict]:
     """TemplateView[] — форма каждого вида атома и класса сущности (amem/forms.py); target — atom или entity."""
     return forms.views(conn, target=_enum(target, "target", TARGETS))
+
+
+def template_put(conn: psycopg.Connection, code, draft, *, agent: str) -> dict:
+    """TemplateView своего вида после правки по черновику (TemplateDraft); правит только человек (403 forbidden).
+    Занятый пакетом из файла код — MineError exists (409), черновик не по проверке — invalid (422 с issues)."""
+    _person_only(agent, "свои виды правит")
+    code = _str(code, "code")
+    if not isinstance(draft, dict):
+        raise BadRequest("тело: ожидается объект TemplateDraft")
+    return mine.put(conn, code, draft, agent=agent)
+
+
+def template_delete(conn: psycopg.Connection, code, *, agent: str) -> None:
+    """Удалить свой вид; есть записи этого вида — MineError in_use (409), своего вида нет — not_found (404)."""
+    _person_only(agent, "свои виды удаляет")
+    mine.delete(conn, _str(code, "code"), agent=agent)
 
 
 def base(conn: psycopg.Connection) -> dict:

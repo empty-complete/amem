@@ -29,6 +29,8 @@ from . import canon, folders, ids, packs
 
 SQL_DIR = Path(__file__).with_name("sql")
 MIGRATION_LOCK = 0x616D656D00000001          # ключ pg_advisory_lock для миграций: «amem» + 1
+MINE_LOCK = 0x616D656D00000004               # ключ pg_advisory_xact_lock пакета «Мои виды» (amem/mine.py): «amem» + 4
+MINE = "mine"                                # пакет своих видов в базе: понятия origin = 'mine'
 
 
 BASE_NAME_MAX = 200
@@ -101,14 +103,27 @@ def load_vocab(conn: psycopg.Connection) -> None:
     становится постоянной). Ошибки загрузки (всё откатывается):
     - пакет с тем же именем и версией уже загружен с другим содержимым — поднимите версию;
     - шаблон с той же code и version, но другим содержимым — поднимите version;
-    - из пакета исчез код, которым пользуются записи, — внешний ключ не даёт удалить понятие.
+    - из пакета исчез код, которым пользуются записи, — внешний ключ не даёт удалить понятие;
+    - пакет из файла принёс код своего вида («Мои виды», amem/mine.py) — переименуйте одно из двух.
+
+    Свои виды переживают пересборку: понятия origin = 'mine' не считаются осиротевшими, а их шаблоны (последняя
+    версия каждого кода) возвращаются в template_active.
     """
     require_autocommit(conn)
     now = datetime.now(timezone.utc)
     with conn.transaction():
+        conn.execute("SELECT pg_advisory_xact_lock(%s)", (MINE_LOCK,))
         for c in packs.service_concepts():
             _upsert_concept(conn, c, "schema", now)
         loaded = packs.load_packs()
+        mine = {code: scheme for scheme, code in conn.execute(
+            "SELECT scheme, code FROM concept WHERE origin = %s AND scheme IN ('kind', 'entity_class')", (MINE,))}
+        for p in loaded:
+            clash = sorted({c.code for c in p.concepts if mine.get(c.code) == c.scheme}
+                           | {t.code for t in p.templates if t.code in mine})
+            if clash:
+                raise MigrationError(f"пакет {p.name}: код {', '.join(clash)} уже занят своим видом («Мои виды») — "
+                                     f"переименуйте вид пакета или удалите свой вид")
         for p in loaded:
             row = conn.execute("SELECT digest FROM pack WHERE name = %s AND version = %s",
                                (p.name, p.version)).fetchone()
@@ -137,11 +152,17 @@ def load_vocab(conn: psycopg.Connection) -> None:
         for p in loaded:
             for t in p.templates:
                 conn.execute("INSERT INTO template_active (code, version) VALUES (%s, %s)", (t.code, t.version))
+        # свои виды: последняя версия шаблона каждого кода (версии mine — 1.0.N, сравниваются по числам)
+        for code in sorted(mine):
+            versions = [v for (v,) in conn.execute("SELECT version FROM template WHERE code = %s", (code,))]
+            if versions:
+                latest = max(versions, key=lambda v: tuple(int(x) if x.isdigit() else -1 for x in v.split(".")))
+                conn.execute("INSERT INTO template_active (code, version) VALUES (%s, %s)", (code, latest))
         # осиротевшие понятия: код исчез из пакета или пакет больше не загружается;
         # используемые записями удалить нельзя — внешний ключ, ошибка называет пакет и код
         keep = {(c.scheme, c.code) for p in loaded for c in p.concepts}
         names = {p.name for p in loaded}
-        gone = conn.execute("SELECT scheme, code, origin FROM concept WHERE origin NOT IN ('schema', 'agent') "
+        gone = conn.execute("SELECT scheme, code, origin FROM concept WHERE origin NOT IN ('schema', 'agent', 'mine') "
                             "ORDER BY scheme, code").fetchall()
         for scheme, code, origin in gone:
             if origin in names and (scheme, code) in keep:

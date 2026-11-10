@@ -61,7 +61,7 @@ def _vocab(conn: psycopg.Connection) -> _Vocab:
                   via={data["via_field"]: code for scheme, code, data in rows if scheme == "rel" and data.get("via_field")})
 
 
-def _slot(path: str, target: str) -> dict | None:
+def form_slot(path: str, target: str) -> dict | None:
     """Поле схемы, если путь — поле формы (поле тела верхнего уровня, не составное); иначе None."""
     if path == VALUES:
         return {"multivalued": True, "range": "Value"}
@@ -125,7 +125,7 @@ def _form(ctx: _Vocab, target: str, code: str) -> tuple[list[dict], str, list[st
     ui, body, widgets = _ui(rules, ctx)
     base = packs.UI_BASE[target]
     paths = [p for p in base[:1] if target == "atom"]                   # about — первым
-    paths += [p for p in rules.fields if p not in paths and _slot(p, target) is not None]
+    paths += [p for p in rules.fields if p not in paths and form_slot(p, target) is not None]
     props = [p for p in ui if packs.UI_PROPERTY.fullmatch(p)]
     if any(p.startswith(VALUES) for p in props) and VALUES in paths:
         at = paths.index(VALUES)                                       # величины ui заменяют общее «значение»
@@ -159,7 +159,7 @@ def _form(ctx: _Vocab, target: str, code: str) -> tuple[list[dict], str, list[st
                 label = LABELS["period"]
             else:
                 key = "value" if path == VALUES else path
-                ftype, extra = infer(path, _slot(path, target) or {}, rule, ctx)
+                ftype, extra = infer(path, form_slot(path, target) or {}, rule, ctx)
                 required = bool((rule or {}).get("required"))
                 label = LABELS.get(path)
             hint = None

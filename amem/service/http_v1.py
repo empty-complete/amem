@@ -225,6 +225,18 @@ def get_templates(request: Request) -> JSONResponse:
         return JSONResponse(api.templates(conn, target=_q(request, "target")))
 
 
+async def put_my_template(request: Request) -> JSONResponse:
+    body = await _body(request)
+    return JSONResponse(await _call(request, lambda conn: api.template_put(
+        conn, request.path_params["code"], body, agent=request.state.agent)))
+
+
+def delete_my_template(request: Request) -> Response:
+    with connection(request) as conn:
+        api.template_delete(conn, request.path_params["code"], agent=request.state.agent)
+    return Response(status_code=204)
+
+
 def get_base(request: Request) -> JSONResponse:
     with connection(request) as conn:
         return JSONResponse(api.base(conn))
@@ -597,6 +609,8 @@ ROUTES = [
     Route(f"{API}/submit", submit, methods=["POST"]),
     Route(f"{API}/vocab/{{scheme}}", get_vocab, methods=["GET"]),
     Route(f"{API}/templates", get_templates, methods=["GET"]),
+    Route(f"{API}/packs/mine/templates/{{code}}", put_my_template, methods=["PUT"]),
+    Route(f"{API}/packs/mine/templates/{{code}}", delete_my_template, methods=["DELETE"]),
     Route(f"{API}/base", get_base, methods=["GET"]),
     Route(f"{API}/backups", get_backups, methods=["GET"]),
     Route(f"{API}/bundles/export", export_bundle, methods=["POST"]),
