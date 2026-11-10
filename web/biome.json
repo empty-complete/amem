@@ -8,6 +8,7 @@
       "!python",
       "!dist-mock",
       "!dist-setup",
+      "!setup-shots",
       "!test-results",
       "!playwright-report",
       "!index.html",

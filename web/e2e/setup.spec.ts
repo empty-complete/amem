@@ -2,8 +2,8 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 
 /** Мастер первого запуска (setup.html, заглушка моста src/setup/mock.ts). Снимки каждого шага в обеих темах и
- * на обоих языках прикладываются к отчёту (playwright-report, артефакт CI) — их смотрят глазами; проверки — по
- * содержимому и axe. */
+ * на обоих языках — в web/setup-shots (артефакт CI setup-shots), их смотрят глазами; проверки — по содержимому и
+ * axe. */
 
 const STEPS = ["lang", "data", "docs", "features", "agents", "install", "done"] as const;
 
@@ -29,10 +29,10 @@ for (const lang of ["ru", "en"] as const) {
         if (step === "install") await expect(page.locator("progress")).toBeVisible();
         if (step === "install") await expect(page.locator(".car__img")).toBeVisible();
         await axe(page);
-        await info.attach(`${lang}-${theme}-${step}`, {
-          body: await page.screenshot(),
-          contentType: "image/png",
+        const shot = await page.screenshot({
+          path: `setup-shots/${lang}-${theme}-${STEPS.indexOf(step) + 1}-${step}.png`,
         });
+        await info.attach(`${lang}-${theme}-${step}`, { body: shot, contentType: "image/png" });
       }
     });
   }

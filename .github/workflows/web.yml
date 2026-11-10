@@ -40,6 +40,13 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: setup-shots
+          path: web/setup-shots
+          retention-days: 14
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-report

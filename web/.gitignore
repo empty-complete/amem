@@ -3,6 +3,7 @@ python/amemo_web/dist/*
 !python/amemo_web/dist/.gitkeep
 dist-mock/
 dist-setup/
+setup-shots/
 test-results/
 playwright-report/
 playwright-report-service/
