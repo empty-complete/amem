@@ -7,7 +7,7 @@ Follow these steps in order. They work from a bare machine: no Python, no Docker
 When you are done, the machine has:
 
 - PostgreSQL 16 or newer with the pgvector extension, and a database for amemo;
-- the `amemo` command (Python package `amemo` from PyPI, with the web UI and local semantic search);
+- the `amemo` command (Python package `amemo` from PyPI, with the web UI);
 - amemo connected to the user's coding agents (Claude Code, Codex): MCP server, hooks and skills;
 - `amemo doctor` with no `FAIL` lines.
 
@@ -143,14 +143,15 @@ Use uv: it brings its own Python, so the system Python doesn't matter.
 
 ```bash
 command -v uv || curl -LsSf https://astral.sh/uv/install.sh | sh     # installs into ~/.local/bin, no sudo
-uv tool install --python 3.12 'amemo[web,embed]'
+uv tool install --python 3.12 'amemo[web]'
 amemo --version
 ```
 
-- `[web]` adds the web UI at `/ui`. `[embed]` adds local multilingual semantic search; its model (about 250 MB)
-  downloads on first use. Without `[embed]`, exact and full-text search still work.
+- `[web]` adds the web UI at `/ui`. Exact and full-text search work out of the box. Local semantic search
+  (`[embed]`, a multilingual model of about 250 MB) has no command to turn it on yet, so `amemo doctor` reports it
+  as unavailable; leave it out unless the user asks.
 - If `amemo` is not found, run `uv tool update-shell` and open a new shell, or call `~/.local/bin/amemo`.
-- With pipx instead of uv: `pipx install 'amemo[web,embed]'` (needs Python 3.11 or newer).
+- With pipx instead of uv: `pipx install 'amemo[web]'` (needs Python 3.11 or newer).
 
 ## 5. Create the base
 
@@ -207,8 +208,8 @@ memory hooks.
 amemo doctor
 ```
 
-Every line must be `ok` or a warning you can explain; fix each `FAIL` line using its hint and run it again. Then
-try the service:
+Every line must be `ok` or a warning you can explain; fix each `FAIL` line using its hint and run it again. A
+warning that semantic search is unavailable is expected (see step 4). Then try the service:
 
 ```bash
 amemo serve &                                   # http://127.0.0.1:8767; --port changes the port

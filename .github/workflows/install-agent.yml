@@ -116,7 +116,7 @@ jobs:
         run: |
           uv build --wheel --out-dir "$RUNNER_TEMP/dist"
           wheel=$(ls "$RUNNER_TEMP"/dist/amemo-*.whl)
-          uv tool install --python 3.12 "amemo[web,embed] @ file://$wheel"
+          uv tool install --python 3.12 "amemo[web] @ file://$wheel"
           amemo --version
 
       - name: amemo init, documents folder
