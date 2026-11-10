@@ -23,6 +23,7 @@
 
 <p align="center">
   <a href="#install-with-your-agent"><b>Install</b></a> ·
+  <a href="#see-it-in-action"><b>Demo</b></a> ·
   <a href="#quickstart"><b>Quickstart</b></a> ·
   <a href="#features"><b>Features</b></a> ·
   <a href="#how-it-works"><b>How it works</b></a> ·
@@ -142,6 +143,34 @@ file it came from, the full history of its changes, and the decision of a person
   by a real trial restore into a temporary database.
 - **Boring storage.** Data lives in plain PostgreSQL 16+ with pgvector. The schema is written in
   LinkML, with Pydantic models and JSON Schema generated from it.
+
+## See it in action
+
+The real service on the sample base, recorded in CI.
+
+**Write in one line.** Press <kbd>N</kbd>, type, press <kbd>Enter</kbd>. amemo guesses the kind from the text
+(a value with a unit becomes a parameter), and every action can be undone for 6 seconds.
+
+<img alt="Quick write: N opens a one-line field, the text ends with a value and a unit, the kind turns into a parameter, Enter saves it with an Undo toast" src="docs/assets/readme/en/demo-write.gif" width="100%">
+
+**From a question to the source.** Search, open the record, and the quote is highlighted on the real PDF page.
+In the dark theme the page follows the palette.
+
+<img alt="Search for humidity accuracy, open the TH-20 record, the quote is highlighted on the PDF page, then the theme switches to dark" src="docs/assets/readme/en/demo-source.gif" width="100%">
+
+**Review from the keyboard.** <kbd>J</kbd> and <kbd>K</kbd> move through the queue, <kbd>Y</kbd> confirms,
+<kbd>N</kbd> rejects, <kbd>S</kbd> skips.
+
+<img alt="The review queue: J moves down twice, Y confirms the claim, a toast offers Undo and the next item opens" src="docs/assets/readme/en/demo-review.gif" width="100%">
+
+**Fill the gaps.** The card shows what the profile requires and what is missing. Type the value right there; once
+the undo window passes, completeness goes up.
+
+<img alt="The WS-100 station card: Needed on power consumption, 2.4 W typed in, the value lands and completeness grows" src="docs/assets/readme/en/demo-card.gif" width="100%">
+
+**The sky.** The whole base as a constellation. Arrow keys pick a star and <kbd>Enter</kbd> opens its record.
+
+<img alt="The sky lays itself out, arrow keys select stars, and Enter opens a record with its quoted source" src="docs/assets/readme/en/demo-sky.gif" width="100%">
 
 ## Install with your agent
 
