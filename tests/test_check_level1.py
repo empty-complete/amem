@@ -170,8 +170,9 @@ ONE = {
                                ("template", "violation", "@r: content.values")),
     "idea_without_body": ([atom("@i", kind="idea")], [], ("template", "warning", "@i: body")),
     "idea_with_blank_body": ([atom("@i", kind="idea", body={"ru": "  "})], [], ("template", "warning", "@i: body")),
-    "summary_without_ru": ([atom("@a", summary_plain={"ru": "", "en": "Bracket on one anchor."})], [],
-                           ("template", "violation", "@a: summary_plain")),
+    # пусто, только если текста нет ни в одном слоте (английского пояснения хватает — test_english_text_is_enough)
+    "summary_blank_in_every_slot": ([atom("@a", summary_plain={"ru": "", "en": "  "})], [],
+                                    ("template", "violation", "@a: summary_plain")),
     "no_sources": ([atom("@a", sources=None)], [], ("template", "violation", "@a: sources")),
     "second_source_without_place": ([atom("@a", sources=[source_md(MD), _no_place(source_md(MD))])], [],
                                     ("template", "warning", "@a: sources[1].selectors")),
@@ -232,6 +233,13 @@ def test_one_issue(kb, case):
     items, links, expected = ONE[case]
     _, issues, _ = run(kb, *items, links=links)
     assert issues == [expected]
+
+
+def test_english_text_is_enough(kb):
+    """Подпись и пояснение только по-английски — без замечаний: у LangString нужен хотя бы один слот."""
+    english = atom("@a", label={"en": "Bracket is fixed with an anchor"},
+                   summary_plain={"ru": "", "en": "Bracket on one anchor."})
+    assert run(kb, english)[1] == []
 
 
 def test_found_batch_name_gives_no_issue(kb):
