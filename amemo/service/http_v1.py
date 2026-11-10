@@ -684,13 +684,13 @@ def get_updates(request: Request) -> JSONResponse:
 async def put_updates(request: Request) -> JSONResponse:
     _person_writer(request, "автообновление включает и выключает")
     body = await _body(request)
-    if not isinstance(body.get("auto"), bool):
-        raise problems.Problem(400, "bad_request", "тело: нужно поле auto — true или false")
+    if not isinstance(body.get("auto"), bool) or set(body) != {"auto"}:
+        raise problems.Problem(400, "bad_request", "тело: нужно только поле auto — true или false")
     return JSONResponse(await run_in_threadpool(request.app.state.updates.set_auto, body["auto"]))
 
 
 def check_updates(request: Request) -> JSONResponse:
-    return JSONResponse(request.app.state.updates.check())
+    return JSONResponse(request.app.state.updates.check(manual=True))
 
 
 def install_update(request: Request) -> JSONResponse:

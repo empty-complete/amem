@@ -604,7 +604,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, required: [auto], properties: { auto: { type: boolean } } }
+            schema: { type: object, required: [auto], additionalProperties: false, properties: { auto: { type: boolean } } }
             example: { auto: false }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateStatus" } } } }
@@ -616,7 +616,7 @@ paths:
     post:
       tags: [updates]
       operationId: checkUpdates
-      summary: "Проверить релизы сейчас (без тела); может любой с правом чтения. Сбой сети — не ошибка: итог в message"
+      summary: "Проверить релизы сейчас (без тела); может любой с правом чтения. Сбой сети — не ошибка: итог в message; чаще раза в минуту — статус из кэша"
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateStatus" } } } }
         default: { $ref: "#/components/responses/Problem" }
@@ -1311,7 +1311,7 @@ components:
           required: [version, url]
           properties:
             version: { type: string }
-            url: { type: string, description: "Страница релиза на GitHub" }
+            url: { type: [string, "null"], description: "Страница релиза на GitHub (только https://github.com/empty-complete/amemo/…); null — релиз дал другой адрес" }
         channel: { type: string, enum: [stable, pre], description: "pre — стоит предварительная версия (a, b, rc): видны и предварительные релизы" }
         install: { type: string, enum: [pipx, pip, uv, docker, source], description: "Вид установки; docker и source сами не обновляются" }
         auto: { type: boolean, description: "Автообновление включено" }

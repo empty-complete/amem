@@ -14,20 +14,29 @@
 обновиться. Временное окружение pipx run не обновляется.
 
 Установка (Updater.install) — под файловым замком AMEMO_STATE/updates.install.lock (служба и amemo update из CLI
-не ставят одновременно):
-  1. временный venv AMEMO_STATE/updates/<X>, в нём pip install "amemo[…]==X";
-  2. там же python -I -m amemo.service --check (self_check): импорт всего пакета, сборка приложения и /ui, миграции
-     новой версии — в транзакции с откатом на рабочей базе под замком миграций (db.rehearse); в базу — ничего.
-     Не прошла — failed, версия больше не пробуется; рабочая установка не тронута;
-  3. у новой версии есть новые миграции — сначала бэкап (backup.create без ротации); бэкап невозможен — версия
+не ставят одновременно). Ставится ровно тот артефакт, что проверен: sha256 колёс amemo и amemo-web берутся из JSON
+PyPI, и оба колеса ставятся с --require-hashes --no-deps (pip сам сверяет хэш скачанного файла), затем тем же
+установщиком — их зависимости (--only-binary для amemo и amemo-web: сборки из исходников нет). Шаги:
+  1. временный venv AMEMO_STATE/updates/<X>/venv (папка updates — 0700, символическая ссылка — отказ) с теми же
+     extras, что стоят сейчас;
+  2. дождаться простоя службы (тот же признак, что у перезапуска) и там же python -I -m amemo.service --check
+     (self_check): импорт всего пакета, сборка приложения и /ui, миграции новой версии — в транзакции с откатом на
+     рабочей базе под замком миграций (db.rehearse; замок занят — «отложено»). Не прошла — failed, версия больше
+     не пробуется; не смогла прогнать миграции из-за правил одной транзакции — available и «проверка не смогла
+     прогнать миграции»; рабочая установка не тронута;
+  3. у новой версии есть новые миграции, а бэкап невозможен (нет клиента PostgreSQL 18, папки, базы) — версия
      не ставится: available и «нужен бэкап: …»;
-  4. установка на место — pipx, uv или pip той же среды, точная версия ==X, без --index-url (зеркало и настройки pip
-     пользователя работают); упала — запасной откат на прежнюю ==;
+  4. установка на место тем же установщиком, что ставил amemo: pip той же среды, pipx runpip (venv pipx и его
+     интерпретатор остаются на месте) или uv pip install --python <интерпретатор окружения uv>; точная версия ==X,
+     без --index-url (зеркало и настройки пользователя работают); упала — запасной откат на прежнюю == тем же путём;
   5. сверка importlib.metadata.version у amemo и amemo-web в новом процессе; не сошлось — failed (и откат).
 Временный venv удаляется в любом исходе. Затем ready: служба перезапускается сама в простое (watch: нет запросов HTTP
-IDLE секунд, ни одного занятого соединения пула, ничего не ставится) — os.execv того же процесса с теми же
-аргументами; при старте db.prepare применит миграции. Установку из CLI служба тоже замечает: версия на диске
-сменилась — ready и перезапуск в простое.
+IDLE секунд и ни одного занятого соединения пула; через READY_CEILING в ready — как только нет запросов в работе
+и пул свободен). Прямо перед перезапуском, когда простой уже наступил, — бэкап базы, если у версии новые миграции
+(или неизвестно, есть ли они); не удался — перезапуска нет, failed и команда. Затем os.execv того же процесса с теми
+же аргументами; при старте db.prepare применит миграции. Установку из CLI служба тоже замечает: версия на диске
+сменилась — ready и перезапуск в простое. Код всего пакета служба импортирует при старте (preload): до перезапуска
+она работает на коде из памяти, а /ui отдаёт из копии прежней сборки.
 
 Состояние — AMEMO_STATE/updates.json (замок updates.json.lock, запись — временный файл и переименование): переключатель
 auto из веба, ETag и список релизов, итог проверки, последняя доступная версия, не вставшие версии, журнал (что,
@@ -75,6 +84,12 @@ CHECK_TIMEOUT = 600            # с на --check новой версии
 JOURNAL_KEPT = 200             # записей журнала в updates.json
 OUTPUT_KEPT = 2000             # знаков вывода упавшей команды в сообщении и журнале
 CHECK_TEMPORARY = 3            # код выхода --check: проверка не состоялась (база недоступна или занята) — позже
+CHECK_LIMITED = 4              # код выхода --check: миграции не прогнать в одной транзакции — не отказ версии
+MANUAL_EVERY = 60.0            # с: ручная проверка чаще — ответ из кэша
+IDLE_WAIT = 1800.0             # с: сколько ждать простоя перед --check, дальше — «отложено»
+READY_CEILING = 24 * 3600.0    # с в ready, после которых перезапуск — без IDLE секунд тишины
+RELEASE_PREFIX = f"https://github.com/{REPO}/"     # html_url релиза — только такой, иначе null
+ONLY_BINARY = ("--only-binary=amemo", "--only-binary=amemo-web")
 STATES = ("idle", "checking", "available", "installing", "ready", "restarting", "failed")
 KINDS = ("pipx", "pip", "uv", "docker", "source")
 INSTALLERS = frozenset({"pipx", "pip", "uv"})
@@ -114,7 +129,7 @@ def channel(current: str) -> str:
 @dataclass(frozen=True)
 class Release:
     version: str
-    url: str
+    url: str | None
     prerelease: bool
 
     def view(self) -> dict:
@@ -134,8 +149,8 @@ def parse_releases(data) -> list[Release]:
             version = Version(tag[1:] if tag[:1] in ("v", "V") else tag)
         except InvalidVersion:
             continue
-        url = item.get("html_url") if isinstance(item.get("html_url"), str) else \
-            f"https://github.com/{REPO}/releases/tag/{tag}"
+        url = item.get("html_url")
+        url = url if isinstance(url, str) and url.startswith(RELEASE_PREFIX) else None
         out.append(Release(str(version), url, bool(item.get("prerelease")) or version.is_prerelease))
     return out
 
@@ -174,15 +189,32 @@ def _json(body: bytes, where: str):
         raise NetworkError(f"{where}: ответ — не JSON") from None
 
 
-def has_wheel(get: Callable, name: str, version: str) -> bool:
-    """Есть ли на PyPI колесо name==version (не отозванное)."""
+def wheel_hashes(get: Callable, name: str, version: str) -> list[str]:
+    """sha256 не отозванных колёс name==version на PyPI (пусто — колёс нет)."""
     status, _, body = get(PYPI.format(name=name, version=version))
     if status == 404:
-        return False
+        return []
     if status != 200:
         raise NetworkError(f"PyPI {name} {version}: ответ {status}")
     files = _json(body, "PyPI").get("urls") or []
-    return any(isinstance(f, dict) and f.get("packagetype") == "bdist_wheel" and not f.get("yanked") for f in files)
+    found = []
+    for f in files:
+        digest = (f.get("digests") or {}).get("sha256") if isinstance(f, dict) else None
+        if f.get("packagetype") == "bdist_wheel" and not f.get("yanked") and isinstance(digest, str) \
+                and len(digest) == 64 and all(c in "0123456789abcdef" for c in digest):
+            found.append(digest)
+    return found
+
+
+def has_wheel(get: Callable, name: str, version: str) -> bool:
+    """Есть ли на PyPI колесо name==version (не отозванное, с sha256)."""
+    return bool(wheel_hashes(get, name, version))
+
+
+def requirements(version: str, hashes: Mapping[str, Sequence[str]]) -> str:
+    """Файл требований с --hash: только сами колёса amemo и amemo-web (ставятся с --no-deps --require-hashes)."""
+    return "".join(f"{name}=={version} " + " ".join(f"--hash=sha256:{h}" for h in found) + "\n"
+                   for name, found in hashes.items())
 
 
 # --- вид установки ---
@@ -193,6 +225,7 @@ class Install:
     extras: tuple[str, ...] = ()    # extras amemo, которые стоят сейчас (web, embed): ставятся и в новую версию
     reason: str | None = None       # почему этот вид не ставит сам (None — ставит)
     tool: str | None = None         # pipx или uv: путь к команде
+    venv: str | None = None         # pipx: имя venv (pipx runpip <имя>)
 
     @property
     def can_install(self) -> bool:
@@ -201,13 +234,25 @@ class Install:
     def spec(self, version: str) -> str:
         return f"{PACKAGE}[{','.join(self.extras)}]=={version}" if self.extras else f"{PACKAGE}=={version}"
 
-    def command(self, version: str, python: str = sys.executable) -> list[str]:
-        """Команда установки на место — без --index-url и без shell."""
+    def installer(self, python: str = sys.executable) -> list[str]:
+        """Начало команды установки в это окружение — без --index-url и без shell. pipx и uv ставят в своё окружение
+        тем же pip или uv pip, не пересоздавая его и не закрепляя ==X в своих метаданных."""
         if self.kind == "pipx":
-            return [self.tool or "pipx", "install", "--force", self.spec(version)]
+            return [self.tool or "pipx", "runpip", self.venv or PACKAGE, "install", "--disable-pip-version-check"]
         if self.kind == "uv":
-            return [self.tool or "uv", "tool", "install", "--force", self.spec(version)]
-        return [python, "-m", "pip", "install", "--disable-pip-version-check", self.spec(version)]
+            return [self.tool or "uv", "pip", "install", "--python", python]
+        return [python, "-m", "pip", "install", "--disable-pip-version-check"]
+
+    def steps(self, version: str, requirements_file: str, python: str = sys.executable,
+              base: Sequence[str] | None = None) -> list[list[str]]:
+        """Две команды установки version: колёса amemo и amemo-web по хэшам, затем их зависимости."""
+        base = list(self.installer(python) if base is None else base)
+        return [[*base, "--no-deps", "--require-hashes", *ONLY_BINARY, "-r", requirements_file],
+                [*base, *ONLY_BINARY, self.spec(version)]]
+
+    def command(self, version: str, python: str = sys.executable) -> list[str]:
+        """Команда для человека и журнала."""
+        return [*self.installer(python), self.spec(version)]
 
     def advice(self, version: str | None) -> str:
         """Как обновиться человеку — для docker, source и случаев, когда ставить самой нельзя."""
@@ -264,7 +309,8 @@ def detect(env: Mapping[str, str] | None = None, *, prefix: str | None = None, b
             return Install("pipx", extras, reason="временное окружение pipx run — свежую версию оно возьмёт само "
                                                   "при следующем запуске")
         tool = which("pipx")
-        return Install("pipx", extras, reason=None if tool else "нет команды pipx в PATH", tool=tool)
+        return Install("pipx", extras, reason=None if tool else "нет команды pipx в PATH", tool=tool,
+                       venv=prefix.name)
     if (prefix / "uv-receipt.toml").exists():
         tool = which("uv")
         return Install("uv", extras, reason=None if tool else "нет команды uv в PATH", tool=tool)
@@ -328,12 +374,21 @@ def self_check(settings) -> dict:
 
 
 def run_check(settings, out=None, err=None) -> int:
-    """--check: JSON self_check в stdout и код 0; база недоступна или занята — CHECK_TEMPORARY; прочее — 1."""
+    """--check: JSON self_check в stdout и код 0; база недоступна, замок миграций занят, таймаут — CHECK_TEMPORARY;
+    миграции не прогнать в одной транзакции — CHECK_LIMITED; прочее — 1 (версия не годится)."""
     import psycopg
+
+    from . import db
 
     out, err = out or sys.stdout, err or sys.stderr
     try:
         result = self_check(settings)
+    except db.RehearsalBusy as e:
+        print(f"amemo --check: отложено: {e}", file=err)
+        return CHECK_TEMPORARY
+    except db.RehearsalLimited as e:
+        print(f"amemo --check: {e}", file=err)
+        return CHECK_LIMITED
     except psycopg.OperationalError as e:
         print(f"amemo --check: база недоступна или занята: {type(e).__name__}: {e}", file=err)
         return CHECK_TEMPORARY
@@ -398,7 +453,7 @@ class Updater:
                  clock: Callable[[], float] = time.monotonic, now: Callable[[], datetime] = _utcnow,
                  execv: Callable | None = None, python: str = sys.executable, argv: Sequence[str] | None = None,
                  versions: Callable[[], dict] | None = None, disk: Callable[[], str | None] | None = None,
-                 windows: bool = portable.WINDOWS) -> None:
+                 windows: bool = portable.WINDOWS, sleep: Callable[[float], None] = time.sleep) -> None:
         self.settings = settings
         self.root = Path(settings.state)
         self.kind = install if install is not None else detect()
@@ -415,7 +470,14 @@ class Updater:
         self.disk = disk or (lambda: disk_version())
         self.windows = windows
         self.baseline = self.disk()            # версия на диске при старте: сменилась — поставил кто-то другой
+        self.sleep = sleep
         self.before_restart: Callable[[], None] = lambda: None
+        self.before_install: Callable[[], None] = lambda: None    # служба: копия /ui прежней сборки
+        # служба задаёт: idle — простой (IDLE секунд без запросов и пул свободен), free — нет запросов в работе
+        # и пул свободен (для перезапуска после READY_CEILING); у CLI их нет — он не служба
+        self.idle: Callable[[], bool] | None = None
+        self.free: Callable[[], bool] | None = None
+        self._ready_since: float | None = None
         self._lock = threading.Lock()          # проверки и смены состояния одного процесса — по очереди
         self._checking = False
         self._installing: str | None = None   # версия, которую ставит этот процесс
@@ -511,7 +573,7 @@ class Updater:
             state = "checking"
         if message is None:
             message = self._describe(state, latest, data)
-        return {"current": self.current, "latest": {"version": latest["version"], "url": latest["url"]}
+        return {"current": self.current, "latest": {"version": latest["version"], "url": latest.get("url")}
                 if latest else None, "channel": channel(self.current), "install": self.kind.kind,
                 "auto": self.auto(data), "state": state, "checked_at": data.get("checked_at"), "message": message}
 
@@ -558,8 +620,20 @@ class Updater:
                 return release
         return None
 
-    def check(self) -> dict:
-        """Проверить релизы сейчас. Ошибка сети или API — тихо: итог в check_error, статус прежний."""
+    def _recent(self) -> bool:
+        """Последняя проверка была меньше MANUAL_EVERY назад (часы, ушедшие назад, — не «недавно»)."""
+        checked = self.read().get("checked_at")
+        try:
+            age = (self.now() - datetime.fromisoformat(str(checked).replace("Z", "+00:00"))).total_seconds()
+        except (TypeError, ValueError):
+            return False
+        return 0 <= age < MANUAL_EVERY
+
+    def check(self, *, manual: bool = False) -> dict:
+        """Проверить релизы сейчас. Ошибка сети или API — тихо: итог в check_error, статус прежний. Ручная проверка
+        (кнопка, amemo update) чаще раза в MANUAL_EVERY отвечает статусом из кэша, не трогая GitHub."""
+        if manual and self._recent():
+            return self.status()
         with self._lock:
             self._checking = True
             try:
@@ -628,6 +702,12 @@ class Updater:
                                                     f": {self.kind.advice(version)}")
         if latest is None:
             raise UpdateError("no_update", "обновлений нет: ставить нечего (проверить заново — amemo update check)")
+        if data.get("state") in ("ready", "restarting"):
+            installed = (data.get("installed") or {}).get("version")
+            raise UpdateError("no_update", f"{installed or 'новая версия'} уже установлена — служба перезапустится "
+                                           f"в простое")
+        if latest["version"] in (data.get("failed") or []):
+            raise UpdateError("no_update", f"версия {latest['version']} уже не встала — её не ставим; ждём следующую")
         if self._install_busy():
             raise UpdateError("update_busy", "обновление уже ставится")
         need = data.get("backup_needed") or {}
@@ -687,28 +767,84 @@ class Updater:
                 data["failed"] = sorted({*(data.get("failed") or []), version}, key=Version)
             self._journal(data, event, version, detail)
 
+    def _folder(self, version: str) -> Path:
+        """Свежая папка AMEMO_STATE/updates/<X> (0700): символическая ссылка вместо updates или <X> — отказ."""
+        top = self.root / VENVS
+        if top.is_symlink():
+            raise UpdateError("update_unsafe", f"{top} — символическая ссылка: временное окружение туда не ставим")
+        top.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with contextlib.suppress(OSError):
+            top.chmod(0o700)
+        folder = top / version
+        if folder.is_symlink():
+            raise UpdateError("update_unsafe", f"{folder} — символическая ссылка: временное окружение туда не ставим")
+        shutil.rmtree(folder, ignore_errors=True)
+        folder.mkdir(mode=0o700)
+        return folder
+
+    def _hashes(self, version: str) -> dict[str, list[str]]:
+        names = [PACKAGE, *([WEB] if "web" in self.kind.extras else [])]
+        found = {name: wheel_hashes(self.get, name, version) for name in names}
+        missing = [name for name, hashes in found.items() if not hashes]
+        if missing:
+            raise NetworkError(f"на PyPI нет колеса {', '.join(missing)} {version}")
+        return found
+
     def _venv_python(self, venv: Path) -> str:
         return str(venv / ("Scripts" if self.windows else "bin") / ("python.exe" if self.windows else "python"))
 
+    def _wait_idle(self) -> bool:
+        """Служба: ждать простоя (не дольше IDLE_WAIT) — пробный прогон миграций берёт замки таблиц. CLI — сразу."""
+        if self.idle is None:
+            return True
+        waited = 0.0
+        while not self.idle():
+            if waited >= IDLE_WAIT:
+                return False
+            self.sleep(TICK)
+            waited += TICK
+        return True
+
+    def _run_all(self, commands: Sequence[Sequence[str]]) -> Step:
+        step = Step(0, "")
+        for argv in commands:
+            step = self.run(list(argv))
+            if step.returncode != 0:
+                return step
+        return step
+
     def _install(self, version: str) -> None:
         kind = self.kind
-        self._set(None, None, "install start", version, detail=" ".join(kind.command(version, self.python)))
-        venv = self.root / VENVS / version
-        shutil.rmtree(venv, ignore_errors=True)
-        venv.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            folder = self._folder(version)
+        except UpdateError as e:
+            return self._set("available", f"обновление до {version} отложено: {e}", "unsafe folder", version)
+        try:
+            hashes = self._hashes(version)
+        except NetworkError as e:
+            return self._set("available", f"обновление до {version} отложено: {e}", "pypi unavailable", version)
+        wanted = folder / "requirements.txt"
+        wanted.write_text(requirements(version, hashes), encoding="utf-8")
+        self._set(None, None, "install start", version, detail=" ".join(kind.command(version, self.python))
+                  + " (sha256: " + ", ".join(f"{n} {' '.join(h)}" for n, h in hashes.items()) + ")")
+        venv = folder / "venv"
         python = self._venv_python(venv)
-        trial_spec = f"{PACKAGE}[web]=={version}" if "web" in kind.extras else f"{PACKAGE}=={version}"
-        for argv in ([self.python, "-m", "venv", str(venv)],
-                     [python, "-m", "pip", "install", "--disable-pip-version-check", trial_spec]):
-            step = self.run(argv)
-            if step.returncode != 0:
-                return self._set("failed", f"обновление до {version} не встало: временное окружение не собралось "
-                                 f"({Path(argv[0]).name} {' '.join(argv[1:3])}): {step.output[-300:]}",
-                                 "trial failed", version, detail=step.output)
-        step = self.run([python, "-I", "-m", "amemo.service", "--check"], timeout=CHECK_TIMEOUT, cwd=str(venv))
+        trial = self._run_all([[self.python, "-m", "venv", str(venv)],
+                               *kind.steps(version, str(wanted), base=[python, "-m", "pip", "install",
+                                                                       "--disable-pip-version-check"])])
+        if trial.returncode != 0:
+            return self._set("available", f"обновление до {version} отложено: временное окружение не собралось: "
+                             f"{trial.output[-300:]}", "trial failed", version, detail=trial.output)
+        if not self._wait_idle():
+            return self._set("available", f"проверка {version} отложена: служба не освободилась за "
+                             f"{IDLE_WAIT / 60:g} мин", "check postponed", version)
+        step = self.run([python, "-I", "-m", "amemo.service", "--check"], timeout=CHECK_TIMEOUT, cwd=str(folder))
         if step.returncode == CHECK_TEMPORARY:
             return self._set("available", f"проверка {version} отложена: {step.output[-300:]}", "check postponed",
                              version, detail=step.output)
+        if step.returncode == CHECK_LIMITED:
+            return self._set("available", f"обновление до {version} не поставлено: {step.output[-400:]}",
+                             "check limited", version, detail=step.output)
         report = None
         if step.returncode == 0:
             with contextlib.suppress(ValueError, IndexError):
@@ -719,38 +855,50 @@ class Updater:
         if "web" in kind.extras and not report.get("ui"):
             return self._set("failed", f"обновление до {version} не встало: в новой версии нет сборки веб-интерфейса",
                              "check failed", version)
-        made = None
-        if report.get("migrations"):
-            problem = self.backup_problem()
-            if problem is None:
-                try:
-                    made = self._make_backup()
-                except Exception as e:  # noqa: BLE001 — BackupError, OSError: бэкапа нет — версия не ставится
-                    problem = str(e)
+        migrations = bool(report.get("migrations"))
+        if migrations:
+            problem = self.backup_problem()        # сам бэкап — прямо перед перезапуском (watch)
             if problem is not None:
                 return self._set("available", None, "backup required", version, detail=problem,
                                  backup_needed={"version": version, "reason": problem})
-        manifest = made.get("manifest") if made else None
-        step = self.run(kind.command(version, self.python))
+        with contextlib.suppress(Exception):
+            self.before_install()
+        step = self._run_all(kind.steps(version, str(wanted), self.python))
         if step.returncode != 0:
-            return self._rollback(version, f"установка на место упала: {step.output[-300:]}", step.output, manifest)
+            return self._rollback(version, f"установка на место упала: {step.output[-300:]}", step.output, folder)
         found = self.versions()
         if found.get("amemo") != version or ("web" in kind.extras and found.get("amemo-web") != version):
             return self._rollback(version, f"после установки на диске amemo {found.get('amemo')}, amemo-web "
-                                  f"{found.get('amemo-web')}, а не {version}", json.dumps(found), manifest)
-        restore = f"; если новая версия не запустится — amemo backup restore {manifest}" if manifest else ""
-        return self._set("ready", f"обновление {version} установлено — перезапуск, когда служба освободится{restore}",
-                         "installed", version, detail=manifest and f"бэкап {manifest}",
-                         installed={"version": version, "previous": self.current, "at": _iso(self.now()),
-                                    "backup": manifest}, backup_needed=None)
+                                  f"{found.get('amemo-web')}, а не {version}", json.dumps(found), folder)
+        manifest, note = None, ""
+        if migrations and self.idle is None:      # CLI: перезапуска здесь нет — бэкап сразу, до запуска службы
+            try:
+                manifest = self._make_backup().get("manifest")
+            except Exception as e:  # noqa: BLE001
+                note = f"; бэкап не удался ({e}) — сделайте amemo backup create до запуска новой версии"
+        if self.windows:
+            message = f"обновление {version} установлено — перезапустите службу"
+        else:
+            message = f"обновление {version} установлено — перезапуск, когда служба освободится"
+        if migrations:
+            message += f"; у версии новые миграции — {'бэкап: ' + manifest if manifest else 'перед перезапуском бэкап'}"
+        self._set("ready", message + note, "installed", version, detail=manifest and f"бэкап {manifest}",
+                  installed={"version": version, "previous": self.current, "at": _iso(self.now()),
+                             "migrations": migrations, "backup": manifest}, backup_needed=None)
+        self._ready_since = self.clock()
 
-    def _rollback(self, version: str, why: str, output: str, manifest: str | None) -> None:
-        back = self.run(self.kind.command(self.current, self.python))
+    def _rollback(self, version: str, why: str, output: str, folder: Path) -> None:
+        try:
+            hashes = self._hashes(self.current)
+            wanted = folder / "rollback.txt"
+            wanted.write_text(requirements(self.current, hashes), encoding="utf-8")
+            back = self._run_all(self.kind.steps(self.current, str(wanted), self.python))
+        except NetworkError as e:
+            back = Step(1, f"прежней версии нет на PyPI или PyPI не ответил: {e}")
         if back.returncode == 0:
             tail = f"прежняя версия {self.current} поставлена заново"
         else:
-            tail = (f"вернуть {self.current} не удалось — поставьте её сами: {self.kind.advice(self.current)}"
-                    + (f"; бэкап базы — {manifest}" if manifest else ""))
+            tail = f"вернуть {self.current} не удалось — поставьте её сами: {self.kind.advice(self.current)}"
         return self._set("failed", f"обновление до {version} не встало: {why}; {tail}", "install failed", version,
                          detail=f"{output}\nоткат: {back.returncode} {back.output}")
 
@@ -768,7 +916,13 @@ class Updater:
     # --- служба: расписание, простой, перезапуск ---
 
     def startup(self) -> None:
-        """Служба стартовала: завершить переход после перезапуска (или признать, что он не удался)."""
+        """Служба стартовала: завершить переход после перезапуска (или признать, что он не удался); убрать копии
+        /ui прежних запусков."""
+        top = self.root / VENVS
+        if top.is_dir() and not top.is_symlink():
+            for old in top.glob("ui-*"):
+                if not old.is_symlink():
+                    shutil.rmtree(old, ignore_errors=True)
         with self._lock, self._changing() as data:
             installed = data.get("installed") or {}
             state = data.get("state")
@@ -800,9 +954,16 @@ class Updater:
             status = self.status()
         return status
 
-    def watch(self, idle: Callable[[], bool]) -> bool:
+    def _restart_failed(self, data: dict, version: str | None, message: str, detail: str | None = None) -> None:
+        data["state"], data["message"], data["installed"] = "failed", message, None
+        self._journal(data, "restart failed", version, detail)
+        self.baseline = self.disk()               # та же версия на диске — больше не «новая»
+        self._ready_since = None
+
+    def watch(self, idle: Callable[[], bool], free: Callable[[], bool] | None = None) -> bool:
         """Взгляд службы раз в TICK: стоит новая версия (наша установка или версия на диске сменилась) и служба
-        свободна — перезапуск (os.execv). True — перезапуск начат (в тестах execv подставной)."""
+        свободна (idle; через READY_CEILING в ready хватает free — нет запросов в работе и пул свободен) — бэкап,
+        если у версии новые миграции, и перезапуск (os.execv). True — перезапуск начат (в тестах execv подставной)."""
         if not self.kind.can_install or self._installing:
             return False
         data = self.read()
@@ -812,18 +973,40 @@ class Updater:
                 return False
             with self._lock, self._changing() as data:
                 data["state"] = "ready"
-                data["message"] = f"обновление {disk} установлено — перезапуск, когда служба освободится"
+                data["message"] = (f"обновление {disk} установлено — "
+                                   + ("перезапустите службу" if self.windows else "перезапуск, когда служба "
+                                                                                  "освободится"))
+                # поставил кто-то другой: есть ли новые миграции — неизвестно, поэтому бэкап — как при них
                 data["installed"] = {"version": disk, "previous": self.current, "at": _iso(self.now()),
-                                     "backup": None}
+                                     "migrations": None, "backup": None}
                 self._journal(data, "installed elsewhere", disk)
+        if self._ready_since is None:
+            self._ready_since = self.clock()
         if self.windows:
             return False                      # перезапуск на Windows — вручную: os.execv там не заменяет процесс
-        if not idle():
+        patient = self.clock() - self._ready_since >= READY_CEILING
+        if not (idle() or (patient and free is not None and free())):
             return False
+        installed = dict(data.get("installed") or {})
+        version = installed.get("version")
+        manifest = installed.get("backup")
+        if installed.get("migrations") is not False:
+            problem = self.backup_problem()
+            if problem is None:
+                try:
+                    manifest = self._make_backup().get("manifest")
+                except Exception as e:  # noqa: BLE001 — BackupError, OSError
+                    problem = str(e)
+            if problem is not None:
+                with self._lock, self._changing() as data:
+                    self._restart_failed(data, version, f"бэкап перед перезапуском на {version} не удался: {problem}"
+                                         f" — служба не перезапущена; сделайте бэкап (amemo backup create) и "
+                                         f"перезапустите службу сами", problem)
+                return False
         with self._lock, self._changing() as data:
-            version = (data.get("installed") or {}).get("version")
             data["state"], data["message"] = "restarting", f"перезапуск на {version}"
-            self._journal(data, "restart", version)
+            data["installed"] = {**installed, "backup": manifest}
+            self._journal(data, "restart", version, manifest and f"бэкап {manifest}")
         with contextlib.suppress(Exception):
             self.before_restart()
         for handler in logging.getLogger().handlers:
@@ -833,10 +1016,7 @@ class Updater:
             self.execv(self.python, [self.python, *self.argv])
         except OSError as e:
             with self._lock, self._changing() as data:
-                data["state"], data["message"] = "failed", f"перезапуск не удался: {e} — перезапустите службу сами"
-                data["installed"] = None
-                self._journal(data, "restart failed", version, str(e))
-            self.baseline = self.disk()
+                self._restart_failed(data, version, f"перезапуск не удался: {e} — перезапустите службу сами", str(e))
             return False
         return True
 
