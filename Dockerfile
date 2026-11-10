@@ -19,10 +19,11 @@ RUN npm run build
 FROM python:3.12-slim-bookworm AS base
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 # клиент PostgreSQL 18 из репозитория PGDG: в Debian — старее, а pg_dump не снимает базу новее себя
-RUN apt-get update \
+RUN printf 'Acquire::Retries "5";\n' > /etc/apt/apt.conf.d/80-retries \
+ && apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl \
  && install -d /usr/share/postgresql-common/pgdg \
- && curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+ && curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
       https://www.postgresql.org/media/keys/ACCC4CF8.asc \
  && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
       > /etc/apt/sources.list.d/pgdg.list \
