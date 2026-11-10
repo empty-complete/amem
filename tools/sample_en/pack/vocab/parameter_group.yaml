@@ -1,0 +1,6 @@
+# Labels for the card field groups (rule.group) of the station profile; the web UI reads them from here.
+scheme: parameter_group
+concepts:
+  - {code: power, label: {ru: Питание, en: Power}, definition: {ru: "Чем и сколько станция работает без обслуживания.", en: "What powers the station and how long it runs unattended."}}
+  - {code: data, label: {ru: Данные, en: Data}, definition: {ru: "Как часто станция измеряет, передаёт и хранит данные.", en: "How often the station samples, sends and keeps data."}}
+  - {code: installation, label: {ru: Установка, en: Installation}, definition: {ru: "Где и в каких условиях станция стоит.", en: "Where and in what conditions the station stands."}}

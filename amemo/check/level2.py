@@ -49,7 +49,7 @@ ONE_PAGE_OK = (".md", ".txt")              # одностраничное ok б�
 RANGE = re.compile(r"^\s*(\d+)\s*[-–—‒]\s*(\d+)\s*$")
 MAX_RANGE = 50                             # страниц в диапазоне селектора page: больше — это не фрагмент
 RETIRED = ("rejected", "deprecated", "superseded")
-NO_OCR = "нет языковых данных tesseract (rus, eng)"
+NO_OCR = "нет языковых данных tesseract или ocr = none (языки — amemo ocr install rus eng)"
 FILE_KINDS = ("file",)
 
 

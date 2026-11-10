@@ -3,7 +3,8 @@
 #   web     — то же плюс статика веб-интерфейса (amemo[web]: пакет amemo-web из web/python), служба отдаёт её по /ui.
 # Сборка: docker build -t amemo .   или   docker build --target web -t amemo-web .
 # Внутри — клиент PostgreSQL 18 (pg_dump, pg_restore) для amemo backup; семантическая модель — по
-# --build-arg AMEMO_EXTRAS=embed (fastembed, образ заметно больше).
+# --build-arg AMEMO_EXTRAS=embed (fastembed, образ заметно больше). Распознавание сканов PDF — по
+# --build-arg OCR_LANGS="rus eng" (языки tesseract, amemo ocr install при сборке; пусто — без OCR).
 
 FROM node:24-bookworm-slim AS ui
 WORKDIR /src/web
@@ -34,6 +35,14 @@ COPY pyproject.toml README.md LICENSE.txt /src/amemo/
 COPY amemo /src/amemo/amemo
 RUN if [ -n "$AMEMO_EXTRAS" ]; then pip install "/src/amemo[$AMEMO_EXTRAS]"; else pip install /src/amemo; fi \
  && rm -rf /src/amemo
+
+# языковые данные OCR — в образе, не в томе: их задаёт сборка; amemo.toml не правится — настройки в окружении
+ARG OCR_LANGS=""
+ARG OCR_QUALITY=fast
+ENV AMEMO_OCR_DATA=/usr/share/amemo/tessdata \
+    AMEMO_OCR_LANGUAGES="${OCR_LANGS}"
+RUN install -d /usr/share/amemo/tessdata \
+ && if [ -n "$OCR_LANGS" ]; then amemo ocr install --no-config --quality "$OCR_QUALITY" $OCR_LANGS; fi
 
 # данные, состояние и бэкапы — тома (docker-compose.yml); служба не от root
 RUN useradd --system --uid 10001 --user-group --home-dir /var/lib/amemo amemo \

@@ -94,7 +94,7 @@ def _cyclic_pdf(path):
 def test_extract_text_scan_without_ocr(tmp_path, monkeypatch):
     """Страницы-картинки без текстового слоя, а OCR недоступен: текста нет, но это отмечено (ocr_unavailable);
     пустые страницы без картинок — просто нет текста."""
-    monkeypatch.setattr(sources, "ocr_languages", lambda: None)
+    monkeypatch.setattr(sources, "ocr_setup", lambda config=None: None)
     scan = make_scanned_pdf(tmp_path / "скан.pdf", SCAN_PAGES)
     got = extract_text(scan)
     assert got.pages is None and got.ocr_unavailable and got.ocr == frozenset()

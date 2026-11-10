@@ -143,6 +143,50 @@ def test_init_with_dsn_saves_config_0600(run, dsn, tmp_path):
     assert run("folders", "tree", extra={"AMEMO_DSN": None})[0] == 0     # DSN теперь из amemo.toml
 
 
+def test_init_with_ocr_installs_languages(run, pg, tmp_path, monkeypatch):
+    """--ocr rus,eng: языки скачиваются (подменено, без сети) и OCR включается в amemo.toml; без флага и не в
+    терминале — без вопроса; в терминале — вопрос, Enter пропускает; модель языки не ставит."""
+    from amemo.cli.commands import ocr
+    from test_ocr import traineddata
+
+    calls = []
+    monkeypatch.setattr(ocr, "fetch", lambda url, out: (calls.append(url), out.write(traineddata())))
+    code, out, err = run("init")
+    assert code == 0 and "Распознавать" not in err                              # stdin тестов — не терминал
+    code, out, err = run("init", "--ocr", "rus,eng", "--json")
+    assert code == 0, err
+    assert [x["language"] for x in js(out)["ocr"]["installed"]] == ["rus", "eng"] and len(calls) == 2
+    data = tmp_path / "home" / ".local" / "share" / "amemo" / "tessdata"
+    assert (data / "rus.traineddata").is_file() and (data / "eng.traineddata").is_file()
+    s = settings.load({"HOME": str(tmp_path / "home"), "USER": "ann"})
+    assert (s.ocr, s.ocr_languages) == ("tesseract", ("rus", "eng"))
+    code, _, err = run("init", "--ocr", "deu", extra={"CLAUDECODE": "1"})
+    assert code == 2 and "только человек" in err and len(calls) == 2
+
+
+class _Tty(io.StringIO):
+    def isatty(self):
+        return True
+
+
+@pytest.mark.parametrize("answer, installed", [("deu\n", ["deu"]), ("\n", [])])
+def test_init_asks_about_ocr_in_a_terminal(run, pg, tmp_path, monkeypatch, answer, installed):
+    from amemo.cli.commands import ocr
+    from amemo import sources
+    from test_ocr import traineddata
+
+    monkeypatch.setattr(ocr, "fetch", lambda url, out: out.write(traineddata()))
+    monkeypatch.setattr(sources, "system_tessdata", lambda: None)
+    monkeypatch.setattr(sys, "stdin", _Tty(answer))
+    code, out, err = run("init")
+    assert code == 0 and "Распознавать сканы PDF?" in err
+    data = tmp_path / "home" / ".local" / "share" / "amemo" / "tessdata"
+    assert sorted(p.name.removesuffix(".traineddata") for p in data.glob("*.traineddata")) == installed
+    monkeypatch.setattr(sys, "stdin", _Tty("rus\n"))
+    code, _, err = run("init", extra={"CI": "true"})                            # в CI — без вопроса
+    assert code == 0 and "Распознавать" not in err
+
+
 def test_init_refuses_empty_store_of_a_base_with_files(run, kb, store, docs, tmp_path):
     objects.ingest(kb, store, docs, "Заметки/узел.md", agent=PERSON)
     shutil.rmtree(tmp_path / "objects")
@@ -179,7 +223,7 @@ def test_doctor(run, base, tmp_path, monkeypatch):
     assert code == 0 and report["ok"]
     assert {c["name"]: c["status"] for c in report["checks"]} == {
         "настройки": "ok", "база": "ok", "миграции": "ok", "id базы": "ok", "хранилище": "ok",
-        "смысловой поиск": "warn", "документы": "ok", "агенты": "warn"}
+        "смысловой поиск": "warn", "документы": "ok", "OCR": "ok", "агенты": "warn"}
     assert base_id_of(report) == js(run("base", "--json")[1])["base_id"]
     code, out, _ = run("doctor", extra={"AMEMO_DSN": "postgresql://u:p@127.0.0.1:1/none"})
     assert code == 1 and "FAIL  база" in out

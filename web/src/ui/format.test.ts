@@ -9,6 +9,14 @@ test("значения словами", () => {
   expect(unitLabel("hPa", "en")).toBe("hPa");
 });
 
+test("составные единицы UCUM словами", () => {
+  expect(formatValue({ amount: 26, unit: "A.h" })).toBe("26 А·ч");
+  expect(unitLabel("A.h", "en")).toBe("A·h");
+  expect(formatValue({ amount: 90, unit: "d" })).toBe("90 сут");
+  expect(unitLabel("cm2", "en")).toBe("cm²");
+  expect(unitLabel("m2")).toBe("м²");
+});
+
 test("размер и агент", () => {
   expect(formatSize(40666)).toMatch(/^39,7\sКБ$/);
   expect(agentName("model:extractor")).toBe("extractor (модель)");
