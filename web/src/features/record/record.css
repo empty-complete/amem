@@ -58,6 +58,8 @@ h1.title {
   line-height: 1.2;
   margin-block: 0 var(--s-sm);
   text-wrap: balance;
+  /* любое название помещается: перенос по словам, слово длиннее строки рвётся */
+  overflow-wrap: anywhere;
 }
 .pending {
   display: flex;
@@ -126,6 +128,15 @@ h1.title {
   color: var(--foreground);
   font-size: var(--t-label);
   text-decoration: none;
+  max-width: min(100%, 36ch);
+  min-width: 0;
+}
+/* длинное название в пилюле — многоточием, целиком — во всплывающей подсказке (title) */
+.pill__t {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 a.pill:hover {
   background: var(--surface-tertiary);

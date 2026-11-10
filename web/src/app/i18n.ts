@@ -2,6 +2,7 @@ import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import en from "../i18n/en.json";
 import ru from "../i18n/ru.json";
+import { MOD } from "../ui/platform";
 
 export type Locale = "ru" | "en";
 const KEY = "amemo.locale";
@@ -22,7 +23,7 @@ export async function setupI18n(locale: Locale = readLocale()) {
       resources: { ru: { translation: ru }, en: { translation: en } },
       lng: locale,
       fallbackLng: "ru",
-      interpolation: { escapeValue: false },
+      interpolation: { escapeValue: false, defaultVariables: { mod: MOD } },
     });
   }
   document.documentElement.lang = locale;

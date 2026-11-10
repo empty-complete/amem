@@ -59,8 +59,8 @@ function RefField({
   return (
     <span className="refs">
       {value.map((r) => (
-        <span key={r} className={`pill ${f.type === "object" ? "obj" : ""}`}>
-          {labels[r] ?? r}
+        <span key={r} className={`pill ${f.type === "object" ? "obj" : ""}`} title={labels[r] ?? r}>
+          <span className="pill__t">{labels[r] ?? r}</span>
           <button
             type="button"
             aria-label={t("edit.remove", { what: labels[r] ?? r })}

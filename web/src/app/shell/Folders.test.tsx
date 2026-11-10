@@ -1,7 +1,9 @@
-import { act, screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { MoveDialog } from "../../features/write/MoveDialog";
-import { resetQueue, UNDO_MS } from "../../features/write/submitQueue";
+import { resetQueue } from "../../features/write/submitQueue";
+import { UndoToasts } from "../../features/write/UndoToast";
 import { db } from "../../mocks/db";
 import { renderWithApp } from "../../test/render";
 import { Folders } from "./Folders";
@@ -10,6 +12,17 @@ afterEach(() => {
   resetQueue();
   vi.useRealTimers();
 });
+
+// окно переноса закрывается, как на странице записи: под открытым модальным окном тост недоступен
+function MoveHarness({ recordRef }: { recordRef: string }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <>
+      <MoveDialog recordRef={recordRef} current={null} open={open} onClose={() => setOpen(false)} />
+      <UndoToasts />
+    </>
+  );
+}
 
 const nav = () => screen.getByRole("navigation", { name: "Папки" });
 
@@ -39,14 +52,13 @@ test("переименование переносит записи; непуст
   expect(await screen.findByRole("alert")).toHaveTextContent("В папке есть записи");
 });
 
-test("«Переместить в папку» — с окном отмены", async () => {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
-  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+test("«Переместить в папку» уходит сразу; «Отменить» возвращает в прежнюю папку", async () => {
+  const user = userEvent.setup();
   const ref = "atm:0193b7c2-5e1a-7d40-9f2e-00000000001e";
-  await renderWithApp(<MoveDialog recordRef={ref} current={null} open onClose={() => {}} />);
+  await renderWithApp(<MoveHarness recordRef={ref} />);
   await user.click(await screen.findByRole("radio", { name: "Архив" }));
   await user.click(screen.getByRole("button", { name: "Переместить в папку" }));
-  expect(db.records.find((r) => r.ref === ref)?.folder).toBeNull();
-  await act(() => vi.advanceTimersByTimeAsync(UNDO_MS + 50));
-  expect(db.records.find((r) => r.ref === ref)?.folder).toBe("Архив");
+  await waitFor(() => expect(db.records.find((r) => r.ref === ref)?.folder).toBe("Архив"));
+  await user.click(await screen.findByRole("button", { name: "Отменить" }));
+  await waitFor(() => expect(db.records.find((r) => r.ref === ref)?.folder).toBeNull());
 });

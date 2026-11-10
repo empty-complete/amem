@@ -1,4 +1,5 @@
 import { api, data } from "../api/client";
+import { MOD } from "../ui/platform";
 import type { Plugin } from "./plugin";
 
 /** Ядро amemo — первый плагин оболочки: источник данных записей и команды; виджеты добавляются по частям B–F. */
@@ -42,7 +43,7 @@ export const corePlugin: Plugin = {
     {
       id: "amemo.settings",
       title: { ru: "Настройки", en: "Settings" },
-      keys: "⌘,",
+      keys: `${MOD},`,
       run: ({ navigate }) => navigate("/settings"),
     },
   ],

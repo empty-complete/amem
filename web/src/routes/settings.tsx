@@ -9,6 +9,7 @@ import { changeLocale, type Locale } from "../app/i18n";
 import { applyTheme, readTheme, type Theme } from "../app/theme";
 import { kindsStore } from "../features/kinds/store";
 import { UpdatesSection } from "../features/updates/UpdatesSection";
+import { agentName } from "../ui/format";
 import "../features/records/records.css";
 
 export const Route = createFileRoute("/settings")({ component: Settings });
@@ -93,7 +94,7 @@ function Settings() {
           }}
         >
           <dt style={{ color: "var(--muted)" }}>{t("settings.who")}</dt>
-          <dd style={{ margin: 0 }}>{session.data.agent}</dd>
+          <dd style={{ margin: 0 }}>{agentName(session.data.agent, i18n.language)}</dd>
           <dt style={{ color: "var(--muted)" }}>{t("settings.service")}</dt>
           <dd style={{ margin: 0 }}>{session.data.base_name ?? session.data.base}</dd>
           <dt style={{ color: "var(--muted)" }}>{t("settings.version")}</dt>

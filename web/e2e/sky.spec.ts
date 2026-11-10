@@ -128,3 +128,27 @@ test("новая запись загорается звездой", async ({ pag
     .toBe(before + 1);
   await expect(page.getByRole("region", { name: "Выбранная звезда" })).toContainText("Новая заметка");
 });
+
+test("небо светлое в светлой теме и тёмное в тёмной", async ({ page }) => {
+  const lightness = () =>
+    page.evaluate(() => {
+      // цвет фона неба на главной: из токена --sky, приведённого браузером
+      const el = document.createElement("div");
+      el.style.color = "var(--sky)";
+      document.body.append(el);
+      const c = getComputedStyle(el).color;
+      el.remove();
+      const ok = c.match(/oklch\(([\d.]+)(%?)/);
+      if (ok?.[1]) return ok[2] ? Number(ok[1]) / 100 : Number(ok[1]);
+      const rgb = c.match(/rgba?\((\d+)/);
+      return rgb?.[1] ? Number(rgb[1]) / 255 : -1;
+    });
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("./");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  expect(await lightness()).toBeGreaterThan(0.85);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  expect(await lightness()).toBeLessThan(0.25);
+});

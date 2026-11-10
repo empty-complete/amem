@@ -68,8 +68,8 @@ export function Properties({ view, kindLabel }: { view: View; kindLabel: string 
       {!!view.about?.length && (
         <Row icon="link" name={t("record.p_about")}>
           {view.about.map((a) => (
-            <Link key={a.ref} className="pill obj" {...recordPath(a.ref)}>
-              {a.label}
+            <Link key={a.ref} className="pill obj" title={a.label} {...recordPath(a.ref)}>
+              <span className="pill__t">{a.label}</span>
             </Link>
           ))}
         </Row>

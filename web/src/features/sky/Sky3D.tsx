@@ -13,6 +13,22 @@ type N = {
   z?: number;
 };
 
+const idOf = (e: unknown) => (typeof e === "object" && e ? (e as { id: string }).id : String(e));
+
+type Live = { current: Pick<SkyCanvasProps, "selected" | "colors"> };
+
+/** Связи выбранной звезды — цветом подписи и толще, прочие — приглушённые; цвета и выбор — из live. */
+function paintLinks(fg: InstanceType<typeof ForceGraph3D>, live: Live) {
+  const touches = (l: object) => {
+    const s = live.current.selected;
+    const { source, target } = l as { source: unknown; target: unknown };
+    return !!s && (idOf(source) === s || idOf(target) === s);
+  };
+  fg.linkColor((l: object) => (touches(l) ? live.current.colors.ink : live.current.colors.muted)).linkWidth(
+    (l: object) => (touches(l) ? 1.2 : 0),
+  );
+}
+
 export default function Sky3D(p: Omit<SkyCanvasProps, "onHover">) {
   const box = useRef<HTMLDivElement>(null);
   const live = useRef(p);
@@ -30,7 +46,8 @@ export default function Sky3D(p: Omit<SkyCanvasProps, "onHover">) {
       .nodeLabel((n: object) => (n as N).label)
       .nodeVal((n: object) => (n as N).r * (n as N).r)
       .nodeRelSize(2)
-      .linkOpacity(0.35)
+      // связи видно в обеих темах: цвет подписи неба, а не приглушённый; у выбранной звезды — толще
+      .linkOpacity(0.55)
       .nodeOpacity(1)
       .nodeResolution(16)
       .onNodeClick((n: object) => live.current.onSelect((n as N).id))
@@ -56,10 +73,16 @@ export default function Sky3D(p: Omit<SkyCanvasProps, "onHover">) {
     fg.nodeColor((n: object) => {
       const s = n as N;
       return live.current.dim.has(s.id) ? live.current.colors.muted : live.current.colors.fam[s.family];
-    }).linkColor(() => live.current.colors.muted);
+    });
+    paintLinks(fg, live);
     fg.graphData({ nodes: p.sky.nodes.map((n) => ({ ...n })), links: p.sky.links.map((l) => ({ ...l })) });
     if (p.reducedMotion) fg.warmupTicks(200).cooldownTicks(0);
   }, [p.sky, p.reducedMotion]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: цвета и выбор читаются из live, перекраска — по их смене
+  useEffect(() => {
+    if (g.current) paintLinks(g.current, live);
+  }, [p.selected, p.colors]);
 
   useEffect(() => {
     const fg = g.current;

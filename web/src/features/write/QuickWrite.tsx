@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "react-aria-components";
@@ -28,10 +28,18 @@ export function QuickWrite({ trigger }: { trigger: React.RefObject<HTMLElement |
   const area = useRef<HTMLTextAreaElement>(null);
   const templates = useQuery(q.templates("atom"));
   const props = useQuery(q.vocab("property"));
-  const entities = useQuery({
-    ...q.records(null),
-    select: (d) => d.items.filter((r) => r.target === "entity"),
-  });
+  // @слово — поиском по всем объектам базы (как «о чём» в полном редакторе); первый ответ и есть объект
+  const words = useMemo(
+    () => [...new Set([...text.matchAll(/@([\p{L}\p{N}._-]+)/gu)].map((m) => m[1] ?? ""))].filter(Boolean),
+    [text],
+  );
+  const picks = useQueries({ queries: words.map((w) => q.pick("entity", w)) });
+  const objects = picks
+    .map((p, i) => {
+      const hit = p.data?.items[0];
+      return hit ? { ref: hit.ref, label: hit.label ?? hit.ref, codes: [words[i] ?? ""] } : null;
+    })
+    .filter((o) => o !== null);
   const aboutRec = useQuery({ ...q.record(about ?? ""), enabled: !!about && !place.label });
   const aboutLabel =
     place.label ??
@@ -47,18 +55,8 @@ export function QuickWrite({ trigger }: { trigger: React.RefObject<HTMLElement |
     setTimeout(() => area.current?.focus(), 0);
   }, [open, key]);
 
-  const inferred = useMemo(
-    () =>
-      infer(text, {
-        properties: (props.data ?? []) as never,
-        objects: (entities.data ?? []).map((e) => ({
-          ref: e.ref,
-          label: e.label,
-          codes: [e.label.split(" ").pop() ?? ""],
-        })),
-      }),
-    [text, props.data, entities.data],
-  );
+  // разбор дешёвый: считаем на каждой отрисовке, объекты приходят из поиска по мере ответа
+  const inferred = infer(text, { properties: (props.data ?? []) as never, objects });
   const kind = kindOverride ?? inferred.kind;
   const tpl = templates.data?.find((x) => x.code === kind);
 
@@ -144,8 +142,8 @@ export function QuickWrite({ trigger }: { trigger: React.RefObject<HTMLElement |
       >
         <div className="quick__in">
           {about && (
-            <span className="pill obj quick__about">
-              {t("quick.about", { what: aboutLabel })}
+            <span className="pill obj quick__about" title={aboutLabel}>
+              <span className="pill__t">{t("quick.about", { what: aboutLabel })}</span>
               <button type="button" aria-label={t("quick.about_off")} onClick={() => setAboutOff(true)}>
                 <Icon name="cross" size={12} />
               </button>

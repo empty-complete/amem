@@ -16,6 +16,7 @@ import type { Command } from "../../app/plugin";
 import { registry } from "../../app/registry-instance";
 import { Icon } from "../../ui/icons";
 import { KindChip } from "../../ui/KindChip";
+import { MOD_KEY } from "../../ui/platform";
 import { recordPath } from "../records/RecordList";
 import "./palette.css";
 
@@ -105,7 +106,7 @@ export const CommandField = forwardRef<HTMLInputElement>(function CommandField(_
     >
       <Icon name="search" />
       <Input ref={ref} type="search" placeholder={t("nav.search")} onKeyDown={onKeyDown} />
-      <kbd>⌘</kbd>
+      <kbd>{MOD_KEY}</kbd>
       <kbd>K</kbd>
       <Popover className="palette" placement="bottom start" offset={6}>
         <ListBox<{ name: string; items: Item[] }> className="palette__list">

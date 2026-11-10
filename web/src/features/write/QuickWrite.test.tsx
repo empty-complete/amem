@@ -1,6 +1,7 @@
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef } from "react";
+import { db } from "../../mocks/db";
 import { renderWithApp } from "../../test/render";
 import { CardPage } from "../card/CardPage";
 import { placeStore } from "./place";
@@ -85,4 +86,19 @@ test("объект: «Добавить заметку» — строка в сп
   expect(within(notes).getByText("записывается")).toBeInTheDocument();
   await act(() => vi.advanceTimersByTimeAsync(UNDO_MS + 100));
   expect(await within(notes).findByRole("link", { name: /Решили поставить козырёк/ })).toBeInTheDocument();
+});
+
+test("@объект ищется по всей базе: запись привязана к найденному объекту", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  await renderWithApp(<Harness />, "/");
+  act(() => placeStore.openQuick(true));
+  const dlg = await screen.findByRole("dialog", { name: "Новая запись" });
+  await user.type(within(dlg).getByRole("textbox", { name: "Текст записи" }), "Смазали узел @влажности");
+  // ответ поиска по объекту — до Enter
+  await act(() => vi.advanceTimersByTimeAsync(300));
+  await user.keyboard("{Enter}");
+  await act(() => vi.advanceTimersByTimeAsync(UNDO_MS + 100));
+  const made = db.records.find((r) => r.label.startsWith("Смазали узел"));
+  expect(made?.about.map((a) => a.ref)).toContain(E3);
 });

@@ -1,4 +1,4 @@
-import { queryOptions } from "@tanstack/react-query";
+import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { api, data } from "../client";
 
 /** Фабрики запросов: компоненты не знают путей API, только эти функции. */
@@ -29,6 +29,25 @@ export const q = {
     queryOptions({
       queryKey: ["records", folder],
       queryFn: async () => data(await api.GET("/records", { params: { query: folder ? { folder } : {} } })),
+    }),
+  /** Список записей страницами по cursor (предел контракта — 200): «Все записи» и папка доходят до конца. */
+  recordPages: (folder: string | null) =>
+    infiniteQueryOptions({
+      queryKey: ["records", folder, "pages"],
+      initialPageParam: null as string | null,
+      queryFn: async ({ pageParam }) =>
+        data(
+          await api.GET("/records", {
+            params: {
+              query: {
+                ...(folder ? { folder } : {}),
+                limit: 200,
+                ...(pageParam ? { cursor: pageParam } : {}),
+              },
+            },
+          }),
+        ),
+      getNextPageParam: (last) => last.next_cursor ?? null,
     }),
   search: (p: { q: string; kind: string[]; status: string[]; limit: number }) =>
     queryOptions({
