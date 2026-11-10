@@ -138,7 +138,7 @@ def test_low_confidence_needs_review_only_with_rule(ready, store, docs, tmp_path
     assert mine.records[0]["status"] == "verified" and mine.queued == []
 
 
-def test_person_edit_of_model_atom_is_verified_and_model_edit_of_person_is_pending(ready, store, docs):
+def test_person_edit_of_model_atom_keeps_status_and_model_edit_of_person_is_pending(ready, store, docs):
     src = [source_md(NOTE, "Масса 3 кг.")]
     first = _submit(ready, store, docs, a("@m", "Масса корпуса 3 кг", "parameter", sources=src, content=mass()), MODEL)
     rid = first.records[0]["record_id"]
@@ -146,15 +146,13 @@ def test_person_edit_of_model_atom_is_verified_and_model_edit_of_person_is_pendi
     edited = a("@m", "Масса корпуса 3,0 кг", "parameter", sources=src, content=mass(),
                summary_plain={"ru": "Паспортная масса."})
     by_person = _submit(ready, store, docs, edited, PERSON, record_id=rid)
-    assert by_person.records[0]["status"] == "verified" and by_person.records[0]["review_state"] == "none"
-    assert by_person.queued == []
-    open_items = ready.execute("SELECT count(*) FROM review_item WHERE record_id = %s AND state = 'open'",
-                               (rid,)).fetchone()[0]
-    assert open_items == 0                                 # пункт semantic ревизии модели закрыт правкой человека
+    # правка человеком записи модели статус не меняет (решение 11.11.2026): вопрос «по смыслу» — к новой ревизии
+    assert by_person.records[0]["status"] == "draft" and by_person.records[0]["review_state"] == "none"
+    assert [q["reason"] for q in by_person.queued] == ["semantic"]
     again = {**edited, "summary_plain": {"ru": "Масса с упаковкой."}}
     by_model = _submit(ready, store, docs, again, MODEL, record_id=rid)
     assert by_model.records[0]["review_state"] == "pending"
-    assert by_model.records[0]["status"] == "verified"
+    assert by_model.records[0]["status"] == "draft"
 
 
 def test_person_edit_of_verified_record_is_not_pending(ready, store, docs):

@@ -58,12 +58,15 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
   const links = useQuery(q.links(view.ref));
   const [active, setActive] = useState(0);
   const session = useQuery(q.session());
-  const own = !!session.data && session.data.agent === view.agent && view.agent.startsWith("person:");
+  // человек правит любую запись и сущность: правка — новая ревизия от его имени, история остаётся; правка записи
+  // модели статус не меняет (подтверждают проверкой)
+  const person = !!session.data?.agent.startsWith("person:");
+  const own = person && session.data?.agent === view.agent;
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState("");
   const [moving, setMoving] = useState(false);
   const [rejected, setRejected] = useState<{ draft: Draft; issues: FieldIssues } | null>(null);
-  const templates = useQuery({ ...q.templates(view.target), enabled: own });
+  const templates = useQuery({ ...q.templates(view.target), enabled: person });
   const kindCode = String(
     (view.payload as { kind?: string; entity_class?: string }).kind ??
       (view.payload as { entity_class?: string }).entity_class ??
@@ -72,7 +75,7 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
   const tpl = templates.data?.find((x) => x.code === kindCode);
   const editKey = draftKey("edit", view.ref);
   useEffect(() => {
-    if (!own) return;
+    if (!person) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyE") {
         e.preventDefault();
@@ -81,7 +84,7 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [own]);
+  }, [person]);
   const { copy, message } = useCopy(t("record.copy_failed"));
   const doc = useMemo(() => recordToDocument(p, view.about, view.sources as never, lang), [p, view, lang]);
   const kind = p.kind ?? p.entity_class ?? "";
@@ -114,7 +117,7 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
           <Crumbs view={view} />
           <StatusText status={view.status} />
           <span className="modes">
-            {own ? (
+            {person && (
               <Button
                 isIconOnly
                 size="sm"
@@ -125,39 +128,6 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
               >
                 <Icon name="pencil" />
               </Button>
-            ) : (
-              <Dropdown>
-                <Button
-                  isIconOnly
-                  size="sm"
-                  variant="ghost"
-                  aria-label={t("edit.not_own", { who: agentName(view.agent, lang) })}
-                >
-                  <Icon name="pencil" />
-                </Button>
-                <Dropdown.Popover>
-                  <Dropdown.Menu
-                    onAction={async (key) => {
-                      if (key === "enqueue") {
-                        await api.POST("/review/enqueue", { body: { ref: view.ref, reason: "audit" } });
-                        setNote(t("edit.enqueued"));
-                      }
-                      if (key === "beside")
-                        navigate({
-                          to: "/new",
-                          search: { about: view.about?.[0]?.ref, related: view.ref } as never,
-                        });
-                    }}
-                  >
-                    <Dropdown.Item id="enqueue" textValue={t("edit.enqueue")}>
-                      <Label>{t("edit.enqueue")}</Label>
-                    </Dropdown.Item>
-                    <Dropdown.Item id="beside" textValue={t("edit.beside")}>
-                      <Label>{t("edit.beside")}</Label>
-                    </Dropdown.Item>
-                  </Dropdown.Menu>
-                </Dropdown.Popover>
-              </Dropdown>
             )}
             <Button
               isIconOnly
@@ -175,7 +145,16 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
               </Button>
               <Dropdown.Popover>
                 <Dropdown.Menu
-                  onAction={(key) => {
+                  onAction={async (key) => {
+                    if (key === "enqueue") {
+                      await api.POST("/review/enqueue", { body: { ref: view.ref, reason: "audit" } });
+                      setNote(t("edit.enqueued"));
+                    }
+                    if (key === "beside")
+                      navigate({
+                        to: "/new",
+                        search: { about: view.about?.[0]?.ref, related: view.ref } as never,
+                      });
                     if (key === "agent") setMode(mode === "agent" ? "human" : "agent");
                     if (key === "ref") copy(view.ref, t("record.copied"));
                     if (key === "md") copy(doc, t("record.copied"));
@@ -194,6 +173,16 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
                   <Dropdown.Item id="move" textValue={t("folders.move_to")}>
                     <Label>{t("folders.move_to")}</Label>
                   </Dropdown.Item>
+                  {!own && (
+                    <Dropdown.Item id="enqueue" textValue={t("edit.enqueue")}>
+                      <Label>{t("edit.enqueue")}</Label>
+                    </Dropdown.Item>
+                  )}
+                  {!own && (
+                    <Dropdown.Item id="beside" textValue={t("edit.beside")}>
+                      <Label>{t("edit.beside")}</Label>
+                    </Dropdown.Item>
+                  )}
                 </Dropdown.Menu>
               </Dropdown.Popover>
             </Dropdown>
@@ -204,29 +193,34 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
         </span>
 
         {editing && templates.data ? (
-          <RecordEditor
-            key={`${view.ref}-${view.revision}`}
-            initial={
-              rejected?.draft ?? loadDraft(editKey) ?? fromPayload(view.payload as never, tpl, view.target)
-            }
-            labels={Object.fromEntries((view.about ?? []).map((a) => [a.ref, a.label]))}
-            recordId={view.ref}
-            base={view.payload as never}
-            draftKey={editKey}
-            issues={rejected?.issues}
-            onQueued={() => {
-              setRejected(null);
-              setEditing(false);
-            }}
-            onCancel={() => {
-              setRejected(null);
-              setEditing(false);
-            }}
-            onRejected={(draft, issues) => {
-              setRejected({ draft, issues });
-              setEditing(true);
-            }}
-          />
+          <>
+            {!own && (
+              <p className="muted note__foreign">{t("edit.foreign", { who: agentName(view.agent, lang) })}</p>
+            )}
+            <RecordEditor
+              key={`${view.ref}-${view.revision}`}
+              initial={
+                rejected?.draft ?? loadDraft(editKey) ?? fromPayload(view.payload as never, tpl, view.target)
+              }
+              labels={Object.fromEntries((view.about ?? []).map((a) => [a.ref, a.label]))}
+              recordId={view.ref}
+              base={view.payload as never}
+              draftKey={editKey}
+              issues={rejected?.issues}
+              onQueued={() => {
+                setRejected(null);
+                setEditing(false);
+              }}
+              onCancel={() => {
+                setRejected(null);
+                setEditing(false);
+              }}
+              onRejected={(draft, issues) => {
+                setRejected({ draft, issues });
+                setEditing(true);
+              }}
+            />
+          </>
         ) : (
           <>
             <h1 id="rec-title" className="title">

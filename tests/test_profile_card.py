@@ -316,9 +316,11 @@ def test_card_through_submit_review_and_rebuild(ready, store, docs, monkeypatch)
     f = _field(profile.card(ready, sensor), "mass")
     assert (f["state"], f["by"], f["status"]) == ("known", "model", "draft") and f["sources"][0]["verdict"] == "ok"
 
-    mass(3, PERSON, first, label="Масса корпуса 3,0 кг")            # правка человека — verified без очереди
+    mass(3, PERSON, first, label="Масса корпуса 3,0 кг")            # правка человека записи модели — статус прежний
     f = _field(profile.card(ready, sensor), "mass")
-    assert (f["by"], f["status"]) == ("person", "verified")
+    assert (f["by"], f["status"]) == ("person", "draft")
+    records.set_status(ready, "atom", first, "verified", agent=PERSON)   # подтверждает — отдельным решением
+    assert _field(profile.card(ready, sensor), "mass")["status"] == "verified"
 
     edit = mass(4, MODEL, first)                                    # правка модели записи человека — pending
     f = _field(profile.card(ready, sensor), "mass")

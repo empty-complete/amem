@@ -8,7 +8,9 @@ submit — единая точка записи знаний: уровни 1–4
 
 Записи человека (агент person:, спецификация 3c, разд. 5): уровни 1–4 те же, но статус — verified без риска шаблонов
 и без пунктов очереди, кроме source_changed (ссылка на не последнюю версию файла); правка моделью записи, текущую
-ревизию которой записал человек, ждёт его решения (pending).
+ревизию которой записал человек, ждёт его решения (pending). Правка человеком записи, текущую ревизию которой
+записала модель, статус не меняет (решение 11.11.2026): мелкая правка не подтверждает содержание — подтверждают
+проверкой; пункт очереди ставится по сохранённому статусу, как у правки моделью.
 
 Устройство и правила — docs/superpowers/specs/2026-11-05-amemo-subproject-3-autocheck-design.md.
 """
@@ -68,6 +70,7 @@ class _Plan:
     status: str | None = None          # итоговый статус записи; у правки проверенной — прежний verified
     pending: bool = False              # правка проверенной: ревизия ждёт решения человека
     person: bool = False               # пишет человек (person:): verified без риска и очереди
+    kept: bool = False                 # человек правит запись модели: статус прежний, пункт — по нему
     owner: str | None = None           # агент текущей ревизии существующей записи — читается под блокировкой
 
 
@@ -180,6 +183,9 @@ def _decide(plan: _Plan, status: str | None) -> None:
     if status in RETIRED:
         raise _Retired(plan.item, status)
     if plan.person:
+        if status is not None and plan.owner is not None and not _is_person(plan.owner):
+            plan.status, plan.kept = status, True
+            return
         plan.status = "verified"
         return
     by_person = plan.owner is not None and _is_person(plan.owner) and status not in review.CLOSING_STATUSES
@@ -270,7 +276,7 @@ def _verdicts(conn, target: str, revision_id: uuid.UUID, checks: list[SourceChec
 def _reasons(conn, plan: _Plan, rev: records.Revision) -> list[tuple[str, dict]]:
     """Причины пунктов созданной ревизии (разд. 7.2): по итогу статуса, аудит и ссылки на старые версии объектов."""
     out: list[tuple[str, dict]] = []
-    if plan.person:
+    if plan.person and not plan.kept:
         pass                       # запись человека проверена им самим; остаётся только вопрос о файле — source_changed
     elif plan.pending:
         out.append(("edit", {}))

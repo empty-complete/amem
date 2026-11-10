@@ -43,12 +43,16 @@ test("пустой заголовок — замечание проверки у
   expect(screen.getByRole("textbox", { name: "Заголовок" })).toHaveAttribute("aria-invalid", "true");
 });
 
-test("чужая запись: вместо правки — «Поставить на проверку» и «Записать своё рядом»", async () => {
+test("запись модели правится: подсказка о статусе; «Поставить на проверку» — в меню «Ещё»", async () => {
   const user = userEvent.setup();
   await renderWithApp(<RecordPage recordRef={A3} view="human" />, `/atom/${A3}`);
-  await user.click(await screen.findByRole("button", { name: /extractor .* — её не правят/ }));
+  await user.click(await screen.findByRole("button", { name: "Ещё" }));
   expect(await screen.findByRole("menuitem", { name: "Поставить на проверку" })).toBeInTheDocument();
   expect(screen.getByRole("menuitem", { name: "Записать своё рядом" })).toBeInTheDocument();
+  await user.keyboard("{Escape}");
+  await user.click(screen.getByRole("button", { name: /^Править, (⌘|Ctrl\+)E$/ }));
+  expect(await screen.findByText(/статус записи не изменится/)).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Заголовок" })).toBeInTheDocument();
 });
 
 test("смена вида подставляет форму шаблона; своё свойство переживает исходник", async () => {
