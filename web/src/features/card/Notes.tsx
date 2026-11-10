@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
+import { pickText, useText } from "../../ui/lang";
 import { RecordRow } from "../records/RecordList";
 import { infer } from "../write/infer";
 import { emptyDraft, toProposal } from "../write/proposal";
@@ -13,6 +14,7 @@ const KINDS = new Set(["note", "decision", "question", "lesson"]);
 /** «Заметки и решения» у объекта: последняя строка — «Добавить заметку», как новая строка в Напоминаниях. */
 export function Notes({ entityRef }: { entityRef: string }) {
   const { t } = useTranslation();
+  const { lang } = useText();
   const list = useQuery(q.about(entityRef));
   const vocab = useQuery(q.vocab("kind"));
   const templates = useQuery(q.templates("atom"));
@@ -33,7 +35,7 @@ export function Notes({ entityRef }: { entityRef: string }) {
     };
     submit(
       { proposals: [toProposal(d, tpl).proposal] },
-      { label: i.label, what: (tpl?.label.ru ?? kind).toLowerCase(), kind, about: [entityRef] },
+      { label: i.label, what: (pickText(tpl?.label, lang) || kind).toLowerCase(), kind, about: [entityRef] },
     );
     setText("");
   };

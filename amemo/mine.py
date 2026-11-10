@@ -30,7 +30,7 @@ import psycopg
 import yaml
 from psycopg.types.json import Jsonb
 
-from . import canon, db, forms, packs
+from . import canon, db, forms, lang, packs
 from .model_v1 import Concept, Template
 
 NAME = "mine"
@@ -76,23 +76,25 @@ def _issue(code: str, path: str, message: str) -> dict:
 # --- черновик → понятие и шаблон ---
 
 def _lang(value, path: str, issues: list, code: str, *, required: bool) -> dict | None:
-    """LangString черновика: ru — непустая строка, en — строка; None — нет (если можно)."""
+    """LangString черновика: слоты ru, en — строки, непустой нужен хотя бы один (amemo.lang); None — нет (если
+    можно). Пустые слоты отбрасываются."""
     if value is None:
         if required:
-            issues.append(_issue(code, f"{path}.ru", "нужна подпись по-русски"))
+            issues.append(_issue(code, path, "нужна подпись: ru или en"))
         return None
-    if not isinstance(value, dict) or set(value) - {"ru", "en"}:
+    if not isinstance(value, dict) or set(value) - set(lang.LANGS):
         issues.append(_issue(code, path, "ожидается {ru, en}"))
         return None
-    ru, en = value.get("ru"), value.get("en")
-    if not isinstance(ru, str) or not ru.strip():
-        if required or ru is not None or en is not None:
-            issues.append(_issue(code, f"{path}.ru", "нужен текст по-русски"))
+    for slot in lang.LANGS:
+        if value.get(slot) is not None and not isinstance(value[slot], str):
+            issues.append(_issue(code, f"{path}.{slot}", "ожидается строка"))
+            return None
+    texts = {slot: text.strip() for slot, text in lang.texts(value)}
+    if not texts:
+        if required or value:
+            issues.append(_issue(code, path, "нужен текст хотя бы на одном языке: ru или en"))
         return None
-    if en is not None and not isinstance(en, str):
-        issues.append(_issue(code, f"{path}.en", "ожидается строка"))
-        return None
-    return {"ru": ru.strip(), **({"en": en.strip()} if en and en.strip() else {})}
+    return texts
 
 
 def _field(code: str, target: str, i: int, f, issues: list, properties: set[str]) -> list[tuple[str, dict, dict]]:

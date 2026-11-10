@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { apiFetch } from "../../api/auth";
+import { langHeaders } from "../../api/client";
 import { problemFromResponse } from "../../api/errors";
 import { enqueue, usePending } from "../write/submitQueue";
 
@@ -32,7 +33,7 @@ export function useDecision(onAlready: (who: string) => void) {
         run: async (keepalive) => {
           const res = await apiFetch(`${location.origin}/api/v1/review/items/${itemId}/resolve`, {
             method: "POST",
-            headers: { "content-type": "application/json" },
+            headers: { "content-type": "application/json", ...langHeaders() },
             body: JSON.stringify({ outcome, ...(note?.trim() ? { note: note.trim() } : {}) }),
             keepalive,
           });

@@ -1,4 +1,5 @@
 import { delay, HttpResponse, http } from "msw";
+import { type LangString, pickText } from "../ui/lang";
 import { db } from "./db";
 import changes from "./fixtures/changes.json";
 import history from "./fixtures/history-a3.json";
@@ -41,7 +42,7 @@ function summaries(about: string) {
     .map((v) => ({
       ref: v.ref,
       target: v.target,
-      label: (v.payload as { label: { ru: string } }).label.ru,
+      label: pickText((v.payload as { label: LangString }).label),
       kind_or_class: (v.payload as { kind: string }).kind,
       status: v.status,
       folder: v.folder,

@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
+import { type LangString, useText } from "../../ui/lang";
 import { RegionState } from "../../ui/RegionState";
 import { recordPath } from "../records/RecordList";
 import { draftKey, loadDraft, saveDraft } from "./drafts";
@@ -30,6 +31,7 @@ export function NewRecord({
   issue?: string;
 }) {
   const { t } = useTranslation();
+  const { text } = useText();
   const navigate = useNavigate();
   const key = draftKey("new", about ?? null);
   const [issuesNow] = useState(() => peekIssues(key));
@@ -46,7 +48,7 @@ export function NewRecord({
   const tpl = templates.data?.find((x) => x.code === initial.kind);
   const aboutKey = tpl?.form.find((f) => f.path === "about")?.key;
   if (about && aboutKey && !initial.values[aboutKey]) initial.values[aboutKey] = [about];
-  const aboutLabel = (aboutRec.data?.payload as { label?: { ru: string } } | undefined)?.label?.ru;
+  const aboutLabel = text((aboutRec.data?.payload as { label?: LangString } | undefined)?.label) || undefined;
   // после записи — к тому, о чём запись (или на главную), а не «назад»: назад может увести из приложения
   const back = () => (about ? navigate(recordPath(about)) : navigate({ to: "/" }));
   return (

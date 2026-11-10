@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
 import { agentName } from "../../ui/format";
 import { Icon } from "../../ui/icons";
+import { type LangString, useText } from "../../ui/lang";
 import { RelativeTime } from "../../ui/RelativeTime";
 import type { Grouping, Item, Row } from "./groups";
 import { REASON_ICON } from "./reasons";
@@ -18,12 +19,12 @@ const size = (r: Row | undefined) => (r?.kind === "head" ? HEAD : ROW);
 /** О чём сомнение — первый кандидат пункта («Похожая запись: …»); подпись — из кеша, только у видимых строк. */
 function Doubt({ it }: { it: Item }) {
   const { t } = useTranslation();
+  const { text } = useText();
   const c = ((it.details ?? {}) as { candidates?: { code: string; ref: string }[] }).candidates?.[0];
   const rec = useQuery({ ...q.record(c?.ref ?? ""), enabled: !!c && REF.test(c.ref), staleTime: 60_000 });
   if (!c) return null;
   const label =
-    (rec.data?.payload as { label?: { ru: string } } | undefined)?.label?.ru ??
-    (REF.test(c.ref) ? "…" : c.ref);
+    text((rec.data?.payload as { label?: LangString } | undefined)?.label) || (REF.test(c.ref) ? "…" : c.ref);
   return (
     <span className="qrow__doubt">
       {t(`review.code.${c.code}`, { defaultValue: c.code })}: {label}

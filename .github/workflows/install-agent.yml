@@ -1,0 +1,156 @@
+name: install-agent
+# Команды docs/install-agent.md на чистых машинах GitHub: PostgreSQL 18 с pgvector тремя путями инструкции — apt
+# (репозиторий PGDG) и Homebrew без Docker, с ролью amemo без прав суперпользователя, и контейнер Docker; amemo
+# из этой ветки через uv (amemo-web — из PyPI), amemo init с папкой документов, amemo install claude-code и codex,
+# amemo doctor без FAIL, служба (/health и /ui), бэкап и его пробное восстановление.
+# Windows (WSL2) на машинах GitHub не проверить: шаг 2 инструкции CI не проходит.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 1"          # по понедельникам: PGDG, Homebrew и образ меняются и без нас
+  pull_request:
+    paths:
+      - "docs/install-agent.md"
+      - ".github/workflows/install-agent.yml"
+      - "amemo/backup.py"
+      - "amemo/cli/commands/setup.py"
+      - "amemo/agents/**"
+      - "pyproject.toml"
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: install (${{ matrix.postgres }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, postgres: apt }
+          - { os: ubuntu-24.04, postgres: docker }
+          - { os: macos-15, postgres: brew }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Database password
+        run: |
+          pw=$(openssl rand -hex 16)
+          echo "::add-mask::$pw"
+          echo "PW=$pw" >> "$GITHUB_ENV"
+
+      - name: PostgreSQL — apt (PGDG), role amemo without superuser
+        if: matrix.postgres == 'apt'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common ca-certificates
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-18 postgresql-18-pgvector
+          pg_lsclusters
+          if ! pg_lsclusters -h | awk '$1 == 18 && $2 == "main"' | grep -q .; then
+            sudo pg_createcluster 18 main --start      # у машин GitHub create_main_cluster выключен
+          fi
+          if pg_lsclusters -h | awk '$1 == 18 && $2 == "main" {print $4}' | grep -q '^down'; then
+            sudo pg_ctlcluster 18 main start
+          fi
+          pg_lsclusters
+          port=$(pg_lsclusters -h | awk '$1 == 18 && $2 == "main" {print $3}')
+          cd /tmp
+          sudo -u postgres psql -p "$port" -v ON_ERROR_STOP=1 <<SQL
+          CREATE ROLE amemo LOGIN CREATEDB PASSWORD '$PW';
+          CREATE DATABASE amemo OWNER amemo;
+          \c amemo
+          CREATE EXTENSION IF NOT EXISTS vector;
+          CREATE EXTENSION IF NOT EXISTS btree_gist;
+          \c template1
+          CREATE EXTENSION IF NOT EXISTS vector;
+          SQL
+          echo "DSN=postgresql://amemo:$PW@127.0.0.1:$port/amemo" >> "$GITHUB_ENV"
+          echo "AMEMO_PG_BIN=/usr/lib/postgresql/18/bin" >> "$GITHUB_ENV"   # pg_wrapper выбрал бы клиент 16 машины
+
+      - name: PostgreSQL — Docker container, PostgreSQL 18 client for backups
+        if: matrix.postgres == 'docker'
+        run: |
+          docker run -d --name amemo-db --restart unless-stopped \
+            -e POSTGRES_USER=amemo -e POSTGRES_PASSWORD="$PW" -e POSTGRES_DB=amemo \
+            -p 127.0.0.1:5435:5432 -v amemo-pg:/var/lib/postgresql \
+            pgvector/pgvector:0.8.1-pg18
+          for _ in $(seq 120); do docker exec amemo-db pg_isready -h 127.0.0.1 -U amemo -d amemo && break; sleep 1; done
+          docker exec amemo-db pg_isready -h 127.0.0.1 -U amemo -d amemo
+          echo "DSN=postgresql://amemo:$PW@127.0.0.1:5435/amemo" >> "$GITHUB_ENV"
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common ca-certificates
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-18
+          echo "AMEMO_PG_BIN=/usr/lib/postgresql/18/bin" >> "$GITHUB_ENV"   # pg_wrapper выбрал бы клиент 16 машины
+
+      - name: PostgreSQL — Homebrew, role amemo without superuser
+        if: matrix.postgres == 'brew'
+        run: |
+          brew install postgresql@18 pgvector
+          brew services start postgresql@18
+          bin="$(brew --prefix postgresql@18)/bin"
+          echo "$bin" >> "$GITHUB_PATH"
+          export PATH="$bin:$PATH"
+          for _ in $(seq 60); do pg_isready -h 127.0.0.1 -p 5432 && break; sleep 1; done
+          pg_isready -h 127.0.0.1 -p 5432
+          psql -d postgres -v ON_ERROR_STOP=1 <<SQL
+          CREATE ROLE amemo LOGIN CREATEDB PASSWORD '$PW';
+          CREATE DATABASE amemo OWNER amemo;
+          \c amemo
+          CREATE EXTENSION IF NOT EXISTS vector;
+          CREATE EXTENSION IF NOT EXISTS btree_gist;
+          \c template1
+          CREATE EXTENSION IF NOT EXISTS vector;
+          SQL
+          echo "DSN=postgresql://amemo:$PW@127.0.0.1:5432/amemo" >> "$GITHUB_ENV"
+
+      - name: uv
+        run: |
+          command -v uv || curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: amemo from this branch (amemo-web from PyPI)
+        run: |
+          uv build --wheel --out-dir "$RUNNER_TEMP/dist"
+          wheel=$(ls "$RUNNER_TEMP"/dist/amemo-*.whl)
+          uv tool install --python 3.12 "amemo[web] @ file://$wheel"
+          amemo --version
+
+      - name: amemo init, documents folder
+        run: |
+          amemo init --dsn "$DSN"
+          mkdir -p "$HOME/amemo-docs"
+          printf 'docs = "%s"\n' "$HOME/amemo-docs" >> "$HOME/.config/amemo/amemo.toml"
+
+      - name: Agents — amemo install claude-code, amemo install codex
+        run: |
+          amemo install claude-code
+          amemo install codex
+
+      - name: amemo doctor — no FAIL
+        run: |
+          amemo doctor
+          amemo doctor --json > "$RUNNER_TEMP/doctor.json"
+          python3 - "$RUNNER_TEMP/doctor.json" <<'PY'
+          import json, sys
+          checks = {c["name"]: c["status"] for c in json.load(open(sys.argv[1], encoding="utf-8"))["checks"]}
+          for name in ("база", "миграции", "id базы", "хранилище", "документы"):
+              assert checks.get(name) == "ok", (name, checks)
+          PY
+
+      - name: amemo serve — /health and /ui
+        run: |
+          amemo serve > "$RUNNER_TEMP/serve.log" 2>&1 &
+          for _ in $(seq 60); do curl -fsS http://127.0.0.1:8767/health && break; sleep 1; done
+          curl -fsS http://127.0.0.1:8767/health || { cat "$RUNNER_TEMP/serve.log"; exit 1; }
+          curl -fsS -o /dev/null http://127.0.0.1:8767/ui/
+
+      - name: amemo backup create and verify
+        run: |
+          "${AMEMO_PG_BIN:+$AMEMO_PG_BIN/}pg_dump" --version
+          amemo backup create --json > "$RUNNER_TEMP/backup.json" || { cat "$RUNNER_TEMP/backup.json"; exit 1; }
+          manifest=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["manifest"])' "$RUNNER_TEMP/backup.json")
+          amemo backup verify "$manifest"

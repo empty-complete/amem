@@ -3,7 +3,7 @@ name = "amemo"
 dynamic = ["version"]                # amemo.__version__; tools/release.py сверяет его с amemo-web и меткой релиза
 description = "Verifiable shared memory for AI agents and people: atoms with checked source quotes, revisions and review on PostgreSQL + pgvector"
 readme = "README.md"
-license = "MIT"
+license = "AGPL-3.0-only"
 license-files = []                   # текст лицензии с именем автора в пакет не кладём: он в LICENSE.txt репозитория
 authors = [{name = "empty-complete"}]
 requires-python = ">=3.11"

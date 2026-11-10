@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../api/auth";
-import { api } from "../../api/client";
+import { api, langHeaders } from "../../api/client";
 import { type ApiError, problemFromResponse } from "../../api/errors";
 import type { components } from "../../api/schema";
 import { Icon } from "../../ui/icons";
@@ -53,7 +53,11 @@ export function ImportFlow() {
     try {
       const fd = new FormData();
       fd.append("file", f);
-      const res = await apiFetch(`${location.origin}/api/v1/bundles/inspect`, { method: "POST", body: fd });
+      const res = await apiFetch(`${location.origin}/api/v1/bundles/inspect`, {
+        method: "POST",
+        headers: langHeaders(),
+        body: fd,
+      });
       if (!res.ok) throw await problemFromResponse(res);
       setIns((await res.json()) as Inspect);
     } catch (e) {

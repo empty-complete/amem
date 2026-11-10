@@ -2,7 +2,7 @@
 
 Порядок источников: явный аргумент → окружение (AMEMO_…) → amemo.toml ($AMEMO_CONFIG, затем ~/.config/amemo/amemo.toml).
 Ключи amemo.toml — имена полей Settings (dsn, data, docs, state, backups, host, port, agent, model_agent, ui_origins,
-allowed_hosts, tokens, query_log, state_quota, ocr, ocr_data, ocr_languages); неизвестный ключ — ошибка, а не тихий пропуск опечатки. Относительный путь в amemo.toml считается
+allowed_hosts, tokens, query_log, state_quota, ocr, ocr_data, ocr_languages, lang); неизвестный ключ — ошибка, а не тихий пропуск опечатки. Относительный путь в amemo.toml считается
 от папки файла, в окружении и аргументе — от текущей папки; «~» раскрывается везде.
 
 Распознавание сканов (OCR) — расширение на выбор: ocr = none | tesseract (cloud зарезервирован и пока — ошибка
@@ -60,6 +60,7 @@ ENV = {
     "ui_origins": "AMEMO_UI_ORIGINS", "allowed_hosts": "AMEMO_ALLOWED_HOSTS", "tokens": "AMEMO_TOKENS",
     "query_log": "AMEMO_QUERY_LOG", "state_quota": "AMEMO_STATE_QUOTA",
     "ocr": "AMEMO_OCR", "ocr_data": "AMEMO_OCR_DATA", "ocr_languages": "AMEMO_OCR_LANGUAGES",
+    "lang": "AMEMO_LANG",
 }
 
 
@@ -86,6 +87,7 @@ class Settings:
     ocr: str                        # распознавание сканов: none | tesseract | auto (не задано — по данным)
     ocr_data: Path                  # языковые данные tesseract (amemo ocr install); сверх них — системные
     ocr_languages: tuple[str, ...]  # языки tessdata по порядку: rus, eng
+    lang: str | None                # язык подписей CLI и MCP без явного (ru | en); None — ru, затем en (amemo.lang)
     config: Path | None             # прочитанный amemo.toml, если был
 
 
@@ -147,6 +149,7 @@ def load(env: Mapping[str, str] | None = None, **explicit) -> Settings:
         tokens=path("tokens"),
         query_log=query_log,
         state_quota=_quota(raw.get("state_quota")),
+        lang=_lang(raw.get("lang")),
         config=config,
         ocr=_ocr(raw.get("ocr")),
         ocr_data=path("ocr_data") or home / ".local" / "share" / "amemo" / "tessdata",
@@ -361,6 +364,18 @@ def _allowed_hosts(entry) -> tuple[str, ...]:
                                 f"по имени, порт любой (например amemo)")
         hosts.append(host)
     return tuple(dict.fromkeys(hosts))
+
+
+def _lang(entry) -> str | None:
+    from . import lang
+
+    if entry is None:
+        return None
+    value, where, _ = entry
+    try:
+        return lang.check(value)
+    except lang.LangError:
+        raise SettingsError(f"{where}: язык {value!r} — допустимы {', '.join(lang.LANGS)}") from None
 
 
 def _quota(entry) -> int:

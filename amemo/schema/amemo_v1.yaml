@@ -6,7 +6,7 @@ description: >-
   и amemo/schema/amemo_v1.schema.json (JSON Schema): python tools/gen_schema.py.
   Коды полей, видов и связей — латиницей и неизменны; подписи — в аннотациях label_ru / label_en.
 version: 1.0.0
-license: MIT
+license: AGPL-3.0-only
 prefixes:
   linkml: https://w3id.org/linkml/
   amemo: amemo/
@@ -421,11 +421,13 @@ classes:
     description: Любое значение (ячейка таблицы, отчёт проверки).
 
   LangString:
-    description: Текст на нескольких языках; русский обязателен.
+    description: Текст на нескольких языках; нужен хотя бы один из слотов ru, en.
     attributes:
-      ru:
-        required: true
+      ru: {}
       en: {}
+    any_of:
+      - slot_conditions: {ru: {required: true}}
+      - slot_conditions: {en: {required: true}}
 
   Selector:
     description: Место внутри файла. refined_by уточняет его — лист → диапазон, страница → цитата.

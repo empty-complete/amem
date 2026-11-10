@@ -101,13 +101,13 @@ def _timed(channel, function, durations):
 
 def _response(conn: psycopg.Connection, recipe: str, channels: dict, *, query: str, agent: str,
               activity, limit: int, include_record: bool, semantic: str, reasons: dict, model,
-              durations_ms: dict, useful: bool, log: bool, now) -> dict:
+              durations_ms: dict, useful: bool, log: bool, now, lang: str | None = None) -> dict:
     candidates = [row for rows in channels.values() if rows is not None for row in rows]
     multipliers = usefulness.multipliers(conn, candidates, now=now) if useful else None
     ranked = search._rrf(channels, search.RANKING_V1["recipes"][recipe], limit=limit,
                          exact_fact=recipe == "exact_fact", durations_ms=durations_ms,
                          usefulness=multipliers)
-    cards = search._enrich(conn, ranked["hits"], include_record=include_record)
+    cards = search._enrich(conn, ranked["hits"], include_record=include_record, lang=lang)
     items = [{**card, "score": hit["score"], "matches": hit["matches"]}
              for hit, card in zip(ranked["hits"], cards)]
     retrieval_id = usefulness.record_retrieval(
@@ -328,13 +328,16 @@ def what_changed(conn: psycopg.Connection, *, ref: str | None = None,
 def exact_fact(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
                limit: int = 10, target=None, kind=None, entity_class=None, statuses=None,
                include_record: bool = False, provider: embed.EmbeddingProvider | None = None,
-               usefulness: bool = True, log: bool = True, now=None, on_semantic_error: str = "raise") -> dict:
+               usefulness: bool = True, log: bool = True, now=None, on_semantic_error: str = "raise",
+               lang: str | None = None) -> dict:
     """Найти марку или формулировку всеми четырьмя каналами, не выбирая один «лучший» ответ.
 
     kind и entity_class — код строкой или несколько кодов (search._codes); log=False — выдача не пишется
     в retrieval, retrieval_id равен None. on_semantic_error — что делать, если provider не может посчитать вектор
     запроса (не та модель, нет fastembed, сбой модели, неизвестный AMEMO_BACKEND): raise — EmbeddingError, skip —
-    смысловой канал пропускается с причиной в channels.reasons.vector, остальные каналы отвечают как обычно."""
+    смысловой канал пропускается с причиной в channels.reasons.vector, остальные каналы отвечают как обычно.
+    lang — язык фрагмента находки (amemo.lang; None — ru, затем en); на поиск он не влияет: запрос идёт по всем
+    слотам."""
     filters = {"target": target, "kind": search._codes(kind, "kind"),
                "entity_class": search._codes(entity_class, "entity_class"), "statuses": statuses}
     durations = {}
@@ -356,7 +359,8 @@ def exact_fact(conn: psycopg.Connection, query: str, *, agent: str, activity=Non
     return _response(conn, "exact_fact", channels, query=query, agent=agent, activity=activity,
                      limit=limit, include_record=include_record,
                      semantic="used" if channels["vector"] is not None else "unavailable",
-                     reasons=reasons, model=model, durations_ms=durations, useful=usefulness, log=log, now=now)
+                     reasons=reasons, model=model, durations_ms=durations, useful=usefulness, log=log, now=now,
+                     lang=lang)
 
 
 def _source_document(conn: psycopg.Connection, ref: str):
@@ -382,10 +386,11 @@ def _source_document(conn: psycopg.Connection, ref: str):
 def similar(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
             limit: int = 10, target=None, kind=None, entity_class=None, statuses=None,
             include_record: bool = False, provider: embed.EmbeddingProvider | None = None,
-            usefulness: bool = True, log: bool = True, now=None, on_semantic_error: str = "raise") -> dict:
+            usefulness: bool = True, log: bool = True, now=None, on_semantic_error: str = "raise",
+            lang: str | None = None) -> dict:
     """Найти похожие записи по тексту либо по atm:/ent: ссылке (UUID или ключ) на существующую запись.
 
-    Фильтры, log и on_semantic_error — как у exact_fact: при skip похожие по тексту ищет один канал fts."""
+    Фильтры, log, on_semantic_error и lang — как у exact_fact: при skip похожие по тексту ищет один канал fts."""
     if not isinstance(query, str):
         raise ValueError("запрос должен быть строкой")
     kind, entity_class = search._codes(kind, "kind"), search._codes(entity_class, "entity_class")
@@ -422,7 +427,8 @@ def similar(conn: psycopg.Connection, query: str, *, agent: str, activity=None,
     return _response(conn, "similar", channels, query=query, agent=agent, activity=activity,
                      limit=limit, include_record=include_record,
                      semantic="used" if channels["vector"] is not None else "unavailable",
-                     reasons=reasons, model=model, durations_ms=durations, useful=usefulness, log=log, now=now)
+                     reasons=reasons, model=model, durations_ms=durations, useful=usefulness, log=log, now=now,
+                     lang=lang)
 
 
 GRAPH_LIMIT = 300                    # узлов графа по умолчанию (around_entity, overview); контракт /graph — до 1000

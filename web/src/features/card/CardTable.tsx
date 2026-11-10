@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
 import { formatValue, unitLabel, type ValueLike } from "../../ui/format";
 import { Icon } from "../../ui/icons";
+import { useText } from "../../ui/lang";
 import { humanize, useVocabLabel } from "../../ui/useVocabLabel";
 import { recordPath } from "../records/RecordList";
 import type { CardField } from "./card";
@@ -184,16 +185,15 @@ function Value({ f, open, toggle, fill }: { f: CardField; open: boolean; toggle:
 }
 
 /**
- * Имя величины на языке интерфейса. Служба отдаёт подпись поля карточки по-русски; в английском интерфейсе
- * берётся английская подпись словаря property, если она есть, иначе — подпись службы, затем код.
+ * Имя величины на языке интерфейса: подпись словаря property (с заменой на другой слот), иначе подпись службы
+ * (она тоже на языке интерфейса — Accept-Language), затем код.
  */
 export function usePropertyName() {
-  const { i18n } = useTranslation();
+  const { text } = useText();
   const props = useQuery(q.vocab("property"));
-  const en = i18n.language.startsWith("en");
   return (code: string, fallback?: string | null) => {
     const v = props.data?.find((p) => p.code === code);
-    return (en ? v?.label.en : undefined) ?? fallback ?? v?.label.ru ?? code.replaceAll("_", " ");
+    return text(v?.label) || fallback || code.replaceAll("_", " ");
   };
 }
 

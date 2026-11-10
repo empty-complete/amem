@@ -81,20 +81,17 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment:
-      name: pypi                       # секрет PYPI_API_TOKEN; окружение пускает только метки v*
+      name: pypi                       # Trusted Publishing на PyPI доверяет release.yml в этом окружении; только метки v*
       url: https://pypi.org/project/amemo/${{ needs.build.outputs.version }}/
     permissions:
       contents: read
-      id-token: write                  # для Trusted Publishing, когда токен сменится на него
+      id-token: write                  # Trusted Publishing: PyPI проверяет OIDC-токен GitHub, секретов нет
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          attestations: false          # аттестации — только при Trusted Publishing
+      - uses: pypa/gh-action-pypi-publish@release/v1   # Trusted Publishing и аттестации (PEP 740) по умолчанию
 
   # команды README «с нуля»: pipx install с PyPI в чистой машине
   verify:

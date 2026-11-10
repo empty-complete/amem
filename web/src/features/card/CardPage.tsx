@@ -6,8 +6,8 @@ import { ApiError, errorText } from "../../api/errors";
 import { q } from "../../api/queries";
 import { formatValue, unitLabel } from "../../ui/format";
 import { KindChip } from "../../ui/KindChip";
+import { type LangString, langString, pickText } from "../../ui/lang";
 import { RegionState } from "../../ui/RegionState";
-import { text } from "../record/doc";
 import { HistoryList } from "../record/Widgets";
 import { kindLabel, RecordRow, recordPath } from "../records/RecordList";
 import { Sky } from "../sky/Sky";
@@ -84,7 +84,7 @@ export function CardPage({ entityRef }: { entityRef: string }) {
               record_id: null,
               payload: {
                 kind: "parameter",
-                label: { ru: label },
+                label: langString(label, i18n.language),
                 about: [entityRef],
                 basis: "author",
                 content: { values: [{ property: f.property, ...v }] },
@@ -105,7 +105,7 @@ export function CardPage({ entityRef }: { entityRef: string }) {
               record_id: null,
               payload: {
                 kind: "question",
-                label: { ru: label },
+                label: langString(label, i18n.language),
                 about: [entityRef],
                 basis: "author",
                 content: { values: [{ property: f.property, value_state: "unknown" }] },
@@ -127,7 +127,7 @@ export function CardPage({ entityRef }: { entityRef: string }) {
               record_id: null,
               payload: {
                 kind: "parameter",
-                label: { ru: label },
+                label: langString(label, i18n.language),
                 about: [entityRef],
                 basis: "default",
                 derived_from: [`profile:${card.data?.profile ?? ""}#${f.property}`],
@@ -156,12 +156,14 @@ export function CardPage({ entityRef }: { entityRef: string }) {
     );
   }
   const payload = rec.data?.payload as
-    | { label?: { ru: string }; entity_class?: string; description?: { ru: string } }
+    | { label?: LangString; entity_class?: string; description?: LangString }
     | undefined;
-  const label = payload?.label ? text(payload.label, i18n.language) : (card.data?.entity.label ?? entityRef);
+  const label = payload?.label
+    ? pickText(payload.label, i18n.language)
+    : (card.data?.entity.label ?? entityRef);
   const cls = payload?.entity_class ?? card.data?.entity.entity_class ?? "";
   const ancestors = card.data?.ancestors ?? rec.data?.ancestors ?? [];
-  const desc = payload?.description ? text(payload.description, i18n.language) : "";
+  const desc = payload?.description ? pickText(payload.description, i18n.language) : "";
 
   return (
     <div className="entitypage">
