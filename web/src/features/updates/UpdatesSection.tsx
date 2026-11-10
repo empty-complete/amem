@@ -38,9 +38,13 @@ export function UpdatesSection() {
       {s.latest && (
         <div className="upd__avail" data-state={s.state}>
           <p>
-            <a href={s.latest.url} target="_blank" rel="noopener noreferrer">
-              {t("updates.available", { v: s.latest.version })}
-            </a>
+            {s.latest.url ? (
+              <a href={s.latest.url} target="_blank" rel="noopener noreferrer">
+                {t("updates.available", { v: s.latest.version })}
+              </a>
+            ) : (
+              t("updates.available", { v: s.latest.version })
+            )}
           </p>
           {canInstall(s) && (s.state === "available" || s.state === "failed") && write && (
             <Button

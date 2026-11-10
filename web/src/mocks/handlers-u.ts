@@ -2,7 +2,7 @@ import { delay, HttpResponse, http } from "msw";
 import fixture from "./fixtures/updates.json";
 
 type Status = Omit<typeof fixture, "latest" | "checked_at"> & {
-  latest: typeof fixture.latest | null;
+  latest: { version: string; url: string | null } | null;
   checked_at: string | null;
 };
 
