@@ -241,7 +241,7 @@ const scenes = {
     await pause(page, 8000);
     return start;
   },
-  // небо: укладка созвездия, стрелки выбирают звезду, Enter открывает, глубина окрестности 1 и 3
+  // небо: укладка созвездия, стрелки выбирают звезду, Enter открывает её запись
   async sky(page) {
     await page.goto(`${base}/ui/`);
     await page.waitForLoadState("domcontentloaded");
@@ -250,19 +250,12 @@ const scenes = {
     await page.getByRole("application").first().focus();
     for (let i = 0; i < 2; i++) {
       await key(page, "ArrowRight", "→");
-      await pause(page, 1000);
+      await pause(page, 1100);
     }
     await key(page, "Enter", "Enter ↵");
     await page.waitForURL(/\/(atom|entity)\//);
     await page.waitForLoadState("networkidle");
-    await pause(page, 1200);
-    for (const n of [1, 3]) {
-      const radio = page.getByRole("radio", { name: `${t("sky.depth")} ${n}` }).first();
-      if (await radio.isVisible()) {
-        await click(page, radio);
-        await pause(page, 1500);
-      }
-    }
+    await pause(page, 2600);
     return start;
   },
 };
