@@ -141,6 +141,7 @@ jobs:
           & "$env:PGBIN\createdb.exe" -h 127.0.0.1 -p 5433 -U test onecmd
           if ($LASTEXITCODE) { exit 1 }
       - name: Wheel of this branch, uv tool install
+        id: wheel
         run: |
           python -m pip install --quiet uv==0.10.4
           uv build --wheel --out-dir dist
@@ -158,6 +159,7 @@ jobs:
           python -m pytest -q -p no:cacheprovider tests/test_portable.py tests/test_ocfl_store.py
           if ($LASTEXITCODE) { exit 1 }
       - name: amemo init, amemo install claude-code, amemo doctor, hooks, tokens, amemo serve /health
+        if: ${{ !cancelled() && steps.wheel.outcome == 'success' }}     # и после упавших тестов хранилища
         run: |
           $env:HOME = "$env:RUNNER_TEMP\not-the-profile"
           (Get-Command amemo).Source

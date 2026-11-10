@@ -1,6 +1,5 @@
 """Проверка корня OCFL валидатором ocfl-py. Раскладки 0004 в ocfl-py 2.1 нет — она регистрируется здесь,
 по описанию расширения (https://ocfl.github.io/extensions/0004-hashed-n-tuple-storage-layout.html)."""
-import os
 from pathlib import Path
 
 import ocfl
@@ -30,7 +29,7 @@ class Layout0004(Layout_0003_Hash_And_Id_N_Tuple):
         digest = string_digest(identifier, self.digest_algorithm).lower()
         parts = [digest[i * self.tuple_size:(i + 1) * self.tuple_size] for i in range(self.number_of_tuples)]
         tail = digest[self.tuple_size * self.number_of_tuples:] if self.short_object_root else digest
-        return os.path.join(*parts, tail)
+        return "/".join([*parts, tail])        # путь pyfilesystem: всегда «/», и на Windows
 
 
 layout_registry.add_layout(Layout0004().NAME, Layout0004)
