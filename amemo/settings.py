@@ -2,7 +2,8 @@
 
 Порядок источников: явный аргумент → окружение (AMEMO_…) → amemo.toml ($AMEMO_CONFIG, затем ~/.config/amemo/amemo.toml).
 Ключи amemo.toml — имена полей Settings (dsn, data, docs, state, backups, host, port, agent, model_agent, ui_origins,
-allowed_hosts, tokens, query_log, state_quota, ocr, ocr_data, ocr_languages, lang, auto_update); неизвестный ключ — ошибка, а не тихий пропуск опечатки. Относительный путь в amemo.toml считается
+allowed_hosts, tokens, query_log, state_quota, ocr, ocr_data, ocr_languages, lang, auto_update, pg_bin, pg_data);
+неизвестный ключ — ошибка, а не тихий пропуск опечатки. Относительный путь в amemo.toml считается
 от папки файла, в окружении и аргументе — от текущей папки; «~» раскрывается везде.
 
 Распознавание сканов (OCR) — расширение на выбор: ocr = none | tesseract (cloud зарезервирован и пока — ошибка
@@ -13,6 +14,10 @@ TESSDATA_PREFIX и системный tesseract; языки — ocr_languages (�
 Обновления (amemo/updates.py): auto_update = true по умолчанию — служба ставит новую версию сама; false — только
 сообщает о ней. Переключатель в вебе пишет в AMEMO_STATE/updates.json, а не сюда: конфиг пользователя служба
 не переписывает. Выключено здесь — выключено, что бы ни говорил переключатель.
+
+Свой PostgreSQL (amemo setup, amemo/localpg.py): pg_bin — каталог программ PostgreSQL 16+ (initdb, pg_ctl, postgres,
+клиент pg_dump для бэкапа), pg_data — каталог кластера; amemo pg start|stop|status управляет им. AMEMO_PG_BIN — та же
+переменная, что и у бэкапа.
 
 Токены общей службы — amemo-tokens.toml с правами 0600: строки [[token]] с hash = "sha256:…", agent и write. Сам токен
 в файле не хранится: служба сравнивает sha256 предъявленного токена с записанными. Файл принадлежит пользователю
@@ -67,6 +72,7 @@ ENV = {
     "query_log": "AMEMO_QUERY_LOG", "state_quota": "AMEMO_STATE_QUOTA",
     "ocr": "AMEMO_OCR", "ocr_data": "AMEMO_OCR_DATA", "ocr_languages": "AMEMO_OCR_LANGUAGES",
     "lang": "AMEMO_LANG", "auto_update": "AMEMO_AUTO_UPDATE",
+    "pg_bin": "AMEMO_PG_BIN", "pg_data": "AMEMO_PG_DATA",
 }
 BOOLEAN = {"true": True, "1": True, "yes": True, "on": True, "false": False, "0": False, "no": False, "off": False}
 
@@ -97,6 +103,8 @@ class Settings:
     lang: str | None                # язык подписей CLI и MCP без явного (ru | en); None — ru, затем en (amemo.lang)
     config: Path | None             # прочитанный amemo.toml, если был
     auto_update: bool = True        # ставить новые версии самой (amemo/updates.py); false — только сообщать
+    pg_bin: Path | None = None      # программы PostgreSQL: свой кластер (amemo setup, amemo pg) и клиент бэкапа
+    pg_data: Path | None = None     # каталог своего кластера PostgreSQL (amemo setup); None — база чужая
 
 
 @dataclass(frozen=True)
@@ -163,6 +171,8 @@ def load(env: Mapping[str, str] | None = None, **explicit) -> Settings:
         ocr_data=path("ocr_data") or home / ".local" / "share" / "amemo" / "tessdata",
         ocr_languages=_ocr_languages(raw.get("ocr_languages")),
         auto_update=_bool(raw.get("auto_update"), default=True),
+        pg_bin=path("pg_bin"),
+        pg_data=path("pg_data"),
     )
 
 

@@ -114,6 +114,22 @@ def _person(ctx) -> None:
 
 
 def run_enable(ctx, args) -> int:
+    result = enable(ctx, args)
+
+    def text(r):
+        m, c = r["model"], r["coverage"]
+        return "\n".join([
+            f"модель: {m['name']} v{m['version']} ({m['backend']}, {m['dims']}) — "
+            + (f"скачана в {r['models_dir']}" if r["downloaded"] else f"из {r['models_dir']}"),
+            f"посчитано векторов: {r['embedded']}; покрытие: {c['covered']} из {c['total']} документов",
+            "смысловой поиск включён; новые записи досчитывает повторный amemo embed enable",
+        ])
+    ctx.emit(result, text)
+    return 0
+
+
+def enable(ctx, args) -> dict:
+    """Включить смысловой поиск (общая часть amemo embed enable и amemo setup --embed): модель, вектора, канал."""
     from ... import embed
 
     _person(ctx)
@@ -143,19 +159,8 @@ def run_enable(ctx, args) -> int:
         except embed.EmbeddingError:
             if attempt == ATTEMPTS - 1:
                 raise
-    result = {"model": model, "downloaded": downloaded, "models_dir": str(folder), "embedded": embedded,
-              "coverage": embed.embedding_coverage(conn, model["id"])}
-
-    def text(r):
-        m, c = r["model"], r["coverage"]
-        return "\n".join([
-            f"модель: {m['name']} v{m['version']} ({m['backend']}, {m['dims']}) — "
-            + (f"скачана в {r['models_dir']}" if r["downloaded"] else f"из {r['models_dir']}"),
-            f"посчитано векторов: {r['embedded']}; покрытие: {c['covered']} из {c['total']} документов",
-            "смысловой поиск включён; новые записи досчитывает повторный amemo embed enable",
-        ])
-    ctx.emit(result, text)
-    return 0
+    return {"model": model, "downloaded": downloaded, "models_dir": str(folder), "embedded": embedded,
+            "coverage": embed.embedding_coverage(conn, model["id"])}
 
 
 # --- status ---

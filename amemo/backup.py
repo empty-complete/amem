@@ -74,13 +74,25 @@ class BackupError(RuntimeError):
 # Клиент PostgreSQL
 
 
+def _configured_bin() -> str | None:
+    from . import settings
+
+    try:
+        found = settings.load().pg_bin
+    except settings.SettingsError:
+        return None
+    return str(found) if found else None
+
+
 def _tool(name: str) -> str:
-    """pg_dump / pg_restore версии не ниже 18: из AMEMO_PG_BIN или PATH; иначе — понятная ошибка, а не пропуск."""
-    folder = os.environ.get("AMEMO_PG_BIN")
+    """pg_dump / pg_restore версии не ниже 18: из AMEMO_PG_BIN, pg_bin amemo.toml (его пишет amemo setup) или PATH;
+    иначе — понятная ошибка, а не пропуск."""
+    folder = os.environ.get("AMEMO_PG_BIN") or _configured_bin()
     # which и с папкой: на Windows имя дополняется .exe (PATHEXT)
     path = shutil.which(name, path=folder) if folder else shutil.which(name)
     if not path or not os.access(path, os.X_OK):
-        raise BackupError(f"нет {name}: нужен клиент PostgreSQL {PG_MAJOR} — каталог с ним в AMEMO_PG_BIN или в PATH")
+        raise BackupError(f"нет {name}: нужен клиент PostgreSQL {PG_MAJOR} — каталог с ним в AMEMO_PG_BIN, "
+                          f"в pg_bin amemo.toml или в PATH")
     try:
         out = subprocess.run([path, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace",
                              check=True, timeout=30).stdout

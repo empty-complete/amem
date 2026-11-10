@@ -244,7 +244,7 @@ level 1 report. The returned `Imported` also carries `changeset_id`, `queued` an
 ## Backup
 
 `amemo.backup` needs the PostgreSQL 18 client (`pg_dump`, `pg_restore`, `psql`) — in `PATH`
-or in the folder given by `AMEMO_PG_BIN`.
+or in the folder given by `AMEMO_PG_BIN` or by `pg_bin` in `amemo.toml` (written by `amemo setup`).
 
 - `create(dsn, folder)` — a `pg_dump -Fc` dump plus a JSON manifest (SHA-256, `base_id`,
   migrations, record counts — taken from the same snapshot as the dump); the last 14 copies are kept;

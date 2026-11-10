@@ -24,6 +24,6 @@ def _help(ctx, parser) -> int:
 
 
 # модули команд берут add и group отсюда — импорт после них
-from . import agents, backup, bundles, embed, ocr, read, setup, tasks, tokens, update, write  # noqa: E402
+from . import agents, backup, bundles, embed, local, ocr, read, setup, tasks, tokens, update, write  # noqa: E402
 
-COMMANDS = (setup, read, write, tasks, bundles, backup, tokens, ocr, embed, agents, update)
+COMMANDS = (setup, local, read, write, tasks, bundles, backup, tokens, ocr, embed, agents, update)

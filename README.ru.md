@@ -306,6 +306,22 @@ amemo doctor                   # что работает и что поправ�
 находят базу без `AMEMO_DSN` в окружении. PostgreSQL с pgvector — из `docker compose up -d --wait db`, прямой
 установкой ([`docs/install-agent.md`](docs/install-agent.md), шаг 3) или свой. CI проходит эти шаги на каждом push.
 
+### Свой PostgreSQL в папке данных
+
+Если есть программы PostgreSQL 16+ с pgvector (например, zip EDB в Windows или `postgresql-18` и
+`postgresql-18-pgvector` из PGDG), `amemo setup` обходится без Docker, службы ОС и прав администратора:
+
+```bash
+amemo setup --pg-bin /usr/lib/postgresql/18/bin --embed --agents claude-code
+```
+
+Команда создаёт кластер в `~/amemo-data/pg` (роль `amemo` со случайным паролем, только `127.0.0.1`, первый свободный
+порт от 5436), пишет `amemo.toml` со строкой подключения, хранилищем, состоянием и бэкапами в `~/amemo-data`, запускает
+кластер, готовит базу как `amemo init`, а с `--embed`, `--ocr rus,eng` и `--agents` включает смысловой поиск,
+распознавание сканов и агентов. Повторный запуск продолжает с места остановки и не меняет пароль; чужой `amemo.toml`
+не трогает. После перезагрузки кластер запускает `amemo pg start` (`amemo pg stop`, `amemo pg status`); бэкапы берут
+тот же `pg_bin`. Эту команду запускает установщик для рабочего стола.
+
 ## Служба
 
 HTTP-служба отдаёт [контракт v1](docs/api/http-v1.openapi.yaml) по `/api/v1` и веб-UI по `/ui`. Запускается
@@ -432,6 +448,8 @@ docker compose --profile web up -d --wait amemo-web   # то же с веб-UI �
 
 ```
 amemo init [--dsn DSN] [--ocr ЯЗЫКИ]   база и хранилище объектов; --ocr rus,eng — распознавание сканов
+amemo setup --pg-bin DIR [--data DIR]  свой PostgreSQL в папке данных, amemo.toml, база (--embed --ocr --agents)
+amemo pg start|stop|status             кластер, созданный amemo setup
 amemo serve [--host --port --no-auth]  HTTP API, /mcp и веб-UI
 amemo mcp [--agent model:ИМЯ]          сервер MCP на stdio для агента
 amemo search ЗАПРОС [--kind --limit]   поиск, шаг 1
@@ -799,7 +817,7 @@ sources:
 - Векторы локальные и необязательные: `pip install -e ".[embed]"` добавляет fastembed, а `amemo embed enable`
   скачивает модель только с разрешения человека ([Смысловой поиск](#смысловой-поиск)).
   `AMEMO_BACKEND=none` выключает смысловой канал, лексический поиск продолжает работать.
-- Бэкапу нужен клиент PostgreSQL 18 (`pg_dump`, `pg_restore`, `psql`) в `PATH` или в папке `AMEMO_PG_BIN`.
+- Бэкапу нужен клиент PostgreSQL 18 (`pg_dump`, `pg_restore`, `psql`) в `PATH`, в папке `AMEMO_PG_BIN` или в `pg_bin` из `amemo.toml`.
 
 ## Разработка
 

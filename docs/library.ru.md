@@ -236,7 +236,7 @@ bundle.import_(conn, store, Path("out/shared"), agent="person:boris", trust="kee
 ## Бэкап
 
 `amemo.backup` нужен клиент PostgreSQL 18 (`pg_dump`, `pg_restore`, `psql`) — в `PATH` или в папке
-из `AMEMO_PG_BIN`.
+из `AMEMO_PG_BIN` или `pg_bin` в `amemo.toml` (его пишет `amemo setup`).
 
 - `create(dsn, folder)` — дамп `pg_dump -Fc` и манифест JSON (SHA-256, `base_id`, миграции, числа
   записей — из того же снимка, что дамп); хранятся последние 14 копий;

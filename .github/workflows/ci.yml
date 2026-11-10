@@ -31,17 +31,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: PostgreSQL client 18 (pg_dump, pg_restore, psql) for backup tests; tesseract language data (rus, eng) for OCR tests
+      - name: PostgreSQL 18 with pgvector (client for backup tests, server programs for amemo setup); tesseract language data (rus, eng) for OCR tests
         run: |
+          # пакет сервера не создаёт свой кластер main: тестам amemo setup нужны только программы
+          sudo install -d /etc/postgresql-common
+          echo "create_main_cluster = false" | sudo tee -a /etc/postgresql-common/createcluster.conf
           sudo install -d /usr/share/postgresql-common/pgdg
           sudo curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
           for attempt in 1 2 3; do
-            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-18 tesseract-ocr tesseract-ocr-rus && break
+            sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold postgresql-client-18 postgresql-18 postgresql-18-pgvector tesseract-ocr tesseract-ocr-rus && break
             echo "apt: попытка $attempt не удалась"; sleep 15
             [ "$attempt" = 3 ] && exit 1
           done
           echo "AMEMO_PG_BIN=/usr/lib/postgresql/18/bin" >> "$GITHUB_ENV"
+          echo "AMEMO_TEST_PG_SERVER_BIN=/usr/lib/postgresql/18/bin" >> "$GITHUB_ENV"
       - run: pip install -e ".[dev]"
       - run: ruff check amemo tests tools
       - run: pytest -q -p no:cacheprovider -rA | tee pytest.log
@@ -166,6 +170,35 @@ jobs:
           python -m pip install --quiet -e . pytest ocfl-py==2.1.0
           python -m pytest -q -p no:cacheprovider tests/test_portable.py tests/test_ocfl_store.py
           if ($LASTEXITCODE) { exit 1 }
+      - name: amemo setup — own PostgreSQL cluster in a data folder, as the desktop installer runs it
+        if: ${{ !cancelled() && steps.wheel.outcome == 'success' }}
+        run: |
+          Remove-Item Env:PGPASSWORD, Env:PGUSER -ErrorAction SilentlyContinue
+          $env:AMEMO_CONFIG = "$env:RUNNER_TEMP\setup\amemo.toml"
+          $data = "$env:RUNNER_TEMP\setup\amemo-data"
+          amemo setup --pg-bin "$env:PGROOT\bin" --data $data --no-auto-update
+          if ($LASTEXITCODE) { exit 1 }
+          amemo setup --pg-bin "$env:PGROOT\bin" --data $data --json > "$env:RUNNER_TEMP\setup-again.json"
+          if ($LASTEXITCODE) { exit 1 }
+          amemo doctor --json > "$env:RUNNER_TEMP\setup-doctor.json"
+          amemo pg stop
+          if ($LASTEXITCODE) { exit 1 }
+          amemo pg start
+          if ($LASTEXITCODE) { exit 1 }
+          amemo pg stop
+          if ($LASTEXITCODE) { exit 1 }
+          $env:PYTHONUTF8 = "1"          # только проверке: в ней кириллица; amemo выше — без режима UTF-8
+          @'
+          import json, sys
+          again = json.load(open(sys.argv[1], encoding="utf-8"))
+          assert again["migrations_applied"] == [] and again["base_id"], again
+          checks = {c["name"]: c["status"] for c in json.load(open(sys.argv[2], encoding="utf-8"))["checks"]}
+          for name in ("база", "миграции", "id базы", "хранилище"):
+              assert checks.get(name) == "ok", (name, checks)
+          '@ | python - "$env:RUNNER_TEMP\setup-again.json" "$env:RUNNER_TEMP\setup-doctor.json"
+          if ($LASTEXITCODE) { exit 1 }
+      - if: failure()
+        run: Get-Content "$env:RUNNER_TEMP\setup\amemo-data\pg\log\postgresql.log" -Tail 50 -ErrorAction SilentlyContinue
       - name: amemo init, install claude-code, doctor, hooks, tokens, serve /health, backup create and verify
         if: ${{ !cancelled() && steps.wheel.outcome == 'success' }}     # и после упавших тестов хранилища
         run: |
