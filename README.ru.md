@@ -297,6 +297,7 @@ cd web && npm ci && npm run dev:mock              # затем откройте 
 pipx install 'amemo[web]'      # или pip install / uv tool install; [web] добавляет веб-UI по /ui, [embed] — смысловой поиск
 amemo init --dsn postgresql://amemo:amemo@127.0.0.1:5435/amemo   # база и хранилище; DSN запоминается в amemo.toml
 amemo install claude-code      # сервер MCP, хуки и навыки; `amemo install codex` — для Codex CLI
+amemo install cowork           # по желанию: zip-плагин для Claude Cowork, его загружаете вы в приложении Claude
 amemo embed enable             # по желанию, с amemo[web,embed]: смысловой поиск, скачает модель ~250 МБ
 amemo doctor                   # что работает и что поправить
 ```
@@ -636,6 +637,21 @@ http_headers = { "X-Amemo-Agent" = "model:codex" }
   нет (это синтаксис оболочки POSIX), и он им не нужен: хуки только читают. Настройки агентов — в `%USERPROFILE%`.
 - **Проверка.** `amemo doctor` показывает, что установлено (глобально и для проекта текущей папки) и существует ли
   ещё его команда; затем `claude mcp list` или `codex mcp list` подтверждают, что агент видит сервер.
+
+**Claude Cowork и приложение Claude.** `amemo install cowork` собирает zip-плагин, по умолчанию `~/amemo-plugin.zip`
+(`--out FILE` — другой путь). Загружает его человек, один раз, в приложении Claude или на claude.ai: **Customize →
+Plugins → Add → Upload plugin**. Добавить плагин в аккаунт из командной строки нельзя, а плагин, поставленный через
+`claude plugin install`, остаётся только на этой машине.
+
+- **Что внутри.** Сервер MCP `amemo` с полным путём к `amemo` этой машины (`mcp --agent model:cowork`,
+  `AMEMO_AS_MODEL=cowork`) и три навыка. Хуков нет: Cowork загружает хуки плагина и в облачных сессиях, где `amemo`
+  нет.
+- **Где работает.** Локальный сервер MCP запускается в сессиях Cowork на вашем компьютере, в приложении Claude.
+  Облачные сессии и чат на claude.ai локальных серверов не запускают и amemo не видят.
+- **И в Claude Code.** Плагин из аккаунта синхронизируется и в Claude Code. Там, где уже стоит
+  `amemo install claude-code`, сервер окажется дважды: оставьте один.
+- **Обновление и удаление.** После переноса amemo снова выполните `amemo install cowork` и загрузите новый zip.
+  `amemo uninstall cowork` удаляет только zip; сам плагин убирается в **Customize → Plugins**.
 
 **Расписание `amemo-verify`.** Смысловой проверяющий — это агент, которого запускают по вашему расписанию,
 например каждую ночь через cron:
