@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from amem import db, packs
-from amem.check import templates
+from amemo import db, packs
+from amemo.check import templates
 
 PACKS = Path(__file__).with_name("packs")
 ONTOLOGY, QUANTITIES = PACKS / "ontology", PACKS / "quantities"
@@ -54,7 +54,7 @@ def test_parameters_only_for_entities(tmp_path):
 
 
 def test_parameters_merge_by_property(pg, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(QUANTITIES), str(ONTOLOGY)]))
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join([str(QUANTITIES), str(ONTOLOGY)]))
     db.prepare(pg)
     active = templates.active(pg)
     rules = templates.rules_for(active, "entity", "sensor")

@@ -34,7 +34,7 @@ const pages = [
 for (const theme of ["light", "dark"] as const) {
   for (const path of pages) {
     test(`axe: ${path} в теме ${theme}`, async ({ page }) => {
-      await page.addInitScript((t) => window.localStorage.setItem("amem.theme", t), theme);
+      await page.addInitScript((t) => window.localStorage.setItem("amemo.theme", t), theme);
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       await expect(page.locator("main")).not.toContainText("Загрузка");
@@ -71,7 +71,7 @@ const opened: [string, string, (p: import("@playwright/test").Page) => Promise<v
 for (const theme of ["light", "dark"] as const) {
   for (const [name, path, open] of opened) {
     test(`axe: ${name} открыто, тема ${theme}`, async ({ page }) => {
-      await page.addInitScript((t) => window.localStorage.setItem("amem.theme", t), theme);
+      await page.addInitScript((t) => window.localStorage.setItem("amemo.theme", t), theme);
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       await open(page);

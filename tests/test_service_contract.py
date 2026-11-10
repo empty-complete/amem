@@ -1,7 +1,7 @@
 """Служба (подпроект 4, часть 4a, задача 9): полнота контракта (каждый путь docs/api/http-v1.openapi.yaml — маршрут
-службы, лишних нет), запуск (python -m amem.service, проверка открытости, --no-auth), адрес и AMEM_ALLOWED_HOSTS,
+службы, лишних нет), запуск (python -m amemo.service, проверка открытости, --no-auth), адрес и AMEMO_ALLOWED_HOSTS,
 таймауты (медленное тело — 408, statement_timeout у /graph — 503 timeout), предел места подборок владельца
-(AMEM_STATE_QUOTA — 507). starlette.testclient и настоящий uvicorn в подпроцессе — на настоящей базе (PostgreSQL 18
+(AMEMO_STATE_QUOTA — 507). starlette.testclient и настоящий uvicorn в подпроцессе — на настоящей базе (PostgreSQL 18
 и 16)."""
 import json
 import os
@@ -19,9 +19,9 @@ from starlette.applications import Starlette
 from starlette.routing import Route
 
 import contract
-from amem import api, check, db, recipes, review, settings
-from amem.check import Proposal
-from amem.service import create_app, http_v1, server
+from amemo import api, check, db, recipes, review, settings
+from amemo.check import Proposal
+from amemo.service import create_app, http_v1, server
 from check_support import atom
 from test_service_core import tokens_file
 
@@ -46,7 +46,7 @@ OUTSIDE = frozenset({
 
 def _app(tmp_path) -> Starlette:
     """Приложение без запуска (lifespan не идёт, база не нужна): только список маршрутов."""
-    return create_app(settings.load({"AMEM_DSN": "postgresql://unused/db", "HOME": str(tmp_path), "USER": "ann"}))
+    return create_app(settings.load({"AMEMO_DSN": "postgresql://unused/db", "HOME": str(tmp_path), "USER": "ann"}))
 
 
 def _service_ops(app: Starlette) -> set[tuple[str, str]]:
@@ -108,7 +108,7 @@ class Runner:
 
 
 def _env(tmp_path, **extra) -> dict:
-    return {"AMEM_DSN": "postgresql://unused/db", "HOME": str(tmp_path / "home"), "USER": "ann", **extra}
+    return {"AMEMO_DSN": "postgresql://unused/db", "HOME": str(tmp_path / "home"), "USER": "ann", **extra}
 
 
 def test_main_defaults_to_loopback_8767(tmp_path, capsys):
@@ -122,7 +122,7 @@ def test_main_defaults_to_loopback_8767(tmp_path, capsys):
 
 def test_main_arguments_beat_environment(tmp_path):
     runner = Runner()
-    env = _env(tmp_path, AMEM_HOST="127.0.0.2", AMEM_PORT="9000")
+    env = _env(tmp_path, AMEMO_HOST="127.0.0.2", AMEMO_PORT="9000")
     assert server.main(["--port", "9100"], env=env, runner=runner) == 0
     assert (runner.calls[0][1]["host"], runner.calls[0][1]["port"]) == ("127.0.0.2", 9100)
     assert server.main(["--host", "::1"], env=env, runner=runner) == 0
@@ -130,13 +130,13 @@ def test_main_arguments_beat_environment(tmp_path):
     assert server.main(["--host", "localhost"], env=env, runner=runner) == 0
 
 
-@pytest.mark.parametrize("host", ["0.0.0.0", "::", "192.168.1.10", "amem"])
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "192.168.1.10", "amemo"])
 def test_main_refuses_open_host_without_tokens(tmp_path, capsys, host):
     runner = Runner()
     assert server.main(["--host", host], env=_env(tmp_path), runner=runner) == 2
     assert runner.calls == []
     err = capsys.readouterr().err
-    assert "без входа" in err and "AMEM_TOKENS" in err and "--no-auth" in err
+    assert "без входа" in err and "AMEMO_TOKENS" in err and "--no-auth" in err
 
 
 def test_main_no_auth_warns_loudly(tmp_path, capsys):
@@ -149,7 +149,7 @@ def test_main_no_auth_warns_loudly(tmp_path, capsys):
 
 def test_main_open_host_with_tokens(tmp_path, capsys):
     runner = Runner()
-    env = _env(tmp_path, AMEM_TOKENS=tokens_file(tmp_path, ("t", "person:anna", True)))
+    env = _env(tmp_path, AMEMO_TOKENS=tokens_file(tmp_path, ("t", "person:anna", True)))
     assert server.main(["--host", "0.0.0.0"], env=env, runner=runner) == 0
     assert capsys.readouterr().err == ""
     assert server.main(["--host", "0.0.0.0", "--no-auth"], env=env, runner=runner) == 0
@@ -157,12 +157,12 @@ def test_main_open_host_with_tokens(tmp_path, capsys):
 
 
 @pytest.mark.parametrize("argv, env, words", [
-    (["--host", "amem:8767"], {}, "без порта"),
-    (["--host", "http://amem"], {}, "без порта"),
+    (["--host", "amemo:8767"], {}, "без порта"),
+    (["--host", "http://amemo"], {}, "без порта"),
     (["--port", "0"], {}, "от 1 до 65535"),
-    ([], {"AMEM_DSN": ""}, "AMEM_DSN"),
-    ([], {"AMEM_ALLOWED_HOSTS": "amem:8767"}, "без порта"),
-    ([], {"AMEM_STATE_QUOTA": "много"}, "AMEM_STATE_QUOTA"),
+    ([], {"AMEMO_DSN": ""}, "AMEMO_DSN"),
+    ([], {"AMEMO_ALLOWED_HOSTS": "amemo:8767"}, "без порта"),
+    ([], {"AMEMO_STATE_QUOTA": "много"}, "AMEMO_STATE_QUOTA"),
 ])
 def test_main_bad_settings_exit_2(tmp_path, capsys, argv, env, words):
     runner = Runner()
@@ -174,7 +174,7 @@ def test_main_bad_settings_exit_2(tmp_path, capsys, argv, env, words):
 def test_loopback():
     for host in ("127.0.0.1", "127.0.0.2", "::1", "[::1]", "localhost", "LOCALHOST"):
         assert server.loopback(host), host
-    for host in ("0.0.0.0", "::", "10.0.0.1", "amem", "localhost.example"):
+    for host in ("0.0.0.0", "::", "10.0.0.1", "amemo", "localhost.example"):
         assert not server.loopback(host), host
 
 
@@ -185,16 +185,16 @@ def _free_port() -> int:
 
 
 def _child_env(tmp_path, **extra) -> dict:
-    env = {key: value for key, value in os.environ.items() if not key.startswith("AMEM_") and key != "PYTHONPATH"}
-    return {**env, "HOME": str(tmp_path / "home"), "AMEM_STATE": str(tmp_path / "state"),
-            "AMEM_DATA": str(tmp_path / "objects"), "AMEM_BACKEND": "none", **extra}
+    env = {key: value for key, value in os.environ.items() if not key.startswith("AMEMO_") and key != "PYTHONPATH"}
+    return {**env, "HOME": str(tmp_path / "home"), "AMEMO_STATE": str(tmp_path / "state"),
+            "AMEMO_DATA": str(tmp_path / "objects"), "AMEMO_BACKEND": "none", **extra}
 
 
-def test_python_m_amem_service_serves(dsn, tmp_path):
+def test_python_m_amemo_service_serves(dsn, tmp_path):
     """Настоящий uvicorn в подпроцессе: /health и /session по 127.0.0.1, затем остановка."""
     port = _free_port()
-    child = subprocess.Popen([sys.executable, "-m", "amem.service", "--port", str(port)],
-                             env=_child_env(tmp_path, AMEM_DSN=dsn), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    child = subprocess.Popen([sys.executable, "-m", "amemo.service", "--port", str(port)],
+                             env=_child_env(tmp_path, AMEMO_DSN=dsn), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     try:
         deadline, answer = time.monotonic() + 60, None
         while time.monotonic() < deadline and child.poll() is None:
@@ -214,62 +214,62 @@ def test_python_m_amem_service_serves(dsn, tmp_path):
         child.wait(timeout=30)
 
 
-def test_python_m_amem_service_refuses_open_host(tmp_path):
-    done = subprocess.run([sys.executable, "-m", "amem.service", "--host", "0.0.0.0"], capture_output=True, text=True,
-                          env=_child_env(tmp_path, AMEM_DSN="postgresql://unused/db"), timeout=60)
+def test_python_m_amemo_service_refuses_open_host(tmp_path):
+    done = subprocess.run([sys.executable, "-m", "amemo.service", "--host", "0.0.0.0"], capture_output=True, text=True,
+                          env=_child_env(tmp_path, AMEMO_DSN="postgresql://unused/db"), timeout=60)
     assert done.returncode == 2
-    assert "AMEM_TOKENS" in done.stderr and "--no-auth" in done.stderr
+    assert "AMEMO_TOKENS" in done.stderr and "--no-auth" in done.stderr
 
 
-# --- адрес и AMEM_ALLOWED_HOSTS ---
+# --- адрес и AMEMO_ALLOWED_HOSTS ---
 
 @pytest.mark.parametrize("value, host", [
     ("127.0.0.1", "127.0.0.1"), ("0.0.0.0", "0.0.0.0"), ("::1", "::1"), ("[::1]", "::1"), ("::", "::"),
-    ("Localhost", "localhost"), ("amem", "amem"), ("amem.internal", "amem.internal"), (" 10.0.0.5 ", "10.0.0.5"),
+    ("Localhost", "localhost"), ("amemo", "amemo"), ("amemo.internal", "amemo.internal"), (" 10.0.0.5 ", "10.0.0.5"),
 ])
 def test_host_setting_accepts_address_or_name(tmp_path, value, host):
-    assert settings.load({"HOME": str(tmp_path), "AMEM_HOST": value}).host == host
+    assert settings.load({"HOME": str(tmp_path), "AMEMO_HOST": value}).host == host
 
 
-@pytest.mark.parametrize("value", ["amem:8767", "127.0.0.1:8767", "[::1]:8767", "http://amem", "amem/ui", "a b",
-                                   "1.2.3", "-amem", "amem_db", "fe80::1%eth0", "[amem]"])
+@pytest.mark.parametrize("value", ["amemo:8767", "127.0.0.1:8767", "[::1]:8767", "http://amemo", "amemo/ui", "a b",
+                                   "1.2.3", "-amemo", "amemo_db", "fe80::1%eth0", "[amemo]"])
 def test_host_setting_rejects_port_scheme_and_garbage(tmp_path, value):
-    with pytest.raises(settings.SettingsError, match="AMEM_HOST"):
-        settings.load({"HOME": str(tmp_path), "AMEM_HOST": value})
+    with pytest.raises(settings.SettingsError, match="AMEMO_HOST"):
+        settings.load({"HOME": str(tmp_path), "AMEMO_HOST": value})
 
 
 def test_allowed_hosts_setting(tmp_path):
     base = {"HOME": str(tmp_path)}
     assert settings.load(base).allowed_hosts == ()
-    assert settings.load({**base, "AMEM_ALLOWED_HOSTS": "amem, Amem.Internal,,amem"}).allowed_hosts == \
-        ("amem", "amem.internal")
-    config = tmp_path / "amem.toml"
-    config.write_text('allowed_hosts = ["amem", "::1"]\nstate_quota = "2G"\n', encoding="utf-8")
-    loaded = settings.load({**base, "AMEM_CONFIG": str(config)})
-    assert loaded.allowed_hosts == ("amem", "::1") and loaded.state_quota == 2 << 30
-    for bad in ("amem:8767", "http://amem", "a b"):
-        with pytest.raises(settings.SettingsError, match="AMEM_ALLOWED_HOSTS"):
-            settings.load({**base, "AMEM_ALLOWED_HOSTS": bad})
+    assert settings.load({**base, "AMEMO_ALLOWED_HOSTS": "amemo, Amemo.Internal,,amemo"}).allowed_hosts == \
+        ("amemo", "amemo.internal")
+    config = tmp_path / "amemo.toml"
+    config.write_text('allowed_hosts = ["amemo", "::1"]\nstate_quota = "2G"\n', encoding="utf-8")
+    loaded = settings.load({**base, "AMEMO_CONFIG": str(config)})
+    assert loaded.allowed_hosts == ("amemo", "::1") and loaded.state_quota == 2 << 30
+    for bad in ("amemo:8767", "http://amemo", "a b"):
+        with pytest.raises(settings.SettingsError, match="AMEMO_ALLOWED_HOSTS"):
+            settings.load({**base, "AMEMO_ALLOWED_HOSTS": bad})
 
 
 def test_guard_accepts_allowed_host_names(serve, pg):
-    """compose: служба на 0.0.0.0, Host — имя службы в сети (amem:8767); прочие имена — 421."""
+    """compose: служба на 0.0.0.0, Host — имя службы в сети (amemo:8767); прочие имена — 421."""
     db.prepare(pg)
-    client = serve({"AMEM_ALLOWED_HOSTS": "amem"}, host="0.0.0.0")
-    for host in ("amem:8767", "AMEM", "amem:80", "127.0.0.1:8767", "localhost"):
+    client = serve({"AMEMO_ALLOWED_HOSTS": "amemo"}, host="0.0.0.0")
+    for host in ("amemo:8767", "AMEMO", "amemo:80", "127.0.0.1:8767", "localhost"):
         assert client.get("/health", headers={"Host": host}).status_code == 200, host
-    for host in ("evil:8767", "0.0.0.0:8767", "amem.evil", "[::]:8767"):
+    for host in ("evil:8767", "0.0.0.0:8767", "amemo.evil", "[::]:8767"):
         response = client.get("/health", headers={"Host": host})
         assert response.status_code == 421 and response.json()["code"] == "bad_host", host
     own = client.post(f"{V1}/folders", json={"path": "Проекты/Север"},
-                      headers={"Host": "amem:8767", "Origin": "http://amem:8767"})
+                      headers={"Host": "amemo:8767", "Origin": "http://amemo:8767"})
     # свой источник по имени службы: защита пропустила, отказ — уже по праву (папки создаёт человек)
     assert own.status_code == 403 and own.json()["code"] == "forbidden", own.text
     foreign = client.post(f"{V1}/folders", json={"path": "Проекты/Юг"},
-                          headers={"Host": "amem:8767", "Origin": "http://evil:8767"})
+                          headers={"Host": "amemo:8767", "Origin": "http://evil:8767"})
     assert foreign.status_code == 403 and foreign.json()["code"] == "bad_origin"
-    plain = serve()                                              # без AMEM_ALLOWED_HOSTS имя службы — чужое
-    assert plain.get("/health", headers={"Host": "amem:8767"}).status_code == 421
+    plain = serve()                                              # без AMEMO_ALLOWED_HOSTS имя службы — чужое
+    assert plain.get("/health", headers={"Host": "amemo:8767"}).status_code == 421
 
 
 # --- таймауты ---
@@ -344,7 +344,7 @@ def test_slow_json_body_408(serve, pg, monkeypatch):
 def test_slow_upload_408_and_part_removed(serve, pg, monkeypatch, tmp_path):
     db.prepare(pg)
     state = tmp_path / "state"
-    client = serve({"AMEM_STATE": str(state)})
+    client = serve({"AMEMO_STATE": str(state)})
     monkeypatch.setattr(http_v1, "BODY_IDLE", 0.3)
     head = (b'--b\r\nContent-Disposition: form-data; name="file"; filename="x.zip"\r\n'
             b"Content-Type: application/zip\r\n\r\nPK\x03\x04")
@@ -399,19 +399,19 @@ def test_graph_statement_timeout_503(serve, pg, monkeypatch):
     (" 7 k ", 7 << 10),
 ])
 def test_state_quota_setting(tmp_path, value, size):
-    env = {"HOME": str(tmp_path)} if value is None else {"HOME": str(tmp_path), "AMEM_STATE_QUOTA": value}
+    env = {"HOME": str(tmp_path)} if value is None else {"HOME": str(tmp_path), "AMEMO_STATE_QUOTA": value}
     assert settings.load(env).state_quota == size
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "10X", "1.5G", "много"])
 def test_state_quota_setting_rejects(tmp_path, value):
-    with pytest.raises(settings.SettingsError, match="AMEM_STATE_QUOTA"):
-        settings.load({"HOME": str(tmp_path), "AMEM_STATE_QUOTA": value})
+    with pytest.raises(settings.SettingsError, match="AMEMO_STATE_QUOTA"):
+        settings.load({"HOME": str(tmp_path), "AMEMO_STATE_QUOTA": value})
 
 
 @pytest.fixture
 def kb(pg, monkeypatch, store, docs):
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
     monkeypatch.setattr(review, "AUDIT_RATE", 0.0)
     db.prepare(pg)
     made = check.submit(pg, store, docs, [
@@ -424,19 +424,19 @@ def kb(pg, monkeypatch, store, docs):
 def _quota_problem(response, path: str) -> dict:
     assert response.status_code == 507, response.text
     body = contract.check(response, path, "post")
-    assert body["code"] == "quota_exceeded" and "AMEM_STATE_QUOTA" in body["detail"], body
+    assert body["code"] == "quota_exceeded" and "AMEMO_STATE_QUOTA" in body["detail"], body
     return body
 
 
 def test_export_over_quota_507_per_owner(serve, kb, docs, tmp_path):
     state = tmp_path / "state"
-    big = serve({"AMEM_STATE": str(state), "AMEM_DOCS": str(docs)})
+    big = serve({"AMEMO_STATE": str(state), "AMEMO_DOCS": str(docs)})
     made = big.post(f"{V1}/bundles/export", json={"selection": {}})
     assert made.status_code == 200, made.text
     size = api.state_usage(state, "agent:model:local")
     assert size > 0
     # предел — полторы подборки: первая модели проходит (уже есть одна — вторая не влезает)
-    client = serve({"AMEM_STATE": str(state), "AMEM_DOCS": str(docs), "AMEM_STATE_QUOTA": str(size * 3 // 2)})
+    client = serve({"AMEMO_STATE": str(state), "AMEMO_DOCS": str(docs), "AMEMO_STATE_QUOTA": str(size * 3 // 2)})
     _quota_problem(client.post(f"{V1}/bundles/export", json={"selection": {}}), "/bundles/export")
     assert len(list((state / "bundles").iterdir())) == 1              # сверх предела — удалена
     # у человека свой счёт: его подборка влезает
@@ -444,32 +444,32 @@ def test_export_over_quota_507_per_owner(serve, kb, docs, tmp_path):
     assert person.json()["agent"] == PERSON
     assert client.post(f"{V1}/bundles/export", json={"selection": {}}).status_code == 200
     # предел занят целиком — отказ сразу, до экспорта
-    tiny = serve({"AMEM_STATE": str(state), "AMEM_DOCS": str(docs), "AMEM_STATE_QUOTA": "1"})
+    tiny = serve({"AMEMO_STATE": str(state), "AMEMO_DOCS": str(docs), "AMEMO_STATE_QUOTA": "1"})
     _quota_problem(tiny.post(f"{V1}/bundles/export", json={"selection": {}}), "/bundles/export")
     assert len(list((state / "bundles").iterdir())) == 2
 
 
 def test_upload_over_quota_507(serve, kb, docs, tmp_path):
     state = tmp_path / "state"
-    big = serve({"AMEM_STATE": str(state), "AMEM_DOCS": str(docs)})
+    big = serve({"AMEMO_STATE": str(state), "AMEMO_DOCS": str(docs)})
     made = big.post(f"{V1}/bundles/export", json={"selection": {}}).json()
     data = big.get(made["download"]).content
     other = tmp_path / "other"                     # загрузки — в другой папке состояния: подборка выше не мешает
     files = {"file": ("bundle.zip", data, "application/zip")}
-    small = serve({"AMEM_STATE": str(other), "AMEM_STATE_QUOTA": str(len(data) // 2)})
+    small = serve({"AMEMO_STATE": str(other), "AMEMO_STATE_QUOTA": str(len(data) // 2)})
     _quota_problem(small.post(f"{V1}/bundles/inspect", files=files, headers={"Origin": ORIGIN}), "/bundles/inspect")
     assert list((other / "uploads").iterdir()) == []                 # оборвано при приёме, .part удалён
-    roomy = serve({"AMEM_STATE": str(other), "AMEM_STATE_QUOTA": str(len(data) * 20)})
+    roomy = serve({"AMEMO_STATE": str(other), "AMEMO_STATE_QUOTA": str(len(data) * 20)})
     first = roomy.post(f"{V1}/bundles/inspect", files=files, headers={"Origin": ORIGIN})
     assert first.status_code == 200, first.text
     used = api.state_usage(other, "agent:model:local")             # распакованная загрузка с meta.json
-    full = serve({"AMEM_STATE": str(other), "AMEM_STATE_QUOTA": str(used)})
+    full = serve({"AMEMO_STATE": str(other), "AMEMO_STATE_QUOTA": str(used)})
     _quota_problem(full.post(f"{V1}/bundles/inspect", files=files, headers={"Origin": ORIGIN}), "/bundles/inspect")
     # zip принят, распакованная подборка в предел не влезла — удаляется после распаковки (api.upload_finish)
     third = tmp_path / "third"
     upload_id, part = api.upload_begin(third)
     part.write_bytes(data)
-    with pytest.raises(api.QuotaExceeded, match="AMEM_STATE_QUOTA"):
+    with pytest.raises(api.QuotaExceeded, match="AMEMO_STATE_QUOTA"):
         api.upload_finish(third, upload_id, part, owner="agent:model:local", quota=1)
     assert list((third / "uploads").iterdir()) == []
 
@@ -501,6 +501,6 @@ def test_state_usage_counts_own_live_folders(tmp_path, monkeypatch):
     assert 150 <= used < 1000                                         # meta.json тоже занимает место
     assert api.upload_room(state, "agent:a", None) is None
     assert api.upload_room(state, "agent:a", used + 10) == 10
-    with pytest.raises(api.QuotaExceeded, match="AMEM_STATE_QUOTA"):
+    with pytest.raises(api.QuotaExceeded, match="AMEMO_STATE_QUOTA"):
         api.upload_room(state, "agent:a", used)
     assert api.state_usage(tmp_path / "нет", "agent:a") == 0

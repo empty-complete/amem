@@ -1,9 +1,9 @@
-"""Числа атома и текста (amem.check.numbers), без базы."""
+"""Числа атома и текста (amemo.check.numbers), без базы."""
 from decimal import Decimal as D
 
 import pytest
 
-from amem.check.numbers import atom_numbers, missing, text_numbers
+from amemo.check.numbers import atom_numbers, missing, text_numbers
 
 
 def test_atom_numbers_paths_and_condition_flag():

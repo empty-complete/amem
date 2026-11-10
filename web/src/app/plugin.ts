@@ -30,14 +30,14 @@ export interface Command {
   run: (ctx: CommandContext) => void | Promise<void>;
 }
 
-/** Источник данных: адаптер к контракту службы (amem, позже asearch). */
+/** Источник данных: адаптер к контракту службы (amemo, позже asearch). */
 export interface DataSource {
   id: string;
   kind: "records" | "files" | "graph";
   search: (q: string) => Promise<{ items: unknown[] }>;
 }
 
-/** Плагин регистрирует в оболочке виджеты, команды и источники данных. Ядро amem — первый плагин. */
+/** Плагин регистрирует в оболочке виджеты, команды и источники данных. Ядро amemo — первый плагин. */
 export interface Plugin {
   id: string;
   title?: Text;

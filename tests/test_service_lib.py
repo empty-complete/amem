@@ -10,8 +10,8 @@ import pytest
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from pydantic import ValidationError
 
-from amem import backup, db, embed, folders, ids, model_v1, packs, recipes, records, review, usefulness, vocab
-from amem.records import Item, RecordError
+from amemo import backup, db, embed, folders, ids, model_v1, packs, recipes, records, review, usefulness, vocab
+from amemo.records import Item, RecordError
 from conftest import FakeProvider
 
 AGENT = "model:test"
@@ -430,7 +430,7 @@ def test_backups_report_created_at_and_size(tmp_path):
     def pair(name, size, **extra):
         (tmp_path / f"{name}.dump").write_bytes(b"x" * size)
         (tmp_path / f"{name}.json").write_text(json.dumps(
-            {"kind": "amem.pg_dump", "format": 1, "file": f"{name}.dump", "size": size, **extra}), encoding="utf-8")
+            {"kind": "amemo.pg_dump", "format": 1, "file": f"{name}.dump", "size": size, **extra}), encoding="utf-8")
 
     pair("2026-11-05T08-00-00Z", 7, created_at="2026-11-05T08:00:00.250000+00:00")
     pair("2026-11-05T09-00-00Z", 3)                                  # манифест без created_at — время из имени

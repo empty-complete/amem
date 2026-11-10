@@ -4,9 +4,9 @@ import uuid
 
 import pytest
 
-from amem import db, embed, records
-from amem.check import Proposal, level1, level4
-from amem.check.report import Report
+from amemo import db, embed, records
+from amemo.check import Proposal, level1, level4
+from amemo.check.report import Report
 from check_support import atom, entity
 from conftest import FakeProvider
 
@@ -137,7 +137,7 @@ def test_vector_edit_does_not_find_itself(kb):
 def test_backend_disabled(kb, monkeypatch):
     activate(kb, FakeProvider())
     stored(kb, atom("@old", label=lab(WIND)))
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
     issues, degraded = run(kb, atom("@a1", label=lab(WIND_NEW)), provider=FakeProvider())
     assert degraded == [{"level": 4, "channel": "vector", "reason": "backend_disabled"}]
     assert codes(issues) == [("duplicate", "warning", "@a1")]

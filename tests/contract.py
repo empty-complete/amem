@@ -23,7 +23,7 @@ from referencing.jsonschema import DRAFT202012
 
 ROOT = Path(__file__).resolve().parent.parent
 PATH = ROOT / "docs" / "api" / "http-v1.openapi.yaml"
-URI = "urn:amem:http-v1"
+URI = "urn:amemo:http-v1"
 JSON = ("application/json", "application/problem+json")
 
 

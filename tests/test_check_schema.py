@@ -5,7 +5,7 @@ import pytest
 from packaging.version import Version
 from pydantic import ValidationError
 
-from amem import model_v1, packs
+from amemo import model_v1, packs
 
 CHECK_CODES = {
     "schema", "unknown_code", "ref_unknown", "template", "ucum", "unit_required", "bounds_order",

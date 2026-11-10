@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from amem import db, packs
+from amemo import db, packs
 
 QUANTITIES = Path(__file__).with_name("packs") / "quantities"
 
@@ -89,7 +89,7 @@ def test_broader_across_packs_ok(tmp_path):
 
 def test_pack_table_keeps_requires(pg, monkeypatch, tmp_path):
     a = _pack(tmp_path / "a", "a", requires={"quantities": ">=1.0.0,<2"})
-    monkeypatch.setenv("AMEM_PACKS", f"{QUANTITIES}{os.pathsep}{a}")
+    monkeypatch.setenv("AMEMO_PACKS", f"{QUANTITIES}{os.pathsep}{a}")
     db.prepare(pg)
     row = pg.execute("SELECT requires FROM pack WHERE name = 'a'").fetchone()
     assert row[0] == {"quantities": ">=1.0.0,<2"}

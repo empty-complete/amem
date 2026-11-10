@@ -1,9 +1,9 @@
-# Образ службы amem (спецификация подпроекта 4, разд. 7). Цели:
-#   service — amem serve (по умолчанию);
-#   web     — то же плюс статика веб-интерфейса (amem[web]: пакет amem-web из web/python), служба отдаёт её по /ui.
-# Сборка: docker build -t amem .   или   docker build --target web -t amem-web .
-# Внутри — клиент PostgreSQL 18 (pg_dump, pg_restore) для amem backup; семантическая модель — по
-# --build-arg AMEM_EXTRAS=embed (fastembed, образ заметно больше).
+# Образ службы amemo (спецификация подпроекта 4, разд. 7). Цели:
+#   service — amemo serve (по умолчанию);
+#   web     — то же плюс статика веб-интерфейса (amemo[web]: пакет amemo-web из web/python), служба отдаёт её по /ui.
+# Сборка: docker build -t amemo .   или   docker build --target web -t amemo-web .
+# Внутри — клиент PostgreSQL 18 (pg_dump, pg_restore) для amemo backup; семантическая модель — по
+# --build-arg AMEMO_EXTRAS=embed (fastembed, образ заметно больше).
 
 FROM node:24-bookworm-slim AS ui
 WORKDIR /src/web
@@ -27,40 +27,40 @@ RUN apt-get update \
  && apt-get update \
  && apt-get install -y --no-install-recommends postgresql-client-18 \
  && apt-get purge -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
-ENV AMEM_PG_BIN=/usr/lib/postgresql/18/bin
+ENV AMEMO_PG_BIN=/usr/lib/postgresql/18/bin
 
-ARG AMEM_EXTRAS=""
-COPY pyproject.toml README.md LICENSE.txt /src/amem/
-COPY amem /src/amem/amem
-RUN if [ -n "$AMEM_EXTRAS" ]; then pip install "/src/amem[$AMEM_EXTRAS]"; else pip install /src/amem; fi \
- && rm -rf /src/amem
+ARG AMEMO_EXTRAS=""
+COPY pyproject.toml README.md LICENSE.txt /src/amemo/
+COPY amemo /src/amemo/amemo
+RUN if [ -n "$AMEMO_EXTRAS" ]; then pip install "/src/amemo[$AMEMO_EXTRAS]"; else pip install /src/amemo; fi \
+ && rm -rf /src/amemo
 
 # данные, состояние и бэкапы — тома (docker-compose.yml); служба не от root
-RUN useradd --system --uid 10001 --user-group --home-dir /var/lib/amem amem \
- && install -d -o amem -g amem /var/lib/amem /var/lib/amem/objects /var/lib/amem/state /var/lib/amem/backups \
-      /var/lib/amem/docs
-ENV HOME=/var/lib/amem \
-    AMEM_DATA=/var/lib/amem/objects \
-    AMEM_STATE=/var/lib/amem/state \
-    AMEM_BACKUPS=/var/lib/amem/backups \
-    AMEM_HOST=0.0.0.0 \
-    AMEM_PORT=8767
-WORKDIR /var/lib/amem
+RUN useradd --system --uid 10001 --user-group --home-dir /var/lib/amemo amemo \
+ && install -d -o amemo -g amemo /var/lib/amemo /var/lib/amemo/objects /var/lib/amemo/state /var/lib/amemo/backups \
+      /var/lib/amemo/docs
+ENV HOME=/var/lib/amemo \
+    AMEMO_DATA=/var/lib/amemo/objects \
+    AMEMO_STATE=/var/lib/amemo/state \
+    AMEMO_BACKUPS=/var/lib/amemo/backups \
+    AMEMO_HOST=0.0.0.0 \
+    AMEMO_PORT=8767
+WORKDIR /var/lib/amemo
 EXPOSE 8767
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8767/health', timeout=4).read() == b'ok' else 1)"
-USER amem
-# amem init — миграции и корень хранилища (повтор безопасен); без AMEM_TOKENS — --no-auth: порт наружу только
-# 127.0.0.1 (compose), с AMEM_TOKENS — вход по токенам
-CMD ["sh", "-c", "amem init && if [ -n \"$AMEM_TOKENS\" ]; then exec amem serve; else exec amem serve --no-auth; fi"]
+USER amemo
+# amemo init — миграции и корень хранилища (повтор безопасен); без AMEMO_TOKENS — --no-auth: порт наружу только
+# 127.0.0.1 (compose), с AMEMO_TOKENS — вход по токенам
+CMD ["sh", "-c", "amemo init && if [ -n \"$AMEMO_TOKENS\" ]; then exec amemo serve; else exec amemo serve --no-auth; fi"]
 
 
 FROM base AS web
 USER root
-COPY web/python /src/amem-web
-COPY --from=ui /src/web/python/amem_web/dist /src/amem-web/amem_web/dist
-RUN pip install /src/amem-web && rm -rf /src/amem-web
-USER amem
+COPY web/python /src/amemo-web
+COPY --from=ui /src/web/python/amemo_web/dist /src/amemo-web/amemo_web/dist
+RUN pip install /src/amemo-web && rm -rf /src/amemo-web
+USER amemo
 
 
 FROM base AS service

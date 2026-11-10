@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Проверка на приватное перед push: добавленные строки сверяются со списком образцов, который лежит ВНЕ репозитория.
 # Включение: git config core.hooksPath tools/hooks
-# Список: $AMEM_PRIVATE_PATTERNS или ~/.config/amem/private-patterns.txt — по одному регулярному выражению
+# Список: $AMEMO_PRIVATE_PATTERNS или ~/.config/amemo/private-patterns.txt — по одному регулярному выражению
 # (grep -E, без учёта регистра) на строку; строки с # — комментарии. Файла нет — предупреждение, push проходит.
 set -u
-patterns="${AMEM_PRIVATE_PATTERNS:-$HOME/.config/amem/private-patterns.txt}"
+patterns="${AMEMO_PRIVATE_PATTERNS:-$HOME/.config/amemo/private-patterns.txt}"
 if [ ! -r "$patterns" ]; then
   echo "pre-push: нет списка приватных образцов ($patterns) — проверка пропущена" >&2
   exit 0

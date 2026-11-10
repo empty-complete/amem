@@ -138,7 +138,7 @@ export function Sky(props: SkyProps) {
   // ручка для e2e — только в сборке с моками
   useEffect(() => {
     if (!import.meta.env.VITE_MOCK || !sky) return;
-    (window as unknown as { __amemSky?: object }).__amemSky = {
+    (window as unknown as { __amemoSky?: object }).__amemoSky = {
       screen: (id: string) => canvas.current?.screen(id) ?? null,
       count: () => sky.nodes.length,
       dim: () => [...dim],

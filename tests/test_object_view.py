@@ -3,10 +3,10 @@ import datetime
 
 import pytest
 
-from amem import db, lookup, objects
-from amem.objects import ObjectError
-from amem.ocfl_store import ObjectStore
-from amem.records import Item, commit
+from amemo import db, lookup, objects
+from amemo.objects import ObjectError
+from amemo.ocfl_store import ObjectStore
+from amemo.records import Item, commit
 from samples import make_xlsx
 
 AGENT = "model:tester"
@@ -198,7 +198,7 @@ def test_sheet_not_a_workbook(kb, docs, store):
 
 def test_sheet_without_the_copy_in_the_store_is_a_store_error(kb, book, tmp_path):
     """Копии нет в хранилище — StoreError (или отказ файловой системы), а не «версия не книга xlsx»."""
-    from amem.ocfl_store import StoreError
+    from amemo.ocfl_store import StoreError
 
     with pytest.raises(StoreError):
         objects.sheet(kb, ObjectStore(tmp_path / "пустое"), book.object_id, 1, "Нагрузки")

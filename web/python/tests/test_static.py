@@ -1,10 +1,10 @@
 import pytest
 
-import amem_web
+import amemo_web
 
 
 def test_static_dir_points_to_built_index():
-    d = amem_web.static_dir()
+    d = amemo_web.static_dir()
     if not (d / "index.html").exists():
         pytest.skip("статика не собрана: npm run build в web/")
     assert (d / "assets").is_dir()

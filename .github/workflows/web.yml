@@ -2,9 +2,9 @@ name: web
 on:
   push:
     branches: [main]
-    paths: ["web/**", "docs/api/**", "amem/**", "pyproject.toml", "tools/seed_sample.py", "tools/check_ui_wheel.py", ".github/workflows/web.yml"]
+    paths: ["web/**", "docs/api/**", "amemo/**", "pyproject.toml", "tools/seed_sample.py", "tools/check_ui_wheel.py", ".github/workflows/web.yml"]
   pull_request:
-    paths: ["web/**", "docs/api/**", "amem/**", "pyproject.toml", "tools/seed_sample.py", "tools/check_ui_wheel.py", ".github/workflows/web.yml"]
+    paths: ["web/**", "docs/api/**", "amemo/**", "pyproject.toml", "tools/seed_sample.py", "tools/check_ui_wheel.py", ".github/workflows/web.yml"]
 
 jobs:
   web:
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Пакет amem-web
+      - name: Пакет amemo-web
         working-directory: web/python
         run: pip install -q -e ".[dev]" && pytest -q tests
       - run: npx playwright install --with-deps chromium
@@ -44,7 +44,7 @@ jobs:
           path: web/playwright-report
           retention-days: 7
 
-  # веб на настоящей службе (часть H): колёса amem и amem-web в чистом окружении, /ui по правилам службы,
+  # веб на настоящей службе (часть H): колёса amemo и amemo-web в чистом окружении, /ui по правилам службы,
   # e2e на образце «метеостанция» (tools/seed_sample.py)
   web-service:
     runs-on: ubuntu-latest
@@ -57,7 +57,7 @@ jobs:
           --health-cmd "pg_isready -U test -d test"
           --health-interval 2s --health-timeout 3s --health-retries 30
     env:
-      AMEM_DSN: postgresql://test:test@127.0.0.1:5432/test
+      AMEMO_DSN: postgresql://test:test@127.0.0.1:5432/test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -72,21 +72,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Колёса amem и amem-web в чистом окружении
+      - name: Колёса amemo и amemo-web в чистом окружении
         run: |
           pip install -q build
           python -m build -q --wheel -o wheels .
           python -m build -q --wheel -o wheels web/python
-          python -m venv /tmp/amem
-          /tmp/amem/bin/pip install -q wheels/amem-*.whl wheels/amem_web-*.whl
+          python -m venv /tmp/amemo
+          /tmp/amemo/bin/pip install -q wheels/amemo-*.whl wheels/amemo_web-*.whl
       - name: /ui из колёс — CSP, кэш, маршруты
-        run: /tmp/amem/bin/python tools/check_ui_wheel.py
+        run: /tmp/amemo/bin/python tools/check_ui_wheel.py
       - run: npx playwright install --with-deps chromium
         working-directory: web
       - name: e2e против службы
         working-directory: web
         env:
-          AMEM_PYTHON: /tmp/amem/bin/python
+          AMEMO_PYTHON: /tmp/amemo/bin/python
         run: npx playwright test -c playwright.service.config.ts
       - uses: actions/upload-artifact@v4
         if: failure()

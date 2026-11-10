@@ -1,6 +1,6 @@
 """Ядро 1.2.0–1.3.0: заметка, изделие, прямоугольник, has_source со skip_if_set; семья видов (1.3.0)."""
-from amem import packs
-from amem.check import templates
+from amemo import packs
+from amemo.check import templates
 
 CORE = packs.load_pack(packs.CORE_PACK)
 

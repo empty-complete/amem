@@ -9,7 +9,7 @@ backups/
 .github/
 .env
 web/node_modules/
-web/python/amem_web/dist/
+web/python/amemo_web/dist/
 web/dist-mock/
 web/test-results/
 web/playwright-report*/

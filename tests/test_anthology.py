@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from amem import anthology, bundle, check, db
-from amem.check import Proposal
+from amemo import anthology, bundle, check, db
+from amemo.check import Proposal
 from check_support import atom, entity, source_md, value
 
 PACKS = Path(__file__).with_name("packs")
@@ -16,7 +16,7 @@ MODEL = "model:extractor"
 @pytest.fixture
 def world(pg, monkeypatch, store, docs):
     """Датчик; два значения массы (preferred и normal), устаревшее, заметка; запись модели — не проверена."""
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(PACKS / "ontology")]))
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(PACKS / "ontology")]))
     db.prepare(pg)
     r = check.submit(pg, store, docs, [
         Proposal("entity", entity("@s", cls="sensor")),

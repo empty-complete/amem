@@ -6,9 +6,9 @@ import uuid
 
 import pytest
 
-from amem import db, records
-from amem.check import Proposal, level1, level3
-from amem.check.report import Report
+from amemo import db, records
+from amemo.check import Proposal, level1, level3
+from amemo.check.report import Report
 from check_support import CHECK_PACK, atom, entity, value
 
 AGENT = "model:tester"
@@ -44,7 +44,7 @@ def stored(conn, *bodies, status=None) -> dict[str, uuid.UUID]:
 
 @pytest.fixture
 def kb(pg, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", str(CHECK_PACK))
+    monkeypatch.setenv("AMEMO_PACKS", str(CHECK_PACK))
     db.prepare(pg)
     return pg
 
@@ -86,7 +86,7 @@ def test_unknown_property_with_vocabulary(kb):
 
 
 def test_free_codes_without_property_vocabulary(pg, monkeypatch):
-    monkeypatch.delenv("AMEM_PACKS", raising=False)
+    monkeypatch.delenv("AMEMO_PACKS", raising=False)
     db.prepare(pg)
     assert pg.execute("SELECT count(*) FROM concept WHERE scheme = 'property'").fetchone()[0] == 0
     found, _, _ = run(pg, one(value("velocity", 3, "m/s")))

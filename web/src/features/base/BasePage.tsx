@@ -163,7 +163,7 @@ export function BasePage() {
       <dl className="basemeta">
         <dt>{t("basepage.id")}</dt>
         <dd className="mono">{base.data.base_id}</dd>
-        <dt>{t("basepage.amem")}</dt>
+        <dt>{t("basepage.amemo")}</dt>
         <dd>{base.data.amem_version}</dd>
       </dl>
     </section>

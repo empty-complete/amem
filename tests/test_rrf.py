@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from amem import search
+from amemo import search
 
 
 def candidate(ref, rank, source_rank=None):

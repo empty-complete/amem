@@ -1,5 +1,5 @@
 export type Theme = "system" | "light" | "dark";
-const KEY = "amem.theme";
+const KEY = "amemo.theme";
 const dark = () => window.matchMedia("(prefers-color-scheme: dark)");
 
 /** Выбор человека; без localStorage (приватное окно, запрет) — «как в системе». */

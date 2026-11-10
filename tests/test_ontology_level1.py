@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from amem import check, db, records, review
-from amem.check import Proposal
+from amemo import check, db, records, review
+from amemo.check import Proposal
 from check_support import atom, pack, source_md, value
 
 PACKS = Path(__file__).with_name("packs")
@@ -19,8 +19,8 @@ def _packs(*extra) -> str:
 
 @pytest.fixture
 def ready(pg, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", _packs())
-    monkeypatch.setenv("AMEM_BACKEND", "none")          # уровень 4 — только текст, без модели
+    monkeypatch.setenv("AMEMO_PACKS", _packs())
+    monkeypatch.setenv("AMEMO_BACKEND", "none")          # уровень 4 — только текст, без модели
     db.prepare(pg)
     return pg
 
@@ -119,7 +119,7 @@ def test_low_confidence_needs_review_only_with_rule(ready, store, docs, tmp_path
     extra = pack(tmp_path / "risk", "risk", {"measurement": {
         "code": "measurement", "version": "1.0.0", "target": "atom", "applies_to": "measurement",
         "extends": ["has_label"], "high_risk": ["low_confidence"]}}, kinds=["measurement"])
-    monkeypatch.setenv("AMEM_PACKS", _packs(extra))
+    monkeypatch.setenv("AMEMO_PACKS", _packs(extra))
     db.prepare(ready)
     low = _submit(ready, store, docs, a("@m", "Масса корпуса 3 кг", "measurement", confidence=0.5, content=mass(),
                                         sources=[source_md(NOTE, "Масса 3 кг.")]), MODEL)
@@ -184,8 +184,8 @@ def test_model_edit_of_person_record_is_pending_whatever_status(ready, store, do
 
 def test_level1_without_agent_skips_agent_rules(ready):
     """level1.check без agent (как в старых вызовах) правил basis author и confidence не применяет."""
-    from amem.check import level1
-    from amem.check.report import Report
+    from amemo.check import level1
+    from amemo.check.report import Report
     report = Report()
     body = a("@n", "Заметка о крепеже", "note", sources=None, body={"ru": "Текст."}, basis="author", confidence=0.4)
     level1.check(ready, [Proposal("atom", body)], [], report)
@@ -235,7 +235,7 @@ def test_model_edit_of_rejected_person_record_goes_usual_way(ready, store, docs)
 
 def test_person_record_on_old_object_version_gets_source_changed(ready, store, docs):
     """У записи человека из пунктов остаётся только source_changed: это вопрос о файле, а не проверка записи."""
-    from amem import objects
+    from amemo import objects
     note = docs / "версии.md"
     note.write_text("# Узел\n\n## Кронштейн\n\nКронштейн КБ-14 крепится анкером.\n", encoding="utf-8")
     v1 = objects.ingest(ready, store, docs, "версии.md", agent=PERSON)

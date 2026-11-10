@@ -90,7 +90,7 @@ export const handlersF = (zip: () => Promise<ArrayBuffer>) => [
     return HttpResponse.arrayBuffer(await zip(), {
       headers: {
         "content-type": "application/zip",
-        "content-disposition": `attachment; filename="amem-${params.id}.zip"`,
+        "content-disposition": `attachment; filename="amemo-${params.id}.zip"`,
       },
     });
   }),
@@ -109,7 +109,7 @@ export const handlersF = (zip: () => Promise<ArrayBuffer>) => [
     const file = form.get("file") as File | null;
     if (!file) return problem(422, "Нужен файл подборки");
     if (!/\.zip$/i.test(file.name))
-      return problem(422, "Это не подборка", "Нужен zip, собранный amem (amem.bundle/1)");
+      return problem(422, "Это не подборка", "Нужен zip, собранный amemo (amem.bundle/1)");
     const damaged = /битый|broken/i.test(file.name);
     const upload_id = newId("task");
     uploads.set(upload_id, { name: file.name, damaged });

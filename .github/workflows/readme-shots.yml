@@ -40,13 +40,13 @@ jobs:
           --health-cmd "pg_isready -U test -d test"
           --health-interval 2s --health-timeout 3s --health-retries 30
     env:
-      AMEM_DSN: postgresql://test:test@127.0.0.1:5432/test
-      AMEM_DATA: /tmp/sample/objects
-      AMEM_DOCS: /tmp/sample/docs
-      AMEM_STATE: /tmp/sample/state
-      AMEM_AGENT: person:sample
-      AMEM_PORT: "8770"
-      AMEM_BACKEND: none
+      AMEMO_DSN: postgresql://test:test@127.0.0.1:5432/test
+      AMEMO_DATA: /tmp/sample/objects
+      AMEMO_DOCS: /tmp/sample/docs
+      AMEMO_STATE: /tmp/sample/state
+      AMEMO_AGENT: person:sample
+      AMEMO_PORT: "8770"
+      AMEMO_BACKEND: none
       SHOT_LANG: ${{ matrix.lang }}
       SHOT_SEED: ${{ matrix.seed }}
       SHOT_PACKS: ${{ matrix.packs }}
@@ -67,26 +67,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: amem and amem-web wheels in a clean venv
+      - name: amemo and amemo-web wheels in a clean venv
         run: |
           pip install -q build
           python -m build -q --wheel -o wheels .
           python -m build -q --wheel -o wheels web/python
-          python -m venv /tmp/amem
-          /tmp/amem/bin/pip install -q wheels/amem-*.whl wheels/amem_web-*.whl
+          python -m venv /tmp/amemo
+          /tmp/amemo/bin/pip install -q wheels/amemo-*.whl wheels/amemo_web-*.whl
       - name: Seed the sample
         run: |
-          mkdir -p "$AMEM_DOCS" "$AMEM_DATA" "$AMEM_STATE"
-          if [ -n "$SHOT_PACKS" ]; then echo "AMEM_PACKS=$GITHUB_WORKSPACE/$SHOT_PACKS" >> "$GITHUB_ENV"; fi
-          if [ -n "$SHOT_PACKS" ]; then export AMEM_PACKS="$GITHUB_WORKSPACE/$SHOT_PACKS"; fi
-          /tmp/amem/bin/python "$SHOT_SEED"
+          mkdir -p "$AMEMO_DOCS" "$AMEMO_DATA" "$AMEMO_STATE"
+          if [ -n "$SHOT_PACKS" ]; then echo "AMEMO_PACKS=$GITHUB_WORKSPACE/$SHOT_PACKS" >> "$GITHUB_ENV"; fi
+          if [ -n "$SHOT_PACKS" ]; then export AMEMO_PACKS="$GITHUB_WORKSPACE/$SHOT_PACKS"; fi
+          /tmp/amemo/bin/python "$SHOT_SEED"
       - name: Start the service
         run: |
-          nohup /tmp/amem/bin/python -m amem.service > /tmp/service.log 2>&1 &
+          nohup /tmp/amemo/bin/python -m amemo.service > /tmp/service.log 2>&1 &
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:8770/api/v1/base >/dev/null && exit 0; sleep 1; done
           cat /tmp/service.log; exit 1
-      - name: Agent session over MCP (amem mcp, stdio)
-        run: /tmp/amem/bin/python tools/readme_agent_session.py "$AGENT_TRANSCRIPT" --query "$SHOT_QUERY" --prompt "$SHOT_PROMPT"
+      - name: Agent session over MCP (amemo mcp, stdio)
+        run: /tmp/amemo/bin/python tools/readme_agent_session.py "$AGENT_TRANSCRIPT" --query "$SHOT_QUERY" --prompt "$SHOT_PROMPT"
       - run: npx playwright install --with-deps chromium
         working-directory: web
       - name: Screens

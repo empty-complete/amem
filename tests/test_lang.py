@@ -1,12 +1,12 @@
-"""Языки текста записей (docs/superpowers/specs/2026-11-09-amem-text-languages-design.md): amem.lang, подписи
+"""Языки текста записей (docs/superpowers/specs/2026-11-09-amemo-text-languages-design.md): amemo.lang, подписи
 и фрагменты на языке запроса с заменой на другой слот, полнотекстовый поиск по слотам en, перестройка проекции
-поиска, язык у HTTP (Accept-Language), MCP (lang) и CLI (--lang, AMEM_LANG); база — PostgreSQL 18 и 16."""
+поиска, язык у HTTP (Accept-Language), MCP (lang) и CLI (--lang, AMEMO_LANG); база — PostgreSQL 18 и 16."""
 import json
 
 import pytest
 
-from amem import db, lang, lookup, recipes, records, search, settings
-from amem.records import Item, RecordError
+from amemo import db, lang, lookup, recipes, records, search, settings
+from amemo.records import Item, RecordError
 
 pytest_plugins = ["test_service_write", "test_cli"]     # фикстуры kb, start, env, run
 
@@ -19,7 +19,7 @@ ONLY_EN = {"en": "Humidity readings near saturation"}
 ONLY_RU = {"ru": "Высота мачты станции"}
 
 
-# --- amem.lang без базы ---
+# --- amemo.lang без базы ---
 
 def test_check():
     assert [lang.check(v) for v in (None, "", "ru", "EN", " en ")] == [None, None, "ru", "en", "en"]
@@ -97,9 +97,9 @@ def test_shown_text_picks_nested_lang_strings():
 def test_lang_setting(tmp_path):
     home = {"HOME": str(tmp_path)}
     assert settings.load(home).lang is None
-    assert settings.load({**home, "AMEM_LANG": "EN"}).lang == "en"
-    with pytest.raises(settings.SettingsError, match="AMEM_LANG"):
-        settings.load({**home, "AMEM_LANG": "de"})
+    assert settings.load({**home, "AMEMO_LANG": "EN"}).lang == "en"
+    with pytest.raises(settings.SettingsError, match="AMEMO_LANG"):
+        settings.load({**home, "AMEMO_LANG": "de"})
 
 
 # --- база ---
@@ -189,7 +189,7 @@ def test_mcp_lang_argument(env, kb):
     import anyio
     from mcp import Client
 
-    from amem.service import mcp
+    from amemo.service import mcp
 
     @contextlib.asynccontextmanager
     async def connect(environ):
@@ -207,13 +207,13 @@ def test_mcp_lang_argument(env, kb):
         async with connect(env) as client:
             for language, label in (("en", BOTH["en"]), ("ru", BOTH["ru"]), (None, BOTH["ru"])):
                 arguments = {"query": "humidity", **({"lang": language} if language else {})}
-                err, found = await call(client, "amem_search", **arguments)
+                err, found = await call(client, "amemo_search", **arguments)
                 assert not err, found
                 assert next(i["label"] for i in found["items"] if i["ref"] == both) == label
-            err, refused = await call(client, "amem_search", query="humidity", lang="de")
+            err, refused = await call(client, "amemo_search", query="humidity", lang="de")
             assert err and refused["code"] == "bad_request"
-        async with connect({**env, "AMEM_LANG": "en"}) as client:
-            err, found = await call(client, "amem_search", query="humidity")
+        async with connect({**env, "AMEMO_LANG": "en"}) as client:
+            err, found = await call(client, "amemo_search", query="humidity")
             assert not err and next(i["label"] for i in found["items"] if i["ref"] == both) == BOTH["en"]
     anyio.run(main)
 
@@ -228,7 +228,7 @@ def test_cli_lang(run, kb):
 
     assert label("--lang", "en") == BOTH["en"]
     assert label() == BOTH["ru"]
-    assert label(extra={"AMEM_LANG": "en"}) == BOTH["en"]
-    assert label("--lang", "ru", extra={"AMEM_LANG": "en"}) == BOTH["ru"]      # опция главнее окружения
+    assert label(extra={"AMEMO_LANG": "en"}) == BOTH["en"]
+    assert label("--lang", "ru", extra={"AMEMO_LANG": "en"}) == BOTH["ru"]      # опция главнее окружения
     code, _, err = run("search", "humidity", "--lang", "de")
     assert code == 2 and "--lang" in err

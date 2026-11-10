@@ -1,8 +1,8 @@
 """Поисковая проекция меняется атомарно с текущей ревизией и полностью перестраивается."""
 import pytest
 
-from amem import db, lookup, records, search
-from amem.records import Item
+from amemo import db, lookup, records, search
+from amemo.records import Item
 
 AGENT = "model:claude"
 HUMAN = "person:filipp"

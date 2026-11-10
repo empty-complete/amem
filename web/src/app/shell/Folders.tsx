@@ -15,7 +15,7 @@ import { menuStore, useMenuOpen } from "./menu";
 
 type Folder = components["schemas"]["Folder"];
 const TOP_ICON: Record<string, IconName> = { Архив: "archive" };
-export const RECORD_MIME = "application/x-amem-ref";
+export const RECORD_MIME = "application/x-amemo-ref";
 const toggleTheme = () => applyTheme(resolveTheme(readTheme()) === "dark" ? "light" : "dark");
 
 /** Имя папки на месте: Enter — готово, Esc — отмена; ошибки службы словами под полем. */

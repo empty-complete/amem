@@ -10,9 +10,9 @@ import psycopg
 import pytest
 import yaml
 
-from amem import db, packs, records
-from amem.ids import uuid7
-from amem.records import Item
+from amemo import db, packs, records
+from amemo.ids import uuid7
+from amemo.records import Item
 
 AGENT = "model:claude"
 EXAMPLE = Path(__file__).with_name("packs") / "example"
@@ -69,7 +69,7 @@ def test_no_duplicates_in_core():
 def test_unknown_annotation_is_an_error(tmp_path, monkeypatch):
     schema = yaml.safe_load(packs.SCHEMA_FILE.read_text(encoding="utf-8"))
     schema["enums"]["Status"]["permissible_values"]["draft"]["annotations"]["labl_ru"] = "опечатка"
-    broken = tmp_path / "amem_v1.yaml"
+    broken = tmp_path / "amemo_v1.yaml"
     broken.write_text(yaml.safe_dump(schema, allow_unicode=True), encoding="utf-8")
     monkeypatch.setattr(packs, "SCHEMA_FILE", broken)
     with pytest.raises(packs.PackError, match="Status.draft.*labl_ru"):

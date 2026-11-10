@@ -7,7 +7,7 @@ import uuid
 import psycopg
 import pytest
 
-from amem import db, ids, packs
+from amemo import db, ids, packs
 from v1_support import same_database
 
 MIGRATIONS = ["0001_core.sql", "0002_objects.sql", "0003_packs.sql", "0004_hub.sql", "0005_search.sql",
@@ -154,7 +154,7 @@ PROTECTED = ["entity_revision", "atom_revision", "link", "changeset", "status_lo
 @pytest.mark.parametrize("table", PROTECTED)
 def test_truncate_is_forbidden(pg, table):
     db.migrate(pg)
-    with pytest.raises(psycopg.errors.RaiseException, match=f"amem: TRUNCATE в таблице {table} запрещено"):
+    with pytest.raises(psycopg.errors.RaiseException, match=f"amemo: TRUNCATE в таблице {table} запрещено"):
         pg.execute(f"TRUNCATE {table} CASCADE")
 
 
@@ -257,7 +257,7 @@ def test_object_rows_cannot_change(pg, table, op):
     _objects(pg)
     column = OBJECT_ROWS[table]
     sql = f"UPDATE {table} SET {column} = {column}" if op == "UPDATE" else f"DELETE FROM {table}"
-    with pytest.raises(psycopg.errors.RaiseException, match=f"amem: {op} в таблице {table} запрещено"):
+    with pytest.raises(psycopg.errors.RaiseException, match=f"amemo: {op} в таблице {table} запрещено"):
         pg.execute(sql)
 
 

@@ -46,7 +46,7 @@ async function send(p: Pending, keepalive = false) {
       p.onDone?.({} as Submitted);
     } catch (e) {
       const err = e instanceof ApiError ? e : null;
-      p.onIssues?.([], err?.detail ?? err?.title ?? "Нет связи со службой amem");
+      p.onIssues?.([], err?.detail ?? err?.title ?? "Нет связи со службой amemo");
     }
     return;
   }
@@ -64,7 +64,7 @@ async function send(p: Pending, keepalive = false) {
   } catch (e) {
     const err = e instanceof ApiError ? e : null;
     skyBus.retract(p.id);
-    p.onIssues?.(err?.issues ?? [], err?.detail ?? err?.title ?? "Нет связи со службой amem");
+    p.onIssues?.(err?.issues ?? [], err?.detail ?? err?.title ?? "Нет связи со службой amemo");
   }
 }
 

@@ -70,10 +70,10 @@
 }
 @media (prefers-reduced-motion: no-preference) {
   .skeleton-row {
-    animation: amem-pulse 1.4s var(--ease) infinite;
+    animation: amemo-pulse 1.4s var(--ease) infinite;
   }
 }
-@keyframes amem-pulse {
+@keyframes amemo-pulse {
   50% {
     opacity: 0.55;
   }

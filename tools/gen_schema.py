@@ -1,4 +1,4 @@
-"""Генерирует amem/model_v1.py (Pydantic) и amem/schema/amem_v1.schema.json из amem/schema/amem_v1.yaml.
+"""Генерирует amemo/model_v1.py (Pydantic) и amemo/schema/amemo_v1.schema.json из amemo/schema/amemo_v1.yaml.
 
   python tools/gen_schema.py          записать файлы
   python tools/gen_schema.py --check  только сравнить: код 1 и список устаревших файлов
@@ -16,9 +16,9 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = "amem/schema/amem_v1.yaml"    # относительный путь: генератор записывает его в model_v1.py
-PYDANTIC = ROOT / "amem" / "model_v1.py"
-JSON_SCHEMA = ROOT / "amem" / "schema" / "amem_v1.schema.json"
+SOURCE = "amemo/schema/amemo_v1.yaml"    # относительный путь: генератор записывает его в model_v1.py
+PYDANTIC = ROOT / "amemo" / "model_v1.py"
+JSON_SCHEMA = ROOT / "amemo" / "schema" / "amemo_v1.schema.json"
 
 
 def _fail(message: str):
@@ -107,7 +107,7 @@ def generate() -> dict[Path, str]:
     # Строки таблицы (Table.rows) — списки, поэтому массив добавляем.
     any_type = js.get("$defs", {}).get("Any", {}).get("type")
     if not isinstance(any_type, list):
-        _fail("вывод генератора JSON Schema изменился: $defs.Any.type не список — посмотрите amem_v1.schema.json")
+        _fail("вывод генератора JSON Schema изменился: $defs.Any.type не список — посмотрите amemo_v1.schema.json")
     if "array" not in any_type:
         any_type.append("array")
     # Ветвь anyOf («поле обязательно») генератор пишет с пустой схемой поля, и null проходил бы её; ветвь требует
@@ -129,7 +129,7 @@ def stale() -> list[Path]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Генерация model_v1.py и amem_v1.schema.json из amem_v1.yaml.")
+    parser = argparse.ArgumentParser(description="Генерация model_v1.py и amemo_v1.schema.json из amemo_v1.yaml.")
     parser.add_argument("--check", action="store_true", help="только сравнить: код 1 и список устаревших файлов")
     args = parser.parse_args(argv)
     if args.check:

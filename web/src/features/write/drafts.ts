@@ -1,7 +1,7 @@
 // Черновики записи в localStorage: только удобство одного браузера; хранилище может быть недоступно.
 import type { Draft } from "./proposal";
 
-const PREFIX = "amem.draft:";
+const PREFIX = "amemo.draft:";
 
 export const draftKey = (mode: "new" | "edit", id: string | null) => `${PREFIX}${mode}:${id ?? "none"}`;
 

@@ -1,4 +1,4 @@
-// Язык текста записей — как amem/lang.py службы: слоты LangString, порядок замены, текст на языке интерфейса.
+// Язык текста записей — как amemo/lang.py службы: слоты LangString, порядок замены, текст на языке интерфейса.
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 

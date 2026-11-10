@@ -1,7 +1,7 @@
-"""Проверка поставки веб-UI: служба из установленных колёс amem и amem-web отдаёт /ui как положено.
+"""Проверка поставки веб-UI: служба из установленных колёс amemo и amemo-web отдаёт /ui как положено.
 
 Запускать интерпретатором окружения, куда поставлены оба колеса (CI — чистое окружение):
-  AMEM_DSN=… python tools/check_ui_wheel.py [--port 8769]
+  AMEMO_DSN=… python tools/check_ui_wheel.py [--port 8769]
 Проверяется: /ui/ — 200, CSP службы и no-cache; файл сборки с хэшем — immutable; маршрут приложения (/ui/records/) —
 та же страница; boot.js и значок — на месте. Код 0 — всё так, 1 — что-то нет (печатается что).
 """
@@ -33,10 +33,10 @@ def main(argv=None) -> int:
     ap.add_argument("--port", type=int, default=8769)
     args = ap.parse_args(argv)
     base = f"http://127.0.0.1:{args.port}"
-    state = tempfile.mkdtemp(prefix="amem-ui-check-")
-    env = {**os.environ, "AMEM_DATA": os.path.join(state, "objects"), "AMEM_BACKEND": "none",
-           "AMEM_QUERY_LOG": "off"}
-    service = subprocess.Popen([sys.executable, "-m", "amem.service", "--port", str(args.port)], env=env,
+    state = tempfile.mkdtemp(prefix="amemo-ui-check-")
+    env = {**os.environ, "AMEMO_DATA": os.path.join(state, "objects"), "AMEMO_BACKEND": "none",
+           "AMEMO_QUERY_LOG": "off"}
+    service = subprocess.Popen([sys.executable, "-m", "amemo.service", "--port", str(args.port)], env=env,
                                cwd=state)
     failures: list[str] = []
     try:

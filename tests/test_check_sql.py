@@ -6,9 +6,9 @@ from pathlib import Path
 import psycopg
 import pytest
 
-from amem import db, packs
-from amem.ids import uuid7
-from amem.records import Item, commit
+from amemo import db, packs
+from amemo.ids import uuid7
+from amemo.records import Item, commit
 
 AGENT = "model:claude"
 HUMAN = "person:reviewer"
@@ -69,10 +69,10 @@ def test_tables_exist_and_active_templates_filled(kb):
 
 
 def test_active_templates_follow_loaded_packs(kb, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", str(EXAMPLE))
+    monkeypatch.setenv("AMEMO_PACKS", str(EXAMPLE))
     db.load_vocab(kb)
     assert kb.execute("SELECT count(*) FROM template_active WHERE code = 'idea'").fetchone()[0] == 1
-    monkeypatch.delenv("AMEM_PACKS")
+    monkeypatch.delenv("AMEMO_PACKS")
     db.load_vocab(kb)
     assert kb.execute("SELECT count(*) FROM template_active WHERE code = 'idea'").fetchone()[0] == 0
     assert kb.execute("SELECT count(*) FROM template WHERE code = 'idea'").fetchone()[0] >= 1
@@ -81,7 +81,7 @@ def test_active_templates_follow_loaded_packs(kb, monkeypatch):
 def test_item_of_foreign_revision_is_refused(kb):
     record, _ = _atom(kb)
     _, other_rev = _atom(kb, "note.two")
-    with pytest.raises(psycopg.errors.RaiseException, match="amem:"):
+    with pytest.raises(psycopg.errors.RaiseException, match="amemo:"):
         _item(kb, other_rev, record)
 
 
@@ -96,7 +96,7 @@ def test_entity_item_checks_record_of_revision(kb):
         kb.execute(f"INSERT INTO review_item ({', '.join(row)}) VALUES ({', '.join(['%s'] * len(row))})",
                    list(row.values()))
 
-    with pytest.raises(psycopg.errors.RaiseException, match="amem:"):
+    with pytest.raises(psycopg.errors.RaiseException, match="amemo:"):
         insert(first.record_id, second.revision_id)
     insert(second.record_id, second.revision_id)
 
@@ -106,7 +106,7 @@ def test_item_must_start_queued(kb, state):
     record, rev = _atom(kb)
     extra = ({"claimed_by": AGENT, "claimed_until": _now() + timedelta(minutes=5)} if state == "claimed"
              else {"closed_at": _now()})
-    with pytest.raises(psycopg.errors.RaiseException, match="amem:"):
+    with pytest.raises(psycopg.errors.RaiseException, match="amemo:"):
         _item(kb, rev, record, state=state, **extra)
 
 
@@ -127,14 +127,14 @@ def test_closed_item_stays_closed(kb, closed, then):
     item = _item(kb, rev, record)
     _close(kb, item, closed)
     extra = ({"claimed_by": AGENT, "claimed_until": _now() + timedelta(minutes=5)} if then == "claimed" else {})
-    with pytest.raises(psycopg.errors.RaiseException, match="amem:"):
+    with pytest.raises(psycopg.errors.RaiseException, match="amemo:"):
         _set(kb, item, state=then, closed_at=None, **extra)
 
 
 def test_queued_cannot_stay_queued(kb):
     record, rev = _atom(kb)
     item = _item(kb, rev, record)
-    with pytest.raises(psycopg.errors.RaiseException, match="amem:"):
+    with pytest.raises(psycopg.errors.RaiseException, match="amemo:"):
         _set(kb, item, state="queued")
 
 
@@ -143,7 +143,7 @@ def test_queued_cannot_stay_queued(kb):
 def test_item_body_cannot_change(kb, column, value):
     record, rev = _atom(kb)
     item = _item(kb, rev, record)
-    with pytest.raises(psycopg.errors.RaiseException, match="amem:"):
+    with pytest.raises(psycopg.errors.RaiseException, match="amemo:"):
         _set(kb, item, **{column: value})
 
 
@@ -153,7 +153,7 @@ def test_delete_and_truncate_are_forbidden(kb, sql):
     record, rev = _atom(kb)
     item = _item(kb, rev, record)
     _verdict(kb, item)
-    with pytest.raises(psycopg.errors.RaiseException, match="amem:"):
+    with pytest.raises(psycopg.errors.RaiseException, match="amemo:"):
         kb.execute(sql)
 
 
@@ -190,7 +190,7 @@ def test_verification_constraints(kb):
     verdict = _verdict(kb, item, method="human", confidence=None, agent=HUMAN)
     with pytest.raises(psycopg.errors.UniqueViolation):
         _verdict(kb, item)                                               # один вердикт на пункт
-    with pytest.raises(psycopg.errors.RaiseException, match="amem:"):
+    with pytest.raises(psycopg.errors.RaiseException, match="amemo:"):
         kb.execute("UPDATE verification SET note = 'позже' WHERE id = %s", (verdict,))
 
 

@@ -9,10 +9,10 @@ import yaml
 from jsonschema.validators import validator_for
 from pydantic import ValidationError
 
-from amem import model_v1
+from amemo import model_v1
 
 EXAMPLES = Path(__file__).with_name("v1_examples")
-JSON_SCHEMA = Path(__file__).resolve().parents[1] / "amem" / "schema" / "amem_v1.schema.json"
+JSON_SCHEMA = Path(__file__).resolve().parents[1] / "amemo" / "schema" / "amemo_v1.schema.json"
 
 
 def example(name: str) -> dict:
@@ -54,7 +54,7 @@ def changed(name: str, change) -> dict:
 
 @lru_cache
 def schema_yaml() -> dict:
-    return yaml.safe_load((JSON_SCHEMA.parent / "amem_v1.yaml").read_text(encoding="utf-8"))
+    return yaml.safe_load((JSON_SCHEMA.parent / "amemo_v1.yaml").read_text(encoding="utf-8"))
 
 
 def schema_attrs(class_name: str) -> dict:

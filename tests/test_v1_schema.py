@@ -7,7 +7,7 @@ import yaml
 
 from v1_support import JSON_SCHEMA, changed, example, json_errors, pydantic_errors
 
-SCHEMA_YAML = Path(__file__).resolve().parents[1] / "amem" / "schema" / "amem_v1.yaml"
+SCHEMA_YAML = Path(__file__).resolve().parents[1] / "amemo" / "schema" / "amemo_v1.yaml"
 
 VALID = [
     ("AtomPayload", "atom_fact.yaml"),
@@ -161,7 +161,7 @@ def test_open_codes_have_code_pattern():
 UUID_A = "01929f3a-7c4e-7b21-9a6f-3d2c8e1f0a55"
 UUID_B = "01929f3a-7c4e-7b21-9a6f-3d2c8e1f0a56"
 DIGEST = "sha256:" + "0123456789abcdef" * 4       # хэш файла
-HASH = "sha256-c1:" + "0123456789abcdef" * 4      # хэш канонического тела ревизии (amem/canon.py)
+HASH = "sha256-c1:" + "0123456789abcdef" * 4      # хэш канонического тела ревизии (amemo/canon.py)
 
 RECORDS = {
     "Atom": {"kind": "fact", "label": {"ru": "Факт"}, "id": UUID_A, "schema_version": "amem.atom/1", "revision": 1,
@@ -200,8 +200,8 @@ def test_record_classes_reject_bad_values(class_name, change):
 
 
 def test_server_ids_match_schema():
-    """id, которые выдаёт сервер (amem/ids.py), проходят шаблоны id и ссылок схемы."""
-    from amem.ids import uuid7
+    """id, которые выдаёт сервер (amemo/ids.py), проходят шаблоны id и ссылок схемы."""
+    from amemo.ids import uuid7
 
     atom = {**RECORDS["Atom"], "id": str(uuid7()), "about": [f"ent:{uuid7()}"], "changeset": str(uuid7())}
     assert pydantic_errors("Atom", atom) == []

@@ -11,10 +11,10 @@ from datetime import date
 
 import pytest
 
-from amem import db, lang, model_v1, records
-from amem.check import Proposal, level1, templates
-from amem.check.report import Issue, Report
-from amem.ids import uuid7
+from amemo import db, lang, model_v1, records
+from amemo.check import Proposal, level1, templates
+from amemo.check.report import Issue, Report
+from amemo.ids import uuid7
 from check_support import CHECK_PACK, MD, PDF, atom, entity, pack, source_md, source_pdf, value
 
 AGENT = "model:tester"
@@ -48,7 +48,7 @@ def existing(conn, *bodies, links=()) -> dict[str, uuid.UUID]:
 
 @pytest.fixture
 def kb(pg, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", str(CHECK_PACK))
+    monkeypatch.setenv("AMEMO_PACKS", str(CHECK_PACK))
     db.prepare(pg)
     return pg
 
@@ -384,7 +384,7 @@ def memo_kb(pg, monkeypatch, tmp_path):
         "see_also_note": {"code": "see_also_note", "version": "1.0.0", "target": "link", "applies_to": "see_also",
                           "fields": [{"path": "note", "required": True, "severity": "warning"}]},
     }, kinds=["memo", "remark"])
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(CHECK_PACK), str(memo)]))
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join([str(CHECK_PACK), str(memo)]))
     db.prepare(pg)
     return pg
 
@@ -436,14 +436,14 @@ def test_pack_rule(memo_kb, case):
 
 
 def test_inactive_template_rule_does_not_fire(pg, monkeypatch, tmp_path):
-    """Пакет убран из AMEM_PACKS и load_vocab повторён: правило его шаблона больше не срабатывает (разд. 13)."""
+    """Пакет убран из AMEMO_PACKS и load_vocab повторён: правило его шаблона больше не срабатывает (разд. 13)."""
     extra = pack(tmp_path / "extra", "extra", {"fact_codes": {
         "code": "fact_codes", "version": "1.0.0", "target": "atom", "applies_to": "fact",
         "fields": [{"path": "codes", "required": True, "severity": "warning"}]}})
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(CHECK_PACK), str(extra)]))
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join([str(CHECK_PACK), str(extra)]))
     db.prepare(pg)
     assert run(pg, atom("@a"))[1] == [("template", "warning", "@a: codes")]
-    monkeypatch.setenv("AMEM_PACKS", str(CHECK_PACK))
+    monkeypatch.setenv("AMEMO_PACKS", str(CHECK_PACK))
     db.load_vocab(pg)
     assert run(pg, atom("@a"))[1] == []
 
@@ -457,7 +457,7 @@ def test_rule_message_and_link_template(memo_kb):
 
 
 def test_rule_message_in_call_language(memo_kb):
-    """Сообщение правила шаблона — на языке вызова (amem.lang.using), с заменой на другой слот."""
+    """Сообщение правила шаблона — на языке вызова (amemo.lang.using), с заменой на другой слот."""
     with lang.using("en"):
         [issue] = run(memo_kb, memo(codes=["w0"]), DOC)[2].issues
     assert issue.message == "Two designations are needed."
