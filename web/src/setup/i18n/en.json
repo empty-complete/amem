@@ -1,6 +1,10 @@
 {
   "title": "Install amemo",
-  "window": { "minimize": "Minimize", "maximize": "Maximize", "close": "Close" },
+  "window": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "close": "Close"
+  },
   "steps": {
     "label": "Setup steps",
     "lang": "Language",
@@ -11,7 +15,12 @@
     "install": "Install",
     "done": "Done"
   },
-  "nav": { "back": "Back", "next": "Next", "install": "Install", "skip": "Skip" },
+  "nav": {
+    "back": "Back",
+    "next": "Next",
+    "install": "Install",
+    "skip": "Skip"
+  },
   "lang": {
     "title": "amemo language",
     "lead": "amemo labels and hints for agents use this language. You can change it later in Settings.",
@@ -37,6 +46,7 @@
   },
   "features": {
     "title": "Features",
+    "lead": "What amemo can do right after installation.",
     "search": "Semantic search",
     "searchNote": "Finds records by meaning, not only by words. Always installed: it is part of amemo, the ~250 MB model comes with the program.",
     "ocr": "Recognise scans",
@@ -107,6 +117,14 @@
     "autostart": "Start when I sign in to Windows",
     "open": "Open amemo"
   },
-  "size": { "b": "{{n}} B", "kb": "{{n}} KB", "mb": "{{n}} MB", "gb": "{{n}} GB" },
-  "time": { "s": "{{n}} s", "m": "{{n}} min" }
+  "size": {
+    "b": "{{n}} B",
+    "kb": "{{n}} KB",
+    "mb": "{{n}} MB",
+    "gb": "{{n}} GB"
+  },
+  "time": {
+    "s": "{{n}} s",
+    "m": "{{n}} min"
+  }
 }

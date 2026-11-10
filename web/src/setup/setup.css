@@ -522,11 +522,15 @@ li[data-state="done"] .wz__num-dot {
 
 /* готово */
 .wz__tips {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-xs);
-  margin: 0 0 var(--s-lg);
-  padding-left: 1.4em;
+  margin-bottom: var(--s-lg);
+}
+.wz__tip {
+  margin: 0;
+  padding-top: 1px;
+}
+.wz__tip .wz__meta {
+  font-size: var(--t-body);
+  color: var(--ink-2);
 }
 .wz__checks {
   display: flex;

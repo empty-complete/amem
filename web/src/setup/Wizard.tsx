@@ -324,10 +324,21 @@ export function Wizard({ bridge, defaults }: { bridge: Bridge; defaults: Default
     body = (
       <>
         <p className="wz__lead">{t("done.lead")}</p>
-        <ol className="wz__tips">
-          <li>{t("done.find")}</li>
-          <li>{t("done.write")}</li>
-          <li>{t("done.check")}</li>
+        <ol className="wz__list wz__tips">
+          {(["find", "write", "check"] as const).map((k, i) => {
+            const [verb, rest] = t(`done.${k}`).split(" — ");
+            return (
+              <li key={k} className="wz__row">
+                <span className="wz__num-dot" aria-hidden="true">
+                  {i + 1}
+                </span>
+                <p className="wz__tip">
+                  <span className="wz__row-title">{verb}</span>
+                  {rest && <span className="wz__meta"> — {rest}</span>}
+                </p>
+              </li>
+            );
+          })}
         </ol>
         <div className="wz__checks">
           <label className="wz__check">
@@ -347,6 +358,7 @@ export function Wizard({ bridge, defaults }: { bridge: Bridge; defaults: Default
     lang: t("lang.lead"),
     data: t("data.lead"),
     docs: t("docs.lead"),
+    features: t("features.lead"),
     agents: t("agents.lead"),
     install: t("install.lead"),
   };
