@@ -100,3 +100,23 @@ def test_my_kinds_are_not_for_the_model_or_a_read_only_token(serve, pg, monkeypa
     problem(reader.put(f"{V1}/packs/mine/templates/weighing", json=DRAFT), 403, "read_only", MINE, "put")
     problem(reader.delete(f"{V1}/packs/mine/templates/weighing"), 403, "read_only", MINE, "delete")
     assert pg.execute("SELECT count(*) FROM concept WHERE origin = 'mine'").fetchone()[0] == 0
+
+
+# --- блоки ui видов ядра ---
+
+def test_core_parameter_and_decision_forms(serve, pg):
+    """Формы ядра — как их ждёт веб: у параметра значение величины и период, у решения «действует с»;
+    правила без required — строгость проверки не меняется."""
+    db.prepare(pg)
+    atoms = contract.check(serve().get(f"{V1}/templates", params={"target": "atom"}), "/templates")
+    by = {v["code"]: v for v in atoms}
+    parameter = {f["key"]: f for f in by["parameter"]["form"]}
+    assert list(parameter) == ["about", "value", "valid", "tags"]
+    assert (parameter["value"]["path"], parameter["value"]["type"]) == ("content.values", "quantity")
+    assert (parameter["valid"]["path"], parameter["valid"]["type"]) == ("valid_from", "period")
+    assert not any(f["required"] for f in parameter.values())
+    assert "values_table" in by["parameter"]["widgets"] and by["parameter"]["pack"] == "core"
+    decision = {f["key"]: f for f in by["decision"]["form"]}
+    assert list(decision) == ["about", "valid_from", "tags"]
+    assert (decision["valid_from"]["type"], decision["valid_from"]["required"]) == ("date", False)
+    assert by["decision"]["widgets"] == ["sources", "links", "around", "similar"]
