@@ -27,6 +27,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import sys
 import tempfile
 import zipfile
 from dataclasses import dataclass, field
@@ -115,6 +116,28 @@ def is_ours(path: Path) -> bool:
         return False
 
 
+def _uv_cache(env: Mapping[str, str]) -> Path:
+    if env.get("UV_CACHE_DIR"):
+        return Path(env["UV_CACHE_DIR"])
+    if sys.platform == "win32":
+        return Path(env.get("LOCALAPPDATA") or home(env) / "AppData" / "Local") / "uv" / "cache"
+    return Path(env.get("XDG_CACHE_HOME") or home(env) / ".cache") / "uv"
+
+
+def ephemeral(command: list[str], env: Mapping[str, str]) -> str | None:
+    """Команда amemo — из временного окружения `uvx` или `uv tool run` (оно лежит в кэше uv и чистится): такой путь
+    исчезнет, а плагин живёт в аккаунте. Возвращает причину или None."""
+    exe = Path(command[0]).absolute()
+    try:
+        exe.relative_to(_uv_cache(env).absolute())
+        return f"{exe} — кэш uv"
+    except ValueError:
+        pass
+    if any(part.startswith("archive-v") for part in exe.parts):
+        return f"{exe} — кэш uv"
+    return None
+
+
 def default_path(env: Mapping[str, str]) -> Path:
     return home(env) / FILENAME
 
@@ -139,6 +162,11 @@ def build(env: Mapping[str, str], out: Path | None = None, *, dry_run: bool = Fa
     if path.is_dir():
         raise InstallError(f"--out {path}: это папка, нужен путь к файлу .zip")
     command, note = amemo_command(env)
+    temporary = ephemeral(command, env)
+    if temporary:
+        raise InstallError(f"amemo запущен из временного окружения ({temporary}): в плагине остался бы путь, которого "
+                           f"скоро не будет. Поставьте amemo постоянно — uv tool install \"amemo[web]\" или pipx "
+                           f"install \"amemo[web]\" — и повторите amemo install cowork")
     files = plugin_files(command)
     data = zip_bytes(files)
     report = PluginReport(path, dry_run, files=sorted(files), command=command)

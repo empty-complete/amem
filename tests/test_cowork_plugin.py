@@ -97,3 +97,18 @@ def test_cli_install_and_uninstall_cowork(home, env, capsys):
 def test_cli_rejects_project_for_cowork_and_out_for_other_agents(home, env, tmp_path):
     assert cli.main(["install", "cowork", "--project", str(tmp_path)], env=env) == 2
     assert cli.main(["install", "codex", "--out", str(tmp_path / "x.zip")], env=env) == 2
+
+
+def test_amemo_from_a_temporary_environment_is_refused(home, env, tmp_path):
+    """`uv tool run` и `uvx` ставят amemo во временную папку: путь в плагине исчез бы сразу после сборки."""
+    cache = tmp_path / "uvcache"
+    fake = cache / "archive-v0" / "abc" / "bin" / "amemo"
+    fake.parent.mkdir(parents=True)
+    fake.write_text("#!/bin/sh\n")
+    fake.chmod(0o755)
+    temp_env = {**env, "PATH": str(fake.parent), "UV_CACHE_DIR": str(cache)}
+    assert cowork.ephemeral([str(fake)], temp_env)
+    with pytest.raises(install.InstallError, match="временного окружения"):
+        cowork.build(temp_env)
+    assert not (home / cowork.FILENAME).exists()
+    assert cowork.ephemeral(install.amemo_command(env)[0], env) is None
