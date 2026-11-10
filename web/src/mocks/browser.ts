@@ -7,11 +7,13 @@ import { handlersC } from "./handlers-c";
 import { handlersD } from "./handlers-d";
 import { handlersE } from "./handlers-e";
 import { handlersF } from "./handlers-f";
+import { handlersU } from "./handlers-u";
 
 const pdf = async () => (await fetch(manualPdfUrl)).arrayBuffer();
 
 export const worker = setupWorker(
   ...handlersF(async () => (await fetch(bundleZipUrl)).arrayBuffer()),
+  ...handlersU,
   ...handlersE,
   ...handlersD,
   ...handlersC,

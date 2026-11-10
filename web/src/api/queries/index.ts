@@ -12,6 +12,11 @@ export const q = {
       queryFn: async () => data(await api.GET("/session")),
       staleTime: 5 * 60_000,
     }),
+  updates: () =>
+    queryOptions({
+      queryKey: ["updates"],
+      queryFn: async () => data(await api.GET("/updates")),
+    }),
   base: () =>
     queryOptions({
       queryKey: ["base"],

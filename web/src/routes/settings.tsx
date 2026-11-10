@@ -8,6 +8,7 @@ import { q } from "../api/queries";
 import { changeLocale, type Locale } from "../app/i18n";
 import { applyTheme, readTheme, type Theme } from "../app/theme";
 import { kindsStore } from "../features/kinds/store";
+import { UpdatesSection } from "../features/updates/UpdatesSection";
 import "../features/records/records.css";
 
 export const Route = createFileRoute("/settings")({ component: Settings });
@@ -80,6 +81,7 @@ function Settings() {
           <p className="muted">{t("signin.leave_hint")}</p>
         </div>
       )}
+      <UpdatesSection />
       {session.data && (
         <dl
           style={{

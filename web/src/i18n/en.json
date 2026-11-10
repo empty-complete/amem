@@ -665,5 +665,22 @@
     "rejected": "The token did not work: a typo, or it was revoked. Ask the owner for a new one.",
     "leave": "Sign out",
     "leave_hint": "The token will be erased from this device."
+  },
+  "updates": {
+    "title": "Version and updates",
+    "pre": "pre-release",
+    "checked": "Last checked:",
+    "none": "no updates",
+    "never": "Updates have not been checked yet",
+    "available": "{{v}} is available",
+    "install": "Update now",
+    "auto": "Update automatically",
+    "check": "Check now",
+    "manual_docker": "amemo runs in Docker: the service does not update itself — update the image.",
+    "manual_source": "amemo is installed from source or not from PyPI: update it the same way.",
+    "badge_ready": "Update installed",
+    "badge_failed": "Update failed",
+    "reload_text": "amemo was updated to {{v}} — reload the page",
+    "reload": "Reload"
   }
 }

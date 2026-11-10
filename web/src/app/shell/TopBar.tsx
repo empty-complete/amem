@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
 import { CommandField } from "../../features/palette/CommandField";
+import { UpdateBadge } from "../../features/updates/UpdateBadge";
 import { placeStore, useQuickOpen } from "../../features/write/place";
 import { QuickWrite } from "../../features/write/QuickWrite";
 import { Icon } from "../../ui/icons";
@@ -64,6 +65,7 @@ export function TopBar() {
         <button type="button" className="iconbtn hide-s" aria-label={t("nav.theme")} onClick={toggleTheme}>
           <Icon name="theme" />
         </button>
+        <UpdateBadge />
         <Link to="/settings" className="iconbtn hide-s" aria-label={t("nav.settings")}>
           <Icon name="user" />
         </Link>
