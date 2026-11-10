@@ -10,6 +10,9 @@
 - величина content.values[property=X] / qualifiers[property=X] — запись ui.fields и правило content.values /
   qualifiers, обязательное, если обязательна хоть одна величина: отбора по property у FieldRule нет;
 - период (type period) — правила valid_from и valid_to (обязательность — у valid_from);
+- новое свойство: текстовое поле qualifiers[property=X] с кодом X, которого нет в словаре property, заводит понятие
+  property X (origin mine, подпись — из поля, без unit); существующее понятие любого пакета не трогается. Свойство
+  уходит вместе с последним своим видом, который на него ссылается, если его нет и в записях;
 - подписи, подсказки и типы полей, body и widgets — блок ui.
 
 Проверка — та же, что у пакета из файла: пакет mine собирается из базы и проверяется вместе с пакетами-файлами
@@ -119,8 +122,14 @@ def _field(code: str, target: str, i: int, f, issues: list, properties: set[str]
             issues.append(_issue(code, f"{at}.path", "величины есть только у тела атома"))
             return []
         if prop.group(2) not in properties:
-            issues.append(_issue(code, f"{at}.path", f"величины {prop.group(2)} нет в словаре property"))
-            return []
+            # своё текстовое свойство (qualifiers) заводится вместе с видом; величина с единицей — только из словаря
+            if prop.group(1) != "qualifiers" or ftype != "text":
+                issues.append(_issue(code, f"{at}.path", f"величины {prop.group(2)} нет в словаре property"))
+                return []
+            if not CODE.fullmatch(prop.group(2)):
+                issues.append(_issue(code, f"{at}.path", f"код свойства {prop.group(2)}: латиница, цифры и _, "
+                                                         "с буквы, 2–64 знака"))
+                return []
         if f.get("property") not in (None, prop.group(2)):
             issues.append(_issue(code, f"{at}.property", f"путь называет величину {prop.group(2)}, "
                                                          f"а не {f.get('property')}"))
@@ -225,6 +234,42 @@ def _concepts(conn: psycopg.Connection) -> dict[str, Concept]:
     return {c.code: c for c in (Concept.model_validate(data) for (data,) in rows)}
 
 
+def _props(conn: psycopg.Connection) -> list[Concept]:
+    """Свойства, которые завели свои виды: понятия property с origin mine."""
+    rows = conn.execute("SELECT data FROM concept WHERE origin = %s AND scheme = 'property' ORDER BY code",
+                        (NAME,)).fetchall()
+    return [Concept.model_validate(data) for (data,) in rows]
+
+
+def _new_props(conn: psycopg.Connection, body: dict) -> list[Concept]:
+    """Понятия свойств, которые вводит шаблон своего вида: текстовые поля qualifiers[property=X] с кодом, которого
+    нет в словаре property; подпись — из поля ui."""
+    known = {c for (c,) in conn.execute("SELECT code FROM concept WHERE scheme = 'property'").fetchall()}
+    out: dict[str, Concept] = {}
+    for f in (body.get("ui") or {}).get("fields") or []:
+        m = packs.UI_PROPERTY.fullmatch(f["path"])
+        if m is None or m.group(1) != "qualifiers" or m.group(2) in known or f.get("type") != "text":
+            continue
+        label = f.get("label") or {"ru": m.group(2)}
+        out[m.group(2)] = Concept.model_validate_json(
+            json.dumps({"scheme": "property", "code": m.group(2), "label": label}, ensure_ascii=False), strict=True)
+    return list(out.values())
+
+
+def _gc_props(conn: psycopg.Connection) -> None:
+    """Убрать свойства mine, на которые больше не ссылается ни свой вид, ни текущая запись (qualifiers)."""
+    used = {code for scheme, code in refs(conn) if scheme == "property"}
+    for c in _props(conn):
+        if c.code in used:
+            continue
+        in_records = conn.execute(
+            "SELECT 1 FROM atom_current WHERE payload->'qualifiers' @> jsonb_build_array(jsonb_build_object("
+            "'property', %s::text)) LIMIT 1", (c.code,)).fetchone()
+        if in_records is None:
+            conn.execute("DELETE FROM concept WHERE scheme = 'property' AND code = %s AND origin = %s",
+                         (c.code, NAME))
+
+
 def _active(conn: psycopg.Connection) -> dict[str, dict]:
     """code → тело действующего шаблона своего вида."""
     rows = conn.execute(
@@ -264,7 +309,7 @@ def _make_pack(version: str, concepts: list[Concept], bodies: list[dict]) -> pac
 
 def as_pack(conn: psycopg.Connection) -> packs.Pack:
     """Пакет mine, собранный из базы: понятия своих видов и их действующие шаблоны."""
-    return _make_pack(_pack_version(conn), list(_concepts(conn).values()), templates(conn))
+    return _make_pack(_pack_version(conn), [*_concepts(conn).values(), *_props(conn)], templates(conn))
 
 
 def refs(conn: psycopg.Connection) -> set[tuple[str, str]]:
@@ -344,17 +389,22 @@ def _save(conn: psycopg.Connection, concept: Concept, template: Template, loaded
         major, minor, patch = (_version(max(versions, key=_version)) + (0, 0, 0))[:3]
         body["version"] = f"{major}.{minor}.{patch + 1}"
     bodies = [b for c, b in active.items() if c != code] + [body]
+    props = _new_props(conn, body)
     try:
-        _check(loaded, _pack_version(conn), [*(c for k, c in concepts.items() if k != code), concept], bodies)
+        _check(loaded, _pack_version(conn),
+               [*(c for k, c in concepts.items() if k != code), concept, *_props(conn), *props], bodies)
     except packs.PackError as e:
         raise MineError(f"вид {code}: {e}", code="invalid", issues=[_issue(code, "", str(e))]) from e
     now = datetime.now(timezone.utc)
+    for prop in props:
+        db._upsert_concept(conn, prop, NAME, now)
     db._upsert_concept(conn, concept, NAME, now)
     conn.execute("INSERT INTO template (code, version, target, applies_to, body, body_hash, loaded_at) "
                  "VALUES (%s, %s, %s, %s, %s, %s, %s)",
                  (code, body["version"], body["target"], code, Jsonb(body), canon.content_hash(body), now))
     conn.execute("INSERT INTO template_active (code, version) VALUES (%s, %s) "
                  "ON CONFLICT (code) DO UPDATE SET version = EXCLUDED.version", (code, body["version"]))
+    _gc_props(conn)                       # правка могла убрать поле со своим свойством
     _bump(conn, now)
     return True
 
@@ -413,8 +463,10 @@ def _pack_kinds(pack: packs.Pack) -> list[tuple[Concept, Template]]:
         if family not in (FAMILIES["atom"] if t.target == "atom" else (None,)):
             raise MineError(f"{where}: семья вида {c.family!r} не по правилам {t.target}", code="invalid")
         kinds.append((c, t))
-    if concepts:
-        raise MineError(f"пакет {pack.name}: понятия без шаблона: {', '.join(sorted(concepts))}", code="invalid")
+    # свойства своих видов (vocab/property.yaml) едут без шаблона: _save заводит их по полям шаблона
+    loose = sorted(code for code, c in concepts.items() if c.scheme != "property")
+    if loose:
+        raise MineError(f"пакет {pack.name}: понятия без шаблона: {', '.join(loose)}", code="invalid")
     return sorted(kinds, key=lambda k: (k[0].scheme != "entity_class", k[0].code))
 
 
@@ -516,7 +568,8 @@ def delete(conn: psycopg.Connection, code: str, *, agent: str) -> None:
             raise MineError(f"у вида {code} есть записи: {n} — сначала смените им вид", code="in_use")
         bodies = [b for c, b in _active(conn).items() if c != code]
         try:
-            _check(loaded, _pack_version(conn), [c for k, c in concepts.items() if k != code], bodies)
+            _check(loaded, _pack_version(conn), [*(c for k, c in concepts.items() if k != code), *_props(conn)],
+                   bodies)
         except packs.PackError as e:
             raise MineError(f"на вид {code} ссылается другой свой вид: {e}", code="in_use") from e
         conn.execute("DELETE FROM template_active WHERE code = %s", (code,))
@@ -525,4 +578,5 @@ def delete(conn: psycopg.Connection, code: str, *, agent: str) -> None:
         except psycopg.errors.ForeignKeyViolation as e:
             # запись вида появилась после подсчёта (submit не берёт MINE_LOCK): то же, что записи были
             raise MineError(f"у вида {code} появились записи — сначала смените им вид", code="in_use") from e
+        _gc_props(conn)                   # свойства, которые были только у этого вида
         _bump(conn, datetime.now(timezone.utc))

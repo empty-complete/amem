@@ -320,3 +320,101 @@ def test_adopt_adds_missing_kinds_and_refuses_other_content(kb, pg2, tmp_path):
     with pytest.raises(mine.MineError) as e:
         mine.adopt(pg2, kinds, agent=PERSON)
     assert e.value.code == "exists"
+
+
+# --- свои текстовые свойства (qualifiers[property=X] с кодом не из словаря) ---
+
+def inspection(*fields) -> dict:
+    """Черновик вида «Обход»: свои текстовые свойства (по умолчанию — «Что нашли»)."""
+    form = list(fields) or [{"key": "what_found", "path": "qualifiers[property=what_found]",
+                             "label": {"ru": "Что нашли", "en": "Found"}, "type": "text"}]
+    return {"label": {"ru": "Обход"}, "target": "atom", "family": "work", "form": form,
+            "body": "wanted", "widgets": ["sources"]}
+
+
+def _prop(conn, code="what_found"):
+    return conn.execute("SELECT origin, data FROM concept WHERE scheme = 'property' AND code = %s", (code,)).fetchone()
+
+
+def _walk(label: str, found: str) -> dict:
+    return {"kind": "inspection", "label": {"ru": label}, "summary_plain": {"ru": label}, "basis": "author",
+            "qualifiers": [{"property": "what_found", "value_text": found}]}
+
+
+def test_text_property_of_my_kind_is_created_and_records_pass(kb, store, docs):
+    view = mine.put(kb, "inspection", inspection(), agent=PERSON)
+    origin, data = _prop(kb)
+    assert origin == "mine" and data["label"] == {"ru": "Что нашли", "en": "Found"} and "unit" not in data
+    assert [f["label"] for f in view["form"] if f["key"] == "what_found"] == [{"ru": "Что нашли", "en": "Found"}]
+    done = check.submit(kb, store, docs, [check.Proposal("atom", _walk("Обход 10 ноября", "растяжка ослабла"))],
+                        agent=PERSON)
+    assert done.state != "rejected", done.report["issues"]
+    assert "unknown_property" not in {i["code"] for i in done.report["issues"]}
+    # величина с единицей — только из словаря: своей content.values[property=X] не бывает
+    quantity = {"key": "depth", "path": "content.values[property=depth]", "label": {"ru": "Глубина"},
+                "type": "quantity"}
+    with pytest.raises(mine.MineError) as e:
+        mine.put(kb, "digging", inspection(quantity), agent=PERSON)
+    assert e.value.code == "invalid" and "depth" in e.value.issues[0]["message"]
+
+
+def test_second_put_with_my_property_changes_nothing(kb):
+    mine.put(kb, "inspection", inspection(), agent=PERSON)
+    before = _versions(kb, "inspection")
+    mine.put(kb, "inspection", inspection(), agent=PERSON)
+    assert _versions(kb, "inspection") == before
+    assert kb.execute("SELECT count(*) FROM concept WHERE scheme = 'property' AND origin = 'mine'").fetchone()[0] == 1
+
+
+def test_existing_property_is_used_not_created(kb):
+    field = {"key": "mass", "path": "qualifiers[property=mass]", "label": {"ru": "Масса словами"}, "type": "text"}
+    mine.put(kb, "inspection", inspection(field), agent=PERSON)
+    assert _prop(kb, "mass")[0] == "quantities"                       # величина пакета-файла осталась его
+    assert kb.execute("SELECT count(*) FROM concept WHERE origin = 'mine' AND scheme = 'property'").fetchone()[0] == 0
+
+
+def test_my_property_goes_with_the_last_kind_but_stays_in_records(kb, store, docs):
+    mine.put(kb, "inspection", inspection(), agent=PERSON)
+    mine.delete(kb, "inspection", agent=PERSON)
+    assert _prop(kb) is None                                          # вид удалён — свойство ушло с ним
+    # правка убрала поле: свойство уходит, если его нет в записях
+    tags = {"key": "tags", "path": "tags", "label": {"ru": "Теги"}, "type": "tags"}
+    mine.put(kb, "inspection", inspection(), agent=PERSON)
+    mine.put(kb, "inspection", inspection(tags), agent=PERSON)
+    assert _prop(kb) is None
+    # а запись со свойством его держит
+    mine.put(kb, "inspection", inspection(), agent=PERSON)
+    assert check.submit(kb, store, docs, [check.Proposal("atom", _walk("Обход", "всё в порядке"))],
+                        agent=PERSON).state != "rejected"
+    mine.put(kb, "inspection", inspection(tags), agent=PERSON)
+    assert _prop(kb)[0] == "mine"
+
+
+def test_file_pack_bringing_my_property_is_refused(kb, tmp_path, monkeypatch):
+    mine.put(kb, "inspection", inspection(), agent=PERSON)
+    root = tmp_path / "later"
+    (root / "vocab").mkdir(parents=True)
+    (root / "pack.yaml").write_text("name: later\nversion: 1.0.0\n", encoding="utf-8")
+    (root / "vocab" / "property.yaml").write_text(yaml.safe_dump(
+        {"scheme": "property", "concepts": [{"code": "what_found", "label": {"ru": "находка"}}]}, allow_unicode=True),
+        encoding="utf-8")
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(root)]))
+    with pytest.raises(db.MigrationError, match="what_found"):
+        db.prepare(kb)
+    assert _prop(kb)[0] == "mine"
+
+
+def test_bundle_with_my_property_lands_in_a_clean_base(kb, pg2, tmp_path):
+    mine.put(kb, "inspection", inspection(), agent=PERSON)
+    mine.write_pack(kb, tmp_path / "mine")
+    vocab = yaml.safe_load((tmp_path / "mine" / "vocab" / "property.yaml").read_text(encoding="utf-8"))
+    assert [c["code"] for c in vocab["concepts"]] == ["what_found"]
+    kinds = mine.read_pack(tmp_path / "mine")
+    assert [c.code for c, _ in kinds] == ["inspection"]               # свойство едет без шаблона, вид — с ним
+    db.prepare(pg2)
+    assert mine.adopt(pg2, kinds, agent=PERSON) == ["inspection"]
+    origin, data = _prop(pg2)
+    assert origin == "mine" and data["label"]["ru"] == "Что нашли"
+    db.prepare(pg2)                                                   # и переживает пересборку
+    assert _prop(pg2)[0] == "mine"
+

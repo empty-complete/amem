@@ -145,7 +145,15 @@ def load_vocab(conn: psycopg.Connection) -> None:
             if clash:
                 raise MigrationError(f"пакет {p.name}: код {', '.join(clash)} уже занят своим видом («Мои виды») — "
                                      f"переименуйте вид пакета или удалите свой вид")
-        if mine:
+        # свойства, которые завели свои виды: пакет из файла с тем же кодом property — отказ, как у кода вида
+        mine_props = {code for (code,) in conn.execute(
+            "SELECT code FROM concept WHERE origin = %s AND scheme = 'property'", (MINE,))}
+        for p in loaded:
+            clash = sorted(c.code for c in p.concepts if c.scheme == "property" and c.code in mine_props)
+            if clash:
+                raise MigrationError(f"пакет {p.name}: величина {', '.join(clash)} уже заведена своим видом "
+                                     f"(«Мои виды») — переименуйте величину пакета или свойство своего вида")
+        if mine or mine_props:
             _check_mine(conn, loaded)
         for p in loaded:
             row = conn.execute("SELECT digest FROM pack WHERE name = %s AND version = %s",
