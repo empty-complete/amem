@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from amem import db, ids, recipes, records
-from amem.records import Item, RecordError
+from amemo import db, ids, recipes, records
+from amemo.records import Item, RecordError
 
 AGENT = "model:test"
 HUMAN = "person:filipp"

@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 import contract
-from amem import db
+from amemo import db
 
 V1 = "/api/v1"
 PACKS = Path(__file__).with_name("packs")
@@ -23,7 +23,7 @@ def problem(response, status: int, code: str, path: str, method: str = "get") ->
 # --- GET /templates (задача 17) ---
 
 def test_templates(serve, pg, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(PACKS / "forms"), str(PACKS / "quantities")]))
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join([str(PACKS / "forms"), str(PACKS / "quantities")]))
     db.prepare(pg)
     client = serve()
     every = contract.check(client.get(f"{V1}/templates"), "/templates")
@@ -54,7 +54,7 @@ def _person(client):
 
 
 def test_my_kinds_by_the_person(serve, pg, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", str(PACKS / "quantities"))
+    monkeypatch.setenv("AMEMO_PACKS", str(PACKS / "quantities"))
     db.prepare(pg)
     client = _person(serve())
     contract.check_request(DRAFT, MINE, "put")
@@ -76,7 +76,7 @@ def test_my_kinds_by_the_person(serve, pg, monkeypatch):
 
 def test_my_kind_round_trip_keeps_versions_and_required(serve, pg, monkeypatch):
     """Вид с двумя величинами, обязательна одна: GET /templates → PUT того же — версии те же, обязательность та же."""
-    monkeypatch.setenv("AMEM_PACKS", str(PACKS / "quantities"))
+    monkeypatch.setenv("AMEMO_PACKS", str(PACKS / "quantities"))
     db.prepare(pg)
     client = _person(serve())
     draft = {**DRAFT, "form": [
@@ -104,7 +104,7 @@ def test_my_kind_round_trip_keeps_versions_and_required(serve, pg, monkeypatch):
 
 
 def test_my_kind_in_use_cannot_be_deleted(serve, pg, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", str(PACKS / "quantities"))
+    monkeypatch.setenv("AMEMO_PACKS", str(PACKS / "quantities"))
     db.prepare(pg)
     client = _person(serve())
     contract.check(client.put(f"{V1}/packs/mine/templates/weighing", json=DRAFT), MINE, "put")
@@ -118,13 +118,13 @@ def test_my_kind_in_use_cannot_be_deleted(serve, pg, monkeypatch):
 def test_my_kinds_are_not_for_the_model_or_a_read_only_token(serve, pg, monkeypatch, tmp_path):
     from test_service_core import tokens_file
 
-    monkeypatch.setenv("AMEM_PACKS", str(PACKS / "quantities"))
+    monkeypatch.setenv("AMEMO_PACKS", str(PACKS / "quantities"))
     db.prepare(pg)
     model = serve()
     problem(model.put(f"{V1}/packs/mine/templates/weighing", json=DRAFT), 403, "forbidden", MINE, "put")
     problem(model.delete(f"{V1}/packs/mine/templates/weighing"), 403, "forbidden", MINE, "delete")
     path = tokens_file(tmp_path, ("t-read", "person:anna", False))
-    reader = serve({"AMEM_TOKENS": path})
+    reader = serve({"AMEMO_TOKENS": path})
     reader.headers["Authorization"] = "Bearer t-read"
     problem(reader.put(f"{V1}/packs/mine/templates/weighing", json=DRAFT), 403, "read_only", MINE, "put")
     problem(reader.delete(f"{V1}/packs/mine/templates/weighing"), 403, "read_only", MINE, "delete")
@@ -163,13 +163,13 @@ def _upload(client, data: bytes, name="Протокол.md", path=None, origin=O
 
 
 def _parts(docs: Path) -> list[str]:
-    return [p.name for p in docs.iterdir() if p.name.startswith(".amem-upload")]
+    return [p.name for p in docs.iterdir() if p.name.startswith(".amemo-upload")]
 
 
 def test_upload_new_same_and_other_file(serve, pg, tmp_path):
     docs = tmp_path / "d"
     docs.mkdir()
-    client = _person(serve({"AMEM_DOCS": str(docs)}))
+    client = _person(serve({"AMEMO_DOCS": str(docs)}))
     response = _upload(client, b"# Protocol\n")
     assert response.status_code == 201, response.text
     view = contract.check(response, "/objects", "post")
@@ -186,7 +186,7 @@ def test_upload_new_same_and_other_file(serve, pg, tmp_path):
     assert (docs / "Отчёты" / "2026" / "отчёт.md").read_bytes() == b"# Report\n"
     assert placed["logical_paths"] == ["Отчёты/2026/отчёт.md"]
     problem(_upload(client, b"x", path="Отчёты"), 409, "object_path_taken", "/objects", "post")    # там папка
-    model = serve({"AMEM_DOCS": str(docs)})                                       # модель тоже загружает
+    model = serve({"AMEMO_DOCS": str(docs)})                                       # модель тоже загружает
     assert _upload(model, b"model\n", name="m.md").status_code == 201
     assert _parts(docs) == []
     assert pg.execute("SELECT count(*) FROM object").fetchone()[0] == 3
@@ -196,7 +196,7 @@ def test_upload_of_known_content_at_a_new_path_is_200(serve, pg, tmp_path):
     """То же содержимое уже есть у объекта по другому пути: файл ложится по новому пути, но новой версии нет — 200."""
     docs = tmp_path / "d"
     docs.mkdir()
-    client = _person(serve({"AMEM_DOCS": str(docs)}))
+    client = _person(serve({"AMEMO_DOCS": str(docs)}))
     first = contract.check(_upload(client, b"# Protocol\n"), "/objects", "post")
     again = _upload(client, b"# Protocol\n", path="Архив/копия.md")
     assert again.status_code == 200, again.text
@@ -210,17 +210,17 @@ def test_upload_part_is_removed_when_the_database_is_down(serve, pg, tmp_path, m
     import time
 
     import psycopg
-    from amem.service import http_v1
+    from amemo.service import http_v1
 
     docs = tmp_path / "d"
     docs.mkdir()
-    stale = docs / ".amem-upload-old.part"
+    stale = docs / ".amemo-upload-old.part"
     stale.write_bytes(b"x")
     old = time.time() - 2 * 3600
     os.utime(stale, (old, old))
-    fresh = docs / ".amem-upload-now.part"
+    fresh = docs / ".amemo-upload-now.part"
     fresh.write_bytes(b"y")
-    client = _person(serve({"AMEM_DOCS": str(docs)}))
+    client = _person(serve({"AMEMO_DOCS": str(docs)}))
     assert not stale.exists() and fresh.exists()                    # брошенный — долой, свежий не тронут
     fresh.unlink()
 
@@ -234,7 +234,7 @@ def test_upload_part_is_removed_when_the_database_is_down(serve, pg, tmp_path, m
 def test_upload_bad_path_is_400(serve, pg, tmp_path):
     docs = tmp_path / "d"
     docs.mkdir()
-    client = _person(serve({"AMEM_DOCS": str(docs)}))
+    client = _person(serve({"AMEMO_DOCS": str(docs)}))
     for path in ("../вне.md", "/abs.md", "a\x00b.md", "Загрузки/../../x.md"):
         problem(_upload(client, b"x", path=path), 400, "bad_request", "/objects", "post")
     assert _parts(docs) == [] and not (tmp_path / "вне.md").exists()
@@ -243,17 +243,17 @@ def test_upload_bad_path_is_400(serve, pg, tmp_path):
 
 def test_upload_without_docs_is_503(serve, pg, tmp_path):
     problem(_upload(_person(serve()), b"x"), 503, "docs_unavailable", "/objects", "post")
-    missing = serve({"AMEM_DOCS": str(tmp_path / "нет")})
+    missing = serve({"AMEMO_DOCS": str(tmp_path / "нет")})
     problem(_upload(missing, b"x"), 503, "docs_unavailable", "/objects", "post")
 
 
 def test_upload_limits_origin_and_read_only(serve, pg, tmp_path, monkeypatch):
-    from amem.service import http_v1
+    from amemo.service import http_v1
     from test_service_core import tokens_file
 
     docs = tmp_path / "d"
     docs.mkdir()
-    client = _person(serve({"AMEM_DOCS": str(docs)}))
+    client = _person(serve({"AMEMO_DOCS": str(docs)}))
     monkeypatch.setattr(http_v1, "UPLOAD_LIMIT", 4096)
     problem(_upload(client, b"z" * 20000), 413, "too_large", "/objects", "post")
     assert _parts(docs) == [] and not (docs / "Загрузки").exists()                 # недокачанное удалено
@@ -261,7 +261,7 @@ def test_upload_limits_origin_and_read_only(serve, pg, tmp_path, monkeypatch):
     problem(client.post(f"{V1}/objects", json={"file": "x"}, headers={"Origin": ORIGIN}), 415,
             "unsupported_media_type", "/objects", "post")
     path = tokens_file(tmp_path, ("t-read", "person:anna", False))
-    reader = serve({"AMEM_DOCS": str(docs), "AMEM_TOKENS": path})
+    reader = serve({"AMEMO_DOCS": str(docs), "AMEMO_TOKENS": path})
     reader.headers["Authorization"] = "Bearer t-read"
     problem(_upload(reader, b"x"), 403, "read_only", "/objects", "post")
     assert pg.execute("SELECT count(*) FROM object").fetchone()[0] == 0
@@ -270,7 +270,7 @@ def test_upload_limits_origin_and_read_only(serve, pg, tmp_path, monkeypatch):
 def test_list_objects(serve, pg, tmp_path):
     docs = tmp_path / "d"
     docs.mkdir()
-    client = _person(serve({"AMEM_DOCS": str(docs)}))
+    client = _person(serve({"AMEMO_DOCS": str(docs)}))
     for name in ("Протокол.md", "Акт.md", "Схема.md"):
         assert _upload(client, name.encode(), name=name).status_code == 201
     page = contract.check(client.get(f"{V1}/objects", params={"limit": 2}), "/objects")
@@ -293,7 +293,7 @@ def _file(client, name="Протокол.md") -> dict:
 def test_tasks_create_and_list(serve, pg, tmp_path):
     docs = tmp_path / "d"
     docs.mkdir()
-    person = _person(serve({"AMEM_DOCS": str(docs)}))
+    person = _person(serve({"AMEMO_DOCS": str(docs)}))
     body = {**_file(person), "note": "разобрать протокол"}
     contract.check_request(body, "/tasks", "post")
     made = person.post(f"{V1}/tasks", json=body)
@@ -301,7 +301,7 @@ def test_tasks_create_and_list(serve, pg, tmp_path):
     task_id = contract.check(made, "/tasks", "post")["task_id"]
     again = person.post(f"{V1}/tasks", json=body)
     assert again.status_code == 202 and again.json()["task_id"] == task_id                # та же задача
-    model = serve({"AMEM_DOCS": str(docs)})
+    model = serve({"AMEMO_DOCS": str(docs)})
     other = _file(model, "Акт.md")
     by_model = model.post(f"{V1}/tasks", json=other)                                    # модель тоже ставит
     assert by_model.status_code == 202, by_model.text
@@ -327,9 +327,9 @@ def test_tasks_read_only_token(serve, pg, tmp_path):
 
     docs = tmp_path / "d"
     docs.mkdir()
-    body = _file(_person(serve({"AMEM_DOCS": str(docs)})))
+    body = _file(_person(serve({"AMEMO_DOCS": str(docs)})))
     path = tokens_file(tmp_path, ("t-read", "person:anna", False))
-    reader = serve({"AMEM_DOCS": str(docs), "AMEM_TOKENS": path})
+    reader = serve({"AMEMO_DOCS": str(docs), "AMEMO_TOKENS": path})
     reader.headers["Authorization"] = "Bearer t-read"
     problem(reader.post(f"{V1}/tasks", json=body), 403, "read_only", "/tasks", "post")
     assert contract.check(reader.get(f"{V1}/tasks"), "/tasks") == []

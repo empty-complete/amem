@@ -11,12 +11,12 @@ import psycopg
 import pytest
 from starlette.routing import Route
 
-from amem import __version__, bundle, db, embed, objects, private, records, review, service, settings, vocab
-from amem.canon import CanonError
-from amem.check import CheckError
-from amem.folders import FolderError
-from amem.packs import PackError
-from amem.service import problems
+from amemo import __version__, bundle, db, embed, objects, private, records, review, service, settings, vocab
+from amemo.canon import CanonError
+from amemo.check import CheckError
+from amemo.folders import FolderError
+from amemo.packs import PackError
+from amemo.service import problems
 from conftest import SERVICE_URL, FakeProvider
 
 BASE_URL = SERVICE_URL
@@ -27,9 +27,9 @@ DEV_UI = "http://127.0.0.1:5173"
 # --- настройки ---
 
 def test_settings_explicit_argument_beats_environment_and_environment_beats_toml(tmp_path):
-    config = tmp_path / "amem.toml"
+    config = tmp_path / "amemo.toml"
     config.write_text('dsn = "postgresql://toml/db"\nport = 9001\nhost = "127.0.0.2"\n', encoding="utf-8")
-    env = {"AMEM_CONFIG": str(config), "AMEM_DSN": "postgresql://env/db", "AMEM_PORT": "9002", "USER": "ann"}
+    env = {"AMEMO_CONFIG": str(config), "AMEMO_DSN": "postgresql://env/db", "AMEMO_PORT": "9002", "USER": "ann"}
 
     explicit = settings.load(env, dsn="postgresql://arg/db")
     assert (explicit.dsn, explicit.port, explicit.host) == ("postgresql://arg/db", 9002, "127.0.0.2")
@@ -38,22 +38,22 @@ def test_settings_explicit_argument_beats_environment_and_environment_beats_toml
     from_env = settings.load(env)
     assert (from_env.dsn, from_env.port) == ("postgresql://env/db", 9002)
 
-    del env["AMEM_DSN"], env["AMEM_PORT"]
+    del env["AMEMO_DSN"], env["AMEMO_PORT"]
     from_toml = settings.load(env)
     assert (from_toml.dsn, from_toml.port) == ("postgresql://toml/db", 9001)
 
 
 def test_settings_toml_from_home_config_and_defaults(tmp_path):
     home = tmp_path / "home"
-    (home / ".config" / "amem").mkdir(parents=True)
-    (home / ".config" / "amem" / "amem.toml").write_text(
+    (home / ".config" / "amemo").mkdir(parents=True)
+    (home / ".config" / "amemo" / "amemo.toml").write_text(
         'dsn = "postgresql://home/db"\ndocs = "~/Документы"\ndata = "objects"\n', encoding="utf-8")
     s = settings.load({"HOME": str(home), "USER": "ann"})
     assert s.dsn == "postgresql://home/db"
-    assert s.config == home / ".config" / "amem" / "amem.toml"
+    assert s.config == home / ".config" / "amemo" / "amemo.toml"
     assert s.docs == home / "Документы"                              # ~ раскрывается
-    assert s.data == home / ".config" / "amem" / "objects"            # относительный путь — от файла настроек
-    assert s.state == home / ".local" / "state" / "amem"
+    assert s.data == home / ".config" / "amemo" / "objects"            # относительный путь — от файла настроек
+    assert s.state == home / ".local" / "state" / "amemo"
     assert s.backups == s.state / "backups"
     assert s.query_log == s.state / "queries.jsonl"
     assert (s.host, s.port) == ("127.0.0.1", 8767)
@@ -64,12 +64,12 @@ def test_settings_toml_from_home_config_and_defaults(tmp_path):
 
 def test_settings_defaults_without_toml(tmp_path):
     home = tmp_path / "home"
-    s = settings.load({"HOME": str(home), "USER": "ann", "AMEM_DSN": "postgresql://x/db"})
+    s = settings.load({"HOME": str(home), "USER": "ann", "AMEMO_DSN": "postgresql://x/db"})
     assert s.config is None
-    assert s.data == home / ".local" / "share" / "amem" / "objects"
+    assert s.data == home / ".local" / "share" / "amemo" / "objects"
     assert s.docs is None
     state = tmp_path / "state"
-    s = settings.load({"HOME": str(home), "USER": "ann", "AMEM_STATE": str(state)})
+    s = settings.load({"HOME": str(home), "USER": "ann", "AMEMO_STATE": str(state)})
     assert s.dsn is None                     # обязательность DSN проверяет тот, кому нужна база (create_app)
     assert (s.backups, s.query_log) == (state / "backups", state / "queries.jsonl")
 
@@ -86,24 +86,24 @@ def test_settings_default_agent_from_os_user_name(tmp_path, user, agent):
 
 
 def test_settings_agents_ui_origins_tokens_and_query_log_from_environment(tmp_path):
-    s = settings.load({"HOME": str(tmp_path), "USER": "ann", "AMEM_AGENT": "person:anna",
-                       "AMEM_MODEL_AGENT": "model:bot", "AMEM_UI_ORIGINS": f"{DEV_UI}/, HTTP://LOCALHOST:5173",
-                       "AMEM_TOKENS": str(tmp_path / "amem-tokens.toml"), "AMEM_QUERY_LOG": "off"})
+    s = settings.load({"HOME": str(tmp_path), "USER": "ann", "AMEMO_AGENT": "person:anna",
+                       "AMEMO_MODEL_AGENT": "model:bot", "AMEMO_UI_ORIGINS": f"{DEV_UI}/, HTTP://LOCALHOST:5173",
+                       "AMEMO_TOKENS": str(tmp_path / "amemo-tokens.toml"), "AMEMO_QUERY_LOG": "off"})
     assert (s.agent, s.model_agent) == ("person:anna", "model:bot")
     assert s.ui_origins == (DEV_UI, "http://localhost:5173")
-    assert s.tokens == tmp_path / "amem-tokens.toml"
+    assert s.tokens == tmp_path / "amemo-tokens.toml"
     assert s.query_log is None
 
 
 @pytest.mark.parametrize("env, where", [
-    ({"AMEM_PORT": "восемь"}, "AMEM_PORT"),
-    ({"AMEM_PORT": "70000"}, "AMEM_PORT"),
-    ({"AMEM_AGENT": "model:x"}, "AMEM_AGENT"),          # человек локальной службы — только person:
-    ({"AMEM_AGENT": "person:Анна"}, "AMEM_AGENT"),
-    ({"AMEM_MODEL_AGENT": "person:x"}, "AMEM_MODEL_AGENT"),
-    ({"AMEM_UI_ORIGINS": "127.0.0.1:5173"}, "AMEM_UI_ORIGINS"),
-    ({"AMEM_UI_ORIGINS": "http://127.0.0.1:5173/ui"}, "AMEM_UI_ORIGINS"),
-    ({"AMEM_CONFIG": "нет-такого.toml"}, "нет-такого.toml"),
+    ({"AMEMO_PORT": "восемь"}, "AMEMO_PORT"),
+    ({"AMEMO_PORT": "70000"}, "AMEMO_PORT"),
+    ({"AMEMO_AGENT": "model:x"}, "AMEMO_AGENT"),          # человек локальной службы — только person:
+    ({"AMEMO_AGENT": "person:Анна"}, "AMEMO_AGENT"),
+    ({"AMEMO_MODEL_AGENT": "person:x"}, "AMEMO_MODEL_AGENT"),
+    ({"AMEMO_UI_ORIGINS": "127.0.0.1:5173"}, "AMEMO_UI_ORIGINS"),
+    ({"AMEMO_UI_ORIGINS": "http://127.0.0.1:5173/ui"}, "AMEMO_UI_ORIGINS"),
+    ({"AMEMO_CONFIG": "нет-такого.toml"}, "нет-такого.toml"),
 ])
 def test_settings_errors_name_the_source(tmp_path, env, where):
     with pytest.raises(settings.SettingsError, match=where):
@@ -111,22 +111,22 @@ def test_settings_errors_name_the_source(tmp_path, env, where):
 
 
 @pytest.mark.parametrize("text, where", [
-    ("dsn = ", "amem.toml"),                        # не TOML
+    ("dsn = ", "amemo.toml"),                        # не TOML
     ('dns = "postgresql://x/db"', "dns"),           # опечатка в ключе — ошибка, а не тихий пропуск
     ("port = true", "port"),
     ("ui_origins = 5", "ui_origins"),
 ])
 def test_settings_bad_toml(tmp_path, text, where):
-    config = tmp_path / "amem.toml"
+    config = tmp_path / "amemo.toml"
     config.write_text(text, encoding="utf-8")
     with pytest.raises(settings.SettingsError, match=where):
-        settings.load({"HOME": str(tmp_path), "USER": "ann", "AMEM_CONFIG": str(config)})
+        settings.load({"HOME": str(tmp_path), "USER": "ann", "AMEMO_CONFIG": str(config)})
 
 
 def test_settings_ui_origins_list_in_toml(tmp_path):
-    config = tmp_path / "amem.toml"
+    config = tmp_path / "amemo.toml"
     config.write_text(f'ui_origins = ["{DEV_UI}"]\nquery_log = "журнал.jsonl"\n', encoding="utf-8")
-    s = settings.load({"HOME": str(tmp_path), "USER": "ann", "AMEM_CONFIG": str(config)})
+    s = settings.load({"HOME": str(tmp_path), "USER": "ann", "AMEMO_CONFIG": str(config)})
     assert s.ui_origins == (DEV_UI,)
     assert s.query_log == tmp_path / "журнал.jsonl"
 
@@ -134,7 +134,7 @@ def test_settings_ui_origins_list_in_toml(tmp_path):
 # --- токены общей службы ---
 
 def tokens_file(tmp_path, *entries) -> str:
-    path = tmp_path / "amem-tokens.toml"
+    path = tmp_path / "amemo-tokens.toml"
     path.write_text("".join(f'[[token]]\nhash = "{settings.token_hash(token)}"\nagent = "{agent}"\n'
                             f'write = {str(write).lower()}\n\n' for token, agent, write in entries), encoding="utf-8")
     path.chmod(0o600)
@@ -159,7 +159,7 @@ def test_token_hash_and_tokens_file(tmp_path):
     ("token = 1", "token"),
 ])
 def test_bad_tokens_file(tmp_path, text, where):
-    path = tmp_path / "amem-tokens.toml"
+    path = tmp_path / "amemo-tokens.toml"
     path.write_text(text, encoding="utf-8")
     with pytest.raises(settings.SettingsError, match=where):
         settings.load_tokens(path)
@@ -172,7 +172,7 @@ def test_tokens_file_permissions(tmp_path, caplog):
     with pytest.raises(settings.SettingsError, match="chmod 600"):
         settings.load_tokens(path)
     Path(path).chmod(0o644)                  # только чтение другими — предупреждение
-    with caplog.at_level(logging.WARNING, logger="amem.settings"):
+    with caplog.at_level(logging.WARNING, logger="amemo.settings"):
         assert len(settings.load_tokens(path)) == 1
     assert "chmod 600" in caplog.text
 
@@ -182,7 +182,7 @@ def test_tokens_file_value_with_trailing_newline_is_rejected(tmp_path, field):
     """Шаблон — целиком: у re.match с «$» значение с переводом строки на конце проходило."""
     values = {"hash": settings.token_hash("x"), "agent": "person:anna"}
     values[field] += "\n"
-    path = tmp_path / "amem-tokens.toml"
+    path = tmp_path / "amemo-tokens.toml"
     path.write_text(f'[[token]]\nhash = """{values["hash"]}"""\nagent = """{values["agent"]}"""\n', encoding="utf-8")
     path.chmod(0o600)
     with pytest.raises(settings.SettingsError, match=field):
@@ -220,7 +220,7 @@ def test_fifo_in_place_of_the_tokens_file_does_not_hang_the_start(tmp_path):
     """Канал без пишущего на месте файла: открытие с O_NONBLOCK не ждёт, fstat отвергает его до чтения."""
     import time
 
-    path = tmp_path / "amem-tokens.toml"
+    path = tmp_path / "amemo-tokens.toml"
     os.mkfifo(path)
     started = time.perf_counter()
     with pytest.raises(settings.SettingsError, match="не обычный файл"):
@@ -229,8 +229,8 @@ def test_fifo_in_place_of_the_tokens_file_does_not_hang_the_start(tmp_path):
 
 
 def test_missing_tokens_file(tmp_path):
-    with pytest.raises(settings.SettingsError, match="amem-tokens.toml"):
-        settings.load_tokens(tmp_path / "нет" / "amem-tokens.toml")
+    with pytest.raises(settings.SettingsError, match="amemo-tokens.toml"):
+        settings.load_tokens(tmp_path / "нет" / "amemo-tokens.toml")
 
 
 # --- <private> ---
@@ -285,7 +285,7 @@ def base_id(pg) -> str:
 # --- служба: запуск, /health, защита ---
 
 def test_create_app_needs_dsn(tmp_path):
-    with pytest.raises(settings.SettingsError, match="AMEM_DSN"):
+    with pytest.raises(settings.SettingsError, match="AMEMO_DSN"):
         service.create_app(settings.load({"HOME": str(tmp_path), "USER": "ann"}))
 
 
@@ -327,10 +327,10 @@ def test_foreign_origin_is_403(serve):
     is_problem(client.post("/api/v1/submit", json={}, headers={"Origin": "http://evil.example"}), 403, "bad_origin")
     is_problem(client.get("/api/v1/session", headers={"Origin": "http://evil.example"}), 403, "bad_origin")
     is_problem(client.post("/api/v1/submit", json={}, headers={"Origin": "null"}), 403, "bad_origin")
-    # свой источник и dev-сервер из AMEM_UI_ORIGINS проходят защиту: дальше — разбор тела (нет proposals) — 400
+    # свой источник и dev-сервер из AMEMO_UI_ORIGINS проходят защиту: дальше — разбор тела (нет proposals) — 400
     is_problem(client.post("/api/v1/submit", json={}, headers={"Origin": ORIGIN}), 400, "bad_request")
     is_problem(client.post("/api/v1/submit", json={}, headers={"Origin": DEV_UI}), 403, "bad_origin")
-    dev = serve({"AMEM_UI_ORIGINS": DEV_UI})
+    dev = serve({"AMEMO_UI_ORIGINS": DEV_UI})
     is_problem(dev.post("/api/v1/submit", json={}, headers={"Origin": DEV_UI}), 400, "bad_request")
 
 
@@ -402,7 +402,7 @@ def test_session_cookie_from_own_page_makes_the_person(serve):
     attributes = {part.strip().lower() for part in cookie.split(";")[1:]}
     assert {"httponly", "samesite=strict", "path=/"} <= attributes
     name, value = cookie.split(";")[0].split("=", 1)
-    assert name == "amem_session" and len(value) >= 32
+    assert name == "amemo_session" and len(value) >= 32
 
     # клиент хранит cookie: следующий запрос без заголовков браузера — тоже человек
     again = client.get("/api/v1/session")
@@ -412,15 +412,15 @@ def test_session_cookie_from_own_page_makes_the_person(serve):
     # без cookie — снова модель; поддельная cookie — модель
     client.cookies.clear()
     assert client.get("/api/v1/session").json()["agent"] == "model:local"
-    client.cookies.set("amem_session", "x" * len(value))
+    client.cookies.set("amemo_session", "x" * len(value))
     assert client.get("/api/v1/session").json()["agent"] == "model:local"
 
 
 def test_session_cookie_for_ui_origin_but_not_for_others(serve):
-    client = serve({"AMEM_UI_ORIGINS": DEV_UI, "AMEM_AGENT": "person:anna"})
+    client = serve({"AMEMO_UI_ORIGINS": DEV_UI, "AMEMO_AGENT": "person:anna"})
     response = client.get("/api/v1/session", headers={"Origin": DEV_UI})
     assert response.json()["agent"] == "person:anna"
-    assert response.headers["set-cookie"].startswith("amem_session=")
+    assert response.headers["set-cookie"].startswith("amemo_session=")
     client.cookies.clear()
 
     for headers in ({"Sec-Fetch-Site": "none"}, {}):
@@ -438,11 +438,11 @@ def test_session_cookie_for_ui_origin_but_not_for_others(serve):
 
 def test_session_cookie_is_new_on_every_start(serve):
     first, second = serve(), serve()
-    a = first.get("/api/v1/session", headers={"Sec-Fetch-Site": "same-origin"}).cookies["amem_session"]
-    b = second.get("/api/v1/session", headers={"Sec-Fetch-Site": "same-origin"}).cookies["amem_session"]
+    a = first.get("/api/v1/session", headers={"Sec-Fetch-Site": "same-origin"}).cookies["amemo_session"]
+    b = second.get("/api/v1/session", headers={"Sec-Fetch-Site": "same-origin"}).cookies["amemo_session"]
     assert a != b
     second.cookies.clear()
-    second.cookies.set("amem_session", a)
+    second.cookies.set("amemo_session", a)
     assert second.get("/api/v1/session").json()["agent"] == "model:local"
 
 
@@ -454,15 +454,15 @@ def test_session_base_name_and_semantic(serve, pg):
     embed.activate_model(pg, model["id"])
     view = serve(provider=provider).get("/api/v1/session").json()
     assert (view["base_name"], view["semantic"]) == ("Тестовая база", "used")
-    assert serve({"AMEM_MODEL_AGENT": "model:bot"}).get("/api/v1/session").json()["agent"] == "model:bot"
+    assert serve({"AMEMO_MODEL_AGENT": "model:bot"}).get("/api/v1/session").json()["agent"] == "model:bot"
 
 
 def test_session_semantic_off_with_backend_none(serve, pg, monkeypatch):
-    """AMEM_BACKEND=none выключает смысловой канал и при активной модели."""
+    """AMEMO_BACKEND=none выключает смысловой канал и при активной модели."""
     db.prepare(pg)
     provider = FakeProvider()
     embed.activate_model(pg, embed.register_model(pg, provider)["id"])
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
     assert serve(provider=provider).get("/api/v1/session").json()["semantic"] == "unavailable"
 
 
@@ -470,7 +470,7 @@ def test_session_semantic_off_with_backend_none(serve, pg, monkeypatch):
 
 def test_shared_service_requires_token(serve, tmp_path):
     path = tokens_file(tmp_path, ("t-write", "person:anna", True), ("t-read", "model:bot", False))
-    client = serve({"AMEM_TOKENS": path})
+    client = serve({"AMEMO_TOKENS": path})
 
     response = client.get("/api/v1/session")
     is_problem(response, 401, "auth_required")
@@ -493,9 +493,9 @@ def test_shared_service_requires_token(serve, tmp_path):
 
 
 def test_shared_service_with_missing_tokens_file_does_not_start(dsn, tmp_path):
-    s = settings.load({"AMEM_DSN": dsn, "HOME": str(tmp_path), "USER": "ann",
-                       "AMEM_TOKENS": str(tmp_path / "amem-tokens.toml")})
-    with pytest.raises(settings.SettingsError, match="amem-tokens.toml"):
+    s = settings.load({"AMEMO_DSN": dsn, "HOME": str(tmp_path), "USER": "ann",
+                       "AMEMO_TOKENS": str(tmp_path / "amemo-tokens.toml")})
+    with pytest.raises(settings.SettingsError, match="amemo-tokens.toml"):
         service.create_app(s)
 
 
@@ -600,8 +600,8 @@ def test_database_unavailable_is_503_without_connection_details(serve):
 
 
 def test_unexpected_error_is_500_without_details(serve, caplog):
-    client = serve(routes=[raising(RuntimeError("секрет: путь /srv/amem/x"))], raise_server_exceptions=False)
-    with caplog.at_level(logging.ERROR, logger="amem.service"):
+    client = serve(routes=[raising(RuntimeError("секрет: путь /srv/amemo/x"))], raise_server_exceptions=False)
+    with caplog.at_level(logging.ERROR, logger="amemo.service"):
         response = client.get("/api/v1/boom")
     body = is_problem(response, 500, "internal")
     assert "секрет" not in response.text and "/srv" not in response.text

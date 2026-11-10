@@ -1,6 +1,6 @@
 """Образец PDF для моков части B: две страницы руководства МС-1 (подписи 11 и 12).
 
-Запуск один раз из web/: <venv ядра amem>/bin/python tools/make-sample-pdf.py [путь к шрифту TTF с кириллицей]
+Запуск один раз из web/: <venv ядра amemo>/bin/python tools/make-sample-pdf.py [путь к шрифту TTF с кириллицей]
 """
 import sys
 
@@ -26,6 +26,6 @@ for n, lines in pages.items():
         p.insert_textbox(pymupdf.Rect(72, y, 523, y + 60), line, fontname="dv", fontsize=14 if i == 0 else 11)
         y += 44 if i == 0 else 40
     p.insert_text((290, 800), str(n), fontname="dv", fontsize=9)
-doc.set_metadata({"title": "Руководство по эксплуатации МС-1 (образец)", "author": "amem sample"})
+doc.set_metadata({"title": "Руководство по эксплуатации МС-1 (образец)", "author": "amemo sample"})
 doc.subset_fonts()
 doc.save("src/mocks/fixtures/manual.pdf", garbage=4, deflate=True)

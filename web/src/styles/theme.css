@@ -1,5 +1,5 @@
-/* Tokens of the amem web UI (spec, sect. 4.2): HeroUI v3 semantic variables plus our own.
-   Values come from the sketches (docs/superpowers/specs/2026-11-06-amem-web-ui-variants). */
+/* Tokens of the amemo web UI (spec, sect. 4.2): HeroUI v3 semantic variables plus our own.
+   Values come from the sketches (docs/superpowers/specs/2026-11-06-amemo-web-ui-variants). */
 
 :root,
 [data-theme="light"] {

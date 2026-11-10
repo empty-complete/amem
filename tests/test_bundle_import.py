@@ -10,9 +10,9 @@ from pathlib import Path
 import pytest
 from psycopg.pq import TransactionStatus
 
-from amem import bundle, canon, check, db, lookup, objects, records, review
-from amem.check import Proposal, level2
-from amem.ocfl_store import ObjectStore, StoreError
+from amemo import bundle, canon, check, db, lookup, objects, records, review
+from amemo.check import Proposal, level2
+from amemo.ocfl_store import ObjectStore, StoreError
 from check_support import atom, entity, source_md, value
 from v1_support import same_database
 
@@ -22,7 +22,7 @@ ENV = os.pathsep.join([str(PACKS / "quantities"), str(PACKS / "ontology")])
 
 
 def _prepare(conn, monkeypatch, env=ENV):
-    monkeypatch.setenv("AMEM_PACKS", env)
+    monkeypatch.setenv("AMEMO_PACKS", env)
     db.prepare(conn)
 
 
@@ -148,7 +148,7 @@ def test_pack_missing_refuses_with_hint(pg, pg2, monkeypatch, store, store2, doc
     with pytest.raises(bundle.BundleError, match="ontology 1.0.0") as e:
         bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
     assert e.value.code == "bundle_pack_missing"
-    assert "AMEM_PACKS" in str(e.value) and "подборке b" in str(e.value) and "packs/ontology" in str(e.value)
+    assert "AMEMO_PACKS" in str(e.value) and "подборке b" in str(e.value) and "packs/ontology" in str(e.value)
     assert str(tmp_path) not in str(e.value)                 # полного пути на диске в сообщении нет
     assert _count(pg2, "atom") == 0 and _count(pg2, "object") == 0
 
@@ -535,7 +535,7 @@ def test_link_matched_only_by_ends_is_not_retired(pg, pg2, monkeypatch, store, s
     _export(pg, store, tmp_path / "b")
     bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
     _export(pg, store, tmp_path / "c")
-    from amem.ids import uuid7
+    from amemo.ids import uuid7
 
     _rewrite(tmp_path / "c", "links.jsonl",
              lambda l: {**l, "id": str(uuid7()), "retired_at": "2026-01-01T00:00:00+00:00"})
@@ -840,7 +840,7 @@ def test_ingest_during_write_waits_and_marks_written_revision(pg, pg2, monkeypat
     _export(pg, store, tmp_path / "b")
     with (docs / "заметка.md").open("a", encoding="utf-8") as f:
         f.write("\nДобавлено позже.\n")
-    app = f"amem-ingest-{time.monotonic_ns()}"
+    app = f"amemo-ingest-{time.monotonic_ns()}"
     versions, errors, started = [], [], []
     commit = records.commit
 
@@ -889,7 +889,7 @@ def _kind(**extra) -> dict:
 
 
 def _own_kind_record(conn, store, docs) -> str:
-    from amem import mine
+    from amemo import mine
 
     mine.put(conn, "weighing", _kind(), agent=PERSON)
     r = check.submit(conn, store, docs, [Proposal("atom", atom("@w", kind="weighing", tags=["shared"], basis="author",
@@ -922,7 +922,7 @@ def test_own_kind_travels_with_packs(pg, pg2, monkeypatch, store, store2, docs, 
 
 
 def test_own_kind_with_other_content_is_pack_conflict(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
-    from amem import mine
+    from amemo import mine
 
     _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
     _own_kind_record(pg, store, docs)
@@ -949,7 +949,7 @@ def test_own_kind_without_packs_is_pack_missing(pg, pg2, monkeypatch, store, sto
 
 
 def test_own_kind_from_bundle_is_added_only_by_person(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
-    from amem import mine
+    from amemo import mine
 
     _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
     _own_kind_record(pg, store, docs)
@@ -962,7 +962,7 @@ def test_own_kind_from_bundle_is_added_only_by_person(pg, pg2, monkeypatch, stor
 
 def test_own_kind_failing_the_pack_check_is_a_dry_run_collision(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
     """Вид подборки, который не проходит проверку пакета в этой базе: у dry_run — коллизия отчёта, а не отказ."""
-    from amem import mine, packs
+    from amemo import mine, packs
 
     _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
     _own_kind_record(pg, store, docs)

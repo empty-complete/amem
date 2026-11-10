@@ -15,7 +15,10 @@ async function star(page: Page, id: string) {
   await expect
     .poll(
       () =>
-        page.evaluate((i) => (window as unknown as { __amemSky?: Handle }).__amemSky?.screen(i) ?? null, id),
+        page.evaluate(
+          (i) => (window as unknown as { __amemoSky?: Handle }).__amemoSky?.screen(i) ?? null,
+          id,
+        ),
       {
         timeout: 15_000,
       },
@@ -25,7 +28,7 @@ async function star(page: Page, id: string) {
   await page.getByRole("application").first().scrollIntoViewIfNeeded();
   // ждём, пока укладка остынет и вписывание закончится: звезда стоит на месте
   const at = () =>
-    page.evaluate((i) => (window as unknown as { __amemSky: Handle }).__amemSky.screen(i), id) as Promise<{
+    page.evaluate((i) => (window as unknown as { __amemoSky: Handle }).__amemoSky.screen(i), id) as Promise<{
       x: number;
       y: number;
     }>;
@@ -61,7 +64,7 @@ test("фильтр «Объекты» приглушает записи и по�
   await star(page, E3);
   await page.getByRole("button", { name: "Объекты" }).click();
   await expect(page).toHaveURL(/f=object/);
-  const dim = await page.evaluate(() => (window as unknown as { __amemSky: Handle }).__amemSky.dim());
+  const dim = await page.evaluate(() => (window as unknown as { __amemoSky: Handle }).__amemoSky.dim());
   expect(dim).toContain(A3);
   expect(dim).not.toContain(E3);
 });
@@ -83,10 +86,10 @@ test("клавиатура: фокус на небе, стрелка выбир�
 test("глубина 1 уменьшает окрестность; большая база — честная строка", async ({ page }) => {
   await page.goto(`./entity/${E3}`);
   await star(page, E3);
-  const before = await page.evaluate(() => (window as unknown as { __amemSky: Handle }).__amemSky.count());
+  const before = await page.evaluate(() => (window as unknown as { __amemoSky: Handle }).__amemoSky.count());
   await page.getByRole("radio", { name: "Глубина 1" }).click();
   await expect
-    .poll(() => page.evaluate(() => (window as unknown as { __amemSky: Handle }).__amemSky.count()))
+    .poll(() => page.evaluate(() => (window as unknown as { __amemoSky: Handle }).__amemoSky.count()))
     .toBeLessThan(before);
   await page.goto("./?project=big");
   await expect(page.getByText("Показано 300 звёзд из 420", { exact: false })).toBeVisible();
@@ -102,9 +105,9 @@ test("запись: виджет «Окрестность» с небом от �
 test("новая запись загорается звездой", async ({ page }) => {
   await page.goto(`./entity/${E3}`);
   await star(page, E3);
-  const before = await page.evaluate(() => (window as unknown as { __amemSky: Handle }).__amemSky.count());
+  const before = await page.evaluate(() => (window as unknown as { __amemoSky: Handle }).__amemoSky.count());
   await page.evaluate((e3) => {
-    (window as unknown as { __amemSky: Handle }).__amemSky.emit({
+    (window as unknown as { __amemoSky: Handle }).__amemoSky.emit({
       star: {
         id: "atm:new",
         label: "Новая заметка",
@@ -121,7 +124,7 @@ test("новая запись загорается звездой", async ({ pag
     });
   }, E3);
   await expect
-    .poll(() => page.evaluate(() => (window as unknown as { __amemSky: Handle }).__amemSky.count()))
+    .poll(() => page.evaluate(() => (window as unknown as { __amemoSky: Handle }).__amemoSky.count()))
     .toBe(before + 1);
   await expect(page.getByRole("region", { name: "Выбранная звезда" })).toContainText("Новая заметка");
 });

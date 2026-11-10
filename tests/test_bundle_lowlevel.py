@@ -4,10 +4,10 @@ import uuid
 
 import pytest
 
-from amem import db, lookup, objects, records
-from amem.ids import uuid7
-from amem.ocfl_store import ObjectStore, StoreError
-from amem.records import Item
+from amemo import db, lookup, objects, records
+from amemo.ids import uuid7
+from amemo.ocfl_store import ObjectStore, StoreError
+from amemo.records import Item
 
 AGENT = "person:alice"
 
@@ -139,7 +139,7 @@ def test_adopt_path_of_other_object_is_warning(pg, store, tmp_path):
 def test_adopt_new_version_queues_source_changed(pg, store, docs, tmp_path):
     """Новая версия известного объекта — как у ingest: ревизии со ссылкой на прежнюю получают source_changed."""
     from check_support import atom
-    from amem import check
+    from amemo import check
     db.prepare(pg)
     result = check.submit(pg, store, docs, [check.Proposal("atom", atom("@a"))], agent=AGENT)
     oid = lookup.get_object(pg, lookup.object_by_path(pg, "Заметки/узел.md"))

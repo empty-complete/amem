@@ -63,7 +63,7 @@ function fresh() {
   };
 }
 
-const KEY = "amem.mock.db";
+const KEY = "amemo.mock.db";
 const stored = () => {
   try {
     const v = typeof sessionStorage === "undefined" ? null : sessionStorage.getItem(KEY);

@@ -4,8 +4,8 @@ import zipfile
 
 import pytest
 
-from amem import db, extract, objects, sources
-from amem.sources import extract_pages
+from amemo import db, extract, objects, sources
+from amemo.sources import extract_pages
 from samples import make_docs, make_docx, make_xlsx
 
 AGENT = "model:claude"

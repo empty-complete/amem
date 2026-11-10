@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from amem import check, db, forms, mine
+from amemo import check, db, forms, mine
 
 PACKS = Path(__file__).with_name("packs")
 PERSON = "person:ann"
@@ -31,7 +31,7 @@ def draft(**extra) -> dict:
 
 @pytest.fixture
 def kb(pg, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", str(PACKS / "quantities"))
+    monkeypatch.setenv("AMEMO_PACKS", str(PACKS / "quantities"))
     db.prepare(pg)
     return pg
 
@@ -220,7 +220,7 @@ def test_file_pack_with_the_code_of_my_kind_is_refused(kb, tmp_path, monkeypatch
     (root / "vocab" / "kind.yaml").write_text(yaml.safe_dump(
         {"scheme": "kind", "concepts": [{"code": "weighing", "label": {"ru": "взвешивание"}}]}, allow_unicode=True),
         encoding="utf-8")
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(root)]))
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(root)]))
     with pytest.raises(db.MigrationError, match="weighing"):
         db.prepare(kb)
     assert kb.execute("SELECT origin FROM concept WHERE scheme = 'kind' AND code = 'weighing'").fetchone() == ("mine",)
@@ -255,7 +255,7 @@ def _pack_copy(tmp_path, src: Path, version: str, drop: str) -> Path:
 def test_file_pack_losing_a_property_of_my_kind_is_refused(kb, tmp_path, monkeypatch):
     """Из пакета-файла исчезла величина, на которую ссылается свой вид: понятная ошибка с кодом вида."""
     mine.put(kb, "weighing", draft(), agent=PERSON)
-    monkeypatch.setenv("AMEM_PACKS", str(_pack_copy(tmp_path, PACKS / "quantities", "1.0.1", "mass")))
+    monkeypatch.setenv("AMEMO_PACKS", str(_pack_copy(tmp_path, PACKS / "quantities", "1.0.1", "mass")))
     with pytest.raises(db.MigrationError, match="свой вид weighing") as e:
         db.prepare(kb)
     assert "mass" in str(e.value)
@@ -266,12 +266,12 @@ def test_file_pack_losing_a_property_of_my_kind_is_refused(kb, tmp_path, monkeyp
 
 def test_file_pack_losing_a_class_of_my_kind_is_refused(kb, tmp_path, monkeypatch):
     """Класс сущности из accepts своего вида исчез вместе с пакетом-файлом — та же ошибка, а не тихий пропуск."""
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(PACKS / "ontology")]))
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(PACKS / "ontology")]))
     db.prepare(kb)
     form = [{"key": "about", "path": "about", "label": {"ru": "Датчик"}, "type": "object",
              "accepts": {"entity_classes": ["sensor"], "kinds": []}}]
     mine.put(kb, "gauge_reading", draft(form=form), agent=PERSON)
-    monkeypatch.setenv("AMEM_PACKS", str(PACKS / "quantities"))
+    monkeypatch.setenv("AMEMO_PACKS", str(PACKS / "quantities"))
     with pytest.raises(db.MigrationError, match="свой вид gauge_reading") as e:
         db.prepare(kb)
     assert "sensor" in str(e.value)
@@ -283,7 +283,7 @@ def test_file_pack_named_mine_is_refused(kb, tmp_path, monkeypatch):
     root = tmp_path / "mine"
     root.mkdir()
     (root / "pack.yaml").write_text("name: mine\nversion: 9.0.0\n", encoding="utf-8")
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(root)]))
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(root)]))
     with pytest.raises(db.MigrationError, match="mine"):
         db.prepare(kb)
 

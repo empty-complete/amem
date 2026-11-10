@@ -46,7 +46,7 @@ export const CommandField = forwardRef<HTMLInputElement>(function CommandField(_
       return;
     }
     let live = true;
-    const src = registry.dataSources.get("amem.records");
+    const src = registry.dataSources.get("amemo.records");
     src
       ?.search(query)
       .then((r) => live && setHits((r.items as Hit[]).slice(0, 6)))

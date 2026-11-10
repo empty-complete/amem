@@ -1,8 +1,8 @@
 """Лексические каналы: марки, русский FTS, фильтры до LIMIT и компактная выдача."""
 import pytest
 
-from amem import db, lookup, records, search
-from amem.records import Item
+from amemo import db, lookup, records, search
+from amemo.records import Item
 
 AGENT = "model:claude"
 HUMAN = "person:filipp"

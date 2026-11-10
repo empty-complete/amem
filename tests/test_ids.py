@@ -3,8 +3,8 @@ import uuid
 
 import pytest
 
-import amem.ids as ids_mod
-from amem.ids import uuid7
+import amemo.ids as ids_mod
+from amemo.ids import uuid7
 
 
 def _freeze(monkeypatch, now_ns: int) -> list[int]:

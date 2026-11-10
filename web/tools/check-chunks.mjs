@@ -2,7 +2,7 @@
 // Обходит статические imports входа; динамические (lazy) — не в счёт.
 import { readFileSync } from "node:fs";
 
-const path = process.argv[2] ?? "python/amem_web/dist/.vite/manifest.json";
+const path = process.argv[2] ?? "python/amemo_web/dist/.vite/manifest.json";
 const manifest = JSON.parse(readFileSync(path, "utf8"));
 const LAZY =
   /SkyCanvas|Sky3D|PdfPage|SourceView|BodyEditor|KindDrawer|codemirror|katex|force-graph|3d-force-graph|three|pdfjs|codemirror/i;

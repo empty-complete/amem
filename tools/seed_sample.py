@@ -2,11 +2,11 @@
 
 То же содержание, что у моков веба (web/src/mocks/fixtures): метеостанция МС-1 с датчиками, руководство PDF с
 цитатами на страницах, журнал наблюдений xlsx, заметки человека, папки PARA и очередь проверки с открытыми
-пунктами. Всё пишется через amem.api, как пишут агенты и человек, — значит, проходит автопроверку, а статусы и
+пунктами. Всё пишется через amemo.api, как пишут агенты и человек, — значит, проходит автопроверку, а статусы и
 очередь получаются настоящие.
 
-Настройки — те же, что у службы (settings.load: AMEM_DSN, AMEM_DATA, AMEM_DOCS, AMEM_AGENT, amem.toml). Пакет образца
-tools/sample-pack/meteo (датчики с профилями) должен быть в AMEM_PACKS и у образца, и у службы.
+Настройки — те же, что у службы (settings.load: AMEMO_DSN, AMEMO_DATA, AMEMO_DOCS, AMEMO_AGENT, amemo.toml). Пакет образца
+tools/sample-pack/meteo (датчики с профилями) должен быть в AMEMO_PACKS и у образца, и у службы.
 Запуск: python tools/seed_sample.py [--force]; база с записями без --force — отказ (код 2).
 """
 from __future__ import annotations
@@ -188,7 +188,7 @@ FOLDERS = {
 
 
 def seed(conn, store, docs: Path, person: str) -> dict:
-    from amem import api
+    from amemo import api
 
     write_docs(docs)
     first = api.submit(conn, store, docs, agent=MODEL, proposals=entities() + facts(), links=links(),
@@ -215,28 +215,28 @@ def main(argv=None) -> int:
     ap.add_argument("--force", action="store_true", help="писать и в базу, где уже есть записи")
     args = ap.parse_args(argv)
 
-    from amem import api, db, settings
-    from amem.ocfl_store import ObjectStore
+    from amemo import api, db, settings
+    from amemo.ocfl_store import ObjectStore
 
-    # пакет образца нужен и образцу, и службе: без него классов sensor нет — добавляем к AMEM_PACKS, если забыли
-    paths = [p for p in os.environ.get("AMEM_PACKS", "").split(os.pathsep) if p]
+    # пакет образца нужен и образцу, и службе: без него классов sensor нет — добавляем к AMEMO_PACKS, если забыли
+    paths = [p for p in os.environ.get("AMEMO_PACKS", "").split(os.pathsep) if p]
     if not any(Path(p).resolve() == SAMPLE_PACK for p in paths):
-        os.environ["AMEM_PACKS"] = os.pathsep.join([*paths, str(SAMPLE_PACK)])
-        print(f"amem: AMEM_PACKS += {SAMPLE_PACK} — укажите его и службе", file=sys.stderr)
+        os.environ["AMEMO_PACKS"] = os.pathsep.join([*paths, str(SAMPLE_PACK)])
+        print(f"amemo: AMEMO_PACKS += {SAMPLE_PACK} — укажите его и службе", file=sys.stderr)
     s = settings.load()
     if s.docs is None:
-        print("amem: нужна папка документов — AMEM_DOCS", file=sys.stderr)
+        print("amemo: нужна папка документов — AMEMO_DOCS", file=sys.stderr)
         return 2
     with db.connect(s.dsn) as conn:
         db.prepare(conn)
         counts = api.base(conn)["counts"]
         if counts["atoms"] + counts["entities"] and not args.force:
-            print("amem: в базе уже есть записи — образец пишется в пустую базу (или --force)", file=sys.stderr)
+            print("amemo: в базе уже есть записи — образец пишется в пустую базу (или --force)", file=sys.stderr)
             return 2
         try:
             result = seed(conn, ObjectStore(s.data), s.docs, s.agent)
         except api.CheckRejected as e:
-            print(f"amem: {e}", file=sys.stderr)
+            print(f"amemo: {e}", file=sys.stderr)
             for issue in e.issues:
                 print(f"  {issue['severity']}: {issue['ref']} {issue['path'] or ''}: {issue['message']}", file=sys.stderr)
             return 1

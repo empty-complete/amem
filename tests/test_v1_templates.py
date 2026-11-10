@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from amem import packs
+from amemo import packs
 
 SCHEMA = yaml.safe_load(packs.SCHEMA_FILE.read_text(encoding="utf-8"))
 REF_ENT = "^(ent:"          # так начинается шаблон поля-ссылки на сущность

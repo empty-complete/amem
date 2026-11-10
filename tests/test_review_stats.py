@@ -5,9 +5,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from amem import check, db, objects, review
-from amem.ids import uuid7
-from amem.check import Proposal
+from amemo import check, db, objects, review
+from amemo.ids import uuid7
+from amemo.check import Proposal
 from check_support import CHECK_PACK, PDF, atom, entity, source_pdf
 
 AUTHOR = "model:writer"
@@ -18,8 +18,8 @@ PAGE2 = "Ветровой район II: w0 = 0,30 кПа"
 
 @pytest.fixture
 def kb(pg, monkeypatch):
-    monkeypatch.setenv("AMEM_PACKS", str(CHECK_PACK))
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_PACKS", str(CHECK_PACK))
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
     monkeypatch.setattr(review, "AUDIT_RATE", 0.0)
     db.prepare(pg)
     return pg

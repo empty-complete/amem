@@ -8,9 +8,9 @@ from datetime import date, datetime, timezone
 import psycopg
 import pytest
 
-from amem import canon, db, lookup, model_v1, records
-from amem.ids import uuid7
-from amem.records import Item, RecordError, commit, decide, reject, retire_link, set_status
+from amemo import canon, db, lookup, model_v1, records
+from amemo.ids import uuid7
+from amemo.records import Item, RecordError, commit, decide, reject, retire_link, set_status
 from v1_support import same_database
 
 AGENT = "model:claude"
@@ -117,7 +117,7 @@ def test_changed_body_gives_next_revision_and_keeps_old(kb):
         "удаление about"])
 def test_history_cannot_be_rewritten(kb, sql):
     base(kb)
-    with pytest.raises(psycopg.errors.RaiseException, match="amem:"):
+    with pytest.raises(psycopg.errors.RaiseException, match="amemo:"):
         with kb.transaction():
             kb.execute(sql)
 

@@ -16,7 +16,7 @@ GitHub theme with `<picture>`.
 | `record` | `/atom/:ref` | A parameter with its value, body and formula; the PDF page with the quote highlighted |
 | `review` | `/review/:itemId` | The queue on the left; the claim, the quote and the neighbourhood; the decision |
 | `card` | `/entity/:ref?tab=card` | The entity card: completeness, grouped parameters (known, missing, conflict) |
-| `agent` | — | A real MCP session against `amem mcp`: `amem_search` → `amem_get` → `amem_helpful`, drawn as a terminal |
+| `agent` | — | A real MCP session against `amemo mcp`: `amemo_search` → `amemo_get` → `amemo_helpful`, drawn as a terminal |
 
 ## Retaking the screenshots
 

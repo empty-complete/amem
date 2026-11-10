@@ -1,29 +1,29 @@
-# Служба amem и её база. Настройки — в .env (образец .env.example); секретов в этом файле нет.
-#   docker compose up -d --wait amem                    — база и служба на http://127.0.0.1:8767
-#   docker compose --profile web up -d --wait amem-web  — то же с веб-интерфейсом (/ui); вместо amem, не вместе:
+# Служба amemo и её база. Настройки — в .env (образец .env.example); секретов в этом файле нет.
+#   docker compose up -d --wait amemo                    — база и служба на http://127.0.0.1:8767
+#   docker compose --profile web up -d --wait amemo-web  — то же с веб-интерфейсом (/ui); вместо amemo, не вместе:
 #                                                        порт и тома у них общие
 # Тестовые базы — профиль test (ниже).
 
-x-amem: &amem
+x-amemo: &amemo
   build: {context: ., target: service}
-  image: amem:local
+  image: amemo:local
   restart: unless-stopped
   depends_on:
     db: {condition: service_healthy}
-  environment: &amem-env
-    AMEM_DSN: postgresql://amem:${AMEM_PG_PASSWORD:-amem}@db:5432/amem
-    AMEM_AGENT: ${AMEM_AGENT:-}                # человек службы (person:…); пусто — person: + имя пользователя ОС
-    AMEM_TOKENS: ${AMEM_TOKENS:-}              # пусто — без входа (--no-auth): порт наружу только 127.0.0.1
-    AMEM_ALLOWED_HOSTS: amem                   # Host: amem:8767 из сети compose; localhost и 127.0.0.1 — всегда
-    AMEM_DOCS: /var/lib/amem/docs
-    # служба слушает 0.0.0.0:8767 внутри сети (AMEM_HOST и AMEM_PORT заданы в образе)
+  environment: &amemo-env
+    AMEMO_DSN: postgresql://amemo:${AMEMO_PG_PASSWORD:-amemo}@db:5432/amemo
+    AMEMO_AGENT: ${AMEMO_AGENT:-}                # человек службы (person:…); пусто — person: + имя пользователя ОС
+    AMEMO_TOKENS: ${AMEMO_TOKENS:-}              # пусто — без входа (--no-auth): порт наружу только 127.0.0.1
+    AMEMO_ALLOWED_HOSTS: amemo                   # Host: amemo:8767 из сети compose; localhost и 127.0.0.1 — всегда
+    AMEMO_DOCS: /var/lib/amemo/docs
+    # служба слушает 0.0.0.0:8767 внутри сети (AMEMO_HOST и AMEMO_PORT заданы в образе)
   volumes:
-    - amem-objects:/var/lib/amem/objects       # хранилище копий (OCFL)
-    - amem-state:/var/lib/amem/state           # загрузки, подборки, журнал запросов, файл токенов
-    - amem-backups:/var/lib/amem/backups       # amem backup create
-    - ${AMEM_DOCS_DIR:-amem-docs}:/var/lib/amem/docs:ro
+    - amemo-objects:/var/lib/amemo/objects       # хранилище копий (OCFL)
+    - amemo-state:/var/lib/amemo/state           # загрузки, подборки, журнал запросов, файл токенов
+    - amemo-backups:/var/lib/amemo/backups       # amemo backup create
+    - ${AMEMO_DOCS_DIR:-amemo-docs}:/var/lib/amemo/docs:ro
   ports:
-    - "127.0.0.1:${AMEM_PUBLISH_PORT:-8767}:8767"
+    - "127.0.0.1:${AMEMO_PUBLISH_PORT:-8767}:8767"
   healthcheck:
     test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8767/health', timeout=4).read() == b'ok' else 1)"]
     interval: 10s
@@ -32,34 +32,34 @@ x-amem: &amem
     retries: 5
 
 services:
-  amem:
-    <<: *amem
+  amemo:
+    <<: *amemo
 
-  # Служба с веб-интерфейсом: образ с amem[web] (пакет amem-web, статика /ui)
-  amem-web:
-    <<: *amem
+  # Служба с веб-интерфейсом: образ с amemo[web] (пакет amemo-web, статика /ui)
+  amemo-web:
+    <<: *amemo
     profiles: ["web"]
     build: {context: ., target: web}
-    image: amem-web:local
+    image: amemo-web:local
     environment:
-      <<: *amem-env
-      AMEM_ALLOWED_HOSTS: amem,amem-web
+      <<: *amemo-env
+      AMEMO_ALLOWED_HOSTS: amemo,amemo-web
 
   # База схемы v1: PostgreSQL 18 + pgvector. Запуск: docker compose up -d --wait db
   db:
     image: pgvector/pgvector:0.8.1-pg18
     restart: unless-stopped
     environment:
-      POSTGRES_DB: amem
-      POSTGRES_USER: amem
-      POSTGRES_PASSWORD: ${AMEM_PG_PASSWORD:-amem}
+      POSTGRES_DB: amemo
+      POSTGRES_USER: amemo
+      POSTGRES_PASSWORD: ${AMEMO_PG_PASSWORD:-amemo}
       # пароль задаётся только при первом создании базы; потом его меняют в самой базе (ALTER ROLE)
     volumes:
-      - amem-pg:/var/lib/postgresql    # у образа PostgreSQL 18 данные — в /var/lib/postgresql/18/docker
+      - amemo-pg:/var/lib/postgresql    # у образа PostgreSQL 18 данные — в /var/lib/postgresql/18/docker
     ports:
       - "127.0.0.1:5435:5432"            # 5432 на этой машине уже занят другим Postgres
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U amem -d amem"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U amemo -d amemo"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -94,13 +94,13 @@ services:
       retries: 30
 
 volumes:
-  amem-pg:
-    name: amem-pg      # имя не зависит от папки проекта: из рабочего дерева и из основной папки — один том
-  amem-objects:
-    name: amem-objects
-  amem-state:
-    name: amem-state
-  amem-backups:
-    name: amem-backups
-  amem-docs:
-    name: amem-docs
+  amemo-pg:
+    name: amemo-pg      # имя не зависит от папки проекта: из рабочего дерева и из основной папки — один том
+  amemo-objects:
+    name: amemo-objects
+  amemo-state:
+    name: amemo-state
+  amemo-backups:
+    name: amemo-backups
+  amemo-docs:
+    name: amemo-docs

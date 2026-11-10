@@ -6,8 +6,8 @@ from datetime import datetime, timedelta, timezone
 import psycopg
 import pytest
 
-from amem import db, ids, lookup, recipes, records, search
-from amem.records import Item
+from amemo import db, ids, lookup, recipes, records, search
+from amemo.records import Item
 
 AGENT = "model:test"
 NOW = datetime(2026, 11, 8, 12, 0, tzinfo=timezone.utc)
@@ -51,7 +51,7 @@ def find(kb, query, **kwargs):
 
 
 def utility():
-    from amem import usefulness
+    from amemo import usefulness
     return usefulness
 
 

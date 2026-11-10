@@ -2,9 +2,9 @@
 import re
 
 
-from amem import db, records
-from amem.ids import uuid7
-from amem.records import Item
+from amemo import db, records
+from amemo.ids import uuid7
+from amemo.records import Item
 from v1_support import changed, json_errors, pydantic_errors, same_database
 
 AGENT = "model:claude"

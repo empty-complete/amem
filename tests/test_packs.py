@@ -10,9 +10,9 @@ import psycopg
 import pytest
 import yaml
 
-from amem import db, packs, records
-from amem.ids import uuid7
-from amem.records import Item
+from amemo import db, packs, records
+from amemo.ids import uuid7
+from amemo.records import Item
 
 AGENT = "model:claude"
 EXAMPLE = Path(__file__).with_name("packs") / "example"
@@ -69,7 +69,7 @@ def test_no_duplicates_in_core():
 def test_unknown_annotation_is_an_error(tmp_path, monkeypatch):
     schema = yaml.safe_load(packs.SCHEMA_FILE.read_text(encoding="utf-8"))
     schema["enums"]["Status"]["permissible_values"]["draft"]["annotations"]["labl_ru"] = "опечатка"
-    broken = tmp_path / "amem_v1.yaml"
+    broken = tmp_path / "amemo_v1.yaml"
     broken.write_text(yaml.safe_dump(schema, allow_unicode=True), encoding="utf-8")
     monkeypatch.setattr(packs, "SCHEMA_FILE", broken)
     with pytest.raises(packs.PackError, match="Status.draft.*labl_ru"):
@@ -148,7 +148,7 @@ def test_same_version_other_content_is_rejected(pg, monkeypatch, tmp_path):
 def test_pack_table_stores_version_and_digest(pg):
     db.prepare(pg)
     rows = pg.execute("SELECT name, version, digest FROM pack").fetchall()
-    assert [(r[0], r[1]) for r in rows] == [("core", "1.4.0")]
+    assert [(r[0], r[1]) for r in rows] == [("core", "1.4.1")]
     assert all(len(r[2]) == 64 for r in rows)
     db.prepare(pg)                                             # повторно — без ошибок и дублей
     assert pg.execute("SELECT count(*) FROM pack").fetchone()[0] == 1

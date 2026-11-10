@@ -4,7 +4,7 @@ import en from "../i18n/en.json";
 import ru from "../i18n/ru.json";
 
 export type Locale = "ru" | "en";
-const KEY = "amem.locale";
+const KEY = "amemo.locale";
 
 export function readLocale(lang = typeof navigator === "undefined" ? "ru" : navigator.language): Locale {
   try {

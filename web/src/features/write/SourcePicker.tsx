@@ -32,7 +32,7 @@ async function upload(file: File): Promise<Obj> {
   return (await res.json()) as Obj;
 }
 
-/** Bbox протяжкой по картинке: доли ширины и высоты, как селектор amem. */
+/** Bbox протяжкой по картинке: доли ширины и высоты, как селектор amemo. */
 function BoxPick({ src, alt, onPick }: { src: string; alt: string; onPick: (b: string) => void }) {
   const [box, setBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const start = useRef<{ x: number; y: number } | null>(null);

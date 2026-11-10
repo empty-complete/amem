@@ -1,70 +1,73 @@
 [
   {
     "name": "JS: входной кусок",
-    "path": "python/amem_web/dist/assets/index-*.js",
+    "path": "python/amemo_web/dist/assets/index-*.js",
     "limit": "220 kB",
     "gzip": true
   },
   {
     "name": "JS: приложение без ленивых кусков (pdf.js, KaTeX, CodeMirror, небо, 3D, конструктор видов)",
     "path": [
-      "python/amem_web/dist/assets/*.js",
-      "!python/amem_web/dist/assets/PdfPage-*.js",
-      "!python/amem_web/dist/assets/SourceView-*.js",
-      "!python/amem_web/dist/assets/katex-*.js",
-      "!python/amem_web/dist/assets/SkyCanvas-*.js",
-      "!python/amem_web/dist/assets/Sky3D-*.js",
-      "!python/amem_web/dist/assets/float-tooltip-*.js",
-      "!python/amem_web/dist/assets/codemirror-*.js",
-      "!python/amem_web/dist/assets/BodyEditor-*.js",
-      "!python/amem_web/dist/assets/KindDrawer-*.js"
+      "python/amemo_web/dist/assets/*.js",
+      "!python/amemo_web/dist/assets/PdfPage-*.js",
+      "!python/amemo_web/dist/assets/SourceView-*.js",
+      "!python/amemo_web/dist/assets/katex-*.js",
+      "!python/amemo_web/dist/assets/SkyCanvas-*.js",
+      "!python/amemo_web/dist/assets/Sky3D-*.js",
+      "!python/amemo_web/dist/assets/float-tooltip-*.js",
+      "!python/amemo_web/dist/assets/codemirror-*.js",
+      "!python/amemo_web/dist/assets/BodyEditor-*.js",
+      "!python/amemo_web/dist/assets/KindDrawer-*.js"
     ],
     "limit": "460 kB",
     "gzip": true
   },
   {
     "name": "Лениво: pdf.js (страница источника)",
-    "path": "python/amem_web/dist/assets/PdfPage-*.js",
+    "path": "python/amemo_web/dist/assets/PdfPage-*.js",
     "limit": "140 kB",
     "gzip": true
   },
   {
     "name": "Лениво: воркер pdf.js (отдельный поток)",
-    "path": "python/amem_web/dist/assets/pdf.worker.min-*.mjs",
+    "path": "python/amemo_web/dist/assets/pdf.worker.min-*.mjs",
     "limit": "450 kB",
     "gzip": true
   },
   {
     "name": "Лениво: KaTeX (формулы)",
-    "path": ["python/amem_web/dist/assets/katex-*.js", "python/amem_web/dist/assets/katex-*.css"],
+    "path": ["python/amemo_web/dist/assets/katex-*.js", "python/amemo_web/dist/assets/katex-*.css"],
     "limit": "90 kB",
     "gzip": true
   },
   {
     "name": "Лениво: CodeMirror (исходник и редактор тела)",
     "path": [
-      "python/amem_web/dist/assets/codemirror-*.js",
-      "python/amem_web/dist/assets/SourceView-*.js",
-      "python/amem_web/dist/assets/BodyEditor-*.js"
+      "python/amemo_web/dist/assets/codemirror-*.js",
+      "python/amemo_web/dist/assets/SourceView-*.js",
+      "python/amemo_web/dist/assets/BodyEditor-*.js"
     ],
     "limit": "190 kB",
     "gzip": true
   },
   {
     "name": "Лениво: небо 2D (force-graph, d3)",
-    "path": ["python/amem_web/dist/assets/SkyCanvas-*.js", "python/amem_web/dist/assets/float-tooltip-*.js"],
+    "path": [
+      "python/amemo_web/dist/assets/SkyCanvas-*.js",
+      "python/amemo_web/dist/assets/float-tooltip-*.js"
+    ],
     "limit": "70 kB",
     "gzip": true
   },
   {
     "name": "Лениво: небо 3D (three.js; грузится только по переключателю «3D»)",
-    "path": "python/amem_web/dist/assets/Sky3D-*.js",
+    "path": "python/amemo_web/dist/assets/Sky3D-*.js",
     "limit": "360 kB",
     "gzip": true
   },
   {
     "name": "CSS приложения (HeroUI — только используемые компоненты)",
-    "path": ["python/amem_web/dist/assets/*.css", "!python/amem_web/dist/assets/katex-*.css"],
+    "path": ["python/amemo_web/dist/assets/*.css", "!python/amemo_web/dist/assets/katex-*.css"],
     "limit": "40 kB",
     "gzip": true
   }

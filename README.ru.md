@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/banner-dark.svg">
-    <img alt="amem — another memory" src="docs/assets/readme/banner-light.svg" width="100%">
+    <img alt="amemo — another memory" src="docs/assets/readme/banner-light.svg" width="100%">
   </picture>
 </p>
 
@@ -13,8 +13,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/empty-complete/amem/actions/workflows/ci.yml"><img alt="Тесты" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amem/ci.yml?branch=main&label=tests&style=flat-square"></a>
-  <a href="https://github.com/empty-complete/amem/actions/workflows/web.yml"><img alt="Веб-UI" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amem/web.yml?branch=main&label=web%20ui&style=flat-square"></a>
+  <a href="https://github.com/empty-complete/amemo/actions/workflows/ci.yml"><img alt="Тесты" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amemo/ci.yml?branch=main&label=tests&style=flat-square"></a>
+  <a href="https://github.com/empty-complete/amemo/actions/workflows/web.yml"><img alt="Веб-UI" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amemo/web.yml?branch=main&label=web%20ui&style=flat-square"></a>
   <a href="LICENSE.txt"><img alt="Лицензия MIT" src="https://img.shields.io/badge/license-MIT-2a78d6?style=flat-square"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&logo=python&logoColor=white">
   <img alt="PostgreSQL 16+ с pgvector" src="https://img.shields.io/badge/PostgreSQL-16%2B%20%C2%B7%20pgvector-4169e1?style=flat-square&logo=postgresql&logoColor=white">
@@ -39,16 +39,16 @@
 </p>
 
 > [!IMPORTANT]
-> **amem молод.** Ядро, HTTP-служба с веб-UI, CLI, сервер MCP и память агентов для Claude Code и Codex уже
+> **amemo молод.** Ядро, HTTP-служба с веб-UI, CLI, сервер MCP и память агентов для Claude Code и Codex уже
 > работают и проверяются в CI на PostgreSQL 18 и 16. Схема и HTTP-контракт ещё могут меняться. Снимки на этой
 > странице сняты с настоящей службы на образце базы (`tools/seed_sample.py`, метеостанция с датчиками).
 
-## Зачем amem
+## Зачем amemo
 
 Агенты забывают всё между сессиями, а то, что помнят, — текст без доказательств. Заметки и вики хранят,
 что написали люди, но не откуда это взялось и кто решил, что это верно.
 
-amem хранит единицу поменьше и понадёжнее — **атом**. Атом — это одно утверждение, точное место в файле,
+amemo хранит единицу поменьше и понадёжнее — **атом**. Атом — это одно утверждение, точное место в файле,
 откуда оно взято, вся история его правок и решение человека.
 
 <table>
@@ -115,10 +115,10 @@ amem хранит единицу поменьше и понадёжнее — **
     <td width="50%" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/ru/agent-dark.png">
-        <img alt="Сессия агента по MCP: amem_search, amem_get с цитатой источника, amem_helpful" src="docs/assets/readme/ru/agent-light.png">
+        <img alt="Сессия агента по MCP: amemo_search, amemo_get с цитатой источника, amemo_helpful" src="docs/assets/readme/ru/agent-light.png">
       </picture>
       <h3>Память для агентов</h3>
-      Claude Code и Codex сначала спрашивают amem. Они читают короткие карточки, берут только нужные
+      Claude Code и Codex сначала спрашивают amemo. Они читают короткие карточки, берут только нужные
       записи и отмечают, что помогло, — это дешевле по токенам, чем читать сырые файлы.
     </td>
   </tr>
@@ -148,8 +148,8 @@ amem хранит единицу поменьше и понадёжнее — **
 **1. Запустите PostgreSQL и поставьте библиотеку**
 
 ```bash
-git clone https://github.com/empty-complete/amem.git
-cd amem
+git clone https://github.com/empty-complete/amemo.git
+cd amemo
 docker compose up -d --wait db      # PostgreSQL 18 + pgvector на 127.0.0.1:5435
 python3 -m venv .venv
 .venv/bin/pip install -e .          # или -e ".[embed]" для локальных многоязычных векторов
@@ -160,15 +160,15 @@ python3 -m venv .venv
 ```python
 from pathlib import Path
 
-from amem import check, db, recipes
-from amem.check import Proposal
-from amem.ocfl_store import ObjectStore
+from amemo import check, db, recipes
+from amemo.check import Proposal
+from amemo.ocfl_store import ObjectStore
 
-conn = db.connect("postgresql://amem:amem@127.0.0.1:5435/amem")
+conn = db.connect("postgresql://amemo:amemo@127.0.0.1:5435/amemo")
 db.prepare(conn)                                  # миграции и словарь ядра
 
 docs = Path("my-docs")                            # папка с файлами-источниками
-store = ObjectStore(Path("amem-objects"))         # копии процитированных файлов по хэшу
+store = ObjectStore(Path("amemo-objects"))         # копии процитированных файлов по хэшу
 (docs / "pgvector").mkdir(parents=True, exist_ok=True)
 (docs / "pgvector" / "README.md").write_text(
     "## HNSW\n\nvector - up to 2,000 dimensions, halfvec - up to 4,000 dimensions\n")
@@ -233,10 +233,10 @@ print(hits["items"][0]["label"]["ru"])  # pgvector: индекс HNSW по vecto
 
 ```bash
 .venv/bin/pip install -e . -e web/python          # служба и пакет веб-UI
-(cd web && npm ci && npm run build)               # Node 24+; сборка ложится в пакет amem-web
-export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem AMEM_DOCS=~/amem-sample/docs
+(cd web && npm ci && npm run build)               # Node 24+; сборка ложится в пакет amemo-web
+export AMEMO_DSN=postgresql://amemo:amemo@127.0.0.1:5435/amemo AMEMO_DOCS=~/amemo-sample/docs
 .venv/bin/python tools/seed_sample.py             # образец: 22 записи, 2 открытых пункта проверки
-.venv/bin/python -m amem.service                  # затем откройте http://127.0.0.1:8767/ui/
+.venv/bin/python -m amemo.service                  # затем откройте http://127.0.0.1:8767/ui/
 ```
 
 На моках, без базы:
@@ -248,42 +248,42 @@ cd web && npm ci && npm run dev:mock              # затем откройте 
 ### Установка одной командой
 
 ```bash
-pipx install 'amem[web]'      # или pip install / uv tool install; [web] добавляет веб-UI по /ui
-amem init --dsn postgresql://amem:amem@127.0.0.1:5435/amem   # база и хранилище; DSN запоминается в amem.toml
-amem install claude-code      # сервер MCP, хуки и навыки; `amem install codex` — для Codex CLI
-amem doctor                   # что работает и что поправить
+pipx install 'amemo[web]'      # или pip install / uv tool install; [web] добавляет веб-UI по /ui
+amemo init --dsn postgresql://amemo:amemo@127.0.0.1:5435/amemo   # база и хранилище; DSN запоминается в amemo.toml
+amemo install claude-code      # сервер MCP, хуки и навыки; `amemo install codex` — для Codex CLI
+amemo doctor                   # что работает и что поправить
 ```
 
-`amem init --dsn` запоминает строку подключения в `~/.config/amem/amem.toml` (права `0600`): агенты, хуки и CLI
-находят базу без `AMEM_DSN` в окружении. PostgreSQL с pgvector — из `docker compose up -d --wait db` или свой.
+`amemo init --dsn` запоминает строку подключения в `~/.config/amemo/amemo.toml` (права `0600`): агенты, хуки и CLI
+находят базу без `AMEMO_DSN` в окружении. PostgreSQL с pgvector — из `docker compose up -d --wait db` или свой.
 CI проходит эти шаги на каждом push.
 
 ## Служба
 
 HTTP-служба отдаёт [контракт v1](docs/api/http-v1.openapi.yaml) по `/api/v1` и веб-UI по `/ui`. Запускается
-командой `amem serve` (или `python -m amem.service`):
+командой `amemo serve` (или `python -m amemo.service`):
 
 ```bash
-export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
-.venv/bin/amem serve      # http://127.0.0.1:8767; адрес меняют --host и --port
+export AMEMO_DSN=postgresql://amemo:amemo@127.0.0.1:5435/amemo
+.venv/bin/amemo serve      # http://127.0.0.1:8767; адрес меняют --host и --port
 ```
 
 - **Локальное доверие.** По умолчанию служба слушает только `127.0.0.1`. Она отвечает только на своё имя в `Host`
-  (`127.0.0.1`, `localhost`, `[::1]`, адрес привязки) и только своей странице или `AMEM_UI_ORIGINS` в `Origin`;
+  (`127.0.0.1`, `localhost`, `[::1]`, адрес привязки) и только своей странице или `AMEMO_UI_ORIGINS` в `Origin`;
   запись принимает только JSON. Веб-UI получает cookie человека, новую при каждом запуске. Если ввести адрес
   в строке браузера, сама страница cookie не получает: её выдаёт первый `fetch` интерфейса к `/api/v1/session`.
   Запросы без cookie (скрипты, агенты) пишут как модель, и их записи идут через проверку.
-- **Общая служба.** С `AMEM_TOKENS` (файл `0600` с хэшами токенов) каждый запрос к API требует
+- **Общая служба.** С `AMEMO_TOKENS` (файл `0600` с хэшами токенов) каждый запрос к API требует
   `Authorization: Bearer <токен>`. Токен без `write = true` — только для чтения: запись отвечает `403 read_only`.
   `/health` и статика интерфейса открыты без входа. `--host` не loopback без токенов служба отвергает;
   `--no-auth` разрешает его для закрытой сети и печатает предупреждение.
 - **Под своим именем.** С `--host 0.0.0.0` (например, в docker compose) имена, по которым к службе обращаются,
-  перечисляет `AMEM_ALLOWED_HOSTS`: `AMEM_ALLOWED_HOSTS=amem` принимает `Host: amem:8767`. Перечисляйте только имена,
+  перечисляет `AMEMO_ALLOWED_HOSTS`: `AMEMO_ALLOWED_HOSTS=amemo` принимает `Host: amemo:8767`. Перечисляйте только имена,
   которыми управляете: имя, которое браузер может разрешить в чужой адрес, открывает службу для DNS rebinding.
-- **Состояние.** Подборки и загрузки лежат в `AMEM_STATE` (`~/.local/state/amem`) сутки, не больше
-  `AMEM_STATE_QUOTA` на владельца (10 ГиБ). Журнал запросов — `AMEM_STATE/queries.jsonl`; `AMEM_QUERY_LOG=off`
+- **Состояние.** Подборки и загрузки лежат в `AMEMO_STATE` (`~/.local/state/amemo`) сутки, не больше
+  `AMEMO_STATE_QUOTA` на владельца (10 ГиБ). Журнал запросов — `AMEMO_STATE/queries.jsonl`; `AMEMO_QUERY_LOG=off`
   выключает его. Свой журнал служба пишет в stderr.
-- **Веб-UI.** Для `/ui` нужен пакет веба: `pip install 'amem[web]'`. Без него `/ui` отвечает 404 с подсказкой,
+- **Веб-UI.** Для `/ui` нужен пакет веба: `pip install 'amemo[web]'`. Без него `/ui` отвечает 404 с подсказкой,
   а API работает как обычно.
 
 ## Запись из веба
@@ -316,15 +316,15 @@ export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
   `POST /bundles/export` с `with_packs` увозит свои виды с подборкой; импорт добавляет недостающие, а тот же код
   с другим содержимым — коллизия `bundle_pack_conflict`.
 - **Загрузка и поиск файлов.** `POST /objects` (multipart: `file`, необязательный `path`) кладёт файл в папку
-  документов `AMEM_DOCS`, по умолчанию как `Загрузки/<имя файла>`, и разбирает его. Тот же файл по этому пути —
-  `200`, другой файл там — `409 object_path_taken`, и он не тронут; без `AMEM_DOCS` — `503 docs_unavailable`.
+  документов `AMEMO_DOCS`, по умолчанию как `Загрузки/<имя файла>`, и разбирает его. Тот же файл по этому пути —
+  `200`, другой файл там — `409 object_path_taken`, и он не тронут; без `AMEMO_DOCS` — `503 docs_unavailable`.
   `GET /objects?q=` находит объекты по части имени или пути.
 - **Задачи агентам.** В вебе человек просит агента разобрать файл (`POST /tasks`); повтор возвращает ту же
-  задачу. Агент берёт её через MCP: `amem_tasks` — свободные задачи и свои, `amem_task_claim` — взять с арендой
-  на 30 минут, `amem_task_release` — вернуть, `amem_task_done` — закрыть с итогом (ссылками на записанное),
-  `amem_task_cancel` — отменить поставленную им. Истёкшая аренда освобождает задачу для другого агента.
-  `GET /tasks` и `amem tasks list` показывают открытые и взятые задачи, от новых к старым (закрытые —
-  `--state done`); `amem tasks cancel ID` отменяет (тот, кто поставил, или человек).
+  задачу. Агент берёт её через MCP: `amemo_tasks` — свободные задачи и свои, `amemo_task_claim` — взять с арендой
+  на 30 минут, `amemo_task_release` — вернуть, `amemo_task_done` — закрыть с итогом (ссылками на записанное),
+  `amemo_task_cancel` — отменить поставленную им. Истёкшая аренда освобождает задачу для другого агента.
+  `GET /tasks` и `amemo tasks list` показывают открытые и взятые задачи, от новых к старым (закрытые —
+  `--state done`); `amemo tasks cancel ID` отменяет (тот, кто поставил, или человек).
 
 ## Docker compose
 
@@ -332,64 +332,64 @@ export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
 секретов нет.
 
 ```bash
-cp .env.example .env                          # задайте AMEM_PG_PASSWORD и AMEM_AGENT
-docker compose up -d --wait amem              # PostgreSQL 18 + pgvector и служба на http://127.0.0.1:8767
-docker compose exec amem amem doctor
-docker compose --profile web up -d --wait amem-web   # то же с веб-UI по /ui (вместо amem)
+cp .env.example .env                          # задайте AMEMO_PG_PASSWORD и AMEMO_AGENT
+docker compose up -d --wait amemo              # PostgreSQL 18 + pgvector и служба на http://127.0.0.1:8767
+docker compose exec amemo amemo doctor
+docker compose --profile web up -d --wait amemo-web   # то же с веб-UI по /ui (вместо amemo)
 ```
 
 - **Внутри и снаружи.** Служба слушает `0.0.0.0:8767` внутри сети compose, наружу публикуется только
-  `127.0.0.1:8767`. `AMEM_ALLOWED_HOSTS=amem` — другие контейнеры зовут её как `http://amem:8767`.
-- **Вход.** Без `AMEM_TOKENS` служба идёт с `--no-auth`: любой, кто достучится до порта, пишет как модель, поэтому
+  `127.0.0.1:8767`. `AMEMO_ALLOWED_HOSTS=amemo` — другие контейнеры зовут её как `http://amemo:8767`.
+- **Вход.** Без `AMEMO_TOKENS` служба идёт с `--no-auth`: любой, кто достучится до порта, пишет как модель, поэтому
   порт — только на `127.0.0.1`. Для общей службы выдайте токен
-  (`docker compose exec amem amem token create person:me --file /var/lib/amem/state/tokens`), задайте
-  `AMEM_TOKENS=/var/lib/amem/state/tokens` в `.env` и перезапустите.
-- **Тома.** `amem-pg` (база), `amem-objects` (хранилище копий), `amem-state` (подборки, загрузки, журнал запросов,
-  токены), `amem-backups` (`docker compose exec amem amem backup create`; в образе есть клиент PostgreSQL 18).
-  `AMEM_DOCS_DIR` подключает вашу папку документов только для чтения.
+  (`docker compose exec amemo amemo token create person:me --file /var/lib/amemo/state/tokens`), задайте
+  `AMEMO_TOKENS=/var/lib/amemo/state/tokens` в `.env` и перезапустите.
+- **Тома.** `amemo-pg` (база), `amemo-objects` (хранилище копий), `amemo-state` (подборки, загрузки, журнал запросов,
+  токены), `amemo-backups` (`docker compose exec amemo amemo backup create`; в образе есть клиент PostgreSQL 18).
+  `AMEMO_DOCS_DIR` подключает вашу папку документов только для чтения.
 - **Живость.** Образ и compose проверяют `/health`; `docker compose up --wait` ждёт его.
-- **Профиль `web`.** `amem-web` — та же служба, собранная с `amem[web]`. Порт и тома у них общие: запускайте
-  либо `amem`, либо `amem-web`.
-- **Образ.** `docker build -t amem .` (цель `service`) или `--target web`; `--build-arg AMEM_EXTRAS=embed`
+- **Профиль `web`.** `amemo-web` — та же служба, собранная с `amemo[web]`. Порт и тома у них общие: запускайте
+  либо `amemo`, либо `amemo-web`.
+- **Образ.** `docker build -t amemo .` (цель `service`) или `--target web`; `--build-arg AMEMO_EXTRAS=embed`
   добавляет локальную модель векторов.
 
 ## CLI
 
-`pip install -e .` ставит команду `amem` в venv. Она работает с базой напрямую (`AMEM_DSN` или
-`amem init --dsn …`, который запоминает строку в `~/.config/amem/amem.toml`), служба ей не нужна.
+`pip install -e .` ставит команду `amemo` в venv. Она работает с базой напрямую (`AMEMO_DSN` или
+`amemo init --dsn …`, который запоминает строку в `~/.config/amemo/amemo.toml`), служба ей не нужна.
 
 ```
-amem init [--dsn DSN]                 база и хранилище объектов
-amem serve [--host --port --no-auth]  HTTP API, /mcp и веб-UI
-amem mcp [--agent model:ИМЯ]          сервер MCP на stdio для агента
-amem search ЗАПРОС [--kind --limit]   поиск, шаг 1
-amem timeline REF                     что вокруг записи, шаг 2
-amem get REF...                       полные записи, шаг 3
-amem card REF                         карточка сущности
-amem submit FILE.json                 запись пакета (тело как у POST /submit; «-» — stdin)
-amem review list|claim|release|resolve|stats
-amem folders tree|create|delete|rename|move
-amem export|inspect|import FILE.zip   подборки (import без --apply — пробный)
-amem backup create|list|restore|verify
-amem tasks list|cancel              задачи агентам
-amem token create|list|revoke         токены общей службы
-amem base [name [ИМЯ]]                сводка и имя базы
-amem doctor [--project DIR]          база, хранилище, модель, документы, агенты, служба
+amemo init [--dsn DSN]                 база и хранилище объектов
+amemo serve [--host --port --no-auth]  HTTP API, /mcp и веб-UI
+amemo mcp [--agent model:ИМЯ]          сервер MCP на stdio для агента
+amemo search ЗАПРОС [--kind --limit]   поиск, шаг 1
+amemo timeline REF                     что вокруг записи, шаг 2
+amemo get REF...                       полные записи, шаг 3
+amemo card REF                         карточка сущности
+amemo submit FILE.json                 запись пакета (тело как у POST /submit; «-» — stdin)
+amemo review list|claim|release|resolve|stats
+amemo folders tree|create|delete|rename|move
+amemo export|inspect|import FILE.zip   подборки (import без --apply — пробный)
+amemo backup create|list|restore|verify
+amemo tasks list|cancel              задачи агентам
+amemo token create|list|revoke         токены общей службы
+amemo base [name [ИМЯ]]                сводка и имя базы
+amemo doctor [--project DIR]          база, хранилище, модель, документы, агенты, служба
 ```
 
 - **Вывод.** Текст для человека или `--json` с тем же объектом, что HTTP API отдаёт на ту же операцию.
-  Ошибка называет, что сделать: «задайте AMEM_DSN или выполните amem init».
+  Ошибка называет, что сделать: «задайте AMEMO_DSN или выполните amemo init».
 - **Коды выхода.** `0` успех, `1` окружение (нет базы, нет хранилища), `2` неверный вызов, `3` неоднозначный
   текст вместо ссылки (выведены кандидаты), `4` не найдено, `5` проверка отклонила пакет (выведен отчёт),
   `6` конфликт (пункт уже решён, папка занята, коллизия подборки).
-- **Кто пишет.** В обычном терминале — человек `AMEM_AGENT` (по умолчанию `person:` и имя пользователя ОС).
+- **Кто пишет.** В обычном терминале — человек `AMEMO_AGENT` (по умолчанию `person:` и имя пользователя ОС).
   В окружении агента команда идёт от модели: `CLAUDECODE=1` — `model:claude-code`, переменные песочницы Codex —
-  `model:codex`, `AMEM_AS_MODEL=имя` — `model:имя`. `--agent` задаёт агента явно, но `person:` в окружении агента
+  `model:codex`, `AMEMO_AS_MODEL=имя` — `model:имя`. `--agent` задаёт агента явно, но `person:` в окружении агента
   не принимается.
-- **Токены.** `amem token create person:ann` (или `model:…`, `--read-only`) показывает токен один раз и хранит
-  в `AMEM_TOKENS` только его хэш. Выдаёт и отзывает токены только человек.
-- **Бэкап.** Модели доступен `amem backup create`, но без ротации: `--keep` и `restore` — только человеку.
-- **Отладка.** `AMEM_DEBUG=1` добавляет в stderr traceback внутренней ошибки.
+- **Токены.** `amemo token create person:ann` (или `model:…`, `--read-only`) показывает токен один раз и хранит
+  в `AMEMO_TOKENS` только его хэш. Выдаёт и отзывает токены только человек.
+- **Бэкап.** Модели доступен `amemo backup create`, но без ротации: `--keep` и `restore` — только человеку.
+- **Отладка.** `AMEMO_DEBUG=1` добавляет в stderr traceback внутренней ошибки.
 
 ## MCP
 
@@ -397,28 +397,28 @@ amem doctor [--project DIR]          база, хранилище, модель,
 
 | Инструмент | Что делает |
 |---|---|
-| `amem_search(query, kind?, limit?)` | Шаг 1: короткие находки `{ref, label, kind, status, snippet}` и `retrieval_id` |
-| `amem_similar(query \| ref, limit?)` | Похожие записи, в той же форме |
-| `amem_timeline(ref)` | Шаг 2: последние события записи и её соседи |
-| `amem_get(refs)` | Шаг 3: полные записи — тело, источники, статус, открытые пункты |
-| `amem_card(ref)` | Карточка сущности `amem.card/1` |
-| `amem_submit(proposals, links?, reason?)` | Запись пакета через `check.submit` |
-| `amem_helpful(retrieval_id, refs)` | Отметить атомы, которые помогли |
-| `amem_move(ref, folder)` | Переложить запись в существующую папку |
-| `amem_object_status(path)`, `amem_mark_object(path, status, note?)` | Что из документа уже атомизировано |
-| `amem_review_claim`, `amem_review_release`, `amem_review_resolve` | Для смыслового проверяющего |
-| `amem_tasks(object?, limit?)` | Задачи агентам: свободные и взятые вами |
-| `amem_task_claim(task?, kind?)`, `amem_task_release(task)`, `amem_task_done(task, result?)`, `amem_task_cancel(task)` | Взять задачу с арендой, вернуть, закрыть с итогом, отменить свою |
-| `amem_vocab(scheme)` | Коды словаря с подписями |
+| `amemo_search(query, kind?, limit?)` | Шаг 1: короткие находки `{ref, label, kind, status, snippet}` и `retrieval_id` |
+| `amemo_similar(query \| ref, limit?)` | Похожие записи, в той же форме |
+| `amemo_timeline(ref)` | Шаг 2: последние события записи и её соседи |
+| `amemo_get(refs)` | Шаг 3: полные записи — тело, источники, статус, открытые пункты |
+| `amemo_card(ref)` | Карточка сущности `amem.card/1` |
+| `amemo_submit(proposals, links?, reason?)` | Запись пакета через `check.submit` |
+| `amemo_helpful(retrieval_id, refs)` | Отметить атомы, которые помогли |
+| `amemo_move(ref, folder)` | Переложить запись в существующую папку |
+| `amemo_object_status(path)`, `amemo_mark_object(path, status, note?)` | Что из документа уже атомизировано |
+| `amemo_review_claim`, `amemo_review_release`, `amemo_review_resolve` | Для смыслового проверяющего |
+| `amemo_tasks(object?, limit?)` | Задачи агентам: свободные и взятые вами |
+| `amemo_task_claim(task?, kind?)`, `amemo_task_release(task)`, `amemo_task_done(task, result?)`, `amemo_task_cancel(task)` | Взять задачу с арендой, вернуть, закрыть с итогом, отменить свою |
+| `amemo_vocab(scheme)` | Коды словаря с подписями |
 
-Поиск идёт в три шага, чтобы агент читал только нужное: `amem_search` даёт короткие карточки, `amem_timeline`
-показывает, что вокруг находки, `amem_get` отдаёт выбранные записи целиком. Текст, под который подходят несколько
+Поиск идёт в три шага, чтобы агент читал только нужное: `amemo_search` даёт короткие карточки, `amemo_timeline`
+показывает, что вокруг находки, `amemo_get` отдаёт выбранные записи целиком. Текст, под который подходят несколько
 записей без явного лидера, возвращается как `ambiguous: true` с кандидатами, а не первой попавшейся записью.
 
-**Через stdio.** `amem mcp` — одна сессия на процесс со своим маленьким пулом соединений. Claude Code:
+**Через stdio.** `amemo mcp` — одна сессия на процесс со своим маленьким пулом соединений. Claude Code:
 
 ```bash
-claude mcp add amem --env AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem -- amem mcp --agent model:claude-code
+claude mcp add amemo --env AMEMO_DSN=postgresql://amemo:amemo@127.0.0.1:5435/amemo -- amemo mcp --agent model:claude-code
 ```
 
 или в `.mcp.json` проекта:
@@ -426,97 +426,97 @@ claude mcp add amem --env AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem --
 ```json
 {
   "mcpServers": {
-    "amem": {
-      "command": "amem",
+    "amemo": {
+      "command": "amemo",
       "args": ["mcp", "--agent", "model:claude-code"],
-      "env": { "AMEM_DSN": "postgresql://amem:amem@127.0.0.1:5435/amem" }
+      "env": { "AMEMO_DSN": "postgresql://amemo:amemo@127.0.0.1:5435/amemo" }
     }
   }
 }
 ```
 
-Codex CLI, в `~/.codex/config.toml` (DSN — в `amem.toml` или в окружении, не в этом файле):
+Codex CLI, в `~/.codex/config.toml` (DSN — в `amemo.toml` или в окружении, не в этом файле):
 
 ```toml
-[mcp_servers.amem]
-command = "amem"
+[mcp_servers.amemo]
+command = "amemo"
 args = ["mcp", "--agent", "model:codex"]
-env_vars = ["AMEM_DSN", "AMEM_CONFIG"]
+env_vars = ["AMEMO_DSN", "AMEMO_CONFIG"]
 ```
 
 **Через HTTP.** Запущенная служба отдаёт те же инструменты по `/mcp` (Streamable HTTP):
 
 ```bash
-claude mcp add --transport http amem http://127.0.0.1:8767/mcp --header "X-Amem-Agent: model:claude-code"
+claude mcp add --transport http amemo http://127.0.0.1:8767/mcp --header "X-Amemo-Agent: model:claude-code"
 ```
 
 ```toml
-[mcp_servers.amem]
+[mcp_servers.amemo]
 url = "http://127.0.0.1:8767/mcp"
-http_headers = { "X-Amem-Agent" = "model:codex" }
+http_headers = { "X-Amemo-Agent" = "model:codex" }
 ```
 
 - **Всегда модель.** Клиент MCP пишет как `model:…`, и его записи идут через проверку. У stdio агент — из
-  `--agent model:…` или окружения агента; у `/mcp` — из заголовка `X-Amem-Agent`, иначе агент-модель токена,
-  иначе `AMEM_MODEL_AGENT` (`model:local`). `person:` не принимается.
-- **Общая служба.** С `AMEM_TOKENS` `/mcp`, как и API, требует `Authorization: Bearer <токен>`; токен только для
+  `--agent model:…` или окружения агента; у `/mcp` — из заголовка `X-Amemo-Agent`, иначе агент-модель токена,
+  иначе `AMEMO_MODEL_AGENT` (`model:local`). `person:` не принимается.
+- **Общая служба.** С `AMEMO_TOKENS` `/mcp`, как и API, требует `Authorization: Bearer <токен>`; токен только для
   чтения ищет, а инструменты записи отвечают `read_only`. Заголовок, который спорит с агентом-моделью токена,
   отвергается.
-- **Полезность.** `amem_helpful` отмечает атомы только из поиска той же сессии (у клиентов без сессий — того же
+- **Полезность.** `amemo_helpful` отмечает атомы только из поиска той же сессии (у клиентов без сессий — того же
   агента и входа); чужой `retrieval_id` — `forbidden`.
-- **Журнал запросов.** Явные поиски (`amem search`, `amem_search`, `amem_similar`) пишут строку в
-  `AMEM_STATE/queries.jsonl`, как `/search` службы; шаги чтения — нет.
+- **Журнал запросов.** Явные поиски (`amemo search`, `amemo_search`, `amemo_similar`) пишут строку в
+  `AMEMO_STATE/queries.jsonl`, как `/search` службы; шаги чтения — нет.
 
 ## Память агентов
 
-`amem install claude-code` и `amem install codex` подключают amem к агенту — глобально или с `--project DIR`.
-`amem uninstall …` убирает ровно установленное; `--dry-run` сначала показывает изменения.
+`amemo install claude-code` и `amemo install codex` подключают amemo к агенту — глобально или с `--project DIR`.
+`amemo uninstall …` убирает ровно установленное; `--dry-run` сначала показывает изменения.
 
 | | Claude Code | Codex CLI |
 |---|---|---|
-| Сервер MCP | `claude mcp add --scope user` (или `~/.claude.json`); проект — `.mcp.json` | `[mcp_servers.amem]` в `~/.codex/config.toml`; проект — `.codex/config.toml` |
+| Сервер MCP | `claude mcp add --scope user` (или `~/.claude.json`); проект — `.mcp.json` | `[mcp_servers.amemo]` в `~/.codex/config.toml`; проект — `.codex/config.toml` |
 | Хуки | `SessionStart`, `UserPromptSubmit`, `PreCompact` в `settings.json` | `SessionStart`, `UserPromptSubmit` в `hooks.json` |
-| Навыки | `~/.claude/skills/amem-*`; проект — `.claude/skills/` | `~/.agents/skills/`; проект — `.agents/skills/`, и блок в `AGENTS.md` |
+| Навыки | `~/.claude/skills/amemo-*`; проект — `.claude/skills/` | `~/.agents/skills/`; проект — `.agents/skills/`, и блок в `AGENTS.md` |
 
-- **Хуки.** `amem hook SessionStart` добавляет 3–5 проверенных атомов о проекте (по имени корня git) и
-  напоминание; `UserPromptSubmit` — уверенные находки по запросу («сначала amem»); `PreCompact` просит сводку
+- **Хуки.** `amemo hook SessionStart` добавляет 3–5 проверенных атомов о проекте (по имени корня git) и
+  напоминание; `UserPromptSubmit` — уверенные находки по запросу («сначала amemo»); `PreCompact` просит сводку
   перечислить выводы, которые стоит записать. Хук читает базу напрямую, укладывается в 1,5 с и при любом сбое
   отвечает пусто с кодом 0. Текст из памяти приходит в рамке как данные со статусом проверки, а не как указания.
-- **Навыки.** `amem-remember` (записать 1–3 атома в конце задачи), `amem-answer` (ответ по памяти со ссылками на
-  источники), `amem-verify` (смысловой проверяющий, уровень 5).
-- **Кто пишет.** Установщик задаёт `AMEM_AS_MODEL` серверу MCP и хукам: агент пишет как `model:claude-code` или
+- **Навыки.** `amemo-remember` (записать 1–3 атома в конце задачи), `amemo-answer` (ответ по памяти со ссылками на
+  источники), `amemo-verify` (смысловой проверяющий, уровень 5).
+- **Кто пишет.** Установщик задаёт `AMEMO_AS_MODEL` серверу MCP и хукам: агент пишет как `model:claude-code` или
   `model:codex`, а не от вашего имени.
-- **Правит только своё.** Ключи `amem` и элементы хуков с `amem hook` в JSON, блок `# amem:begin … # amem:end`
-  в TOML, блок `<!-- amem:begin … -->` в Markdown. Перед первой правкой файл копируется в `<файл>.amem-backup`.
-- **Codex.** Codex передаёт серверу MCP только переменные из `env_vars`; установщик перечисляет `AMEM_DSN`,
-  `AMEM_CONFIG`, `AMEM_STATE`, `PGPASSFILE` и `PGSERVICE` и никогда не пишет строку подключения в `config.toml`.
-  Базу задавайте в `amem.toml` через `amem init --dsn …` (или в этих переменных). Файлы проекта Codex читает
+- **Правит только своё.** Ключи `amemo` и элементы хуков с `amemo hook` в JSON, блок `# amemo:begin … # amemo:end`
+  в TOML, блок `<!-- amemo:begin … -->` в Markdown. Перед первой правкой файл копируется в `<файл>.amemo-backup`.
+- **Codex.** Codex передаёт серверу MCP только переменные из `env_vars`; установщик перечисляет `AMEMO_DSN`,
+  `AMEMO_CONFIG`, `AMEMO_STATE`, `PGPASSFILE` и `PGSERVICE` и никогда не пишет строку подключения в `config.toml`.
+  Базу задавайте в `amemo.toml` через `amemo init --dsn …` (или в этих переменных). Файлы проекта Codex читает
   только у доверенного проекта.
-- **Файлы проекта.** С `--project` в файлы идёт голая команда `amem`, без пути этой машины, — их можно
-  коммитить; `amem` должен быть в `PATH` агента. Глобальная установка пишет полный путь.
-- **Windows.** Команды хуков — строки оболочки POSIX (`AMEM_AS_MODEL=… amem hook …`): они работают в Linux, macOS
+- **Файлы проекта.** С `--project` в файлы идёт голая команда `amemo`, без пути этой машины, — их можно
+  коммитить; `amemo` должен быть в `PATH` агента. Глобальная установка пишет полный путь.
+- **Windows.** Команды хуков — строки оболочки POSIX (`AMEMO_AS_MODEL=… amemo hook …`): они работают в Linux, macOS
   и WSL2, но не в родных оболочках Windows. Используйте WSL2.
-- **Проверка.** `amem doctor` показывает, что установлено (глобально и для проекта текущей папки) и существует ли
+- **Проверка.** `amemo doctor` показывает, что установлено (глобально и для проекта текущей папки) и существует ли
   ещё его команда; затем `claude mcp list` или `codex mcp list` подтверждают, что агент видит сервер.
 
-**Расписание `amem-verify`.** Смысловой проверяющий — это агент, которого запускают по вашему расписанию,
+**Расписание `amemo-verify`.** Смысловой проверяющий — это агент, которого запускают по вашему расписанию,
 например каждую ночь через cron:
 
 ```cron
 # м ч д мес дн
-30 3 * * *  cd ~/notes && claude -p "Use the amem-verify skill: review up to 20 open semantic items." >> ~/.local/state/amem/verify.log 2>&1
+30 3 * * *  cd ~/notes && claude -p "Use the amemo-verify skill: review up to 20 open semantic items." >> ~/.local/state/amemo/verify.log 2>&1
 ```
 
 или таймером systemd пользователя:
 
 ```ini
-# ~/.config/systemd/user/amem-verify.service
+# ~/.config/systemd/user/amemo-verify.service
 [Service]
 Type=oneshot
 WorkingDirectory=%h/notes
-ExecStart=/usr/bin/env claude -p "Use the amem-verify skill: review up to 20 open semantic items."
+ExecStart=/usr/bin/env claude -p "Use the amemo-verify skill: review up to 20 open semantic items."
 
-# ~/.config/systemd/user/amem-verify.timer
+# ~/.config/systemd/user/amemo-verify.timer
 [Timer]
 OnCalendar=*-*-* 03:30
 Persistent=true
@@ -524,7 +524,7 @@ Persistent=true
 WantedBy=timers.target
 ```
 
-`systemctl --user enable --now amem-verify.timer`. Агенту нужен сервер MCP amem (`amem install …`).
+`systemctl --user enable --now amemo-verify.timer`. Агенту нужен сервер MCP amemo (`amemo install …`).
 
 ## Как это устроено
 
@@ -548,7 +548,7 @@ flowchart LR
    во фрагменте. Работает для PDF, Markdown, xlsx и docx. Страница-скан PDF (картинка без текстового слоя)
    распознаётся Tesseract через PyMuPDF, если установлены языковые данные: в Debian/Ubuntu —
    `sudo apt install tesseract-ocr tesseract-ocr-rus`, в macOS — `brew install tesseract tesseract-lang`;
-   языки по умолчанию `rus+eng`, свои — `AMEM_OCR_LANGUAGES`. Цитата, сверенная с распознанным текстом,
+   языки по умолчанию `rus+eng`, свои — `AMEMO_OCR_LANGUAGES`. Цитата, сверенная с распознанным текстом,
    получает замечание `info` `quote_ocr` и более мягкий порог нечёткости; без Tesseract о такой странице
    сказано, что у неё нет текстового слоя.
 3. **Здравый смысл:** диапазоны значений, единицы, противоречия с атомами, которые уже есть в базе.
@@ -620,12 +620,12 @@ sources:
 - [x] **Автопроверка** (уровни 1–4) и **очередь проверки** с арендой пунктов, аудитом и метриками
 - [x] **Онтология:** профили сущностей, карточки на лету, переносимые подборки
 - [x] **Библиотека для службы:** папки, списки записей, ссылки по ключу, карточка объекта
-- [x] **Служба HTTP:** `amem serve` по [контракту v1](docs/api/http-v1.openapi.yaml)
+- [x] **Служба HTTP:** `amemo serve` по [контракту v1](docs/api/http-v1.openapi.yaml)
 - [x] **CLI и сервер MCP:** поиск в три шага, отметки полезности, вырезание `<private>`
-- [x] **Память агентов:** хуки Claude Code, Codex CLI, `amem install`, навыки ядра
+- [x] **Память агентов:** хуки Claude Code, Codex CLI, `amemo install`, навыки ядра
 - [x] **Запись из веба:** формы по шаблонам, свои виды, загрузка файлов, задачи агентам
 - [x] **Веб-UI:** все экраны — на службе и на моках; сквозные проверки против службы
-- [ ] **asearch:** поиск по файлам как плагин amem
+- [ ] **asearch:** поиск по файлам как плагин amemo
 
 ## Документация
 
@@ -633,7 +633,7 @@ sources:
 |---|---|
 | [Справочник библиотеки](docs/library.ru.md) | Модель данных, поиск, автопроверка, очередь, карточки, подборки, папки, бэкапы |
 | [HTTP API v1](docs/api/) | Контракт OpenAPI между службой и веб-UI |
-| [Манифест](docs/MANIFESTO.ru.md) | Зачем существует amem и на чём он стоит |
+| [Манифест](docs/MANIFESTO.ru.md) | Зачем существует amemo и на чём он стоит |
 | [Спецификации и планы](docs/superpowers/) | Как решали и строили каждый подпроект |
 
 **Полезно знать**
@@ -642,9 +642,9 @@ sources:
   туда английский текст, как английский образец. Полнотекст настроен на русский язык, а необязательная
   локальная модель векторов многоязычная.
 - Векторы локальные и необязательные: `pip install -e ".[embed]"` добавляет fastembed, а модель
-  скачивается только с явного разрешения. `AMEM_BACKEND=none` выключает смысловой канал, лексический
+  скачивается только с явного разрешения. `AMEMO_BACKEND=none` выключает смысловой канал, лексический
   поиск продолжает работать.
-- Бэкапу нужен клиент PostgreSQL 18 (`pg_dump`, `pg_restore`, `psql`) в `PATH` или в папке `AMEM_PG_BIN`.
+- Бэкапу нужен клиент PostgreSQL 18 (`pg_dump`, `pg_restore`, `psql`) в `PATH` или в папке `AMEMO_PG_BIN`.
 
 ## Разработка
 
@@ -659,18 +659,18 @@ docker compose --profile test up -d --wait db-test db-test-pg16
 .venv/bin/pytest -q
 ```
 
-Другие порты или серверы задаются так: `AMEM_TEST_DSNS="postgresql://…/test,postgresql://…/test"`.
+Другие порты или серверы задаются так: `AMEMO_TEST_DSNS="postgresql://…/test,postgresql://…/test"`.
 Нет тестовой базы или клиента — это падение теста, а не пропуск. Если окружение выставляет `PYTHONPATH`
 от других инструментов (например, ROS), он ломает автозагрузку плагинов pytest — тогда запускайте
 `env -u PYTHONPATH .venv/bin/pytest -q`.
 
-После правки `amem/schema/amem_v1.yaml` перегенерируйте модели:
+После правки `amemo/schema/amemo_v1.yaml` перегенерируйте модели:
 
 ```bash
-.venv/bin/python tools/gen_schema.py          # пишет amem/model_v1.py и JSON Schema
+.venv/bin/python tools/gen_schema.py          # пишет amemo/model_v1.py и JSON Schema
 .venv/bin/python tools/gen_schema.py --check  # проверка в CI: сгенерированное актуально
 ```
-Перед push — проверка на приватное: `git config core.hooksPath tools/hooks`; список образцов хук читает из `~/.config/amem/private-patterns.txt` (вне репозитория).
+Перед push — проверка на приватное: `git config core.hooksPath tools/hooks`; список образцов хук читает из `~/.config/amemo/private-patterns.txt` (вне репозитория).
 
 Сообщения коммитов — по [Conventional Commits](https://www.conventionalcommits.org/) и на английском:
 `type(scope): subject`, не длиннее 100 знаков, например `fix(service): reject NUL in parameters`. Тот же
@@ -683,7 +683,7 @@ docker compose --profile test up -d --wait db-test db-test-pg16
 
 ## Участие
 
-amem делается открыто. Вопросы и обсуждения приветствуются. Перед большой правкой откройте, пожалуйста,
+amemo делается открыто. Вопросы и обсуждения приветствуются. Перед большой правкой откройте, пожалуйста,
 issue, чтобы договориться о подходе. Каждый pull request проходит workflow `ci` (тесты на PostgreSQL 18 и 16)
 и workflow `commits` (Conventional Commits на английском), а правки в `web/` — ещё и workflow `web`.
 
@@ -703,4 +703,4 @@ issue, чтобы договориться о подходе. Каждый pull 
 
 MIT, см. [LICENSE.txt](LICENSE.txt). © 2026 Филипп Белобородов (Philipp Beloborodov).
 
-<p align="center"><sub>amem — инструмент для того, чтобы хорошо помнить.</sub></p>
+<p align="center"><sub>amemo — инструмент для того, чтобы хорошо помнить.</sub></p>

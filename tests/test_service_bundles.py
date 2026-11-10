@@ -1,6 +1,6 @@
 """Подборки HTTP v1 (подпроект 4, часть 4a, задача 8): экспорт и антология, скачивание и отчёт, загрузка с проверкой
 (inspect), пробный и настоящий импорт; владелец подборки, срок хранения, пределы загрузки. И журнал запросов
-(amem/journal.py): строка на явный поиск через HTTP. Каждый ответ сверяется со схемой контракта
+(amemo/journal.py): строка на явный поиск через HTTP. Каждый ответ сверяется со схемой контракта
 docs/api/http-v1.openapi.yaml; starlette.testclient на настоящей базе (PostgreSQL 18 и 16), порт не слушается."""
 import io
 import json
@@ -12,10 +12,10 @@ from pathlib import Path
 import pytest
 
 import contract
-from amem import api, check, db, journal, review
-from amem.check import Proposal
-from amem.service import app as service_app
-from amem.service import http_v1
+from amemo import api, check, db, journal, review
+from amemo.check import Proposal
+from amemo.service import app as service_app
+from amemo.service import http_v1
 from check_support import atom
 from test_service_core import tokens_file
 
@@ -37,7 +37,7 @@ def problem(response, status: int, code: str, path: str, method: str = "get") ->
 @pytest.fixture
 def kb(pg, monkeypatch, store, docs):
     """База с двумя заметками человека (verified — для антологии) и черновиком модели."""
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
     monkeypatch.setattr(review, "AUDIT_RATE", 0.0)
     db.prepare(pg)
     made = check.submit(pg, store, docs, [
@@ -52,7 +52,7 @@ def kb(pg, monkeypatch, store, docs):
 @pytest.fixture
 def start(serve, kb, docs):
     def run(env=None, *, person=False, **kw):
-        client = serve({"AMEM_DOCS": str(docs), **(env or {})}, **kw)
+        client = serve({"AMEMO_DOCS": str(docs), **(env or {})}, **kw)
         if person:
             response = client.get(f"{V1}/session", headers={"Sec-Fetch-Site": "same-origin"})
             assert response.json()["agent"] == PERSON
@@ -61,7 +61,7 @@ def start(serve, kb, docs):
 
 
 def state_dir(tmp_path) -> Path:
-    return tmp_path / "home" / ".local" / "state" / "amem"         # AMEM_STATE по умолчанию при HOME фикстуры serve
+    return tmp_path / "home" / ".local" / "state" / "amemo"         # AMEMO_STATE по умолчанию при HOME фикстуры serve
 
 
 def export(client, body=None, status=200):
@@ -101,7 +101,7 @@ def test_export_and_download(start, kb, tmp_path):
         manifest = json.loads(z.read("manifest.json"))
     assert manifest["agent"] == PERSON and manifest["counts"]["atoms"] == 2
     disposition = client.get(made["download"]).headers["content-disposition"]
-    assert disposition == f'attachment; filename="amem-{made["id"]}.zip"'
+    assert disposition == f'attachment; filename="amemo-{made["id"]}.zip"'
     assert (state_dir(tmp_path) / "bundles" / made["id"] / "bundle.zip").is_file()
     # у обычной подборки отчёта нет
     problem(client.get(f"{V1}/bundles/{made['id']}/report"), 404, "not_found", "/bundles/{id}/report")
@@ -185,7 +185,7 @@ def test_foreign_and_missing_bundle_is_404(start, kb, tmp_path):
 def test_bundle_belongs_to_token_not_agent(start, kb, tmp_path):
     """В общей службе подборка — токена: второй токен того же агента её не видит."""
     path = tokens_file(tmp_path, ("t-one", "person:anna", True), ("t-two", "person:anna", True))
-    client = start({"AMEM_TOKENS": path})
+    client = start({"AMEMO_TOKENS": path})
     client.headers["Authorization"] = "Bearer t-one"
     made = export(client)
     downloaded(client, made)
@@ -366,7 +366,7 @@ def test_import_errors(start, kb):
 def test_read_only_token_exports_inspects_and_plans(start, kb, tmp_path):
     """Токен только для чтения: экспорт, проверка загрузки и пробный импорт — да; настоящий импорт — 403 read_only."""
     path = tokens_file(tmp_path, ("t-read", "person:anna", False))
-    client = start({"AMEM_TOKENS": path})
+    client = start({"AMEMO_TOKENS": path})
     client.headers["Authorization"] = "Bearer t-read"
     made = export(client)
     uploaded = contract.check(upload(client, downloaded(client, made)), "/bundles/inspect", "post")
@@ -382,7 +382,7 @@ def test_read_only_token_exports_inspects_and_plans(start, kb, tmp_path):
 
 def test_model_token_cannot_import_for_real(start, kb, tmp_path):
     path = tokens_file(tmp_path, ("t-bot", "model:helper", True))
-    client = start({"AMEM_TOKENS": path})
+    client = start({"AMEMO_TOKENS": path})
     client.headers["Authorization"] = "Bearer t-bot"
     uploaded = contract.check(upload(client, downloaded(client, export(client))), "/bundles/inspect", "post")
     problem(client.post(f"{V1}/bundles/import", json={"upload_id": uploaded["upload_id"], "dry_run": False}),
@@ -422,7 +422,7 @@ def test_errors_do_not_show_disk_paths(start, kb, tmp_path):
 
 
 def test_bundle_error_message_keeps_only_file_names():
-    from amem import bundle
+    from amemo import bundle
     error = bundle.BundleError("/srv/state/uploads/0193/bundle.zip: не читается; см. (/opt/a/b) и packs/core, 1/2")
     assert str(error) == "bundle.zip: не читается; см. (b) и packs/core, 1/2"
 
@@ -520,7 +520,7 @@ def log_lines(path: Path) -> list[dict]:
 
 def test_query_log_line_per_explicit_search(start, kb, tmp_path):
     client = start(person=True)
-    path = state_dir(tmp_path) / "queries.jsonl"             # AMEM_QUERY_LOG по умолчанию — AMEM_STATE/queries.jsonl
+    path = state_dir(tmp_path) / "queries.jsonl"             # AMEMO_QUERY_LOG по умолчанию — AMEMO_STATE/queries.jsonl
     found = contract.check(client.get(f"{V1}/search", params={"q": "кронштейн <private>пароль щита</private>"}),
                            "/search")
     lines = log_lines(path)
@@ -544,11 +544,11 @@ def test_query_log_line_per_explicit_search(start, kb, tmp_path):
 
 
 def test_query_log_off_and_custom_path(start, kb, tmp_path):
-    off = start({"AMEM_QUERY_LOG": "off"})
+    off = start({"AMEMO_QUERY_LOG": "off"})
     contract.check(off.get(f"{V1}/search", params={"q": "кронштейн"}), "/search")
     assert not (state_dir(tmp_path) / "queries.jsonl").exists()
     custom = tmp_path / "logs" / "q.jsonl"
-    client = start({"AMEM_QUERY_LOG": str(custom)})
+    client = start({"AMEMO_QUERY_LOG": str(custom)})
     contract.check(client.get(f"{V1}/search", params={"q": "кронштейн"}), "/search")
     assert [x["agent"] for x in log_lines(custom)] == [MODEL]
 
@@ -557,7 +557,7 @@ def test_query_log_tightens_wider_permissions(start, kb, tmp_path):
     path = tmp_path / "q.jsonl"
     path.write_text("", encoding="utf-8")
     path.chmod(0o644)                                          # файл был до службы, с правами шире
-    client = start({"AMEM_QUERY_LOG": str(path)})
+    client = start({"AMEMO_QUERY_LOG": str(path)})
     contract.check(client.get(f"{V1}/search", params={"q": "кронштейн"}), "/search")
     assert path.stat().st_mode & 0o777 == 0o600 and len(log_lines(path)) == 1
 
@@ -565,7 +565,7 @@ def test_query_log_tightens_wider_permissions(start, kb, tmp_path):
 def test_query_log_failure_does_not_break_search(start, kb, tmp_path):
     blocker = tmp_path / "file"
     blocker.write_text("x", encoding="utf-8")
-    client = start({"AMEM_QUERY_LOG": str(blocker / "q.jsonl")})        # родитель — файл: записать нельзя
+    client = start({"AMEMO_QUERY_LOG": str(blocker / "q.jsonl")})        # родитель — файл: записать нельзя
     response = client.get(f"{V1}/search", params={"q": "кронштейн"})
     assert response.status_code == 200
     contract.check(response, "/search")
@@ -583,7 +583,7 @@ def test_library_search_does_not_log(kb, tmp_path):
 
 def test_vocab_property_unit(serve, pg, monkeypatch):
     packs_dir = Path(__file__).with_name("packs")
-    monkeypatch.setenv("AMEM_PACKS", str(packs_dir / "quantities"))
+    monkeypatch.setenv("AMEMO_PACKS", str(packs_dir / "quantities"))
     db.prepare(pg)
     pg.execute("INSERT INTO concept (scheme, code, data, origin, updated_at) VALUES ('property', 'agent_made', "
                "%s, 'agent', now())", (json.dumps({"scheme": "property", "code": "agent_made",

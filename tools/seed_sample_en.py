@@ -3,12 +3,12 @@
 A fictional network of four automatic weather stations: an operating manual, sensor datasheets and a calibration
 report (PDF), a maintenance log (xlsx) and field notes (Markdown), about 70 records with quotes on real pages,
 a domain pack with station and sensor profiles (tools/sample_en/pack) and an open review queue. Everything is
-written through amem.api, the way agents and people write, so statuses and the queue are real.
+written through amemo.api, the way agents and people write, so statuses and the queue are real.
 
 Schema v1 requires the `ru` slot of a label; an English base keeps its English text there (README, "Good to know").
 
-Settings are the service's (settings.load: AMEM_DSN, AMEM_DATA, AMEM_DOCS, AMEM_AGENT, amem.toml); the pack is
-added to AMEM_PACKS here, the service needs the same AMEM_PACKS to show the profiles.
+Settings are the service's (settings.load: AMEMO_DSN, AMEMO_DATA, AMEMO_DOCS, AMEMO_AGENT, amemo.toml); the pack is
+added to AMEMO_PACKS here, the service needs the same AMEMO_PACKS to show the profiles.
 Run: python tools/seed_sample_en.py [--force]; a base that already has records is refused without --force (code 2).
 """
 from __future__ import annotations
@@ -133,7 +133,7 @@ def write_pdf(path: Path, pages: dict[str, list[str]], title: str) -> None:
             p.insert_textbox(pymupdf.Rect(72, y, 523, y + 80), line, fontname="helv", fontsize=size)
             y += 46 if i == 0 else (40 if len(line) < 80 else 58)
         p.insert_text((290, 800), label, fontname="helv", fontsize=9)
-    doc.set_metadata({"title": title, "author": "amem sample"})
+    doc.set_metadata({"title": title, "author": "amemo sample"})
     path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(path, garbage=4, deflate=True)
 
@@ -406,7 +406,7 @@ KEEP_OPEN = ("@th_hacc", "@cal_ws4", "@fog", "@frost", "@th_edges")
 
 
 def seed(conn, store, docs: Path, person: str) -> dict:
-    from amem import api
+    from amemo import api
 
     write_docs(docs)
     first = api.submit(conn, store, docs, agent=MODEL, proposals=entities() + facts(), links=links(),
@@ -438,28 +438,28 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--force", action="store_true", help="write into a base that already has records")
     args = ap.parse_args(argv)
-    packs = [p for p in os.environ.get("AMEM_PACKS", "").split(os.pathsep) if p]
+    packs = [p for p in os.environ.get("AMEMO_PACKS", "").split(os.pathsep) if p]
     if PACK.resolve() not in {Path(p).resolve() for p in packs}:
-        os.environ["AMEM_PACKS"] = os.pathsep.join([*packs, str(PACK)])
+        os.environ["AMEMO_PACKS"] = os.pathsep.join([*packs, str(PACK)])
 
-    from amem import api, db, settings
-    from amem.ocfl_store import ObjectStore
+    from amemo import api, db, settings
+    from amemo.ocfl_store import ObjectStore
 
     s = settings.load()
     if s.docs is None:
-        print("amem: a documents folder is needed — AMEM_DOCS", file=sys.stderr)
+        print("amemo: a documents folder is needed — AMEMO_DOCS", file=sys.stderr)
         return 2
     with db.connect(s.dsn) as conn:
         db.prepare(conn)
         counts = api.base(conn)["counts"]
         if counts["atoms"] + counts["entities"] and not args.force:
-            print("amem: the base already has records — the sample goes into an empty base (or --force)",
+            print("amemo: the base already has records — the sample goes into an empty base (or --force)",
                   file=sys.stderr)
             return 2
         try:
             result = seed(conn, ObjectStore(s.data), s.docs, s.agent)
         except api.CheckRejected as e:
-            print(f"amem: {e}", file=sys.stderr)
+            print(f"amemo: {e}", file=sys.stderr)
             for issue in e.issues:
                 print(f"  {issue['severity']}: {issue['ref']} {issue['path'] or ''}: {issue['message']}", file=sys.stderr)
             return 1

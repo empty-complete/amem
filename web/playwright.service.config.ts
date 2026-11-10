@@ -2,21 +2,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
-// e2e против настоящей службы amem (часть H): перед стартом — образец «метеостанция» в пустую базу AMEM_DSN
-// (tools/seed_sample.py), затем `python -m amem.service`; сборка интерфейса — из python/amem_web/dist (npm run build).
-const PORT = Number(process.env.AMEM_E2E_PORT ?? 8768);
-const python = process.env.AMEM_PYTHON ?? "python";
-const state = join(tmpdir(), `amem-e2e-${process.pid}`);
+// e2e против настоящей службы amemo (часть H): перед стартом — образец «метеостанция» в пустую базу AMEMO_DSN
+// (tools/seed_sample.py), затем `python -m amemo.service`; сборка интерфейса — из python/amemo_web/dist (npm run build).
+const PORT = Number(process.env.AMEMO_E2E_PORT ?? 8768);
+const python = process.env.AMEMO_PYTHON ?? "python";
+const state = join(tmpdir(), `amemo-e2e-${process.pid}`);
 const env = {
-  AMEM_DSN: process.env.AMEM_DSN ?? "",
-  AMEM_DATA: join(state, "objects"),
-  AMEM_DOCS: join(state, "docs"),
-  AMEM_STATE: join(state, "state"),
-  AMEM_BACKUPS: join(state, "backups"),
-  AMEM_BACKEND: "none",
-  AMEM_QUERY_LOG: "off",
+  AMEMO_DSN: process.env.AMEMO_DSN ?? "",
+  AMEMO_DATA: join(state, "objects"),
+  AMEMO_DOCS: join(state, "docs"),
+  AMEMO_STATE: join(state, "state"),
+  AMEMO_BACKUPS: join(state, "backups"),
+  AMEMO_BACKEND: "none",
+  AMEMO_QUERY_LOG: "off",
   // пакет образца: классы датчиков с профилями — карточка сущности по профилю
-  AMEM_PACKS: join(process.cwd(), "..", "tools", "sample-pack", "meteo"),
+  AMEMO_PACKS: join(process.cwd(), "..", "tools", "sample-pack", "meteo"),
 };
 
 export default defineConfig({
@@ -29,7 +29,7 @@ export default defineConfig({
     : "list",
   use: { baseURL: `http://127.0.0.1:${PORT}/ui/`, trace: "retain-on-failure", locale: "ru-RU" },
   webServer: {
-    command: `${python} ../tools/seed_sample.py && ${python} -m amem.service --port ${PORT}`,
+    command: `${python} ../tools/seed_sample.py && ${python} -m amemo.service --port ${PORT}`,
     url: `http://127.0.0.1:${PORT}/health`,
     env,
     reuseExistingServer: false,

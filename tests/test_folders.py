@@ -10,9 +10,9 @@ from datetime import datetime, timezone
 import psycopg
 import pytest
 
-from amem import db, folders, ids, lookup, recipes, records
-from amem.folders import FolderError
-from amem.records import Item, RecordError
+from amemo import db, folders, ids, lookup, recipes, records
+from amemo.folders import FolderError
+from amemo.records import Item, RecordError
 from v1_support import same_database
 
 MODEL = "model:test"
@@ -455,13 +455,14 @@ def test_existing_base_gets_no_default_folders(pg, tmp_path, monkeypatch):
     (old / "0010_graph_overview.sql").unlink()
     (old / "0011_object_text_ocr.sql").unlink()
     (old / "0012_tasks.sql").unlink()
+    (old / "0013_rename_amemo.sql").unlink()
     with monkeypatch.context() as m:
         m.setattr(db, "SQL_DIR", old)
         db.migrate(pg)
         db.load_vocab(pg)
         pg.execute("INSERT INTO meta (key, value) VALUES ('base_id', %s)", (json.dumps(str(ids.uuid7())),))
     assert db.prepare(pg) == ["0008_folders.sql", "0009_record_list.sql", "0010_graph_overview.sql",
-                              "0011_object_text_ocr.sql", "0012_tasks.sql"]
+                              "0011_object_text_ocr.sql", "0012_tasks.sql", "0013_rename_amemo.sql"]
     assert registry(pg) == set()
 
 
@@ -474,6 +475,7 @@ def test_migrations_0008_0009_over_base_with_data(pg, tmp_path, monkeypatch):
     (old / "0010_graph_overview.sql").unlink()
     (old / "0011_object_text_ocr.sql").unlink()
     (old / "0012_tasks.sql").unlink()
+    (old / "0013_rename_amemo.sql").unlink()
     with monkeypatch.context() as m:
         m.setattr(db, "SQL_DIR", old)
         db.migrate(pg)
@@ -483,7 +485,7 @@ def test_migrations_0008_0009_over_base_with_data(pg, tmp_path, monkeypatch):
                                    Item("entity", {"entity_class": "project", "label": {"ru": "Альфа"}})],
                               agent=MODEL)
     assert db.prepare(pg) == ["0008_folders.sql", "0009_record_list.sql", "0010_graph_overview.sql",
-                              "0011_object_text_ocr.sql", "0012_tasks.sql"]
+                              "0011_object_text_ocr.sql", "0012_tasks.sql", "0013_rename_amemo.sql"]
     assert registry(pg) == set()
     refs = {f"{records.PREFIX[r.target]}:{r.record_id}" for r in made.revisions}
     page = lookup.list_records(pg)
@@ -522,7 +524,7 @@ def test_folder_log_is_immutable(kb):
     ref = atom(kb)
     folders.move(kb, ref, "Архив", agent=MODEL)
     for sql in ("UPDATE folder_log SET folder_to = 'Ресурсы'", "DELETE FROM folder_log"):
-        with pytest.raises(psycopg.errors.RaiseException, match="amem: .* в таблице folder_log запрещено"):
+        with pytest.raises(psycopg.errors.RaiseException, match="amemo: .* в таблице folder_log запрещено"):
             kb.execute(sql)
 
 
@@ -530,7 +532,7 @@ def test_folder_log_is_immutable(kb):
 @pytest.mark.parametrize("table", ["atom", "entity", "folder"])
 def test_folder_columns_refuse_empty_and_too_long(kb, table, value):
     if table == "folder":
-        sql = "INSERT INTO folder (path, created_at, created_by) VALUES (%s, now(), 'model:amem-init')"
+        sql = "INSERT INTO folder (path, created_at, created_by) VALUES (%s, now(), 'model:amemo-init')"
         params = (value,)
     else:
         ref = atom(kb) if table == "atom" else entity(kb, "eps")
@@ -566,4 +568,4 @@ def test_folder_log_refuses_move_to_same_folder(kb):
     ref = atom(kb)
     with pytest.raises(psycopg.errors.CheckViolation):
         kb.execute("INSERT INTO folder_log (id, target, record_id, folder_from, folder_to, agent, changed_at) "
-                   "VALUES (%s, 'atom', %s, 'Архив', 'Архив', 'model:amem-init', now())", (ids.uuid7(), ref[4:]))
+                   "VALUES (%s, 'atom', %s, 'Архив', 'Архив', 'model:amemo-init', now())", (ids.uuid7(), ref[4:]))

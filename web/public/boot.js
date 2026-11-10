@@ -8,7 +8,7 @@
   // тема до первой отрисовки, без мигания
   let theme = null;
   try {
-    theme = localStorage.getItem("amem.theme");
+    theme = localStorage.getItem("amemo.theme");
   } catch {}
   try {
     if (theme !== "light" && theme !== "dark")

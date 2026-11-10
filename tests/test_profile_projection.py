@@ -1,6 +1,6 @@
 """Проекция atom_property: заполняется при записи, перестраивается, совпадает с телами."""
-from amem import db, records
-from amem.records import Item
+from amemo import db, records
+from amemo.records import Item
 from check_support import atom, entity, value
 
 

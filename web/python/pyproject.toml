@@ -1,9 +1,9 @@
 [project]
-name = "amem-web"
-dynamic = ["version"]                # amem_web.__version__ — та же, что у amem (tools/release.py)
-description = "Web UI of amem as static files; the amem service serves them at /ui"
+name = "amemo-web"
+dynamic = ["version"]                # amemo_web.__version__ — та же, что у amemo (tools/release.py)
+description = "Web UI of amemo as static files; the amemo service serves them at /ui"
 readme = "README.md"
-license = "MIT"                      # текст лицензии — в LICENSE.txt репозитория amem
+license = "MIT"                      # текст лицензии — в LICENSE.txt репозитория amemo
 authors = [{name = "empty-complete"}]
 requires-python = ">=3.11"
 classifiers = [
@@ -14,9 +14,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/empty-complete/amem"
-Source = "https://github.com/empty-complete/amem/tree/main/web"
-Issues = "https://github.com/empty-complete/amem/issues"
+Homepage = "https://github.com/empty-complete/amemo"
+Source = "https://github.com/empty-complete/amemo/tree/main/web"
+Issues = "https://github.com/empty-complete/amemo/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
@@ -26,11 +26,11 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
-path = "amem_web/__init__.py"
+path = "amemo_web/__init__.py"
 
 # сборка веба (npm run build) — в .gitignore, но входит и в sdist, и в колесо: колесо из sdist тоже со статикой
 [tool.hatch.build]
-artifacts = ["amem_web/dist/**"]
+artifacts = ["amemo_web/dist/**"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["amem_web"]
+packages = ["amemo_web"]

@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from amem import bundle, check, db, model_v1, records
-from amem.check import Proposal
-from amem.records import Item
+from amemo import bundle, check, db, model_v1, records
+from amemo.check import Proposal
+from amemo.records import Item
 from check_support import atom, entity, source_md, value
 
 PACKS = Path(__file__).with_name("packs")
@@ -21,7 +21,7 @@ PARTS = {"atoms.jsonl", "entities.jsonl", "links.jsonl", "objects.jsonl", "sourc
 @pytest.fixture
 def world(pg, monkeypatch, store, docs):
     """Проект, стойка с датчиком (part_of), параметр датчика с источником, заметки с тегом shared и без."""
-    monkeypatch.setenv("AMEM_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(PACKS / "ontology")]))
+    monkeypatch.setenv("AMEMO_PACKS", os.pathsep.join([str(PACKS / "quantities"), str(PACKS / "ontology")]))
     db.prepare(pg)
     r = check.submit(pg, store, docs, [
         Proposal("entity", entity("@p", cls="project")),
@@ -322,7 +322,7 @@ def test_export_changes_nothing_and_is_repeatable(world, tmp_path, store):
 
 
 def test_with_files_store_error_is_bundle_error(world, tmp_path):
-    from amem.ocfl_store import ObjectStore
+    from amemo.ocfl_store import ObjectStore
     pg, refs = world
     with pytest.raises(bundle.BundleError, match="не скопирован из хранилища"):
         bundle.export(pg, store=ObjectStore(tmp_path / "empty"), folder=tmp_path / "b",
@@ -382,7 +382,7 @@ def test_zip_bomb_limits(tmp_path, monkeypatch):
 def test_export_with_packs_writes_own_kinds(world, tmp_path, store, docs):
     """Свой вид («Мои виды») едет пакетом packs/mine/, собранным из базы; запись вида в подборке ссылается на него.
     Шаблон вида ссылается на класс sensor пакета ontology — пакет-владелец класса тоже в подборке."""
-    from amem import mine
+    from amemo import mine
 
     pg, refs = world
     mine.put(pg, "weighing", {

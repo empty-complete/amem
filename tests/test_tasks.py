@@ -6,8 +6,8 @@ from datetime import datetime, timedelta, timezone
 import psycopg
 import pytest
 
-from amem import api, backup, db, objects, tasks
-from amem.ids import uuid7
+from amemo import api, backup, db, objects, tasks
+from amemo.ids import uuid7
 
 PERSON = "person:ann"
 MODEL = "model:parser"
@@ -17,7 +17,7 @@ T0 = datetime(2026, 11, 10, 9, 0, tzinfo=timezone.utc)
 
 @pytest.fixture
 def kb(pg, monkeypatch):
-    monkeypatch.setenv("AMEM_BACKEND", "none")
+    monkeypatch.setenv("AMEMO_BACKEND", "none")
     db.prepare(pg)
     return pg
 
@@ -198,11 +198,12 @@ def test_migration_0012_over_base_with_data(pg, tmp_path, monkeypatch, store, do
     old = tmp_path / "sql"
     shutil.copytree(db.SQL_DIR, old)
     (old / "0012_tasks.sql").unlink()
+    (old / "0013_rename_amemo.sql").unlink()        # база на 0011: обе позже
     with monkeypatch.context() as m:
         m.setattr(db, "SQL_DIR", old)
         db.prepare(pg)
         version = objects.ingest(pg, store, docs, "Заметки/узел.md", agent=PERSON)
-    assert db.prepare(pg) == ["0012_tasks.sql"]
+    assert db.prepare(pg) == ["0012_tasks.sql", "0013_rename_amemo.sql"]
     assert pg.execute("SELECT count(*) FROM task").fetchone()[0] == 0
     task, created = tasks.create(pg, "parse", version.object_id, version.n, agent=PERSON)
     assert created and "task" in backup.COUNTED

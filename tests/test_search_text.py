@@ -3,7 +3,7 @@ import copy
 
 import pytest
 
-from amem.search import normalize_code, search_text
+from amemo.search import normalize_code, search_text
 
 
 @pytest.mark.parametrize("value", ["Вн-45", "вн–45", "ВН - 45", "BH-45"])

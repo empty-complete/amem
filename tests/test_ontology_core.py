@@ -1,7 +1,7 @@
 """Ядро 1.2.0–1.4.0: заметка, изделие, прямоугольник, has_source со skip_if_set; семья видов (1.3.0);
-ui у decision и parameter (1.4.0)."""
-from amem import packs
-from amem.check import templates
+ui у decision и parameter (1.4.0); 1.4.1 — только заголовок «Ядро amemo»."""
+from amemo import packs
+from amemo.check import templates
 
 CORE = packs.load_pack(packs.CORE_PACK)
 
@@ -11,7 +11,7 @@ def _codes(scheme):
 
 
 def test_core_version():
-    assert CORE.version == "1.4.0"
+    assert CORE.version == "1.4.1"
 
 
 def test_core_new_codes():

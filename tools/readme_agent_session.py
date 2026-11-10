@@ -1,8 +1,8 @@
-"""Agent session for the README "Memory for agents" screen: a real MCP client over stdio against `amem mcp`.
+"""Agent session for the README "Memory for agents" screen: a real MCP client over stdio against `amemo mcp`.
 
-Three steps an agent takes — amem_search, amem_get on the best hit, amem_helpful on what it used — with the
+Three steps an agent takes — amemo_search, amemo_get on the best hit, amemo_helpful on what it used — with the
 arguments and the structured results written to a JSON transcript; web/tools/readme-shots.mjs draws it.
-Settings are the service's (AMEM_DSN, AMEM_DATA, AMEM_DOCS, AMEM_PACKS…); run after tools/seed_sample_en.py.
+Settings are the service's (AMEMO_DSN, AMEMO_DATA, AMEMO_DOCS, AMEMO_PACKS…); run after tools/seed_sample_en.py.
 Run: python tools/readme_agent_session.py OUT.json [--query TEXT] [--prompt TEXT]
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ async def session(query: str) -> list[dict]:
     from mcp.client.stdio import StdioServerParameters
 
     params = StdioServerParameters(command=sys.executable,
-                                   args=["-m", "amem.cli", "mcp", "--agent", "model:claude-code"],
+                                   args=["-m", "amemo.cli", "mcp", "--agent", "model:claude-code"],
                                    env=dict(os.environ))
     calls: list[dict] = []
 
@@ -35,10 +35,10 @@ async def session(query: str) -> list[dict]:
         return result.structured_content
 
     async with Client(params, mode="legacy") as client:
-        found = await call(client, "amem_search", query=query, limit=4)
+        found = await call(client, "amemo_search", query=query, limit=4)
         top = found["items"][0]["ref"]
-        await call(client, "amem_get", refs=[top])
-        await call(client, "amem_helpful", retrieval_id=found["retrieval_id"], refs=[top])
+        await call(client, "amemo_get", refs=[top])
+        await call(client, "amemo_helpful", retrieval_id=found["retrieval_id"], refs=[top])
     return calls
 
 

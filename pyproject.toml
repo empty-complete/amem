@@ -1,6 +1,6 @@
 [project]
-name = "amem"
-dynamic = ["version"]                # amem.__version__; tools/release.py сверяет его с amem-web и меткой релиза
+name = "amemo"
+dynamic = ["version"]                # amemo.__version__; tools/release.py сверяет его с amemo-web и меткой релиза
 description = "Verifiable shared memory for AI agents and people: atoms with checked source quotes, revisions and review on PostgreSQL + pgvector"
 readme = "README.md"
 license = "MIT"
@@ -35,27 +35,27 @@ dependencies = [
   "uvicorn>=0.30",
   "psycopg-pool>=3.2,<4",
   "python-multipart>=0.0.20",
-  # MCP (подпроект 4b): /mcp службы (Streamable HTTP) и amem mcp (stdio) — официальный SDK. Только 2.3.x:
-  # amem/service/mcp.py опирается на приватный MCPServer._tool_manager и на session_manager, который создаёт
+  # MCP (подпроект 4b): /mcp службы (Streamable HTTP) и amemo mcp (stdio) — официальный SDK. Только 2.3.x:
+  # amemo/service/mcp.py опирается на приватный MCPServer._tool_manager и на session_manager, который создаёт
   # streamable_http_app(), — в следующей минорной версии они могут поменяться без объявления
   "mcp>=2.3,<2.4",
   "mcp-types>=2.3,<2.4",             # mcp_types импортируется напрямую; mcp 2.3 сам требует ту же версию
 ]
 
 [project.urls]
-Homepage = "https://github.com/empty-complete/amem"
-Source = "https://github.com/empty-complete/amem"
-Issues = "https://github.com/empty-complete/amem/issues"
+Homepage = "https://github.com/empty-complete/amemo"
+Source = "https://github.com/empty-complete/amemo"
+Issues = "https://github.com/empty-complete/amemo/issues"
 
 [project.scripts]
-amem = "amem.cli:main"
+amemo = "amemo.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.14", "linkml==1.12.1", "linkml-runtime==1.12.1", "jsonschema>=4.20", "ocfl-py==2.1.0",
        "httpx2>=2.0",                    # клиент starlette.testclient
        "openapi-spec-validator>=0.8.4"]  # тест: контракт HTTP v1 — верный OpenAPI 3.1 (его ставит и linkml)
 embed = ["fastembed>=0.9.1,<0.10"]
-web = ["amem-web==0.1.0a1"]      # статика веб-UI, web/python; служба отдаёт по /ui. Версия — та же, что у amem
+web = ["amemo-web==0.1.0a1"]      # статика веб-UI, web/python; служба отдаёт по /ui. Версия — та же, что у amemo
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -65,20 +65,20 @@ requires = ["setuptools>=77"]        # license как выражение SPDX и
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.dynamic]
-version = {attr = "amem.__version__"}
+version = {attr = "amemo.__version__"}
 
 [tool.setuptools.packages.find]
-include = ["amem*"]
+include = ["amemo*"]
 
 [tool.setuptools.package-data]
-amem = ["schema/*.yaml", "schema/*.json", "sql/*.sql", "packs/core/pack.yaml", "packs/core/vocab/*.yaml", "packs/core/templates/*.yaml",
+amemo = ["schema/*.yaml", "schema/*.json", "sql/*.sql", "packs/core/pack.yaml", "packs/core/vocab/*.yaml", "packs/core/templates/*.yaml",
         "service/*.yaml", "packs/core/skills/*/SKILL.md"]
 
 [tool.ruff]
 line-length = 120
 target-version = "py311"
-extend-exclude = ["amem/model_v1.py"]   # генерируется tools/gen_schema.py
+extend-exclude = ["amemo/model_v1.py"]   # генерируется tools/gen_schema.py
 
 [tool.ruff.lint]
-# F — pyflakes (неиспользуемое, неопределённое), E9 — синтаксис. Следующие ступени — docs/superpowers/specs/2026-11-09-amem-hardening-design.md
+# F — pyflakes (неиспользуемое, неопределённое), E9 — синтаксис. Следующие ступени — docs/superpowers/specs/2026-11-09-amemo-hardening-design.md
 select = ["F", "E9"]

@@ -1,4 +1,4 @@
-"""Сгенерированные файлы совпадают с amem/schema/amem_v1.yaml. Упал — выполнить python tools/gen_schema.py."""
+"""Сгенерированные файлы совпадают с amemo/schema/amemo_v1.yaml. Упал — выполнить python tools/gen_schema.py."""
 import importlib.util
 from pathlib import Path
 
