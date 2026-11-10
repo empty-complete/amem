@@ -105,10 +105,13 @@ jobs:
       - name: Usage GIFs
         working-directory: web
         run: node tools/readme-gifs.mjs http://127.0.0.1:8770 "$SHOT_LANG"
-      - uses: actions/upload-artifact@v4
+      - if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: readme-gifs-${{ matrix.lang }}
-          path: docs/assets/readme/${{ matrix.lang }}/*.gif
+          path: |
+            docs/assets/readme/${{ matrix.lang }}/*.gif
+            docs/assets/readme/${{ matrix.lang }}/failed-*.png
           retention-days: 14
       - if: failure()
         run: cat /tmp/service.log || true

@@ -199,7 +199,7 @@ const scenes = {
     await typeIn(page, sample.query);
     await pause(page, 400);
     await key(page, "Enter", "Enter ↵");
-    const hit = page.getByRole("link", { name: new RegExp(`^${escapeRe(sample.result)}`) }).first();
+    const hit = page.getByRole("link", { name: new RegExp(escapeRe(sample.result)) }).first();
     await hit.waitFor();
     await pause(page, 1300);
     await click(page, hit);
@@ -268,6 +268,7 @@ const scenes = {
 
 mkdirSync(out, { recursive: true });
 const videos = mkdtempSync(join(tmpdir(), "amemo-gifs-"));
+const failed = [];
 for (const [name, scene] of Object.entries(scenes)) {
   if (only && !only.includes(name)) continue;
   const ctx = await browser.newContext({
@@ -288,7 +289,17 @@ for (const [name, scene] of Object.entries(scenes)) {
   const page = await ctx.newPage();
   born.set(page, Date.now());
   pointer = { x: SIZE.width / 2, y: SIZE.height / 2 };
-  const start = await scene(page);
+  let start;
+  try {
+    start = await scene(page);
+  } catch (e) {
+    // одна упавшая сцена не отменяет остальные; снимок места падения — рядом с анимациями
+    await page.screenshot({ path: join(out, `failed-${name}.png`) }).catch(() => {});
+    console.error(`сцена ${name}: ${e.message}`);
+    failed.push(name);
+    await ctx.close();
+    continue;
+  }
   const video = page.video();
   await ctx.close();
   const webm = await video.path();
@@ -312,3 +323,7 @@ for (const [name, scene] of Object.entries(scenes)) {
 }
 rmSync(videos, { recursive: true, force: true });
 await browser.close();
+if (failed.length) {
+  console.error(`не вышли сцены: ${failed.join(", ")}`);
+  process.exitCode = 1;
+}
