@@ -862,6 +862,27 @@ def object_upload_begin(docs: Path | None) -> Path:
     return objects.docs_root(docs) / f".amem-upload-{uuid7()}.part"
 
 
+PART_STALE = 3600.0      # с; временный файл загрузки без записи дольше часа — брошен (служба упала посреди загрузки)
+
+
+def object_upload_sweep(docs: Path | None, *, older_than: float = PART_STALE) -> int:
+    """Убрать брошенные временные файлы загрузки (.amem-upload-*.part) в корне папки документов: их оставляет
+    служба, упавшая посреди загрузки. Файл, в который пишут сейчас, свежий (mtime) — его не трогаем. Вернуть число
+    удалённых; нет папки документов — 0."""
+    if docs is None or not Path(docs).is_dir():
+        return 0
+    edge = time.time() - older_than
+    removed = 0
+    for part in Path(docs).glob(".amem-upload-*.part"):
+        try:
+            if part.is_file() and not part.is_symlink() and part.stat().st_mtime < edge:
+                part.unlink()
+                removed += 1
+        except FileNotFoundError:
+            continue
+    return removed
+
+
 def object_upload(conn: psycopg.Connection, store: ObjectStore, docs: Path | None, part: Path, *, filename=None,
                   path=None, agent: str) -> tuple[dict, bool]:
     """Загруженный файл (part) — в папку документов по path или Загрузки/<filename> и в базу (objects.upload):

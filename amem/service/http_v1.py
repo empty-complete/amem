@@ -637,9 +637,12 @@ async def upload_object(request: Request) -> JSONResponse:
         raise
 
     def run() -> tuple[dict, bool]:
-        with connection(request) as conn:
-            return api.object_upload(conn, request.app.state.store, docs, part, filename=filename, path=path,
-                                     agent=request.state.agent)
+        try:
+            with connection(request) as conn:
+                return api.object_upload(conn, request.app.state.store, docs, part, filename=filename, path=path,
+                                         agent=request.state.agent)
+        finally:
+            part.unlink(missing_ok=True)          # база недоступна — object_upload не звался, part не убран
 
     view, created = await run_in_threadpool(run)
     return JSONResponse(view, status_code=201 if created else 200)

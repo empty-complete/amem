@@ -191,6 +191,45 @@ def test_upload_new_same_and_other_file(serve, pg, tmp_path):
     assert pg.execute("SELECT count(*) FROM object").fetchone()[0] == 3
 
 
+def test_upload_of_known_content_at_a_new_path_is_200(serve, pg, tmp_path):
+    """То же содержимое уже есть у объекта по другому пути: файл ложится по новому пути, но новой версии нет — 200."""
+    docs = tmp_path / "d"
+    docs.mkdir()
+    client = _person(serve({"AMEM_DOCS": str(docs)}))
+    first = contract.check(_upload(client, b"# Protocol\n"), "/objects", "post")
+    again = _upload(client, b"# Protocol\n", path="Архив/копия.md")
+    assert again.status_code == 200, again.text
+    view = contract.check(again, "/objects", "post")
+    assert view["id"] == first["id"] and len(view["versions"]) == 1
+    assert (docs / "Архив" / "копия.md").read_bytes() == b"# Protocol\n" and _parts(docs) == []
+
+
+def test_upload_part_is_removed_when_the_database_is_down(serve, pg, tmp_path, monkeypatch):
+    """Сбой до object_upload (база недоступна) не оставляет .part в папке документов; старые .part убирает запуск."""
+    import time
+
+    import psycopg
+    from amem.service import http_v1
+
+    docs = tmp_path / "d"
+    docs.mkdir()
+    stale = docs / ".amem-upload-old.part"
+    stale.write_bytes(b"x")
+    old = time.time() - 2 * 3600
+    os.utime(stale, (old, old))
+    fresh = docs / ".amem-upload-now.part"
+    fresh.write_bytes(b"y")
+    client = _person(serve({"AMEM_DOCS": str(docs)}))
+    assert not stale.exists() and fresh.exists()                    # брошенный — долой, свежий не тронут
+    fresh.unlink()
+
+    def down(request):
+        raise psycopg.OperationalError("нет базы")
+    monkeypatch.setattr(http_v1, "connection", down)
+    problem(_upload(client, b"# Protocol\n"), 503, "db_unavailable", "/objects", "post")
+    assert _parts(docs) == [] and not (docs / "Загрузки").exists()
+
+
 def test_upload_bad_path_is_400(serve, pg, tmp_path):
     docs = tmp_path / "d"
     docs.mkdir()

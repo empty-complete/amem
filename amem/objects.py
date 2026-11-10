@@ -35,6 +35,7 @@ id объекта в этих функциях и в lookup — UUID или сс
 """
 from __future__ import annotations
 
+import errno
 import hashlib
 import mimetypes
 import os
@@ -211,6 +212,8 @@ def ingest(conn: psycopg.Connection, store: ObjectStore, docs: Path, path: str, 
 
 
 UPLOADS = "Загрузки"                     # папка загрузок в папке документов: путь по умолчанию — Загрузки/<имя>
+# os.link не умеет здесь ссылку (файловая система без жёстких ссылок, другой том) — тогда os.replace после проверки
+NO_LINKS = frozenset({errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP, errno.EXDEV})
 
 
 def _digest(file: Path) -> str:
@@ -251,7 +254,9 @@ def upload(conn: psycopg.Connection, store: ObjectStore, docs: Path | None, part
     - по пути уже лежит тот же файл (тот же digest) — его ingest, part не нужен;
     - по пути лежит другой файл или папка — ObjectError(path_taken), файл на диске не тронут;
     - иначе part становится файлом по пути одним шагом (os.link — не затирает того, кто успел раньше; где ссылок
-      нет — os.replace после проверки) и разбирается ingest; сбой ingest удаляет записанный файл.
+      нет, NO_LINKS, — os.replace после проверки; длинное имя — ObjectError(invalid), прочий сбой — ObjectError) и
+      разбирается ingest; сбой ingest удаляет записанный файл. Если то же содержимое уже есть у объекта по другому
+      пути, ingest новой версии не создаёт — второй элемент ответа False (200, а не 201).
     part удаляется в любом случае."""
     root = docs_root(docs)
     try:
@@ -285,12 +290,18 @@ def upload(conn: psycopg.Connection, store: ObjectStore, docs: Path | None, part
             if not same():
                 raise ObjectError(f"{key}: путь занят во время загрузки — повторите", code="path_taken") from None
             return ingest(conn, store, root, key, agent=agent), False
-        except OSError:                               # в этой файловой системе нет жёстких ссылок
-            if same():
+        except OSError as e:
+            if e.errno == errno.ENAMETOOLONG:
+                raise ObjectError(f"{key}: слишком длинное имя файла или пути", code="invalid") from None
+            if e.errno not in NO_LINKS:
+                raise ObjectError(f"{key}: файл не записать в папку документов ({e.strerror or e})") from None
+            if same():                                # в этой файловой системе нет жёстких ссылок
                 return ingest(conn, store, root, key, agent=agent), False
             os.replace(part, target)
         try:
-            return ingest(conn, store, root, key, agent=agent), True
+            # файл записан, но такое содержимое уже есть у объекта по другому пути: ingest не создаёт версию — 200
+            v = ingest(conn, store, root, key, agent=agent)
+            return v, v.created
         except BaseException:
             target.unlink(missing_ok=True)
             raise
