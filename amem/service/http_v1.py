@@ -23,6 +23,9 @@ bundle.export или, с anthology: true, anthology.export; zip отдаётся
 (Origin обязателен — session.Guard): поле file пишется потоком (python-multipart) во временный файл
 AMEM_STATE/uploads/.<id>.part с отсечкой на UPLOAD_LIMIT (413 too_large, недокачанное удаляется), остальное
 в форме — не больше FORM_LIMIT; затем bundle.inspect без базы. Владелец подборки — session.owner (токен или агент).
+POST /objects (загрузка файла, разд. 6a.4) идёт тем же разбором: поле file — во временный файл в корне AMEM_DOCS
+(.amem-upload-<id>.part), поле path — путь в папке документов; затем api.object_upload кладёт файл по пути и принимает
+его (objects.upload). Квота AMEM_STATE_QUOTA не тратится: файл ложится в папку документов, а не в состояние службы.
 
 Медленное тело: следующий кусок тела записи и загрузки служба ждёт не дольше BODY_IDLE, а JSON-тело целиком — не
 дольше BODY_TOTAL; дальше — 408 body_timeout (загрузку ограничивает только BODY_IDLE: большой файл по медленной
@@ -440,15 +443,21 @@ def bundle_report(request: Request) -> FileResponse:
 
 
 class _Upload:
-    """Приёмник multipart/form-data для /bundles/inspect: поле file — потоком в файл на диске, прочие поля
-    и заголовки частей — не больше FORM_LIMIT байт вместе; файл больше UPLOAD_LIMIT — 413, не дочитывая."""
+    """Приёмник multipart/form-data загрузки (/bundles/inspect, POST /objects): поле file — потоком в файл на диске,
+    прочие поля и заголовки частей — не больше FORM_LIMIT байт вместе (текст полей из keep сохраняется в fields);
+    файл больше UPLOAD_LIMIT — 413, не дочитывая. filename — имя файла из заголовка части file."""
 
-    def __init__(self, path: Path, room: int | None = None, quota: int | None = None):
-        self.path, self.out = path, None
+    def __init__(self, path: Path, room: int | None = None, quota: int | None = None, *, what: str = "подборки",
+                 hint: str = "нужно одно поле file с zip подборки", keep: tuple[bytes, ...] = ()):
+        self.path, self.out, self.keep = path, None, keep
         self.room, self.quota = room, quota        # остаток места владельца (AMEM_STATE_QUOTA) и сам предел
+        self.what, self.hint = what, hint
         self.size = self.form = 0
         self.field = self.header = b""
         self.disposition = b""
+        self.name: bytes | None = None
+        self.fields: dict[bytes, bytes] = {}
+        self.filename: bytes | None = None
         self.in_file = self.got_file = self.file_done = self.ended = False
 
     def callbacks(self) -> dict:
@@ -461,10 +470,10 @@ class _Upload:
         self.form += n
         if self.form > FORM_LIMIT:
             raise problems.Problem(413, "too_large", f"поля формы загрузки больше {FORM_LIMIT // 1024} КиБ: "
-                                   "нужно одно поле file с zip подборки")
+                                   f"{self.hint}")
 
     def part_begin(self) -> None:
-        self.disposition, self.in_file = b"", False
+        self.disposition, self.in_file, self.name = b"", False, None
 
     def header_field(self, data: bytes, start: int, end: int) -> None:
         self._count_form(end - start)
@@ -481,25 +490,34 @@ class _Upload:
 
     def headers_finished(self) -> None:
         _, options = parse_options_header(self.disposition)
-        if options.get(b"name") != b"file":
-            return                                # прочие поля читаются (в пределе FORM_LIMIT) и не нужны
+        name = options.get(b"name")
+        if name != b"file":
+            if name in self.keep:                 # прочие поля читаются (в пределе FORM_LIMIT) и не нужны
+                if name in self.fields:
+                    raise problems.Problem(400, "bad_request", f"загрузка {self.what}: поле {name.decode()} — одно")
+                self.name, self.fields[name] = name, b""
+            return
         if self.got_file:
-            raise problems.Problem(400, "bad_request", "загрузка подборки: поле file — одно")
+            raise problems.Problem(400, "bad_request", f"загрузка {self.what}: поле file — одно")
         self.got_file = self.in_file = True
+        self.filename = options.get(b"filename")
         self.out = open(self.path, "xb")
 
     def part_data(self, data: bytes, start: int, end: int) -> None:
         if not self.in_file:
             self._count_form(end - start)
+            if self.name is not None:
+                self.fields[self.name] += data[start:end]
             return
         self.size += end - start
         if self.size > UPLOAD_LIMIT:
-            raise _upload_too_large()
+            raise _upload_too_large(self.what)
         if self.room is not None and self.size > self.room:
-            raise api.quota_exceeded(self.quota - self.room, self.quota, "загрузка подборки")
+            raise api.quota_exceeded(self.quota - self.room, self.quota, f"загрузка {self.what}")
         self.out.write(data[start:end])
 
     def part_end(self) -> None:
+        self.name = None
         if self.in_file:
             self.out.close()
             self.in_file, self.file_done = False, True
@@ -511,27 +529,39 @@ class _Upload:
         if self.out is not None:
             self.out.close()
 
+    def text(self, name: bytes) -> str | None:
+        """Текст поля формы (UTF-8) или None — поля не было."""
+        raw = self.fields.get(name)
+        if raw is None:
+            return None
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError:
+            raise problems.Problem(400, "bad_request", f"загрузка {self.what}: поле {name.decode()} — не UTF-8") \
+                from None
 
-def _upload_too_large() -> problems.Problem:
-    return problems.Problem(413, "too_large", f"файл подборки больше {UPLOAD_LIMIT // (1 << 20)} МиБ — "
-                            f"предел распаковки подборки")
+
+def _upload_too_large(what: str = "подборки") -> problems.Problem:
+    if what == "подборки":
+        return problems.Problem(413, "too_large", f"файл подборки больше {UPLOAD_LIMIT // (1 << 20)} МиБ — "
+                                f"предел распаковки подборки")
+    return problems.Problem(413, "too_large", f"файл больше {UPLOAD_LIMIT // (1 << 20)} МиБ — предел загрузки")
 
 
-async def inspect_bundle(request: Request) -> JSONResponse:
-    """Загрузка подборки (Origin обязателен — проверяет session.Guard): файл — потоком во временный файл
-    в AMEM_STATE/uploads, сверх UPLOAD_LIMIT — 413 и недокачанное удаляется; затем bundle.inspect без базы."""
+def _boundary(request: Request, what: str) -> bytes:
+    """boundary multipart и быстрый отказ по Content-Length (сам счёт — по пришедшим байтам, в _receive)."""
     _, params = parse_options_header(request.headers.get("content-type"))
     boundary = params.get(b"boundary")
     if not boundary:
-        raise problems.Problem(400, "bad_request", "загрузка подборки: в Content-Type нет boundary")
+        raise problems.Problem(400, "bad_request", f"загрузка {what}: в Content-Type нет boundary")
     length = request.headers.get("content-length", "").strip()
     if length.isascii() and length.isdigit() and (len(length) > 18 or int(length) > UPLOAD_LIMIT + FORM_LIMIT):
-        raise _upload_too_large()                 # быстрый отказ; сам счёт — по пришедшим байтам
-    settings = request.app.state.settings
-    state, quota, owner = settings.state, settings.state_quota, session.owner(request)
-    room = await run_in_threadpool(api.upload_room, state, owner, quota)
-    upload_id, part = await run_in_threadpool(api.upload_begin, state)
-    upload = _Upload(part, room, quota)
+        raise _upload_too_large(what)
+    return boundary
+
+
+async def _receive(request: Request, boundary: bytes, upload: _Upload) -> None:
+    """Тело multipart — в upload потоком; при любой ошибке недокачанный файл удаляется."""
     parser = python_multipart.MultipartParser(boundary, upload.callbacks())
     total = 0
     try:
@@ -544,22 +574,64 @@ async def inspect_bundle(request: Request) -> JSONResponse:
                 # чтобы хвост за финальным boundary в том же куске не считался (кусок — не больше буфера сервера)
                 total += len(chunk)
                 if total > UPLOAD_LIMIT + FORM_LIMIT:
-                    raise _upload_too_large()
+                    raise _upload_too_large(upload.what)
             parser.finalize()
         except MultipartParseError as e:
-            raise problems.Problem(400, "bad_request", f"загрузка подборки: тело — не multipart/form-data: "
+            raise problems.Problem(400, "bad_request", f"загрузка {upload.what}: тело — не multipart/form-data: "
                                    f"{e}") from None
         finally:
             upload.close()
         if not upload.got_file:
-            raise problems.Problem(400, "bad_request", "загрузка подборки: нужно поле file с zip подборки")
+            raise problems.Problem(400, "bad_request", f"загрузка {upload.what}: {upload.hint}")
         if not (upload.file_done and upload.ended):
-            raise problems.Problem(400, "bad_request", "загрузка подборки: тело оборвано до конца файла")
+            raise problems.Problem(400, "bad_request", f"загрузка {upload.what}: тело оборвано до конца файла")
+    except BaseException:
+        upload.path.unlink(missing_ok=True)
+        raise
+
+
+async def inspect_bundle(request: Request) -> JSONResponse:
+    """Загрузка подборки (Origin обязателен — проверяет session.Guard): файл — потоком во временный файл
+    в AMEM_STATE/uploads, сверх UPLOAD_LIMIT — 413 и недокачанное удаляется; затем bundle.inspect без базы."""
+    boundary = _boundary(request, "подборки")
+    settings = request.app.state.settings
+    state, quota, owner = settings.state, settings.state_quota, session.owner(request)
+    room = await run_in_threadpool(api.upload_room, state, owner, quota)
+    upload_id, part = await run_in_threadpool(api.upload_begin, state)
+    await _receive(request, boundary, _Upload(part, room, quota))
+    return JSONResponse(await run_in_threadpool(lambda: api.upload_finish(state, upload_id, part, owner=owner,
+                                                                          quota=quota)))
+
+
+async def upload_object(request: Request) -> JSONResponse:
+    """Загрузка файла в папку документов (Origin обязателен — session.Guard; разд. 6a.4): поле file — потоком во
+    временный файл в корне AMEM_DOCS (тот же предел UPLOAD_LIMIT, квота AMEM_STATE_QUOTA не тратится), поле path —
+    путь в папке документов (иначе Загрузки/<имя>); затем api.object_upload: 201 — записан, 200 — уже лежал."""
+    boundary = _boundary(request, "файла")
+    docs = request.app.state.settings.docs
+    part = await run_in_threadpool(api.object_upload_begin, docs)
+    upload = _Upload(part, what="файла", keep=(b"path",),
+                     hint="нужно поле file с файлом (и, если нужно, path — путь в папке документов)")
+    await _receive(request, boundary, upload)
+    try:
+        filename, path = (upload.filename or b"").decode("utf-8", "replace") or None, upload.text(b"path")
     except BaseException:
         part.unlink(missing_ok=True)
         raise
-    return JSONResponse(await run_in_threadpool(lambda: api.upload_finish(state, upload_id, part, owner=owner,
-                                                                          quota=quota)))
+
+    def run() -> tuple[dict, bool]:
+        with connection(request) as conn:
+            return api.object_upload(conn, request.app.state.store, docs, part, filename=filename, path=path,
+                                     agent=request.state.agent)
+
+    view, created = await run_in_threadpool(run)
+    return JSONResponse(view, status_code=201 if created else 200)
+
+
+def list_objects(request: Request) -> JSONResponse:
+    with connection(request) as conn:
+        return JSONResponse(api.object_search(conn, q=_q(request, "q"), limit=_q(request, "limit"),
+                                              cursor=_q(request, "cursor")))
 
 
 async def import_bundle(request: Request) -> JSONResponse:
@@ -597,6 +669,8 @@ ROUTES = [
     Route(f"{API}/entities/{{ref}}/card", get_card, methods=["GET"]),
     Route(f"{API}/graph", get_graph, methods=["GET"]),
     Route(f"{API}/changes", get_changes, methods=["GET"]),
+    Route(f"{API}/objects", list_objects, methods=["GET"]),
+    Route(f"{API}/objects", upload_object, methods=["POST"]),
     Route(f"{API}/objects/{{id}}", get_object, methods=["GET"]),
     Route(f"{API}/objects/{{id}}/versions/{{n}}/content", get_object_content, methods=["GET"]),
     Route(f"{API}/objects/{{id}}/versions/{{n}}/text", get_object_text, methods=["GET"]),

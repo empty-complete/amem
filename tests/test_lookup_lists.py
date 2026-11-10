@@ -390,3 +390,40 @@ def test_labels_one_query_and_unknown_refs_omitted(kb):
     assert lookup.labels(empty, []) == {} and lookup.labels(empty, ["мусор"]) == {} and empty.queries == 0
     with pytest.raises(RecordError):
         lookup.labels(kb, ref_of(a))                                          # строка — не набор ссылок
+
+
+# --- поиск объектов (подпроект 4, часть 4d, задача 20) ---
+
+def test_object_search_by_name_path_and_url(kb, store, tmp_path):
+    from amem import objects
+
+    docs = tmp_path / "d"
+    (docs / "Отчёты").mkdir(parents=True)
+    (docs / "Отчёты" / "Протокол испытаний.md").write_text("Протокол.", encoding="utf-8")
+    (docs / "notes.md").write_text("Заметки.", encoding="utf-8")
+    a = objects.ingest(kb, store, docs, "Отчёты/Протокол испытаний.md", agent=HUMAN).object_id
+    b = objects.ingest(kb, store, docs, "notes.md", agent=HUMAN).object_id
+    w = objects.web(kb, "https://example.org/Page").object_id
+
+    def found(q, **kw):
+        return [i["id"] for i in lookup.object_search(kb, q, **kw)["items"]]
+
+    assert found("протокол ИСП") == [str(a)]              # часть имени без учёта регистра
+    assert found("отчёты/") == [str(a)]                   # часть пути
+    assert found("NOTES") == [str(b)]
+    assert found("example.org/page") == [str(w)]          # адрес страницы
+    assert found("%") == [] and found("_") == []          # знаки LIKE — обычные знаки
+    assert found(None) == [str(w), str(b), str(a)]        # пустой q — последние объекты, новые первыми
+    assert found("  ") == found(None)
+    first = lookup.object_search(kb, "", limit=2)
+    assert [i["id"] for i in first["items"]] == [str(w), str(b)] and first["next_cursor"]
+    assert first["items"][0]["kind"] == "web" and "cited_by" in first["items"][0]
+    rest = lookup.object_search(kb, "", limit=2, cursor=first["next_cursor"])
+    assert [i["id"] for i in rest["items"]] == [str(a)] and rest["next_cursor"] is None
+
+
+@pytest.mark.parametrize("kw", [{"limit": 0}, {"limit": 101}, {"limit": "5"}, {"limit": True}, {"cursor": "мусор"},
+                                {"cursor": lookup._cursor(datetime(2026, 1, 1).astimezone(), ids.uuid7())}])
+def test_object_search_bad_arguments(kb, kw):
+    with pytest.raises(RecordError):
+        lookup.object_search(kb, "", **kw)

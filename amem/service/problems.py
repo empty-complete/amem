@@ -59,7 +59,8 @@ FOLDER = {"exists": (409, "folder_exists"), "not_empty": (409, "folder_not_empty
           "not_found": (404, "folder_not_found")}
 MINE = {"exists": (409, "template_exists"), "in_use": (409, "template_in_use"), "invalid": (422, "template_invalid"),
         "not_found": (404, "not_found"), "forbidden": (403, "forbidden")}
-OBJECT = {"too_large": (413, "too_large"), "not_found": (404, "not_found"), "invalid": (400, "bad_request")}
+OBJECT = {"too_large": (413, "too_large"), "not_found": (404, "not_found"), "invalid": (400, "bad_request"),
+          "path_taken": (409, "object_path_taken"), "docs_unavailable": (503, "docs_unavailable")}
 HTTP = {404: "not_found", 405: "method_not_allowed"}
 
 

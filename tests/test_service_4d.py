@@ -120,3 +120,96 @@ def test_core_parameter_and_decision_forms(serve, pg):
     assert list(decision) == ["about", "valid_from", "tags"]
     assert (decision["valid_from"]["type"], decision["valid_from"]["required"]) == ("date", False)
     assert by["decision"]["widgets"] == ["sources", "links", "around", "similar"]
+
+
+# --- GET / POST /objects (задача 20) ---
+
+ORIGIN = "http://127.0.0.1:8767"
+
+
+def _upload(client, data: bytes, name="Протокол.md", path=None, origin=ORIGIN):
+    return client.post(f"{V1}/objects", files={"file": (name, data, "text/markdown")},
+                       data={"path": path} if path is not None else None,
+                       headers={"Origin": origin} if origin else {})
+
+
+def _parts(docs: Path) -> list[str]:
+    return [p.name for p in docs.iterdir() if p.name.startswith(".amem-upload")]
+
+
+def test_upload_new_same_and_other_file(serve, pg, tmp_path):
+    docs = tmp_path / "d"
+    docs.mkdir()
+    client = _person(serve({"AMEM_DOCS": str(docs)}))
+    response = _upload(client, b"# Protocol\n")
+    assert response.status_code == 201, response.text
+    view = contract.check(response, "/objects", "post")
+    assert (docs / "Загрузки" / "Протокол.md").read_bytes() == b"# Protocol\n"
+    assert view["logical_paths"] == ["Загрузки/Протокол.md"] and len(view["versions"]) == 1
+    again = _upload(client, b"# Protocol\n")
+    assert again.status_code == 200, again.text
+    same = contract.check(again, "/objects", "post")
+    assert same["id"] == view["id"] and len(same["versions"]) == 1                 # второй версии нет
+    problem(_upload(client, b"# Other\n"), 409, "object_path_taken", "/objects", "post")
+    assert (docs / "Загрузки" / "Протокол.md").read_bytes() == b"# Protocol\n"      # файл на диске не тронут
+    placed = contract.check(_upload(client, b"# Report\n", name="x.md", path="Отчёты/2026/отчёт.md"), "/objects",
+                            "post")
+    assert (docs / "Отчёты" / "2026" / "отчёт.md").read_bytes() == b"# Report\n"
+    assert placed["logical_paths"] == ["Отчёты/2026/отчёт.md"]
+    problem(_upload(client, b"x", path="Отчёты"), 409, "object_path_taken", "/objects", "post")    # там папка
+    model = serve({"AMEM_DOCS": str(docs)})                                       # модель тоже загружает
+    assert _upload(model, b"model\n", name="m.md").status_code == 201
+    assert _parts(docs) == []
+    assert pg.execute("SELECT count(*) FROM object").fetchone()[0] == 3
+
+
+def test_upload_bad_path_is_400(serve, pg, tmp_path):
+    docs = tmp_path / "d"
+    docs.mkdir()
+    client = _person(serve({"AMEM_DOCS": str(docs)}))
+    for path in ("../вне.md", "/abs.md", "a\x00b.md", "Загрузки/../../x.md"):
+        problem(_upload(client, b"x", path=path), 400, "bad_request", "/objects", "post")
+    assert _parts(docs) == [] and not (tmp_path / "вне.md").exists()
+    assert pg.execute("SELECT count(*) FROM object").fetchone()[0] == 0
+
+
+def test_upload_without_docs_is_503(serve, pg, tmp_path):
+    problem(_upload(_person(serve()), b"x"), 503, "docs_unavailable", "/objects", "post")
+    missing = serve({"AMEM_DOCS": str(tmp_path / "нет")})
+    problem(_upload(missing, b"x"), 503, "docs_unavailable", "/objects", "post")
+
+
+def test_upload_limits_origin_and_read_only(serve, pg, tmp_path, monkeypatch):
+    from amem.service import http_v1
+    from test_service_core import tokens_file
+
+    docs = tmp_path / "d"
+    docs.mkdir()
+    client = _person(serve({"AMEM_DOCS": str(docs)}))
+    monkeypatch.setattr(http_v1, "UPLOAD_LIMIT", 4096)
+    problem(_upload(client, b"z" * 20000), 413, "too_large", "/objects", "post")
+    assert _parts(docs) == [] and not (docs / "Загрузки").exists()                 # недокачанное удалено
+    problem(_upload(client, b"x", origin=None), 403, "bad_origin", "/objects", "post")
+    problem(client.post(f"{V1}/objects", json={"file": "x"}, headers={"Origin": ORIGIN}), 415,
+            "unsupported_media_type", "/objects", "post")
+    path = tokens_file(tmp_path, ("t-read", "person:anna", False))
+    reader = serve({"AMEM_DOCS": str(docs), "AMEM_TOKENS": path})
+    reader.headers["Authorization"] = "Bearer t-read"
+    problem(_upload(reader, b"x"), 403, "read_only", "/objects", "post")
+    assert pg.execute("SELECT count(*) FROM object").fetchone()[0] == 0
+
+
+def test_list_objects(serve, pg, tmp_path):
+    docs = tmp_path / "d"
+    docs.mkdir()
+    client = _person(serve({"AMEM_DOCS": str(docs)}))
+    for name in ("Протокол.md", "Акт.md", "Схема.md"):
+        assert _upload(client, name.encode(), name=name).status_code == 201
+    page = contract.check(client.get(f"{V1}/objects", params={"limit": 2}), "/objects")
+    assert [i["original_name"] for i in page["items"]] == ["Схема.md", "Акт.md"] and page["next_cursor"]
+    rest = contract.check(client.get(f"{V1}/objects", params={"limit": 2, "cursor": page["next_cursor"]}), "/objects")
+    assert [i["original_name"] for i in rest["items"]] == ["Протокол.md"] and rest["next_cursor"] is None
+    found = contract.check(client.get(f"{V1}/objects", params={"q": "загрузки/акт"}), "/objects")
+    assert [i["original_name"] for i in found["items"]] == ["Акт.md"]
+    problem(client.get(f"{V1}/objects", params={"limit": 0}), 400, "bad_request", "/objects")
+    problem(client.get(f"{V1}/objects", params={"cursor": "мусор"}), 400, "bad_request", "/objects")

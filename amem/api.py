@@ -722,6 +722,11 @@ def object_view(conn: psycopg.Connection, object_id) -> dict:
     view = lookup.object_view(conn, oid)
     if view is None:
         raise objects.ObjectError(f"obj:{oid}: такого объекта нет", code="not_found")
+    return _object_card(conn, view)
+
+
+def _object_card(conn: psycopg.Connection, view: dict) -> dict:
+    """lookup.object_view → ObjectView контракта: подписи цитирующих записей, число цитат у версий."""
     labels = _labels(conn, [c["record"] for c in view["cited_by"]])
     citations = [{**c, "record": labels[c["record"]]} for c in view["cited_by"]]
     counts: dict[int, int] = {}
@@ -836,6 +841,39 @@ def object_status(conn: psycopg.Connection, path) -> dict:
         view = lookup.object_view(conn, ref)
         out["cited_by"] = len(view["cited_by"]) if view else 0
     return out
+
+
+OBJECT_SEARCH_LIMIT = 20               # объектов на страницу поиска по умолчанию (контракт: 1–100)
+
+
+def object_search(conn: psycopg.Connection, *, q=None, limit=None, cursor=None) -> dict:
+    """{items: ObjectView[], next_cursor}: объекты по части имени или пути без учёта регистра (lookup.object_search);
+    пустой q — последние объекты."""
+    page = lookup.object_search(conn, _str(q, "q"), cursor=_str(cursor, "cursor"),
+                                limit=_int(limit, "limit", low=1, high=lookup.OBJECT_LIMIT,
+                                           default=OBJECT_SEARCH_LIMIT))
+    return {"items": [_object_card(conn, v) for v in page["items"]], "next_cursor": page["next_cursor"]}
+
+
+def object_upload_begin(docs: Path | None) -> Path:
+    """Временный файл загрузки в корне папки документов (.amem-upload-<id>.part): служба пишет туда тело потоком,
+    затем object_upload кладёт его по пути — в той же файловой системе. Нет папки документов — ObjectError
+    docs_unavailable (503) до чтения тела."""
+    return objects.docs_root(docs) / f".amem-upload-{uuid7()}.part"
+
+
+def object_upload(conn: psycopg.Connection, store: ObjectStore, docs: Path | None, part: Path, *, filename=None,
+                  path=None, agent: str) -> tuple[dict, bool]:
+    """Загруженный файл (part) — в папку документов по path или Загрузки/<filename> и в базу (objects.upload):
+    (ObjectView, True — файл записан сейчас: 201; False — тот же файл уже лежал: 200). Другой файл по пути —
+    ObjectError path_taken (409); путь с «..», абсолютный — 400. part удаляется в любом случае."""
+    try:
+        key = objects.upload_path(_str(path, "path"), _str(filename, "filename"))
+    except BaseException:
+        Path(part).unlink(missing_ok=True)
+        raise
+    version, created = objects.upload(conn, store, docs, part, key, agent=agent)
+    return object_view(conn, version.object_id), created
 
 
 def object_mark(conn: psycopg.Connection, store: ObjectStore, docs: Path | None, path, status, *, agent: str,
