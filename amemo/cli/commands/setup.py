@@ -72,19 +72,14 @@ def _save_dsn(ctx, dsn: str) -> str | None:
     return str(path)
 
 
-def run_init(ctx, args) -> int:
-    from ... import api, db, settings as settings_
+def prepare(ctx) -> tuple[list[str], dict, Path]:
+    """Миграции и словари базы, корень хранилища, папка состояния (общая часть amemo init и amemo setup):
+    применённые миграции, сводка базы и корень хранилища."""
+    from ... import api, db
     from ...ocfl_store import StoreError
 
-    if args.dsn:
-        ctx._settings = settings_.load(ctx.env, dsn=args.dsn)
     conn = ctx.connect(ready=False)
     applied = db.prepare(conn)
-    saved = _save_dsn(ctx, args.dsn) if args.dsn and not ctx.env.get("AMEMO_DSN", "").strip() else None
-    if args.dsn and saved is None:
-        why = ("задан AMEMO_DSN" if ctx.env.get("AMEMO_DSN", "").strip()
-               else f"файл настроек {_config_path(ctx)} уже есть и не переписывается")
-        ctx.note(f"amemo: --dsn не сохранён ({why}) — впишите dsn в amemo.toml или задайте AMEMO_DSN сами")
     store = ctx.store()
     root = Path(store.root)
     files = conn.execute("SELECT count(*) FROM object_version WHERE digest IS NOT NULL").fetchone()[0]
@@ -96,7 +91,20 @@ def run_init(ctx, args) -> int:
     except StoreError as e:
         raise CliError(f"хранилище копий: {e}", exit=ENV, code="store_unavailable") from None
     Path(ctx.settings.state).mkdir(parents=True, exist_ok=True)
-    base = api.base(conn)
+    return applied, api.base(conn), root
+
+
+def run_init(ctx, args) -> int:
+    from ... import settings as settings_
+
+    if args.dsn:
+        ctx._settings = settings_.load(ctx.env, dsn=args.dsn)
+    applied, base, root = prepare(ctx)
+    saved = _save_dsn(ctx, args.dsn) if args.dsn and not ctx.env.get("AMEMO_DSN", "").strip() else None
+    if args.dsn and saved is None:
+        why = ("задан AMEMO_DSN" if ctx.env.get("AMEMO_DSN", "").strip()
+               else f"файл настроек {_config_path(ctx)} уже есть и не переписывается")
+        ctx.note(f"amemo: --dsn не сохранён ({why}) — впишите dsn в amemo.toml или задайте AMEMO_DSN сами")
     result = {"base_id": base["base_id"], "name": base["name"], "migrations_applied": applied,
               "store": str(root), "state": str(ctx.settings.state), "config_saved": saved,
               "ocr": _init_ocr(ctx, args)}

@@ -308,6 +308,22 @@ and the CLI find the database without `AMEMO_DSN` in their environment. PostgreS
 `docker compose up -d --wait db`, a native install ([`docs/install-agent.md`](docs/install-agent.md), step 3) or
 your own server. CI runs these steps on every push.
 
+### Own PostgreSQL in a data folder
+
+With PostgreSQL 16+ programs that include pgvector (for example the EDB zip on Windows, or `postgresql-18` and
+`postgresql-18-pgvector` from PGDG), `amemo setup` needs no Docker, no service and no administrator rights:
+
+```bash
+amemo setup --pg-bin /usr/lib/postgresql/18/bin --embed --agents claude-code
+```
+
+It creates a cluster in `~/amemo-data/pg` (role `amemo` with a random password, `127.0.0.1` only, first free port from
+5436), writes `amemo.toml` with the DSN, store, state and backups under `~/amemo-data`, starts the cluster, prepares the
+database like `amemo init`, and with `--embed`, `--ocr rus,eng` and `--agents` turns on semantic search, OCR and the
+agents. A second run continues where the first stopped and keeps the password; a foreign `amemo.toml` is left alone.
+After a reboot `amemo pg start` starts the cluster again (`amemo pg stop`, `amemo pg status`); backups use the same
+`pg_bin`. This is the command the desktop installer runs.
+
 ## Service
 
 The HTTP service serves the [v1 contract](docs/api/http-v1.openapi.yaml) at `/api/v1` and the web UI at `/ui`.
@@ -436,6 +452,8 @@ docker compose --profile web up -d --wait amemo-web   # the same with the web UI
 
 ```
 amemo init [--dsn DSN] [--ocr LANGS]   database and object store; --ocr rus,eng — recognise scans
+amemo setup --pg-bin DIR [--data DIR]  own PostgreSQL in a data folder, amemo.toml, database (--embed --ocr --agents)
+amemo pg start|stop|status             the cluster amemo setup created
 amemo serve [--host --port --no-auth]  HTTP API, /mcp and the web UI
 amemo mcp [--agent model:NAME]         MCP server on stdio, for an agent
 amemo search QUERY [--kind --limit]    search, step 1
@@ -790,7 +808,7 @@ ranking. They never change a status or skip a check.
 - Vectors are local and optional: `pip install -e ".[embed]"` adds fastembed, and `amemo embed enable`
   downloads the model only with a person's permission ([Semantic search](#semantic-search)).
   `AMEMO_BACKEND=none` turns the semantic channel off, and lexical search keeps working.
-- Backups need the PostgreSQL 18 client (`pg_dump`, `pg_restore`, `psql`) in `PATH` or in `AMEMO_PG_BIN`.
+- Backups need the PostgreSQL 18 client (`pg_dump`, `pg_restore`, `psql`) in `PATH`, in `AMEMO_PG_BIN` or in `pg_bin` of `amemo.toml`.
 
 ## Development
 
