@@ -159,13 +159,16 @@ function write(proposals: Proposal[], links: LinkP[]) {
     if (p.record_id) {
       const v = db.views[p.record_id];
       if (!v) throw new Error(`нет записи ${p.record_id}`);
+      // правка своей записи — «проверено» (3c); записи модели — статус прежний (решение 11.11.2026)
+      const kept = !String(v.agent).startsWith("person:");
+      const status = kept ? v.status : "verified";
       v.payload = p.payload as never;
       v.revision += 1;
       v.recorded_at = now;
-      v.status = "verified"; // запись человека по 3c — сразу проверена
+      v.status = status as never;
       v.sources = sourceViews(p.payload) as never;
       const s = db.records.find((r) => r.ref === p.record_id);
-      if (s) Object.assign(s, { label, recorded_at: now, status: "verified" });
+      if (s) Object.assign(s, { label, recorded_at: now, status });
       db.events.push({
         type: "revision",
         id: newId("task"),
@@ -181,7 +184,7 @@ function write(proposals: Proposal[], links: LinkP[]) {
         record_id: p.record_id,
         revision_id: newId("task"),
         created: false,
-        status: "verified",
+        status,
         review_state: "none",
       };
     }
@@ -297,10 +300,6 @@ export const handlersD = [
     for (const p of body.proposals)
       if (p.record_id && !p.record_id.includes(":"))
         p.record_id = `${p.target === "entity" ? "ent" : "atm"}:${p.record_id}`;
-    for (const p of body.proposals) {
-      if (p.record_id && db.views[p.record_id]?.agent !== session.agent)
-        return problem(403, "Чужие записи не правятся", "Поставьте её на проверку или запишите своё рядом");
-    }
     const issues = check(body.proposals);
     if (issues.length)
       return HttpResponse.json(

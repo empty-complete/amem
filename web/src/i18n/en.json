@@ -392,12 +392,12 @@
     "leave_drop": "Leave without saving",
     "add_source": "Source",
     "edit": "Edit, {{mod}}E",
-    "not_own": "This is {{who}}'s record — it is not edited",
     "enqueue": "Put up for review",
     "beside": "Write your own beside it",
     "enqueued": "Put up for review",
     "new_title": "New record",
-    "add_source_full": "Add a source"
+    "add_source_full": "Add a source",
+    "foreign": "A record by {{who}}: your edit becomes a new revision under your name; the record's status stays — confirm it in Review."
   },
   "quick": {
     "title": "New record",

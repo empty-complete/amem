@@ -335,6 +335,36 @@ def test_person_edit_of_verified_needs_no_confirmation(kb, store, docs):
                       (rec["record_id"],)).fetchone()[0] == result.records[0]["revision_id"]
 
 
+def test_person_edit_of_model_draft_keeps_status(kb, store, docs):
+    """Правка человеком черновика модели (решение 11.11.2026): статус прежний, вопрос «по смыслу» — к новой ревизии."""
+    first = send(kb, store, docs, wind())
+    rec = first.records[0]
+    assert status(kb, rec["record_id"]) == "draft"
+    result = send(kb, store, docs, wind(summary_plain=lab("Давление ветра для района II.")), rec["record_id"],
+                  agent=PERSON)
+    new = result.records[0]
+    assert status(kb, rec["record_id"]) == "draft"
+    assert kb.execute("SELECT id FROM atom_current WHERE atom_id = %s",
+                      (rec["record_id"],)).fetchone()[0] == new["revision_id"]
+    assert state(kb, queued(first, "semantic")) == "obsolete"
+    assert open_items(kb, rec["record_id"]) == [("semantic", new["revision_id"])]
+
+
+def test_person_edit_of_model_record_under_review_keeps_status(kb, store, docs):
+    first = send(kb, store, docs, wind())
+    rec = first.records[0]
+    records.set_status(kb, "atom", rec["record_id"], "needs_review", agent=MODEL)
+    send(kb, store, docs, wind(summary_plain=lab("Давление ветра.")), rec["record_id"], agent=PERSON)
+    assert status(kb, rec["record_id"]) == "needs_review"
+
+
+def test_person_edit_of_own_record_stays_verified(kb, store, docs):
+    own = send(kb, store, docs, wind(), agent=PERSON)
+    rec = own.records[0]
+    again = send(kb, store, docs, wind(summary_plain=lab("Давление ветра.")), rec["record_id"], agent=PERSON)
+    assert again.queued == [] and status(kb, rec["record_id"]) == "verified"
+
+
 def test_edit_decided_even_when_status_moved(kb, store, docs):
     """О правке решает состояние ревизии (pending), а не статус записи (спецификация 3c, разд. 5): запись успела
     уйти в needs_review — confirmed всё равно делает правку текущей, статус записи не меняется."""

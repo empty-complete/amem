@@ -68,11 +68,24 @@ test("правка своей записи: заголовок → новая р
   await expect(page.getByText("ревизия 2")).toBeVisible();
 });
 
-test("чужая запись — «Поставить на проверку»", async ({ page }) => {
+test("запись модели — «Поставить на проверку» из меню «Ещё»", async ({ page }) => {
   await page.goto(`./atom/${A3}`);
-  await page.getByRole("button", { name: /— её не правят/ }).click();
+  await page.getByRole("button", { name: "Ещё" }).click();
   await page.getByRole("menuitem", { name: "Поставить на проверку" }).click();
   await expect(page.getByText("Поставлено на проверку")).toBeVisible();
+});
+
+test("правка записи модели: новая ревизия, статус прежний", async ({ page }) => {
+  await page.goto(`./atom/${A3}`);
+  const status = page.locator(".note__bar").getByText("Ждёт проверки");
+  await expect(status).toBeVisible();
+  await page.getByRole("button", { name: /^Править, (⌘|Ctrl\+)E$/ }).click();
+  await expect(page.getByText(/статус записи не изменится/)).toBeVisible();
+  await page.getByRole("textbox", { name: "Заголовок" }).fill("Погрешность влажности: ±2 %");
+  await page.getByRole("main").getByRole("button", { name: "Записать" }).click();
+  await page.waitForTimeout(WINDOW);
+  await expect(page.getByRole("heading", { level: 1, name: "Погрешность влажности: ±2 %" })).toBeVisible();
+  await expect(status).toBeVisible();
 });
 
 test("запись по шаблону пакета с источником-таблицей", async ({ page, isMobile }) => {
