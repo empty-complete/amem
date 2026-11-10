@@ -1,0 +1,146 @@
+name: runtime
+# Комплект amemo для Windows и архив модели смыслового поиска (tools/runtime.py; спецификация приложения для Windows,
+# D2). Собирается на pull request с правками комплекта и вручную; release.yml подключит его как workflow_call (D8).
+# Проверка — как у человека: распаковка в папку с кириллицей и пробелом, без Python и PostgreSQL в PATH, amemo setup
+# со смысловым поиском из архива модели без сети к Hugging Face, doctor, бэкап, остановка базы.
+on:
+  pull_request:
+    paths: ["tools/runtime.py", ".github/workflows/runtime.yml", "pyproject.toml", "amemo/localpg.py",
+            "amemo/cli/commands/local.py", "amemo/embed.py"]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  wheels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Web UI build (static files of amemo-web)
+        working-directory: web
+        run: npm ci && npm run build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Wheels amemo and amemo-web
+        run: |
+          pip install -q build
+          python -m build --wheel -o dist .
+          python -m build --wheel -o dist web/python
+          ls -l dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-wheels
+          path: dist/
+          retention-days: 7
+
+  windows:
+    needs: wheels
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      WORK: ${{ github.workspace }}\work
+      OUT: ${{ github.workspace }}\out
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: runtime-wheels
+          path: dist
+      - name: PostgreSQL 18 (EDB zip binaries) and pgvector sources
+        run: |
+          python tools/runtime.py postgres $env:WORK
+          if ($LASTEXITCODE) { exit 1 }
+          python tools/runtime.py pgvector $env:WORK
+          if ($LASTEXITCODE) { exit 1 }
+      - name: pgvector against this PostgreSQL (nmake, MSVC)
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VS=%%i"
+          call "%VS%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          set "PGROOT=%WORK%\pgsql"
+          cd /d "%WORK%\pgvector" || exit /b 1
+          nmake /NOLOGO /F Makefile.win || exit /b 1
+          nmake /NOLOGO /F Makefile.win install || exit /b 1
+          rem Visual C++ runtime of this toolset goes into the runtime zip (tools/runtime.py assemble --vcredist)
+          for /d %%d in ("%VCToolsRedistDir%x64\Microsoft.VC*.CRT") do set "CRT=%%d"
+          if not defined CRT exit /b 1
+          xcopy /q /y "%CRT%\*.dll" "%WORK%\vcredist\" || exit /b 1
+      - name: Portable Python, amemo[web,embed], runtime zip
+        run: |
+          python tools/runtime.py python $env:WORK
+          if ($LASTEXITCODE) { exit 1 }
+          python tools/runtime.py assemble $env:WORK --wheels dist --out $env:OUT --vcredist "$env:WORK\vcredist"
+          if ($LASTEXITCODE) { exit 1 }
+      - name: Model zip (downloaded by the runtime's own fastembed)
+        run: |
+          python tools/runtime.py model $env:WORK --out $env:OUT
+          if ($LASTEXITCODE) { exit 1 }
+          Get-ChildItem $env:OUT | Format-Table Name, Length
+      - name: Runtime as a person gets it — Cyrillic path, nothing in PATH, model offline
+        run: |
+          # профиль на C: — как у человека; кириллица вне кодовой страницы ANSI раннера (1252): программы PostgreSQL
+          # получают короткие имена 8.3 (amemo/localpg.py native)
+          fsutil 8dot3name query C:
+          $root = "$env:USERPROFILE\Проверка комплекта"
+          Expand-Archive (Get-Item "$env:OUT\amemo-runtime-*.zip").FullName "$root\runtime"
+          Expand-Archive "$env:OUT\amemo-model-paraphrase-multilingual-MiniLM-L12-v2.zip" "$root\model"
+          Remove-Item Env:PGPASSWORD, Env:PGUSER, Env:PGROOT, Env:PGBIN, Env:PGDATA -ErrorAction SilentlyContinue
+          $env:PATH = "$env:SystemRoot\system32;$env:SystemRoot;$env:SystemRoot\System32\Wbem"
+          $env:AMEMO_CONFIG = "$root\Анна\amemo.toml"
+          $env:AMEMO_MODELS = "$root\Анна\models"
+          $env:HF_HUB_OFFLINE = "1"                 # модель — только из архива, не с Hugging Face
+          $amemo = "$root\runtime\amemo.cmd"
+          $py = "$root\runtime\python\python.exe"
+          if (Get-Command python -ErrorAction SilentlyContinue) { throw "python в PATH" }
+          & $amemo --version
+          if ($LASTEXITCODE) { exit 1 }
+          & "$root\runtime\pgsql\bin\pg_ctl.exe" --version
+          if ($LASTEXITCODE) { exit 1 }
+          & $amemo setup --pg-bin "$root\runtime\pgsql\bin" --data "$root\Анна\amemo-data" --embed `
+              --embed-models "$root\model" --no-auto-update --json > "$root\setup.json"
+          if ($LASTEXITCODE) { Get-Content "$root\setup.json"; exit 1 }
+          & $amemo doctor --json > "$root\doctor.json"
+          & $amemo backup create --json > "$root\backup.json"
+          if ($LASTEXITCODE) { Get-Content "$root\backup.json"; exit 1 }
+          & $amemo pg stop
+          if ($LASTEXITCODE) { exit 1 }
+          $env:PYTHONUTF8 = "1"
+          @'
+          import json, sys
+          from pathlib import Path
+          root = Path(sys.argv[1])
+          setup = json.loads((root / "setup.json").read_text(encoding="utf-8"))
+          assert setup["embed"] and setup["embed"]["downloaded"] is False, setup["embed"]
+          assert setup["embed"]["model"]["active"], setup["embed"]["model"]
+          checks = {c["name"]: c["status"] for c in json.loads((root / "doctor.json").read_text(encoding="utf-8"))["checks"]}
+          for name in ("база", "миграции", "id базы", "хранилище"):
+              assert checks.get(name) == "ok", (name, checks)
+          from amemo.embed import FastembedProvider
+          vector = FastembedProvider(cache_dir=str(root / "Анна" / "models")).embed(["пробный текст"])[0]
+          assert len(vector) == 384, len(vector)
+          manifest = json.loads((root / "runtime" / "runtime.json").read_text(encoding="utf-8"))
+          print("комплект:", {k: v for k, v in manifest.items() if k != "packages"})
+          print("модель:", setup["embed"]["model"]["name"], "вектор пробного текста:", len(vector))
+          '@ | & $py -I -X utf8 - $root
+          if ($LASTEXITCODE) { exit 1 }
+      - if: failure()
+        run: Get-Content "$env:USERPROFILE\Проверка комплекта\Анна\amemo-data\pg\log\postgresql.log" -Tail 60 -ErrorAction SilentlyContinue
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-windows-x64
+          path: out/
+          retention-days: 14
+          compression-level: 0           # архивы уже сжаты

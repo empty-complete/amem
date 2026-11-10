@@ -62,6 +62,40 @@ def _major(text: str) -> int:
     return int(found.group(1))
 
 
+def _ansi(text: str) -> bool:
+    try:
+        text.encode("mbcs", "strict")         # кодовая страница ANSI системы; символ вне её — ошибка, а не «?»
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def _short(text: str) -> str | None:
+    import ctypes
+
+    size = ctypes.windll.kernel32.GetShortPathNameW(text, None, 0)
+    if not size:
+        return None
+    buffer = ctypes.create_unicode_buffer(size)
+    return buffer.value if ctypes.windll.kernel32.GetShortPathNameW(text, buffer, size) else None
+
+
+def native(path: Path) -> str:
+    """Путь для программ PostgreSQL. В Windows они открывают файлы и ищут себя ANSI-функциями: символ вне кодовой
+    страницы ANSI системы (кириллица в английской Windows) становится «?», и initdb не находит даже себя («invalid
+    binary»). Такой путь (он должен существовать) заменяется коротким именем 8.3, если том их хранит; иначе — отказ
+    с подсказкой."""
+    text = str(path)
+    if not WINDOWS or _ansi(text):
+        return text
+    short = _short(text)
+    if short and _ansi(short):
+        return short
+    raise LocalPgError(f"{text}: в пути есть символы, которых нет в кодовой странице Windows, а коротких имён 8.3 "
+                       f"у тома нет — PostgreSQL такой путь не откроет; выберите папку с латинскими буквами, "
+                       f"например C:\\amemo-data")
+
+
 @dataclass(frozen=True)
 class Cluster:
     bin: Path
@@ -73,11 +107,14 @@ class Cluster:
             raise LocalPgError(f"нет {path}: в pg_bin нужны {', '.join(TOOLS)} PostgreSQL {PG_MIN}+")
         return path
 
+    def exe(self, name: str) -> str:
+        return native(self.tool(name))
+
     def check(self) -> int:
         """Программы на месте и версии не ниже PG_MIN; мажорная версия."""
         for name in TOOLS:
             self.tool(name)
-        done = self._run([self.tool("pg_ctl"), "--version"], "pg_ctl --version")
+        done = self._run([self.exe("pg_ctl"), "--version"], "pg_ctl --version")
         major = _major(done.stdout)
         if major < PG_MIN:
             raise LocalPgError(f"PostgreSQL {major} в {self.bin}: нужен {PG_MIN} или новее")
@@ -109,12 +146,13 @@ class Cluster:
             raise LocalPgError(f"{self.data}: кластер уже есть")
         if self.data.exists() and any(self.data.iterdir()):
             raise LocalPgError(f"{self.data}: папка не пустая и не кластер PostgreSQL — выберите другую")
-        self.data.parent.mkdir(parents=True, exist_ok=True)
-        fd, pwfile = tempfile.mkstemp(prefix="amemo-pw-", text=True)
+        self.data.parent.mkdir(parents=True, exist_ok=True)   # папку кластера создаёт initdb: короткое имя — у родителя
+        # файл пароля — рядом с кластером, а не во временной папке профиля: её путь бывает не в кодовой странице ANSI
+        fd, pwfile = tempfile.mkstemp(prefix="amemo-pw-", dir=self.data.parent, text=True)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as out:
                 out.write(password + "\n")
-            self._run([self.tool("initdb"), "-D", str(self.data), "-U", ROLE, "--pwfile", pwfile,
+            self._run([self.exe("initdb"), "-D", native(self.data.parent) + os.sep + self.data.name, "-U", ROLE, "--pwfile", native(Path(pwfile)),
                        "-A", "scram-sha-256", "-E", "UTF8", "--no-locale"], "initdb")
         finally:
             Path(pwfile).unlink(missing_ok=True)
@@ -124,7 +162,7 @@ class Cluster:
     def running(self) -> bool:
         if not self.exists:
             return False
-        done = subprocess.run([str(self.tool("pg_ctl")), "-D", str(self.data), "status"], capture_output=True,
+        done = subprocess.run([self.exe("pg_ctl"), "-D", native(self.data), "status"], capture_output=True,
                               text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
         return done.returncode == 0
 
@@ -135,7 +173,8 @@ class Cluster:
         if self.running():
             return False
         self.log.parent.mkdir(parents=True, exist_ok=True)
-        self._run([self.tool("pg_ctl"), "-D", str(self.data), "-l", str(self.log), "-w", "-t",
+        log = native(self.log.parent) + os.sep + self.log.name
+        self._run([self.exe("pg_ctl"), "-D", native(self.data), "-l", log, "-w", "-t",
                    str(START_TIMEOUT), "start"], "pg_ctl start", detach=True)
         return True
 
@@ -143,7 +182,7 @@ class Cluster:
         """Остановить, если запущен; True — остановили сейчас."""
         if not self.running():
             return False
-        self._run([self.tool("pg_ctl"), "-D", str(self.data), "-m", "fast", "-w", "stop"], "pg_ctl stop")
+        self._run([self.exe("pg_ctl"), "-D", native(self.data), "-m", "fast", "-w", "stop"], "pg_ctl stop")
         return True
 
     def _run(self, argv: list, what: str, *, detach: bool = False) -> subprocess.CompletedProcess:
@@ -159,7 +198,8 @@ class Cluster:
         except OSError as e:
             raise LocalPgError(f"{what}: {e}") from None
         if done.returncode != 0:
-            tail = ((done.stderr or "") + (done.stdout or "")).strip().splitlines()[-3:] if not detach else []
+            # stderr — последним: причина ошибки там, а stdout initdb длинный
+            tail = ((done.stdout or "") + "\n" + (done.stderr or "")).strip().splitlines()[-3:] if not detach else []
             where = f"; журнал — {self.log}" if what.startswith("pg_ctl start") else ""
             raise LocalPgError(f"{what}: код {done.returncode}" + (f": {' / '.join(tail)}" if tail else "") + where)
         return done

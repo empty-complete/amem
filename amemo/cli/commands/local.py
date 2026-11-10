@@ -168,7 +168,7 @@ def run_setup(ctx, args) -> int:
             values = {"dsn": localpg.dsn(password, port), "data": data / "objects", "docs": args.docs,
                       "state": data / "state", "backups": data / "backups",
                       "lang": getattr(args, "lang", None),               # общая опция --lang: и запишется в настройки
-                      "pg_bin": cluster.bin, "pg_data": cluster.data,
+                      "pg_bin": localpg.native(cluster.bin), "pg_data": cluster.data,      # pg_dump бэкапа — оттуда же
                       "auto_update": False if args.no_auto_update else None}
             write_config(config, values)
             steps.append(f"настройки: {config}")
