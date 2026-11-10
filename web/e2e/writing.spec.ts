@@ -154,3 +154,22 @@ test("загрузка файла в «+ Источник»", async ({ page }) =
   });
   await expect(page.getByRole("heading", { name: "Обход_ноябрь.md" })).toBeVisible();
 });
+
+test("конструктор видов на низком экране: длинная форма листается, «Сохранить вид» достижима", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "высота окна задаётся явно");
+  await page.setViewportSize({ width: 1280, height: 520 });
+  await page.goto("./settings");
+  await page.getByRole("button", { name: "Настроить виды" }).click();
+  const dlg = page.getByRole("dialog", { name: "Мои виды" });
+  await dlg.getByRole("button", { name: "Вид", exact: true }).click();
+  await dlg.getByRole("textbox", { name: "Имя вида" }).fill("Длинный обход");
+  for (const name of ["Что нашли", "Где", "Кто смотрел", "Что сделали"]) {
+    await dlg.getByRole("button", { name: "Добавить свойство" }).click();
+    await dlg.getByRole("textbox", { name: "Имя свойства" }).last().fill(name);
+  }
+  await dlg.getByRole("button", { name: "Сохранить вид" }).click();
+  await expect(dlg.getByText("Вид «Длинный обход» сохранён")).toBeVisible();
+});
