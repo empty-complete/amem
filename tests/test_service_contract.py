@@ -84,7 +84,7 @@ def test_no_routes_outside_contract(tmp_path):
 def test_service_does_not_answer_outside_contract(serve, pg):
     db.prepare(pg)
     client = serve()
-    for path in (f"{V1}/unknown", f"{V1}/records/x/unknown", f"{V1}", "/api/v2/session", f"{V1}/objects"):
+    for path in (f"{V1}/unknown", f"{V1}/records/x/unknown", f"{V1}", "/api/v2/session", f"{V1}/objects/x/unknown"):
         response = client.get(path)
         assert response.status_code == 404, (path, response.text)
         assert response.headers["content-type"].startswith("application/problem+json")
