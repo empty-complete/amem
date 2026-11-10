@@ -147,11 +147,11 @@ def _strip(root: Path, dirs, files: re.Pattern) -> int:
     return before - tree_size(root)
 
 
-def _wheel_version(wheels: Path) -> str:
-    found = sorted(wheels.glob("amemo-*-py3-none-any.whl"))
+def _wheel(wheels: Path, name: str) -> Path:
+    found = sorted(wheels.glob(f"{name}-*-py3-none-any.whl"))
     if len(found) != 1:
-        raise SystemExit(f"{wheels}: нужно ровно одно колесо amemo, найдено {[p.name for p in found]}")
-    return found[0].name.split("-")[1]
+        raise SystemExit(f"{wheels}: нужно ровно одно колесо {name}, найдено {[p.name for p in found]}")
+    return found[0]
 
 
 def _packages(python: Path) -> list[dict]:
@@ -210,12 +210,16 @@ def cmd_assemble(work: Path, wheels: Path, out: Path, vcredist: Path | None = No
     pgsql, python = work / "pgsql", work / "python"
     if not (pgsql / "lib" / "vector.dll").is_file():
         raise SystemExit(f"{pgsql}: нет lib/vector.dll — сначала соберите pgvector (nmake /F Makefile.win install)")
-    version = _wheel_version(wheels)
+    amemo, web = _wheel(wheels, "amemo"), _wheel(wheels, "amemo_web")
+    version = amemo.name.split("-")[1]
     exe = python / "python.exe"
-    log(f"amemo[web,embed]=={version} в {python}")
+    log(f"{amemo.name}[web,embed] и {web.name} в {python}")
+    # колёса — файлами, а не по имени и версии: у ветки та же версия, что на PyPI, и pip взял бы колесо оттуда
     subprocess.run([str(exe), "-I", "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
-                    "--no-warn-script-location", "--find-links", str(wheels), f"amemo[web,embed]=={version}"],
-                   check=True)
+                    "--no-warn-script-location", f"{amemo}[web,embed]", str(web)], check=True)
+    installed = subprocess.run([str(exe), "-I", "-c", "import amemo.cli.commands.local, amemo; print(amemo.__file__)"],
+                               check=True, capture_output=True, text=True).stdout.strip()
+    log(f"amemo из колеса ветки: {installed}")
     packages = _packages(exe)
     runtime_dlls = _vcredist(vcredist, [pgsql / "bin", python])
     notices = _notices(work, packages, runtime_dlls)
