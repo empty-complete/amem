@@ -1,10 +1,13 @@
 """Проверка корня OCFL валидатором ocfl-py. Раскладки 0004 в ocfl-py 2.1 нет — она регистрируется здесь,
 по описанию расширения (https://ocfl.github.io/extensions/0004-hashed-n-tuple-storage-layout.html)."""
+import importlib
 import os
+import posixpath
+import types
 from pathlib import Path
 
 import ocfl
-from ocfl import fsw, layout_registry
+from ocfl import layout_registry
 from ocfl.digest import string_digest
 from ocfl.layout_0003_hash_and_id_n_tuple import Layout_0003_Hash_And_Id_N_Tuple
 
@@ -36,10 +39,21 @@ class Layout0004(Layout_0003_Hash_And_Id_N_Tuple):
 layout_registry.add_layout(Layout0004().NAME, Layout0004)
 
 if os.name == "nt":
-    # ocfl-py 2.1 на Windows склеивает папку обхода корня (fsw_walk) через os.path.join — с «\», а сравнивает
-    # с путями pyfilesystem, где всегда «/»: без этой поправки любой корень «не валиден»
-    _relpath = fsw._fsw_relpath
-    fsw._fsw_relpath = lambda path, start="": _relpath(path.replace("\\", "/"), start.replace("\\", "/"))
+    # ocfl-py 2.1 склеивает пути внутри корня через os.path.join, а сравнивает их с путями fsspec, где всегда «/»:
+    # на Windows любой корень вышел бы «не валиден» (path 27b/29b/011 vs start 27b\29b). Модулям ocfl — os,
+    # у которого os.path — posixpath: пути внутри корня у валидатора те же, что на Linux
+    class _PosixOs(types.ModuleType):
+        path, sep = posixpath, "/"
+
+        def __getattr__(self, name):
+            return getattr(os, name)
+
+    _posix_os = _PosixOs("os")
+    for _name in ("fsw", "storage_root", "validator", "namaste", "inventory", "object", "object_utils", "layout",
+                  "layout_0003_hash_and_id_n_tuple", "validation_logger"):
+        _module = importlib.import_module(f"ocfl.{_name}")
+        if getattr(_module, "os", None) is os:
+            _module.os = _posix_os
 
 
 def validate(root: Path) -> tuple[bool, str]:
