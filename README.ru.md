@@ -15,13 +15,14 @@
 <p align="center">
   <a href="https://github.com/empty-complete/amemo/actions/workflows/ci.yml"><img alt="Тесты" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amemo/ci.yml?branch=main&label=tests&style=flat-square"></a>
   <a href="https://github.com/empty-complete/amemo/actions/workflows/web.yml"><img alt="Веб-UI" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amemo/web.yml?branch=main&label=web%20ui&style=flat-square"></a>
-  <a href="LICENSE.txt"><img alt="Лицензия MIT" src="https://img.shields.io/badge/license-MIT-2a78d6?style=flat-square"></a>
+  <a href="LICENSE.txt"><img alt="Лицензия AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-2a78d6?style=flat-square"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&logo=python&logoColor=white">
   <img alt="PostgreSQL 16+ с pgvector" src="https://img.shields.io/badge/PostgreSQL-16%2B%20%C2%B7%20pgvector-4169e1?style=flat-square&logo=postgresql&logoColor=white">
   <img alt="Состояние: ранняя разработка" src="https://img.shields.io/badge/status-early%20development-eb6834?style=flat-square">
 </p>
 
 <p align="center">
+  <a href="#установка-через-агента"><b>Установка</b></a> ·
   <a href="#быстрый-старт"><b>Быстрый старт</b></a> ·
   <a href="#возможности"><b>Возможности</b></a> ·
   <a href="#как-это-устроено"><b>Как устроено</b></a> ·
@@ -141,6 +142,20 @@ amemo хранит единицу поменьше и понадёжнее — *
 - **Скучное хранилище.** Данные лежат в обычном PostgreSQL 16+ с pgvector. Схема описана на LinkML,
   из неё генерируются модели Pydantic и JSON Schema.
 
+## Установка через агента
+
+Вставьте это в Claude Code, Codex или другого агента для кода:
+
+```text
+Установи amemo на этот компьютер по инструкции https://raw.githubusercontent.com/empty-complete/amemo/main/docs/install-agent.md
+```
+
+Агент начинает с пустой машины. Он смотрит, что уже стоит, ставит PostgreSQL с pgvector (в Docker, если он
+есть, иначе напрямую; в Windows — внутри WSL2), сам amemo, подключает его к вашим агентам и заканчивает
+`amemo doctor`. Перед `sudo`, перезагрузкой и большой загрузкой он спрашивает. Инструкция целиком —
+[`docs/install-agent.md`](docs/install-agent.md) (на английском, агент ответит на вашем языке); её команды CI
+проходит на Linux и macOS. Вручную — [установка одной командой](#установка-одной-командой).
+
 ## Быстрый старт
 
 Нужны Python 3.11+, Docker (для PostgreSQL) и Linux или macOS. В Windows — через WSL2.
@@ -255,8 +270,8 @@ amemo doctor                   # что работает и что поправ�
 ```
 
 `amemo init --dsn` запоминает строку подключения в `~/.config/amemo/amemo.toml` (права `0600`): агенты, хуки и CLI
-находят базу без `AMEMO_DSN` в окружении. PostgreSQL с pgvector — из `docker compose up -d --wait db` или свой.
-CI проходит эти шаги на каждом push.
+находят базу без `AMEMO_DSN` в окружении. PostgreSQL с pgvector — из `docker compose up -d --wait db`, прямой
+установкой ([`docs/install-agent.md`](docs/install-agent.md), шаг 3) или свой. CI проходит эти шаги на каждом push.
 
 ## Служба
 
@@ -673,9 +688,11 @@ sources:
 
 **Полезно знать**
 
-- Схема v1 требует поле `ru` у каждой подписи; остальные языки — по желанию. База на английском пишет
-  туда английский текст, как английский образец. Полнотекст настроен на русский язык, а необязательная
-  локальная модель векторов многоязычная.
+- У текста два слота, `ru` и `en`; записи нужен хотя бы один, так что базу можно вести только по-английски, как
+  английский образец. Подписи и фрагменты приходят на запрошенном языке — языке интерфейса (`Accept-Language`),
+  `--lang` у CLI, `lang` у инструментов MCP, иначе `AMEMO_LANG` — а если его слот пуст, из другого. Полнотекстовый
+  поиск ведёт `ru` русской конфигурацией, `en` — английской; необязательная локальная модель векторов
+  многоязычная.
 - Векторы локальные и необязательные: `pip install -e ".[embed]"` добавляет fastembed, а модель
   скачивается только с явного разрешения. `AMEMO_BACKEND=none` выключает смысловой канал, лексический
   поиск продолжает работать.
@@ -736,6 +753,16 @@ issue, чтобы договориться о подходе. Каждый pull 
 
 ## Лицензия
 
-MIT, см. [LICENSE.txt](LICENSE.txt). © 2026 Филипп Белобородов (Philipp Beloborodov).
+GNU Affero General Public License v3.0 (AGPL-3.0-only), см. [LICENSE.txt](LICENSE.txt).
+© 2026 empty-complete.
+
+amemo можно свободно использовать, изучать, менять и распространять. Кто распространяет изменённую версию или
+запускает её как сервис для других людей по сети, обязан открыть полный исходный код на тех же условиях.
+
+Пакеты домена в `amemo/packs` (словари и шаблоны) — это данные, они остаются под лицензией MIT и годятся для
+повторного использования где угодно.
+
+Коммерческая лицензия без условий AGPL (например, для закрытого облачного сервиса) — по договорённости с автором:
+откройте issue на GitHub. Версии, выпущенные до перехода на AGPL, остаются доступны под MIT.
 
 <p align="center"><sub>amemo — инструмент для того, чтобы хорошо помнить.</sub></p>

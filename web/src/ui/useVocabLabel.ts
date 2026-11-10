@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { q } from "../api/queries";
+import { pickText } from "./lang";
 
 /** Подпись кода из словаря службы (parameter_group, parameter_origin…); словаря или кода нет — undefined.
  * Словарь — из кеша запросов: один запрос на схему, его отсутствие (404) не ошибка. */
@@ -13,7 +14,7 @@ export function useVocabLabel(scheme: string) {
       if (!code) return undefined;
       const e = v.data?.find((x) => x.code === code);
       if (!e) return undefined;
-      return i18n.language.startsWith("en") ? (e.label.en ?? e.label.ru) : e.label.ru;
+      return pickText(e.label, i18n.language) || undefined;
     },
     [v.data, i18n.language],
   );

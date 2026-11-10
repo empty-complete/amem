@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { unitLabel } from "../../ui/format";
-import { type LangString, text } from "./doc";
+import { type LangString, pickText } from "../../ui/lang";
 import { renderMath } from "./markdown";
 
 export type Formula = {
@@ -53,7 +53,7 @@ function FormulaBlock({ f }: { f: Formula }) {
                 <TeX latex={s.symbol} fallback={s.symbol} display={false} />
               </dt>
               <dd>
-                {s.label ? text(s.label, i18n.language) : ""}
+                {s.label ? pickText(s.label, i18n.language) : ""}
                 {s.unit ? <span className="muted">, {unitLabel(s.unit, i18n.language)}</span> : null}
               </dd>
             </div>
@@ -95,7 +95,7 @@ function TableBlock({ table }: { table: Table }) {
             <tr>
               {table.columns.map((c) => (
                 <th key={c.code} scope="col">
-                  {text(c.label, lang) || c.code}
+                  {pickText(c.label, lang) || c.code}
                   {c.unit ? <span className="muted">, {unitLabel(c.unit, lang)}</span> : null}
                 </th>
               ))}

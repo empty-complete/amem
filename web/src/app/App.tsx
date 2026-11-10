@@ -4,10 +4,13 @@ import { useEffect } from "react";
 import { I18nProvider } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { routeTree } from "../routeTree.gen";
+import { i18n } from "./i18n";
 import { parseSearch, stringifySearch } from "./search-url";
 import { watchSystemTheme } from "./theme";
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30_000 } } });
+// подписи и фрагменты ответов — на языке интерфейса (Accept-Language): новый язык — ответы заново
+i18n.on("languageChanged", () => queryClient.invalidateQueries());
 export const router = createRouter({
   routeTree,
   basepath: "/ui",

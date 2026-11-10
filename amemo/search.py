@@ -2,6 +2,12 @@
 
 Содержимое источников и технические ссылки сюда не копируются. Веса A–D сохраняются отдельно,
 чтобы PostgreSQL мог ранжировать подпись выше пояснения, а пояснение — выше контекста.
+
+Языки (amemo.lang): слоты ru и языконезависимый текст (содержимое, aliases, марки) индексируются конфигурацией
+russian, слоты en — english; запрос идёт на обеих (lang.tsquery). Документ эмбеддинга — по весам сначала ru, затем
+en: у записи без en он тот же, что до появления слота en в индексе, и векторы не пересчитываются. Фрагмент находки
+строится из текста на языке выдачи (shown_text). PROJECTION — версия проекции: db.prepare перестраивает поиск
+базы, у которой meta.search_projection меньше (ensure_projection).
 """
 from __future__ import annotations
 
@@ -11,19 +17,23 @@ from dataclasses import dataclass
 from typing import Literal
 
 import psycopg
+from psycopg.types.json import Jsonb
 
-from . import sources
+from . import lang as lang_, sources
 
 SEARCH_TEXT_VERSION = 1
+PROJECTION = 2                       # 2 — слоты en в индексе (english); meta.search_projection
+PROJECTION_LOCK = 0x616D656D00000005  # pg_advisory_xact_lock перестройки при старте: «amemo» + 5 (1–4 заняты)
 Target = Literal["atom", "entity"]
 _UUID = re.compile(r"(?:atm:|ent:|obj:)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
 
 @dataclass(frozen=True)
 class SearchText:
-    weighted: dict[str, tuple[str, ...]]
+    weighted: dict[str, tuple[str, ...]]     # конфигурация russian: слоты ru и языконезависимый текст
     document: str
     codes: tuple[str, ...]
+    english: dict[str, tuple[str, ...]]      # конфигурация english: слоты en (без фрагментов, что уже в weighted)
 
 
 def normalize_code(value: str) -> str:
@@ -43,27 +53,39 @@ def normalize_code(value: str) -> str:
     return normalized
 
 
-def _lang(value) -> list[str]:
-    if isinstance(value, dict) and isinstance(value.get("ru"), str):
-        return [value["ru"]]
+def _slot(value, slot: str) -> list[str]:
+    if isinstance(value, dict) and isinstance(value.get(slot), str):
+        return [value[slot]]
     return []
 
 
-def _content_strings(value) -> list[str]:
-    """Строки содержимого в стабильном порядке; порядок списков значим, порядок JSON-ключей — нет."""
+def _content_strings(value, shown: bool = False, lang: str | None = None) -> list[str]:
+    """Строки содержимого в стабильном порядке; порядок списков значим, порядок JSON-ключей — нет.
+    shown — текст на одном языке: у вложенного LangString (только ключи ru, en) — один слот по lang.pick."""
     if isinstance(value, str):
         return [] if _UUID.fullmatch(value) else [value]
     if isinstance(value, dict):
+        if shown and value and set(value) <= set(lang_.LANGS):
+            text = lang_.pick(value, lang)
+            return [text] if text else []
         out = []
         for key in sorted(value):
-            out.extend(_content_strings(value[key]))
+            out.extend(_content_strings(value[key], shown, lang))
         return out
     if isinstance(value, list):
         out = []
         for item in value:
-            out.extend(_content_strings(item))
+            out.extend(_content_strings(item, shown, lang))
         return out
     return []
+
+
+def _parts(payload: dict, target: Target, text) -> tuple[list[str], list[str], list[str], list[str]]:
+    """LangString-поля тела по весам A–D; text(LangString) → строки одного слота или выбранного языка."""
+    a = text(payload.get("label"))
+    b = text(payload.get("summary_plain")) + text(payload.get("body")) if target == "atom" else []
+    c = text(payload.get("description")) if target == "entity" else []
+    return a, b, c, text(payload.get("retrieval_context"))
 
 
 def _fragments(values) -> tuple[str, ...]:
@@ -83,19 +105,35 @@ def search_text(payload: dict, target: Target) -> SearchText:
     """Тело ревизии → взвешенные части, плоский документ для эмбеддинга и нормализованные марки."""
     if target not in ("atom", "entity"):
         raise ValueError(f"неизвестный вид записи {target!r}")
-    a = _lang(payload.get("label"))
-    b = _lang(payload.get("summary_plain")) + _lang(payload.get("body")) if target == "atom" else []
+    a, b, c, d = _parts(payload, target, lambda value: _slot(value, "ru"))
     if target == "atom":
         c = _content_strings(payload.get("content", {}))
-    else:
-        c = _lang(payload.get("description"))
     raw_codes = payload.get("codes") or []
     # aliases в спецификации идут перед марками; порядок частей D фиксируем независимо от порядка полей.
-    d = list(payload.get("aliases") or []) + list(raw_codes) + _lang(payload.get("retrieval_context"))
+    d = list(payload.get("aliases") or []) + list(raw_codes) + d
     weighted = {weight: _fragments(parts) for weight, parts in zip("ABCD", (a, b, c, d))}
-    document = " ".join(fragment for weight in "ABCD" for fragment in weighted[weight])
+    english = {weight: tuple(f for f in _fragments(parts) if f not in weighted[weight])
+               for weight, parts in zip("ABCD", _parts(payload, target, lambda value: _slot(value, "en")))}
+    document = " ".join(fragment for weight in "ABCD" for fragment in (*weighted[weight], *english[weight]))
     codes = tuple(sorted({normalize_code(code) for code in raw_codes if isinstance(code, str) and code.strip()}))
-    return SearchText(weighted, document, codes)
+    return SearchText(weighted, document, codes, english)
+
+
+def shown_text(payload: dict, target: Target, lang: str | None = None) -> str:
+    """Текст записи на одном языке — каждое LangString-поле одним слотом по lang.pick(…, lang); порядок и состав —
+    как у документа search_text. Из него строится фрагмент находки."""
+    if target not in ("atom", "entity"):
+        raise ValueError(f"неизвестный вид записи {target!r}")
+
+    def text(value) -> list[str]:
+        picked = lang_.pick(value, lang) if isinstance(value, dict) else None
+        return [picked] if picked else []
+
+    a, b, c, d = _parts(payload, target, text)
+    if target == "atom":
+        c = _content_strings(payload.get("content", {}), shown=True, lang=lang)
+    d = list(payload.get("aliases") or []) + list(payload.get("codes") or []) + d
+    return " ".join(fragment for parts in (a, b, c, d) for fragment in _fragments(parts))
 
 
 def refresh_record(conn: psycopg.Connection, target: Target, record_id) -> None:
@@ -112,9 +150,12 @@ def refresh_record(conn: psycopg.Connection, target: Target, record_id) -> None:
             return
         revision_id, payload, content_hash, recorded_at = row
         text = search_text(payload, target)
-        parts = {weight.lower(): " ".join(text.weighted[weight]) for weight in "ABCD"}
-        vector = " || ".join(f"setweight(to_tsvector('russian', %({weight.lower()})s), '{weight}')"
-                             for weight in "ABCD")
+        # конфигурация FTS → части по весам; ключ параметра — «конфигурация_вес», имена только из кода
+        configs = {lang_.FTS["ru"]: text.weighted, lang_.FTS["en"]: text.english}
+        parts = {f"{config}_{weight.lower()}": " ".join(weighted[weight])
+                 for config, weighted in configs.items() for weight in "ABCD"}
+        vector = " || ".join(f"setweight(to_tsvector('{config}', %({config}_{weight.lower()})s), '{weight}')"
+                             for config in configs for weight in "ABCD")
         params = {"target": target, "record_id": record_id, "revision_id": revision_id,
                   "content_hash": content_hash, "document": text.document, "codes": list(text.codes),
                   "updated_at": recorded_at, **parts}
@@ -129,6 +170,20 @@ def refresh_record(conn: psycopg.Connection, target: Target, record_id) -> None:
         with conn.cursor() as cur:
             cur.executemany("INSERT INTO search_code (target, record_id, code) VALUES (%s, %s, %s)",
                             [(target, record_id, code) for code in text.codes])
+
+
+def ensure_projection(conn: psycopg.Connection) -> bool:
+    """Перестроить поиск, если версия проекции в базе (meta.search_projection) меньше PROJECTION; True — перестроен.
+    Под рекомендательной блокировкой транзакции: две службы, стартующие разом, не строят проекцию вдвоём."""
+    with conn.transaction():
+        conn.execute("SELECT pg_advisory_xact_lock(%s)", (PROJECTION_LOCK,))
+        row = conn.execute("SELECT value FROM meta WHERE key = 'search_projection'").fetchone()
+        if row is not None and isinstance(row[0], int) and row[0] >= PROJECTION:
+            return False
+        rebuild_search(conn)
+        conn.execute("INSERT INTO meta (key, value) VALUES ('search_projection', %s) "
+                     "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", (Jsonb(PROJECTION),))
+    return True
 
 
 def rebuild_search(conn: psycopg.Connection) -> int:
@@ -248,8 +303,8 @@ def _lexical_channel(conn: psycopg.Connection, query: str, channel: str, *, targ
             conditions.append("NOT EXISTS (SELECT 1 FROM search_code c WHERE c.target = d.target "
                               "AND c.record_id = d.record_id AND c.code = %(query)s)")
         elif channel == "fts":
-            source_rank = "ts_rank_cd(d.search_vector, websearch_to_tsquery('russian', %(query)s))"
-            conditions.append("d.search_vector @@ websearch_to_tsquery('russian', %(query)s)")
+            source_rank = f"ts_rank_cd(d.search_vector, {lang_.tsquery('%(query)s')})"
+            conditions.append(f"d.search_vector @@ {lang_.tsquery('%(query)s')}")
         else:
             raise ValueError(f"неизвестный лексический канал {channel!r}")
         selects.append(f"SELECT d.target, d.record_id, d.revision_id, {source_rank} AS source_rank "
@@ -418,8 +473,10 @@ def _snippet(document: str, limit: int = 240) -> str:
     return document[:limit].rsplit(" ", 1)[0] + "…"
 
 
-def _enrich(conn: psycopg.Connection, candidates: list[dict], *, include_record=False) -> list[dict]:
-    """Добавить к внутренним кандидатам только публичные поля карточки; очки здесь не раскрываются."""
+def _enrich(conn: psycopg.Connection, candidates: list[dict], *, include_record=False,
+            lang: str | None = None) -> list[dict]:
+    """Добавить к внутренним кандидатам только публичные поля карточки; очки здесь не раскрываются.
+    label — LangString ревизии целиком, snippet — из текста на языке lang с заменой (shown_text)."""
     if not candidates:
         return []
     grouped = {}
@@ -431,7 +488,7 @@ def _enrich(conn: psycopg.Connection, candidates: list[dict], *, include_record=
     rows = {}
     for target, record_ids in grouped.items():
         result = conn.execute(
-            f"SELECT d.target, d.record_id, d.document, r.n, r.review_state, rec.status, r.payload->'label' "
+            f"SELECT d.target, d.record_id, d.document, r.n, r.review_state, rec.status, r.payload "
             f"FROM search_document d JOIN {target} rec ON rec.id = d.record_id "
             f"JOIN {target}_current r ON r.id = d.revision_id "
             f"WHERE d.target = %(target)s AND d.record_id = ANY(%(ids)s::uuid[])",
@@ -446,8 +503,8 @@ def _enrich(conn: psycopg.Connection, candidates: list[dict], *, include_record=
         row = rows.get((target, record_id))
         if row is None:
             raise ValueError(f"поисковая проекция {candidate['ref']} не найдена")
-        card = {"ref": candidate["ref"], "revision": row[3], "label": row[6],
-                "snippet": _snippet(row[2]), "status": row[5], "review_state": row[4]}
+        card = {"ref": candidate["ref"], "revision": row[3], "label": row[6].get("label"),
+                "snippet": _snippet(shown_text(row[6], target, lang)), "status": row[5], "review_state": row[4]}
         if include_record:
             card["record"] = lookup.get(conn, target, record_id)
         cards.append(card)

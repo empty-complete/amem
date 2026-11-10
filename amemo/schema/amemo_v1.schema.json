@@ -1825,7 +1825,33 @@
     },
     "LangString": {
       "additionalProperties": false,
-      "description": "Текст на нескольких языках; русский обязателен.",
+      "anyOf": [
+        {
+          "properties": {
+            "ru": {
+              "type": [
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "ru"
+          ]
+        },
+        {
+          "properties": {
+            "en": {
+              "type": [
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "en"
+          ]
+        }
+      ],
+      "description": "Текст на нескольких языках; нужен хотя бы один из слотов ru, en.",
       "properties": {
         "en": {
           "type": [
@@ -1834,12 +1860,12 @@
           ]
         },
         "ru": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
-      "required": [
-        "ru"
-      ],
       "title": "LangString",
       "type": "object"
     },

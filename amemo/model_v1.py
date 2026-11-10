@@ -25,6 +25,7 @@ from pydantic import (
     SerializationInfo,
     SerializerFunctionWrapHandler,
     field_validator,
+    model_validator,
     model_serializer
 )
 
@@ -76,7 +77,7 @@ linkml_meta = LinkMLMeta({'default_prefix': 'amemo',
                     'неизменны; подписи — в аннотациях label_ru / label_en.',
      'id': 'amemo',
      'imports': ['linkml:types'],
-     'license': 'MIT',
+     'license': 'AGPL-3.0-only',
      'name': 'amemo_v1',
      'prefixes': {'amemo': {'prefix_prefix': 'amemo', 'prefix_reference': 'amemo/'},
                   'linkml': {'prefix_prefix': 'linkml',
@@ -339,12 +340,21 @@ class KindFamily(str, Enum):
 
 class LangString(ConfiguredBaseModel):
     """
-    Текст на нескольких языках; русский обязателен.
+    Текст на нескольких языках; нужен хотя бы один из слотов ru, en.
     """
-    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'amemo'})
+    linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'any_of': [{'slot_conditions': {'ru': {'name': 'ru', 'required': True}}},
+                    {'slot_conditions': {'en': {'name': 'en', 'required': True}}}],
+         'from_schema': 'amemo'})
 
-    ru: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['LangString']} })
+    ru: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['LangString']} })
     en: Optional[str] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['LangString']} })
+
+    @model_validator(mode="after")
+    def _any_of(self):
+        """any_of схемы: нужно хотя бы одно из полей ru, en."""
+        if all(getattr(self, name) is None for name in ('ru', 'en')):
+            raise ValueError("нужно хотя бы одно из полей: ru, en")
+        return self
 
 
 class Selector(ConfiguredBaseModel):

@@ -11,7 +11,7 @@ from datetime import date
 
 import pytest
 
-from amemo import db, model_v1, records
+from amemo import db, lang, model_v1, records
 from amemo.check import Proposal, level1, templates
 from amemo.check.report import Issue, Report
 from amemo.ids import uuid7
@@ -170,8 +170,9 @@ ONE = {
                                ("template", "violation", "@r: content.values")),
     "idea_without_body": ([atom("@i", kind="idea")], [], ("template", "warning", "@i: body")),
     "idea_with_blank_body": ([atom("@i", kind="idea", body={"ru": "  "})], [], ("template", "warning", "@i: body")),
-    "summary_without_ru": ([atom("@a", summary_plain={"ru": "", "en": "Bracket on one anchor."})], [],
-                           ("template", "violation", "@a: summary_plain")),
+    # пусто, только если текста нет ни в одном слоте (английского пояснения хватает — test_english_text_is_enough)
+    "summary_blank_in_every_slot": ([atom("@a", summary_plain={"ru": "", "en": "  "})], [],
+                                    ("template", "violation", "@a: summary_plain")),
     "no_sources": ([atom("@a", sources=None)], [], ("template", "violation", "@a: sources")),
     "second_source_without_place": ([atom("@a", sources=[source_md(MD), _no_place(source_md(MD))])], [],
                                     ("template", "warning", "@a: sources[1].selectors")),
@@ -232,6 +233,13 @@ def test_one_issue(kb, case):
     items, links, expected = ONE[case]
     _, issues, _ = run(kb, *items, links=links)
     assert issues == [expected]
+
+
+def test_english_text_is_enough(kb):
+    """Подпись и пояснение только по-английски — без замечаний: у LangString нужен хотя бы один слот."""
+    english = atom("@a", label={"en": "Bracket is fixed with an anchor"},
+                   summary_plain={"ru": "", "en": "Bracket on one anchor."})
+    assert run(kb, english)[1] == []
 
 
 def test_found_batch_name_gives_no_issue(kb):
@@ -370,7 +378,7 @@ def memo_kb(pg, monkeypatch, tmp_path):
         "memo": {"code": "memo", "version": "1.0.0", "target": "atom", "applies_to": "memo", "fields": [
             {"path": "sources[].selectors", "selector_types": ["page"]},
             {"path": "about", "entity_classes": ["document", "edition"]},
-            {"path": "codes", "min_count": 2, "severity": "warning", "message": {"ru": "Нужны два обозначения."}}]},
+            {"path": "codes", "min_count": 2, "severity": "warning", "message": {"ru": "Нужны два обозначения.", "en": "Two designations are needed."}}]},
         "remark": {"code": "remark", "version": "1.0.0", "target": "atom", "applies_to": "remark",
                  "links": {"allowed": ["see_also", "about"], "required": [{"rel": "see_also"}]}},
         "see_also_note": {"code": "see_also_note", "version": "1.0.0", "target": "link", "applies_to": "see_also",
@@ -413,6 +421,10 @@ MEMO = {
                              ("link_not_allowed", "violation", "links[1]")),
     "link_without_note": ([note(), atom("@a")], [{k: v for k, v in SEE.items() if k != "note"}],
                           ("template", "warning", "links[0]: note")),
+    # LangString непуст, если непуст хотя бы один слот: английской заметки хватает, пробелы в обоих — пусто
+    "link_note_in_english": ([note(), atom("@a")], [{**SEE, "note": {"en": "same place"}}], None),
+    "link_note_blank": ([note(), atom("@a")], [{**SEE, "note": {"ru": " ", "en": ""}}],
+                        ("template", "warning", "links[0]: note")),
 }
 
 
@@ -442,6 +454,13 @@ def test_rule_message_and_link_template(memo_kb):
     assert issue.message == "Нужны два обозначения."
     assert issue.details == {"template": "memo@1.0.0", "path": "codes", "rule": "min_count"}
     assert "see_also_note@1.0.0" in batch.templates
+
+
+def test_rule_message_in_call_language(memo_kb):
+    """Сообщение правила шаблона — на языке вызова (amemo.lang.using), с заменой на другой слот."""
+    with lang.using("en"):
+        [issue] = run(memo_kb, memo(codes=["w0"]), DOC)[2].issues
+    assert issue.message == "Two designations are needed."
 
 
 def test_existing_entity_class_breaks_template_rule(memo_kb):

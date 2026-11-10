@@ -17,6 +17,7 @@ import io
 import sys
 from collections.abc import Mapping, Sequence
 
+from .. import lang
 from .context import Context, dumps, environ
 from .errors import ENV, OK, USAGE, CliError, exit_code
 
@@ -48,6 +49,8 @@ def common() -> argparse.ArgumentParser:
                         help="вывод JSON — тот же объект, что отдаёт HTTP")
     parent.add_argument("--agent", default=argparse.SUPPRESS, metavar="AGENT",
                         help="агент записи явно: person:<имя> или model:<имя> (person: — не из окружения агента)")
+    parent.add_argument("--lang", default=argparse.SUPPRESS, choices=("ru", "en"),
+                        help="язык подписей и фрагментов (без него — AMEMO_LANG, затем ru, затем en)")
     return parent
 
 
@@ -122,7 +125,21 @@ def _run(argv, environment, runner, made: list) -> int:
     made.append(ctx)
     if getattr(args, "agent", None) is not None or ctx.env.get("AMEMO_AS_MODEL", "").strip():
         ctx.agent                         # явный агент проверяется сразу, у любой команды, а не при первой записи
-    return args.run(ctx, args) or OK
+    with lang.using(_language(args, ctx)):
+        return args.run(ctx, args) or OK
+
+
+def _language(args, ctx: Context) -> str | None:
+    """Язык подписей вызова (amemo.lang): --lang, иначе Settings.lang (AMEMO_LANG, lang в amemo.toml). Неверные
+    настройки здесь не ошибка: команда, которой они нужны, скажет о них сама, а остальным язык не нужен."""
+    if getattr(args, "lang", None) is not None:
+        return args.lang
+    from ..settings import SettingsError
+
+    try:
+        return ctx.settings.lang
+    except SettingsError:
+        return None
 
 
 def _utf8_stdio() -> None:

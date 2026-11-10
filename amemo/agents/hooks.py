@@ -187,9 +187,12 @@ def _safe(text: str) -> str:
 
 
 def _text(value) -> str | None:
-    """Подпись из LangString (ru, затем en, затем первая) или строки, в одну строку и не длиннее LABEL_MAX."""
+    """Подпись из LangString (язык вызова, затем другой слот — amemo.lang.pick) или строки, в одну строку и не длиннее
+    LABEL_MAX."""
     if isinstance(value, dict):
-        value = value.get("ru") or value.get("en") or next((v for v in value.values() if isinstance(v, str)), None)
+        from .. import lang
+
+        value = lang.pick(value, lang.current())
     if not isinstance(value, str) or not value.strip():
         return None
     value = _safe(" ".join(value.split()))

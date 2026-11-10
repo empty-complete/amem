@@ -5,6 +5,7 @@ import { Button } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
 import { Icon } from "../../ui/icons";
+import { type LangString, pickText, useText } from "../../ui/lang";
 import { draftKey, dropDraft, loadDraft, saveDraft } from "./drafts";
 import { infer } from "./infer";
 import { KindPicker } from "./KindPicker";
@@ -15,6 +16,7 @@ import { useSubmit } from "./useSubmit";
 /** Окно записи (разд. 5.9, п. 2): одно поле, Enter, звезда. По «N» и по «Записать»; страница остаётся живой. */
 export function QuickWrite({ trigger }: { trigger: React.RefObject<HTMLElement | null> }) {
   const { t } = useTranslation();
+  const { lang } = useText();
   const open = useQuickOpen();
   const navigate = useNavigate();
   const place = useWritePlace();
@@ -33,8 +35,7 @@ export function QuickWrite({ trigger }: { trigger: React.RefObject<HTMLElement |
   const aboutRec = useQuery({ ...q.record(about ?? ""), enabled: !!about && !place.label });
   const aboutLabel =
     place.label ??
-    (aboutRec.data?.payload as { label?: { ru: string } } | undefined)?.label?.ru ??
-    about ??
+    (pickText((aboutRec.data?.payload as { label?: LangString } | undefined)?.label, lang) || about) ??
     "";
   const submit = useSubmit();
 
@@ -109,7 +110,7 @@ export function QuickWrite({ trigger }: { trigger: React.RefObject<HTMLElement |
       { proposals: [proposal] },
       {
         label: d.label,
-        what: (tpl?.label.ru ?? kind).toLowerCase(),
+        what: (pickText(tpl?.label, lang) || kind).toLowerCase(),
         kind,
         about: ((d.values.about as string[]) ?? []).filter((r) => r.startsWith("ent:")),
         family: tpl?.family === "source" ? "source" : "work",

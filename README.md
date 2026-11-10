@@ -15,13 +15,14 @@
 <p align="center">
   <a href="https://github.com/empty-complete/amemo/actions/workflows/ci.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amemo/ci.yml?branch=main&label=tests&style=flat-square"></a>
   <a href="https://github.com/empty-complete/amemo/actions/workflows/web.yml"><img alt="Web UI" src="https://img.shields.io/github/actions/workflow/status/empty-complete/amemo/web.yml?branch=main&label=web%20ui&style=flat-square"></a>
-  <a href="LICENSE.txt"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2a78d6?style=flat-square"></a>
+  <a href="LICENSE.txt"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-2a78d6?style=flat-square"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&logo=python&logoColor=white">
   <img alt="PostgreSQL 16+ with pgvector" src="https://img.shields.io/badge/PostgreSQL-16%2B%20%C2%B7%20pgvector-4169e1?style=flat-square&logo=postgresql&logoColor=white">
   <img alt="Status: early development" src="https://img.shields.io/badge/status-early%20development-eb6834?style=flat-square">
 </p>
 
 <p align="center">
+  <a href="#install-with-your-agent"><b>Install</b></a> ·
   <a href="#quickstart"><b>Quickstart</b></a> ·
   <a href="#features"><b>Features</b></a> ·
   <a href="#how-it-works"><b>How it works</b></a> ·
@@ -142,6 +143,20 @@ file it came from, the full history of its changes, and the decision of a person
 - **Boring storage.** Data lives in plain PostgreSQL 16+ with pgvector. The schema is written in
   LinkML, with Pydantic models and JSON Schema generated from it.
 
+## Install with your agent
+
+Paste this into Claude Code, Codex or another coding agent:
+
+```text
+Install amemo on this machine. Follow https://raw.githubusercontent.com/empty-complete/amemo/main/docs/install-agent.md
+```
+
+The agent works from a bare machine. It checks what is already there, then sets up PostgreSQL with pgvector
+(in Docker if you have it, otherwise natively; on Windows inside WSL2), installs amemo, connects it to your
+agents and finishes with `amemo doctor`. It asks before `sudo`, a reboot or a large download. The full
+instructions are in [`docs/install-agent.md`](docs/install-agent.md); CI runs their commands on Linux and macOS.
+To do it by hand, see [One-command install](#one-command-install).
+
 ## Quickstart
 
 amemo needs Python 3.11+, Docker (for PostgreSQL) and Linux or macOS. On Windows, use WSL2.
@@ -258,7 +273,8 @@ amemo doctor                   # what works and what to fix
 
 `amemo init --dsn` remembers the connection string in `~/.config/amemo/amemo.toml` (mode `0600`), so agents, hooks
 and the CLI find the database without `AMEMO_DSN` in their environment. PostgreSQL with pgvector comes from
-`docker compose up -d --wait db` or your own server. CI runs these steps on every push.
+`docker compose up -d --wait db`, a native install ([`docs/install-agent.md`](docs/install-agent.md), step 3) or
+your own server. CI runs these steps on every push.
 
 ## Service
 
@@ -677,9 +693,11 @@ ranking. They never change a status or skip a check.
 
 **Good to know**
 
-- Schema v1 requires the `ru` slot of every label; other languages are optional. A base kept in English
-  writes its English text there, as the sample does. Full-text search is tuned for Russian, and the optional
-  local vector model is multilingual.
+- Text has two slots, `ru` and `en`; a record needs at least one, so a base can be kept in English only, as
+  the sample is. Labels and snippets come in the language asked for — the UI language (`Accept-Language`),
+  `--lang` in the CLI, `lang` in MCP tools, otherwise `AMEMO_LANG` — and fall back to the other slot. Full-text
+  search indexes `ru` with the Russian configuration and `en` with the English one; the optional local vector
+  model is multilingual.
 - Vectors are local and optional: `pip install -e ".[embed]"` adds fastembed, and a model is downloaded
   only with explicit permission. `AMEMO_BACKEND=none` turns the semantic channel off, and lexical search
   keeps working.
@@ -739,6 +757,16 @@ and the `commits` workflow (Conventional Commits in English); changes to `web/` 
 
 ## License
 
-MIT, see [LICENSE.txt](LICENSE.txt). © 2026 Philipp Beloborodov (Филипп Белобородов).
+GNU Affero General Public License v3.0 only (AGPL-3.0-only), see [LICENSE.txt](LICENSE.txt).
+© 2026 empty-complete.
+
+You may use, study, change and share amemo freely. If you distribute a modified version, or run one as a
+service for other people over a network, you must offer its complete source code under the same license.
+
+The domain packs in `amemo/packs` (vocabularies and templates) are data and stay under the MIT license, so they
+can be reused anywhere.
+
+A commercial license without the AGPL conditions (for example, for a closed hosted service) is available from
+the author — open an issue on GitHub. Versions released before the change to AGPL remain available under MIT.
 
 <p align="center"><sub>amemo is a tool for remembering well.</sub></p>
