@@ -1,0 +1,24 @@
+amemo — memory for people and AI agents
+Copyright (C) 2026 empty-complete
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License, version 3 only
+(AGPL-3.0-only), as published by the Free Software Foundation.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
+
+You should have received a copy of the license with this program, in
+LICENSE.txt. If not, see <https://www.gnu.org/licenses/agpl-3.0.html>.
+
+If you run a modified version of amemo as a service for other people over a
+network, you must offer them its complete source code under the same license
+(section 13 of the license).
+
+The domain packs in amemo/packs (vocabularies and templates) are data and are
+licensed under the MIT license, as stated in each pack.yaml.
+
+Releases made before the change to AGPL-3.0-only remain available under the
+MIT license. A commercial license without the AGPL conditions is available from
+the author: open an issue at https://github.com/empty-complete/amemo.
