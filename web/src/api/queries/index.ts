@@ -140,6 +140,14 @@ export const q = {
         data(await api.GET("/search", { params: { query: { q: text || "*", target, limit: 8 } } })),
       staleTime: 30_000,
     }),
+  /** Теги на записях с частотой (подсказки # и поля тегов); text — начало тега. */
+  tags: (text: string) =>
+    queryOptions({
+      queryKey: ["tags", text],
+      queryFn: async () =>
+        data(await api.GET("/tags", { params: { query: { q: text || undefined, limit: 8 } } })),
+      staleTime: 30_000,
+    }),
   objects: (text: string) =>
     queryOptions({
       queryKey: ["objects", text],

@@ -565,6 +565,20 @@ paths:
           content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/VocabEntry" } } } }
         default: { $ref: "#/components/responses/Problem" }
 
+  /tags:
+    get:
+      tags: [read]
+      operationId: getTags
+      summary: "Теги на текущих ревизиях атомов с числом атомов: сначала частые; q — начало тега без учёта регистра"
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/TagCount" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
   /base:
     get:
       tags: [base]
@@ -1200,6 +1214,13 @@ components:
         report: { type: object, description: "Отчёт amem.check/1" }
         warnings: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "Предупреждения службы: private_removed — скрытое в <private> вырезано из поля; secret_like — строка поля похожа на секрет (запись не отклоняется, значения в предупреждении нет)" }
 
+    TagCount:
+      type: object
+      required: [tag, count]
+      additionalProperties: false
+      properties:
+        tag: { type: string }
+        count: { type: integer, minimum: 1 }
     VocabEntry:
       type: object
       required: [code, label]

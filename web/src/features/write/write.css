@@ -483,3 +483,34 @@ textarea.fld {
 .cm.cm--edit .cm-placeholder {
   color: var(--muted);
 }
+
+/* подсказки под полем: поверх содержимого, ширина — по полю или шире */
+.suggest__wrap {
+  position: relative;
+  display: inline-flex;
+  flex: 1;
+  min-width: 8rem;
+}
+.suggest {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: max(100%, 16rem);
+  max-width: min(28rem, 90vw);
+  margin: 0;
+  list-style: none;
+}
+.quick__textwrap {
+  display: block;
+  width: 100%;
+}
+/* почему вид такой: мелко рядом с плашкой вида */
+.quick__why {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: var(--t-meta);
+}

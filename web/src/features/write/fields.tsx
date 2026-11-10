@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { type KeyboardEvent, useEffect, useId, useState } from "react";
+import { type KeyboardEvent, useId, useState } from "react";
 import { ComboBox, Input, ListBox, ListBoxItem, Popover } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
@@ -7,6 +7,7 @@ import { unitLabel } from "../../ui/format";
 import { Icon, type IconName } from "../../ui/icons";
 import { langOf, pickText, useText } from "../../ui/lang";
 import type { Draft, FieldValue, FormField, Quantity, Template } from "./proposal";
+import { useDebounced, useSuggest } from "./Suggest";
 import "../record/record.css";
 import "./write.css";
 
@@ -20,15 +21,6 @@ const ICON: Record<FormField["type"], IconName> = {
   tags: "tag",
   text: "dash",
 };
-
-function useDebounced<T>(v: T, ms = 150) {
-  const [d, setD] = useState(v);
-  useEffect(() => {
-    const t = setTimeout(() => setD(v), ms);
-    return () => clearTimeout(t);
-  }, [v, ms]);
-  return d;
-}
 
 /** Ссылки на объекты или записи: плашки с крестиком и поле с подсказками (React Aria ComboBox). */
 function RefField({
@@ -188,15 +180,23 @@ function TagsField({
   const { t } = useTranslation();
   const { lang } = useText();
   const [text, setText] = useState("");
-  const add = () => {
-    const v = text.trim().replace(/^#/, "").toLowerCase();
+  const query = useDebounced(text.trim().replace(/^#/, "").toLowerCase());
+  // подсказки — теги, которые уже стоят на записях, с частотой; новый тег — просто Enter
+  const known = useQuery({ ...q.tags(query), enabled: query.length > 0 });
+  const add = (raw: string) => {
+    const v = raw.trim().replace(/^#/, "").toLowerCase();
     if (v && !value.includes(v)) onChange([...value, v]);
     setText("");
   };
+  const options = (known.data ?? [])
+    .filter((x) => !value.includes(x.tag) && x.tag !== query)
+    .map((x) => ({ id: x.tag, label: `#${x.tag}`, meta: String(x.count) }));
+  const sug = useSuggest(query ? options : [], (o) => add(o.id));
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (sug.onKey(e)) return;
     if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
-      add();
+      add(text);
     } else if (e.key === "Backspace" && !text && value.length) onChange(value.slice(0, -1));
   };
   return (
@@ -213,15 +213,24 @@ function TagsField({
           </button>
         </span>
       ))}
-      <input
-        className="fld fld--inline"
-        aria-label={pickText(f.label, lang)}
-        value={text}
-        placeholder={t("edit.add_tag")}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={onKey}
-        onBlur={add}
-      />
+      <span className="suggest__wrap">
+        <input
+          className="fld fld--inline"
+          role="combobox"
+          aria-expanded={sug.open}
+          aria-label={pickText(f.label, lang)}
+          value={text}
+          placeholder={t("edit.add_tag")}
+          onChange={(e) => {
+            setText(e.target.value);
+            sug.reopen();
+          }}
+          onKeyDown={onKey}
+          onBlur={() => add(text)}
+          {...sug.fieldProps}
+        />
+        {sug.list}
+      </span>
     </span>
   );
 }

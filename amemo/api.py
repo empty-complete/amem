@@ -925,6 +925,22 @@ def vocab_entries(conn: psycopg.Connection, scheme) -> list[dict]:
     return vocab.entries(conn, scheme)
 
 
+TAGS_LIMIT = 50
+
+
+def tag_counts(conn: psycopg.Connection, *, q=None, limit=None) -> list[dict]:
+    """TagCount[] — теги, которые стоят на текущих ревизиях атомов, с числом атомов: для подсказок в окне записи
+    и в поле тегов. q — начало тега без учёта регистра; сначала частые, затем по алфавиту."""
+    q = _str(q, "q")
+    limit = _int(limit, "limit", low=1, high=200, default=TAGS_LIMIT)
+    prefix = unicodedata.normalize("NFC", q.strip().lstrip("#")) if q else ""
+    like = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    rows = conn.execute(
+        "SELECT t, count(*) FROM atom_current c, jsonb_array_elements_text(coalesce(c.payload->'tags', '[]')) t "
+        "WHERE lower(t) LIKE lower(%s) GROUP BY t ORDER BY count(*) DESC, t LIMIT %s", (like, limit)).fetchall()
+    return [{"tag": t, "count": n} for t, n in rows]
+
+
 def templates(conn: psycopg.Connection, *, target=None) -> list[dict]:
     """TemplateView[] — форма каждого вида атома и класса сущности (amemo/forms.py); target — atom или entity."""
     return forms.views(conn, target=_enum(target, "target", TARGETS))

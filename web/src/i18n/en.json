@@ -404,8 +404,15 @@
     "about": "About: {{what}}",
     "about_off": "No object",
     "text": "Record text",
-    "placeholder": "The first line is the title. Ending with “?” makes a question, “Decided…” a decision, “Humidity: 87 %” a parameter. @ links an object, # adds a tag",
-    "all_fields": "All fields"
+    "placeholder": "The first line is the title. @ object, # tag, [[ record",
+    "all_fields": "All fields",
+    "why": {
+      "question_mark": "ends with “?”",
+      "decision_word": "starts with “decided…”",
+      "lesson_word": "starts with “lesson…” or “turned out…”",
+      "quantity": "a number with a unit",
+      "default": "no rule matched — press to change"
+    }
   },
   "pick": {
     "title": "Source",

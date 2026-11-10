@@ -694,6 +694,14 @@ def test_vocab(serve, world):
     assert contract.check(client.get(f"{V1}/vocab/no_such"), "/vocab/{scheme}") == []
 
 
+def test_tags(serve, world):
+    client = serve()
+    assert contract.check(client.get(f"{V1}/tags"), "/tags") == [{"tag": "ветер", "count": 1}]
+    assert contract.check(client.get(f"{V1}/tags", params={"q": "#ВЕТ"}), "/tags") == [{"tag": "ветер", "count": 1}]
+    assert contract.check(client.get(f"{V1}/tags", params={"q": "%"}), "/tags") == []
+    problem(client.get(f"{V1}/tags", params={"limit": "0"}), 400, "bad_request", "/tags")
+
+
 def test_base(serve, world, pg):
     client = serve()
     body = contract.check(client.get(f"{V1}/base"), "/base")
