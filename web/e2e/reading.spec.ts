@@ -36,7 +36,7 @@ test("от записи к объекту: полнота, «Нужно», ра�
   await page.getByLabel("Свойства").getByRole("link", { name: "Датчик влажности В-2" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Датчик влажности В-2" })).toBeVisible();
   await expect(page.getByRole("img", { name: /Известно 2 из 7/ })).toBeVisible();
-  await expect(page.getByText("Нужно")).toBeVisible();
+  await expect(page.getByText("Нужно", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /2 значения/ }).click();
   await expect(page.getByRole("list", { name: "Кандидаты" })).toContainText("расхождение до 12 %");
 });
