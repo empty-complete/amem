@@ -1,9 +1,10 @@
 """Проверка корня OCFL валидатором ocfl-py. Раскладки 0004 в ocfl-py 2.1 нет — она регистрируется здесь,
 по описанию расширения (https://ocfl.github.io/extensions/0004-hashed-n-tuple-storage-layout.html)."""
+import os
 from pathlib import Path
 
 import ocfl
-from ocfl import layout_registry
+from ocfl import fsw, layout_registry
 from ocfl.digest import string_digest
 from ocfl.layout_0003_hash_and_id_n_tuple import Layout_0003_Hash_And_Id_N_Tuple
 
@@ -33,6 +34,12 @@ class Layout0004(Layout_0003_Hash_And_Id_N_Tuple):
 
 
 layout_registry.add_layout(Layout0004().NAME, Layout0004)
+
+if os.name == "nt":
+    # ocfl-py 2.1 на Windows склеивает папку обхода корня (fsw_walk) через os.path.join — с «\», а сравнивает
+    # с путями pyfilesystem, где всегда «/»: без этой поправки любой корень «не валиден»
+    _relpath = fsw._fsw_relpath
+    fsw._fsw_relpath = lambda path, start="": _relpath(path.replace("\\", "/"), start.replace("\\", "/"))
 
 
 def validate(root: Path) -> tuple[bool, str]:
