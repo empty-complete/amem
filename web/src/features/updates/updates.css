@@ -1,0 +1,60 @@
+.upd {
+  display: grid;
+  gap: var(--s-xs);
+}
+.upd h2 {
+  font-size: var(--t-label);
+  color: var(--muted);
+  margin: 0;
+}
+.upd p {
+  margin: 0;
+}
+.upd__ver {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.upd__checked,
+.upd__msg {
+  font-size: var(--t-label);
+}
+.upd__avail {
+  display: flex;
+  align-items: center;
+  gap: var(--s-md);
+  flex-wrap: wrap;
+}
+.upd__msg[data-state="failed"] {
+  color: var(--danger);
+}
+.upd > div:last-of-type {
+  margin-top: var(--s-2xs);
+}
+
+/* значок в верхней строке: тихий, только «ждёт перезапуска» и «не встало» */
+.updchip {
+  align-self: center;
+  padding: 2px var(--s-sm);
+  border-radius: 999px;
+  font-size: var(--t-label);
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--foreground);
+  background: var(--surface-secondary);
+}
+.updchip[data-kind="failed"] {
+  color: var(--danger);
+}
+
+/* после перезапуска на новой версии: полоса под верхней строкой, в потоке — не перекрывает тосты отмены */
+.updbanner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--s-md);
+  padding: var(--s-2xs) var(--s-md);
+  background: var(--press);
+  color: var(--press-ink);
+  font-size: var(--t-label);
+}

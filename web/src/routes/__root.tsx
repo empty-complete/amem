@@ -4,6 +4,7 @@ import { Folders } from "../app/shell/Folders";
 import { SignIn } from "../app/shell/SignIn";
 import { TopBar } from "../app/shell/TopBar";
 import { useKindsOpen } from "../features/kinds/store";
+import { ReloadBanner } from "../features/updates/ReloadBanner";
 import { UndoToasts } from "../features/write/UndoToast";
 import "../app/shell/shell.css";
 
@@ -25,6 +26,7 @@ export const Route = createRootRoute({
   component: () => (
     <div className="shell">
       <TopBar />
+      <ReloadBanner />
       <div className="body">
         <Folders />
         <main className="main" id="main">

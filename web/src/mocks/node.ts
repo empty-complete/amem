@@ -7,6 +7,7 @@ import { handlersC } from "./handlers-c";
 import { handlersD } from "./handlers-d";
 import { handlersE } from "./handlers-e";
 import { handlersF } from "./handlers-f";
+import { handlersU } from "./handlers-u";
 
 const pdf = async () => {
   const b = readFileSync(resolve(process.cwd(), "src/mocks/fixtures/manual.pdf"));
@@ -18,6 +19,7 @@ export const server = setupServer(
     const b = readFileSync(resolve(process.cwd(), "src/mocks/fixtures/bundle-sample.zip"));
     return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
   }),
+  ...handlersU,
   ...handlersE,
   ...handlersD,
   ...handlersC,
