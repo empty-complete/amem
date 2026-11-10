@@ -89,6 +89,13 @@ def test_python_m_and_script_show_help():
         assert done.returncode == 0 and "create" in done.stdout
 
 
+def test_version(run):
+    from amem import __version__
+
+    code, out, _ = run("--version")
+    assert code == 0 and out == f"amem {__version__}\n"
+
+
 def test_usage_errors_exit_2(run):
     assert run()[0] == 2                                        # без команды — справка
     code, _, err = run("search")

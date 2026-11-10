@@ -1,0 +1,5 @@
+name: weather_sample
+version: 1.0.0
+title: Weather station sample
+description: Classes, quantities and profiles for the English README sample (tools/seed_sample_en.py).
+license: MIT

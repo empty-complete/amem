@@ -146,14 +146,29 @@ function Value({ f, open, toggle, fill }: { f: CardField; open: boolean; toggle:
   }
 }
 
+/**
+ * Имя величины на языке интерфейса. Служба отдаёт подпись поля карточки по-русски; в английском интерфейсе
+ * берётся английская подпись словаря property, если она есть, иначе — подпись службы, затем код.
+ */
+export function usePropertyName() {
+  const { i18n } = useTranslation();
+  const props = useQuery(q.vocab("property"));
+  const en = i18n.language.startsWith("en");
+  return (code: string, fallback?: string | null) => {
+    const v = props.data?.find((p) => p.code === code);
+    return (en ? v?.label.en : undefined) ?? fallback ?? v?.label.ru ?? code.replaceAll("_", " ");
+  };
+}
+
 function Row({ f, fill }: { f: CardField; fill?: Fill }) {
   const { i18n, t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const name = usePropertyName()(f.property, f.label);
   const atom = f.atoms?.[0];
   return (
     <li className="crow" data-state={f.state}>
       <span className="crow__name">
-        {atom ? <Link {...recordPath(atom)}>{f.label ?? f.property}</Link> : (f.label ?? f.property)}
+        {atom ? <Link {...recordPath(atom)}>{name}</Link> : name}
         <span className="crow__sub">
           <Sub f={f} />
         </span>
@@ -207,16 +222,9 @@ type Extra = { property: string; atom: string; value?: ValueLike | null; status?
 /** Значения из записей о сущности, которых нет в профиле (или профиля нет вовсе): свойство, значение, статус. */
 export function ExtraValues({ items }: { items: unknown[] }) {
   const { t, i18n } = useTranslation();
-  const props = useQuery(q.vocab("property"));
+  const name = usePropertyName();
   const rows = items as Extra[];
   if (!rows.length) return null;
-  const name = (code: string) => {
-    const v = props.data?.find((p) => p.code === code);
-    return (
-      (i18n.language.startsWith("en") ? (v?.label.en ?? v?.label.ru) : v?.label.ru) ??
-      code.replaceAll("_", " ")
-    );
-  };
   return (
     <div className="ctable">
       <section aria-label={t("card.extra")}>

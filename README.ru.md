@@ -39,10 +39,9 @@
 </p>
 
 > [!IMPORTANT]
-> **amem в ранней разработке.** Библиотека ядра уже работает: хранилище с ревизиями, гибридный поиск,
-> автопроверка, очередь проверки, карточки сущностей, подборки и бэкапы. Всё это проверяется в CI
-> на PostgreSQL 18 и 16. HTTP-служба и веб-UI на ней работают: снимки неба, записи и очереди проверки сняты
-> со службы. CLI, сервер MCP и память агентов сейчас в работе; до них картинки карточки и агента — заглушки.
+> **amem молод.** Ядро, HTTP-служба с веб-UI, CLI, сервер MCP и память агентов для Claude Code и Codex уже
+> работают и проверяются в CI на PostgreSQL 18 и 16. Схема и HTTP-контракт ещё могут меняться. Снимки на этой
+> странице сняты с настоящей службы на образце базы (`tools/seed_sample.py`, метеостанция с датчиками).
 
 ## Зачем amem
 
@@ -106,8 +105,8 @@ amem хранит единицу поменьше и понадёжнее — **
   <tr>
     <td width="50%" valign="top">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/ru/card-dark.svg">
-        <img alt="Карточка сущности: полнота и параметры по группам (заглушка)" src="docs/assets/readme/ru/card-light.svg">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/ru/card-dark.png">
+        <img alt="Карточка сущности: полнота и параметры с известными, недостающими и спорными значениями" src="docs/assets/readme/ru/card-light.png">
       </picture>
       <h3>Карточка объекта</h3>
       Профиль говорит, какие параметры нужны объекту. Карточка показывает, что известно, чего нет и где
@@ -115,13 +114,12 @@ amem хранит единицу поменьше и понадёжнее — **
     </td>
     <td width="50%" valign="top">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/ru/agent-dark.svg">
-        <img alt="Сессия агента: поиск в amem, чтение записей и отметка того, что помогло (заглушка)" src="docs/assets/readme/ru/agent-light.svg">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/ru/agent-dark.png">
+        <img alt="Сессия агента по MCP: amem_search, amem_get с цитатой источника, amem_helpful" src="docs/assets/readme/ru/agent-light.png">
       </picture>
       <h3>Память для агентов</h3>
       Claude Code и Codex сначала спрашивают amem. Они читают короткие карточки, берут только нужные
       записи и отмечают, что помогло, — это дешевле по токенам, чем читать сырые файлы.
-      <i>Появится вместе с сервером MCP.</i>
     </td>
   </tr>
 </table>
@@ -250,7 +248,7 @@ cd web && npm ci && npm run dev:mock              # затем откройте 
 ### Установка одной командой
 
 ```bash
-pip install amem              # или pipx / uv tool install; до выхода на PyPI — pip install -e . из клона
+pipx install 'amem[web]'      # или pip install / uv tool install; [web] добавляет веб-UI по /ui
 amem init --dsn postgresql://amem:amem@127.0.0.1:5435/amem   # база и хранилище; DSN запоминается в amem.toml
 amem install claude-code      # сервер MCP, хуки и навыки; `amem install codex` — для Codex CLI
 amem doctor                   # что работает и что поправить
@@ -596,8 +594,9 @@ sources:
 
 **Полезно знать**
 
-- Схема v1 требует подпись на русском (`ru`); остальные языки — по желанию. Полнотекст настроен
-  на русский язык, а необязательная локальная модель векторов многоязычная.
+- Схема v1 требует поле `ru` у каждой подписи; остальные языки — по желанию. База на английском пишет
+  туда английский текст, как английский образец. Полнотекст настроен на русский язык, а необязательная
+  локальная модель векторов многоязычная.
 - Векторы локальные и необязательные: `pip install -e ".[embed]"` добавляет fastembed, а модель
   скачивается только с явного разрешения. `AMEM_BACKEND=none` выключает смысловой канал, лексический
   поиск продолжает работать.

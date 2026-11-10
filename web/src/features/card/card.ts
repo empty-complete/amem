@@ -6,14 +6,17 @@ export type State = CardField["state"];
 
 export const ORDER: State[] = ["known", "conflict", "asked", "missing", "na"];
 
-/** Сводка карточки amem.card/1: счёт по состояниям, обязательные без значения, группы в порядке полей профиля. */
-export function summarize(card: Card) {
+/**
+ * Сводка карточки amem.card/1: счёт по состояниям, обязательные без значения, группы в порядке полей профиля.
+ * name — имя поля для списка обязательных (по умолчанию подпись службы или код).
+ */
+export function summarize(card: Card, name: (f: CardField) => string = (f) => f.label ?? f.property) {
   const parts = Object.fromEntries(ORDER.map((s) => [s, 0])) as Record<State, number>;
   for (const f of card.fields) parts[f.state]++;
   const blockers = card.fields
     .filter((f) => f.required && f.state !== "known" && f.state !== "na")
     .filter((f) => f.state !== "conflict" && f.state !== "asked")
-    .map((f) => f.label ?? f.property);
+    .map(name);
   const groups: { name: string | null; fields: CardField[] }[] = [];
   for (const f of card.fields) {
     const name = f.group ?? null;
