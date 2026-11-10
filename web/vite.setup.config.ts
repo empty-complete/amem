@@ -8,6 +8,8 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   base: "./",
+  // свой кэш предсборки: dev-сервер веб-интерфейса (Playwright запускает оба) иначе затирал бы общий node_modules/.vite
+  cacheDir: "node_modules/.vite-setup",
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   plugins: [react(), tailwindcss()],
   server: {
