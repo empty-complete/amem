@@ -63,14 +63,17 @@ def create_app(settings: Settings, *, provider: embed.EmbeddingProvider | None =
         app.state.base_id = await anyio.to_thread.run_sync(_open, pool)
         app.state.pool = pool
         updater.before_restart = pool.close
+        updater.idle = lambda: activity.quiet_for(updates.IDLE) and updates.pool_idle(pool)
+        updater.free = lambda: activity.inflight == 0 and updates.pool_idle(pool)
+        updater.before_install = lambda: _snapshot_ui(app, updater)
         try:
             await anyio.to_thread.run_sync(_sweep, settings)
             await anyio.to_thread.run_sync(_updates_startup, updater)
+            await anyio.to_thread.run_sync(_preload, app)
             async with endpoint.run(app), anyio.create_task_group() as tasks:
                 tasks.start_soon(_sweeper, settings)
                 if update_loop:
-                    tasks.start_soon(_updates, updater, lambda: activity.quiet_for(updates.IDLE)
-                                     and updates.pool_idle(pool))
+                    tasks.start_soon(_updates, updater)
                 try:
                     yield
                 finally:
@@ -94,6 +97,7 @@ def create_app(settings: Settings, *, provider: embed.EmbeddingProvider | None =
     app.state.provider_chosen = provider is not None
     app.state.store = ObjectStore(settings.data)      # только чтение копий: корень создаёт первая запись файла
     app.state.base_id = None
+    app.state.ui_root = None                          # lifespan запоминает корень сборки /ui (_preload)
     app.state.mcp = endpoint                          # /mcp: его runtime (задачи клиентов без сессии)
     app.state.updates = updater
     app.state.activity = activity
@@ -137,6 +141,33 @@ async def _sweeper(settings: Settings) -> None:
         await anyio.to_thread.run_sync(_sweep, settings)
 
 
+def _preload(app: Starlette) -> None:
+    """Весь код пакета — в память при старте (updates.preload), корень сборки /ui — запомнить: обновление заменит
+    файлы на диске, а до перезапуска служба работает на прежнем коде и отдаёт прежнюю сборку."""
+    from . import problems as problems_, ui
+
+    for name, why in updates.preload():
+        log.warning("модуль %s не импортировался заранее: %s", name, why)
+    try:
+        app.state.ui_root = ui.static_root()
+    except problems_.Problem:
+        app.state.ui_root = None              # веба нет: /ui ответит 404 с подсказкой, как раньше
+
+
+def _snapshot_ui(app: Starlette, updater: updates.Updater) -> None:
+    """Перед установкой на место: копия текущей сборки /ui в AMEMO_STATE/updates/ui-<версия> — её служба и отдаёт
+    до перезапуска (файлы пакета заменит новая версия)."""
+    from . import ui
+
+    root = app.state.ui_root
+    if root is None:
+        return
+    target = updater.root / updates.VENVS / f"ui-{updater.current}"
+    if target.is_symlink():
+        return
+    app.state.ui_root = ui.snapshot(root, target)
+
+
 def _updates_startup(updater: updates.Updater) -> None:
     try:
         updater.startup()
@@ -144,7 +175,7 @@ def _updates_startup(updater: updates.Updater) -> None:
         log.warning("состояние обновлений в %s не записано: %s", updater.root, e)
 
 
-async def _updates(updater: updates.Updater, idle) -> None:
+async def _updates(updater: updates.Updater) -> None:
     """Проверка релизов при старте и раз в CHECK_EVERY (с автообновлением), раз в TICK — перезапуск в простое.
     Сбой шага не роняет службу: он в журнале, следующий — по расписанию."""
     next_check = 0.0
@@ -153,7 +184,7 @@ async def _updates(updater: updates.Updater, idle) -> None:
             if updater.clock() >= next_check:
                 next_check = updater.clock() + updates.CHECK_EVERY
                 await anyio.to_thread.run_sync(updater.scheduled, abandon_on_cancel=True)
-            await anyio.to_thread.run_sync(updater.watch, idle, abandon_on_cancel=True)
+            await anyio.to_thread.run_sync(updater.watch, updater.idle, updater.free, abandon_on_cancel=True)
         except Exception:  # noqa: BLE001
             log.exception("обновления: шаг не удался")
         await anyio.sleep(updates.TICK)

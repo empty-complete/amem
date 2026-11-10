@@ -109,3 +109,32 @@ jobs:
           done
           amemo --version | grep -Fx "amemo $VERSION"
           pipx runpip amemo show amemo-web | grep -Fx "Version: $VERSION"
+
+  # релиз на GitHub — по нему службы узнают о новой версии (спецификация обновлений, U1). Создаётся последним:
+  # к этому моменту версия на PyPI уже есть и ставится, так что служба не увидит релиз, который нечем поставить.
+  github-release:
+    needs: [build, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Release with notes from the commits since the previous tag; pre-release for a/b/rc
+        run: |
+          pre="$(pip install -q packaging && python -c "import sys; from packaging.version import Version; print('--prerelease' if Version(sys.argv[1]).is_prerelease else '')" "$VERSION")"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "релиз $TAG уже есть"; exit 0
+          fi
+          gh release create "$TAG" dist/* --verify-tag --title "amemo $VERSION" --generate-notes $pre \
+            --notes "pipx install --force \"amemo[web]==$VERSION\""

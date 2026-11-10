@@ -66,6 +66,7 @@ Lang = Annotated[Literal["ru", "en"] | None, Field(description="язык под�
 BODY_LIMIT = 1 << 20          # байт тела запроса /mcp — как у записи HTTP (1 МиБ)
 IDLE_CUT = 30 * 60            # секунд тишины, после которых у клиента без сессии новая задача
 VERSION_EVERY = 300           # с между сверками версии amemo на диске у amemo mcp (stdio)
+UPDATED = "amemo_updated"     # метка текста «amemo обновлён — перезапустите агента» в ответе инструмента
 EXIT_GRACE = 0.5              # с после ответа «amemo обновлён»: ответ уходит клиенту, затем процесс завершается
 INSTRUCTIONS = (
     "amemo — база знаний из атомов с источниками. Поиск в три шага: amemo_search (короткий список и retrieval_id) → "
@@ -231,11 +232,18 @@ def build(runtime: Runtime) -> MCPServer:
     async def call(ctx: Context, work: Callable, *, write: bool = False, where: str | None = None,
                    lang: str | None = None) -> CallToolResult:
         """work(conn, caller) в потоке на языке lang (иначе Settings.lang — AMEMO_LANG); ошибки — failure,
-        неоднозначность — ambiguous."""
+        неоднозначность — ambiguous. amemo на диске обновлён (runtime.updated) — этот вызов идёт как обычно (код
+        в памяти — прежний, целиком), к ответу добавляется текст «перезапустите агента», и процесс завершается после
+        ответа."""
         notice = runtime.updated()
+        result = await answer(ctx, work, write=write, where=where, lang=lang)
         if notice is not None:
+            result.content.append(TextContent(type="text", text=f"{UPDATED}: {notice}"))
             runtime.finish()
-            return failure(_Refused(503, "amemo_updated", notice))
+        return result
+
+    async def answer(ctx: Context, work: Callable, *, write: bool, where: str | None,
+                     lang: str | None) -> CallToolResult:
         try:
             caller = runtime.caller(ctx)
             if write and not caller.can_write:
@@ -632,8 +640,9 @@ class StdioRuntime(Runtime):
 
     Обновление под живым процессом: при старте весь пакет импортируется заранее (updates.preload) — после замены
     файлов процесс работает на коде из памяти, а не на смеси. Раз в VERSION_EVERY (и не чаще при вызовах) версия
-    на диске сверяется с той, что была при старте; сменилась — инструменты отвечают amemo_updated «amemo обновлён —
-    перезапустите агента», и процесс завершается после этого ответа."""
+    на диске сверяется с той, что была при старте; сменилась — вызов, на котором это замечено, выполняется как
+    обычно, к его ответу добавляется amemo_updated «amemo обновлён — перезапустите агента», и процесс завершается
+    после этого ответа (разд. 2 п. 6.7 спецификации обновлений)."""
 
     def __init__(self, settings: settings_.Settings, *, agent: str, pool, base_id: str | None, provider=None,
                  provider_chosen: bool = False) -> None:
@@ -668,7 +677,7 @@ class StdioRuntime(Runtime):
         if self.new_version is None:
             return None
         return (f"amemo обновлён ({self.baseline} → {self.new_version}) — перезапустите агента: этот процесс "
-                f"amemo mcp работает на прежнем коде и сейчас завершится")
+                f"amemo mcp работает на прежнем коде и после этого ответа завершится")
 
     def finish(self) -> None:
         self.exiting = True

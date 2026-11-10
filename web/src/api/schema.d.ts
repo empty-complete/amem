@@ -554,7 +554,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Проверить релизы сейчас (без тела); может любой с правом чтения. Сбой сети — не ошибка: итог в message */
+        /** Проверить релизы сейчас (без тела); может любой с правом чтения. Сбой сети — не ошибка: итог в message; чаще раза в минуту — статус из кэша */
         post: operations["checkUpdates"];
         delete?: never;
         options?: never;
@@ -1262,8 +1262,8 @@ export interface components {
             /** @description Новее текущей версия из релиза GitHub с колесом на PyPI; null — новее нет (или ещё не проверяли) */
             latest: {
                 version: string;
-                /** @description Страница релиза на GitHub */
-                url: string;
+                /** @description Страница релиза на GitHub (только https://github.com/empty-complete/amemo/…); null — релиз дал другой адрес */
+                url: string | null;
             } | null;
             /**
              * @description pre — стоит предварительная версия (a, b, rc): видны и предварительные релизы

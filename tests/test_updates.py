@@ -5,6 +5,7 @@ HTTP /updates по строгой схеме контракта, `amemo update`,
 
 GitHub, PyPI, pip, pipx, бэкап, часы и os.execv — подставные: ничего не ставится и не перезапускается по-настоящему
 (tests/conftest.py сверх того выключает сеть, установку и execv у всех тестов)."""
+import hashlib
 import json
 import os
 import subprocess
@@ -42,12 +43,17 @@ def release(tag, *, draft=False, prerelease=False):
             "html_url": f"https://github.com/{updates.REPO}/releases/tag/{tag}"}
 
 
-class GitHub:
-    """API релизов с ETag и JSON PyPI: колёса — у версий из wheels (по умолчанию у всех релизов)."""
+def digest(name, version) -> str:
+    return hashlib.sha256(f"{name}-{version}".encode()).hexdigest()
 
-    def __init__(self, releases, wheels=None, etag='"e1"'):
+
+class GitHub:
+    """API релизов с ETag и JSON PyPI: колёса (с sha256) — у версий из wheels (по умолчанию у всех релизов
+    и у текущей версии — для отката)."""
+
+    def __init__(self, releases, wheels=None, etag='"e1"', current=CURRENT):
         self.releases, self.etag, self.calls = releases, etag, []
-        tags = [r["tag_name"].lstrip("v") for r in releases]
+        tags = [r["tag_name"].lstrip("v") for r in releases] + [current]
         self.wheels = {(name, v) for v in tags for name in (updates.PACKAGE, updates.WEB)} if wheels is None \
             else set(wheels)
         self.down = False
@@ -63,8 +69,10 @@ class GitHub:
             return 200, {"etag": self.etag}, json.dumps(self.releases).encode()
         name, version = url.split("/pypi/")[1].split("/")[:2]
         if (name, version) in self.wheels:
-            return 200, {}, json.dumps({"urls": [{"packagetype": "sdist"},
-                                                 {"packagetype": "bdist_wheel", "yanked": False}]}).encode()
+            return 200, {}, json.dumps({"urls": [
+                {"packagetype": "sdist", "digests": {"sha256": "0" * 64}},
+                {"packagetype": "bdist_wheel", "yanked": True, "digests": {"sha256": "1" * 64}},
+                {"packagetype": "bdist_wheel", "yanked": False, "digests": {"sha256": digest(name, version)}}]}).encode()
         return 404, {}, b""
 
     def release_calls(self):
@@ -80,28 +88,36 @@ class Pip:
         self.check, self.install, self.rollback, self.trial = check, install, rollback, trial
         self.report = report
         self.events = []
+        self.requirements = []                  # содержимое файлов -r на момент вызова
+
+    def event(self, name):
+        if not self.events or self.events[-1] != name:      # две команды одного шага — одно событие
+            self.events.append(name)
 
     def __call__(self, argv, timeout=None, cwd=None):
         argv = list(argv)
         self.calls.append((argv, cwd))
+        if "-r" in argv:
+            self.requirements.append(Path(argv[argv.index("-r") + 1]).read_text(encoding="utf-8"))
         if argv[1:3] == ["-m", "venv"]:
             Path(argv[3], "bin").mkdir(parents=True, exist_ok=True)
-            self.events.append("venv")
+            self.event("venv")
             return updates.Step(0, "")
         if "--check" in argv:
-            self.events.append("check")
+            self.event("check")
             assert argv[1:] == ["-I", "-m", "amemo.service", "--check"] and cwd and Path(cwd).is_dir()
             out = json.dumps(self.report if self.report is not None
                              else {"version": self.version, "migrations": [], "ui": True}) if self.check == 0 else ""
             return updates.Step(self.check, out + "\nжурнал проверки" if self.check else out, out)
-        if "updates" in Path(argv[0]).parts:          # pip во временном venv AMEMO_STATE/updates/<X>
-            self.events.append("trial")
+        if "updates" in Path(argv[0]).parts:          # pip во временном venv AMEMO_STATE/updates/<X>/venv
+            self.event("trial")
             return updates.Step(self.trial, "Successfully installed")
-        spec = argv[-1]
-        if spec.endswith("==" + self.current):
-            self.events.append("rollback")
+        back = Path(argv[argv.index("-r") + 1]).name == "rollback.txt" if "-r" in argv else \
+            argv[-1].endswith("==" + self.current)
+        if back:
+            self.event("rollback")
             return updates.Step(self.rollback, "откат")
-        self.events.append("install")
+        self.event("install")
         return updates.Step(self.install, "Successfully installed" if self.install == 0 else "ERROR: нет места")
 
 
@@ -120,7 +136,13 @@ def state_env(tmp_path, **extra) -> dict:
 
 def make(tmp_path, *, kind="pip", extras=("web",), current=CURRENT, github=None, pip=None, env=None,
          disk=None, **kw) -> updates.Updater:
-    restarts = []
+    restarts, backups = [], []
+
+    def backup(dsn, folder):
+        backups.append(folder)
+        return {"manifest": str(folder / f"copy-{len(backups)}.json")}
+
+    kw.setdefault("backup", backup)
     updater = updates.Updater(settings.load(state_env(tmp_path, **(env or {}))),
                               install=updates.Install(kind, extras, reason=kw.pop("reason", None)), current=current,
                               get=github if github is not None else GitHub([release("v" + NEXT)]),
@@ -128,7 +150,7 @@ def make(tmp_path, *, kind="pip", extras=("web",), current=CURRENT, github=None,
                               versions=kw.pop("versions", lambda: {"amemo": NEXT, "amemo-web": NEXT}),
                               disk=disk or (lambda: current), windows=kw.pop("windows", False),
                               execv=lambda path, args: restarts.append((path, args)), **kw)
-    updater.restarts = restarts
+    updater.restarts, updater.backups = restarts, backups
     updater.backup_problem = lambda: None
     return updater
 
@@ -254,26 +276,45 @@ def detect(prefix, *, base=None, direct=None, env=None, which=lambda name: f"/us
 def test_detect_install_kinds(tmp_path):
     pipx = venv(tmp_path, "pipx", "venvs", "amemo", marker="pipx_metadata.json")
     found = detect(pipx)
-    assert found.kind == "pipx" and found.can_install and found.command(NEXT)[:3] == ["/usr/bin/pipx", "install",
-                                                                                      "--force"]
-    assert found.command(NEXT)[-1] == "amemo[web]==0.1.0a2"
+    # pipx: в своё окружение тем же pip (runpip) — venv и интерпретатор на месте, ==X в метаданные pipx не пишется
+    assert found.kind == "pipx" and found.can_install and found.command(NEXT) == [
+        "/usr/bin/pipx", "runpip", "amemo", "install", "--disable-pip-version-check", "amemo[web]==0.1.0a2"]
     assert detect(pipx, which=lambda name: None).reason == "нет команды pipx в PATH"
 
     run = detect(venv(tmp_path, ".cache", "pipx", "0123abcd", marker="pipx_metadata.json"))
     assert run.kind == "pipx" and not run.can_install and "pipx run" in run.reason
 
     uv = detect(venv(tmp_path, "uv", "tools", "amemo", marker="uv-receipt.toml"))
-    assert uv.kind == "uv" and uv.can_install and uv.command(NEXT) == ["/usr/bin/uv", "tool", "install", "--force",
-                                                                      "amemo[web]==0.1.0a2"]
+    assert uv.kind == "uv" and uv.can_install and uv.command(NEXT, "/uv/amemo/bin/python") == [
+        "/usr/bin/uv", "pip", "install", "--python", "/uv/amemo/bin/python", "amemo[web]==0.1.0a2"]
 
     pip = detect(venv(tmp_path, "venv"), has_pip=True)
     assert pip.kind == "pip" and pip.can_install
     assert pip.command(NEXT, "/v/bin/python") == ["/v/bin/python", "-m", "pip", "install",
                                                   "--disable-pip-version-check", "amemo[web]==0.1.0a2"]
-    assert "--index-url" not in pip.command(NEXT)
+    for kind in (found, uv, pip):
+        assert not any("index-url" in part for step in kind.steps(NEXT, "/r.txt") for part in step)
     assert detect(venv(tmp_path, "nopip"), has_pip=False).reason == "в окружении нет pip"
     system = venv(tmp_path, "system")
     assert "не venv" in detect(system, base=system, has_pip=True).reason
+
+
+def test_steps_install_the_checked_wheels_by_hash_then_dependencies():
+    kind = updates.Install("uv", ("web", "embed"), tool="/usr/bin/uv")
+    first, second = kind.steps(NEXT, "/s/requirements.txt", "/uv/bin/python")
+    assert first == ["/usr/bin/uv", "pip", "install", "--python", "/uv/bin/python", "--no-deps", "--require-hashes",
+                     "--only-binary=amemo", "--only-binary=amemo-web", "-r", "/s/requirements.txt"]
+    assert second == ["/usr/bin/uv", "pip", "install", "--python", "/uv/bin/python", "--only-binary=amemo",
+                      "--only-binary=amemo-web", "amemo[web,embed]==0.1.0a2"]
+    text = updates.requirements(NEXT, {"amemo": ["a" * 64, "b" * 64], "amemo-web": ["c" * 64]})
+    assert text == (f"amemo==0.1.0a2 --hash=sha256:{'a' * 64} --hash=sha256:{'b' * 64}\n"
+                    f"amemo-web==0.1.0a2 --hash=sha256:{'c' * 64}\n")
+
+
+def test_wheel_hashes_skip_yanked_sdists_and_bad_digests():
+    github = GitHub([release("v" + NEXT)])
+    assert updates.wheel_hashes(github, "amemo", NEXT) == [digest("amemo", NEXT)]
+    assert updates.wheel_hashes(github, "amemo", "9.9.9") == []
 
 
 def test_detect_docker_and_sources_never_install(tmp_path):
@@ -310,19 +351,80 @@ def test_install_checks_in_temporary_venv_then_installs_in_place(tmp_path):
     contract.component("UpdateStatus", status)
     assert status["state"] == "ready" and "перезапуск, когда служба освободится" in status["message"]
     assert pip.events == ["venv", "trial", "check", "install"]
-    (venv_cmd, _), (trial, _), (check, cwd), (place, _) = pip.calls
+    (venv_cmd, _), (trial_hashed, _), (trial_deps, _), (check, cwd), (hashed, _), (deps, _) = pip.calls
     folder = tmp_path / "state" / "updates" / NEXT
-    assert venv_cmd == [PY, "-m", "venv", str(folder)]
-    assert trial == [str(folder / "bin" / "python"), "-m", "pip", "install", "--disable-pip-version-check",
-                     "amemo[web]==0.1.0a2"]
-    assert check[0] == str(folder / "bin" / "python") and cwd == str(folder)
-    assert place == [PY, "-m", "pip", "install", "--disable-pip-version-check", "amemo[web]==0.1.0a2"]
+    python = str(folder / "venv" / "bin" / "python")
+    assert venv_cmd == [PY, "-m", "venv", str(folder / "venv")]
+    # временный venv — тот же артефакт и те же extras, что потом ставятся на место
+    base = [python, "-m", "pip", "install", "--disable-pip-version-check"]
+    assert trial_hashed == [*base, "--no-deps", "--require-hashes", *updates.ONLY_BINARY, "-r",
+                            str(folder / "requirements.txt")]
+    assert trial_deps == [*base, *updates.ONLY_BINARY, "amemo[web]==0.1.0a2"]
+    assert check[0] == python and cwd == str(folder)
+    place = [PY, "-m", "pip", "install", "--disable-pip-version-check"]
+    assert hashed == [*place, "--no-deps", "--require-hashes", *updates.ONLY_BINARY, "-r",
+                      str(folder / "requirements.txt")]
+    assert deps == [*place, *updates.ONLY_BINARY, "amemo[web]==0.1.0a2"]
+    expected = (f"amemo==0.1.0a2 --hash=sha256:{digest('amemo', NEXT)}\n"
+                f"amemo-web==0.1.0a2 --hash=sha256:{digest('amemo-web', NEXT)}\n")
+    assert pip.requirements == [expected, expected]       # sha256 из JSON PyPI; отозванное колесо — не в счёт
     assert not folder.exists()                          # временный venv удалён
+    assert (tmp_path / "state" / "updates").stat().st_mode & 0o777 == 0o700
     data = saved(updater)
     assert data["installed"]["version"] == NEXT and data["installed"]["previous"] == CURRENT
+    assert data["installed"]["migrations"] is False and updater.backups == []
     assert [(e["event"], e["version"], e["method"]) for e in data["journal"]] == [
         ("install start", NEXT, "pip"), ("installed", NEXT, "pip")]
-    assert "amemo[web]==0.1.0a2" in data["journal"][0]["detail"]
+    assert "amemo[web]==0.1.0a2" in data["journal"][0]["detail"] and digest("amemo", NEXT) in data["journal"][0][
+        "detail"]
+
+
+def test_pipx_installs_inside_its_venv_with_runpip(tmp_path):
+    pip = Pip()
+    updater = make(tmp_path, pip=pip, kind="pipx")
+    updater.kind = updates.Install("pipx", ("web",), tool="/usr/bin/pipx", venv="amemo")
+    updater.check()
+    assert updater.install()["state"] == "ready"
+    in_place = [argv for argv, _ in pip.calls if argv[0] == "/usr/bin/pipx"]
+    assert [argv[:5] for argv in in_place] == [["/usr/bin/pipx", "runpip", "amemo", "install",
+                                                "--disable-pip-version-check"]] * 2
+    assert not any("--force" in argv for argv, _ in pip.calls)
+
+
+def test_missing_hashes_on_pypi_postpone(tmp_path):
+    github = GitHub([release("v" + NEXT)])
+    updater = make(tmp_path, github=github)
+    updater.check()
+    github.wheels.discard(("amemo-web", NEXT))
+    status = updater.install()
+    assert status["state"] == "available" and "нет колеса amemo-web" in status["message"]
+    assert updater.run.calls == [] and "failed" not in saved(updater)
+
+
+def test_symlinked_folder_is_refused(tmp_path):
+    updater = make(tmp_path)
+    updater.check()
+    (tmp_path / "state" / "updates").mkdir()
+    (tmp_path / "elsewhere").mkdir()
+    (tmp_path / "state" / "updates" / NEXT).symlink_to(tmp_path / "elsewhere")
+    status = updater.install()
+    assert status["state"] == "available" and "символическая ссылка" in status["message"]
+    assert updater.run.calls == [] and (tmp_path / "elsewhere").is_dir()
+
+
+def test_check_waits_for_idle_and_postpones(tmp_path, monkeypatch):
+    monkeypatch.setattr(updates, "IDLE_WAIT", 3 * updates.TICK)
+    pip = Pip()
+    slept = []
+    updater = make(tmp_path, pip=pip, sleep=slept.append)
+    updater.idle = lambda: False
+    updater.check()
+    status = updater.install()
+    assert status["state"] == "available" and "не освободилась" in status["message"]
+    assert "check" not in pip.events and slept == [updates.TICK] * 3
+    answers = iter([False, True])
+    updater.idle = lambda: next(answers)                 # простой наступил — проверка идёт
+    assert updater.install()["state"] == "ready" and "check" in pip.events
 
 
 def test_failed_check_marks_version_failed_and_keeps_installation(tmp_path):
@@ -352,13 +454,23 @@ def test_check_without_database_is_postponed_not_failed(tmp_path):
     assert "failed" not in saved(updater)
 
 
+def test_check_limited_by_one_transaction_is_not_failed(tmp_path):
+    pip = Pip(check=updates.CHECK_LIMITED)
+    updater = make(tmp_path, pip=pip)
+    updater.check()
+    status = updater.install()
+    assert status["state"] == "available" and "не поставлено" in status["message"]
+    assert "failed" not in saved(updater) and "install" not in pip.events
+
+
 def test_install_failure_rolls_back_to_previous(tmp_path):
     pip = Pip(install=1)
     updater = make(tmp_path, pip=pip)
     updater.check()
     status = updater.install()
     assert pip.events[-2:] == ["install", "rollback"]
-    assert pip.calls[-1][0][-1] == "amemo[web]==0.1.0a1"
+    assert pip.calls[-1][0][-1] == "amemo[web]==0.1.0a1"           # откат — тем же путём, по хэшам прежней версии
+    assert pip.requirements[-1].startswith(f"amemo==0.1.0a1 --hash=sha256:{digest('amemo', CURRENT)}")
     assert status["state"] == "failed" and f"прежняя версия {CURRENT} поставлена заново" in status["message"]
 
 
@@ -378,17 +490,45 @@ def test_version_mismatch_after_install_is_failed(tmp_path):
     assert pip.events[-1] == "rollback"
 
 
-def test_new_migrations_need_backup_before_install(tmp_path):
-    made = []
+def test_service_backs_up_right_before_restart(tmp_path):
     pip = Pip(report={"version": NEXT, "migrations": ["0014_next.sql"], "ui": True})
-    updater = make(tmp_path, pip=pip, backup=lambda dsn, folder: made.append(pip.events[-1]) or
-                   {"manifest": str(folder / "2026-11-10T00-00-00Z.json")})
+    updater = make(tmp_path, pip=pip)
+    updater.idle = lambda: True                          # служба: бэкап — не при установке, а перед execv
     updater.check()
     status = updater.install()
-    assert made == ["check"] and pip.events[-1] == "install"       # бэкап — после проверки, до установки
-    assert status["state"] == "ready"
-    assert "amemo backup restore" in status["message"] and "2026-11-10T00-00-00Z.json" in status["message"]
-    assert saved(updater)["installed"]["backup"].endswith("2026-11-10T00-00-00Z.json")
+    assert status["state"] == "ready" and "перед перезапуском бэкап" in status["message"]
+    assert updater.backups == []
+    assert updater.watch(lambda: False) is False and updater.backups == []    # простоя нет — и бэкапа нет
+    assert updater.watch(lambda: True) is True
+    assert len(updater.backups) == 1 and updater.restarts
+    data = saved(updater)
+    assert data["state"] == "restarting" and data["installed"]["backup"].endswith("copy-1.json")
+    assert data["journal"][-1]["event"] == "restart" and "copy-1.json" in data["journal"][-1]["detail"]
+
+
+def test_failed_backup_before_restart_stops_restart(tmp_path):
+    def broken(dsn, folder):
+        raise OSError("нет места на диске")
+
+    pip = Pip(report={"version": NEXT, "migrations": ["0014_next.sql"], "ui": True})
+    updater = make(tmp_path, pip=pip, backup=broken, disk=lambda: NEXT)
+    updater.idle = lambda: True
+    updater.check()
+    updater.install()
+    assert updater.watch(lambda: True) is False and updater.restarts == []
+    status = updater.status()
+    assert status["state"] == "failed" and "нет места" in status["message"] and "amemo backup create" in \
+        status["message"]
+    assert updater.watch(lambda: True) is False and updater.restarts == []     # и не пробует по кругу
+
+
+def test_cli_install_backs_up_right_after_install(tmp_path):
+    pip = Pip(report={"version": NEXT, "migrations": ["0014_next.sql"], "ui": True})
+    updater = make(tmp_path, pip=pip)                    # idle не задан — это CLI: перезапуска здесь нет
+    updater.check()
+    status = updater.install()
+    assert status["state"] == "ready" and len(updater.backups) == 1 and "бэкап: " in status["message"]
+    assert saved(updater)["installed"]["backup"].endswith("copy-1.json")
 
 
 def test_backup_required_when_backup_is_impossible(tmp_path):
@@ -406,12 +546,10 @@ def test_backup_required_when_backup_is_impossible(tmp_path):
     assert updater.ready_to_install() == NEXT
 
 
-def test_failed_backup_also_stops_install(tmp_path):
-    def broken(dsn, folder):
-        raise OSError("нет места на диске")
-
+def test_backup_problem_found_before_install(tmp_path):
     pip = Pip(report={"version": NEXT, "migrations": ["0014_next.sql"], "ui": True})
-    updater = make(tmp_path, pip=pip, backup=broken)
+    updater = make(tmp_path, pip=pip)
+    updater.backup_problem = lambda: "нет места на диске"
     updater.check()
     assert "нет места" in updater.install()["message"] and "install" not in pip.events
 
@@ -532,6 +670,18 @@ def test_watch_sees_install_by_another_process(tmp_path):
     assert updater.watch(lambda: False) is False
     assert updater.status()["state"] == "ready" and saved(updater)["installed"]["version"] == NEXT
     assert updater.watch(lambda: True) is True
+    assert len(updater.backups) == 1          # есть ли новые миграции — неизвестно: бэкап — как при них
+
+
+def test_restart_after_ready_ceiling_needs_only_free_service(tmp_path):
+    clock = Clock()
+    updater = ready(tmp_path, clock=clock)
+    assert updater.watch(lambda: False, lambda: True) is False      # 120 с тишины нет — ждём
+    clock.at += updates.READY_CEILING - 1
+    assert updater.watch(lambda: False, lambda: True) is False
+    clock.at += 1
+    assert updater.watch(lambda: False, lambda: False) is False     # запрос в работе или пул занят — нет
+    assert updater.watch(lambda: False, lambda: True) is True and updater.restarts
 
 
 def test_no_restart_while_installing_or_for_docker_or_on_windows(tmp_path):
@@ -652,6 +802,7 @@ def http(dsn, tmp_path, kb):
         client = TestClient(app, base_url=SERVICE_URL)
         client.__enter__()
         clients.append(client)
+        updater.idle = lambda: True             # служба в тесте свободна всегда: проверка не ждёт 120 с тишины
         if person:
             assert client.get(f"{V1}/session", headers={"Sec-Fetch-Site": "same-origin"}).json()["agent"] == PERSON
         return client, updater
@@ -777,29 +928,59 @@ def test_check_runs_new_migrations_and_rolls_back(pg, dsn, tmp_path, monkeypatch
     assert pg.execute("SELECT count(*) FROM schema_migrations WHERE name = '9998_next.sql'").fetchone()[0] == 0
     (folder / "9999_broken.sql").write_text("CREATE TABLE broken (;", encoding="utf-8")
     assert server.main(["--check"], env=environ) == 1
-    assert "SyntaxError" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "9999_broken.sql" in err and "SyntaxError" in err           # точка сохранения на файл — файл назван
     assert "next_table" not in _tables(pg)
 
 
-def test_check_takes_the_migration_lock(pg, dsn, tmp_path, capsys):
-    """Пока другой процесс держит замок миграций, проверка ждёт его, а не идёт параллельно."""
-    import threading
+def sql_folder(tmp_path, **extra) -> Path:
+    folder = tmp_path / "sql"
+    folder.mkdir(exist_ok=True)
+    for path in db.SQL_DIR.glob("*.sql"):
+        (folder / path.name).write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    for name, text in extra.items():
+        (folder / f"{name}.sql").write_text(text, encoding="utf-8")
+    return folder
 
+
+def test_check_limited_by_one_transaction_is_its_own_code(pg, dsn, tmp_path, monkeypatch, capsys):
+    """ALTER TYPE … ADD VALUE и новое значение в следующем файле: migrate (транзакция на файл) это применит,
+    а одна общая транзакция — нет. Это предел проверки, не отказ версии: код CHECK_LIMITED."""
+    monkeypatch.setattr(db, "SQL_DIR", sql_folder(tmp_path, **{"9997_color": "CREATE TYPE upd_color AS ENUM ('red');"}))
+    db.prepare(pg)
+    monkeypatch.setattr(db, "SQL_DIR", sql_folder(tmp_path, **{
+        "9998_blue": "ALTER TYPE upd_color ADD VALUE 'blue';",
+        "9999_use": "CREATE TABLE upd_paint AS SELECT 'blue'::upd_color AS color;"}))
+    assert server.main(["--check"], env=state_env(tmp_path, AMEMO_DSN=dsn)) == updates.CHECK_LIMITED
+    err = capsys.readouterr().err
+    assert "не смогла прогнать миграции" in err and "9999_use.sql" in err
+    assert "upd_paint" not in _tables(pg)
+
+
+def test_check_sets_timeouts_before_migrations(pg, dsn, tmp_path, monkeypatch, capsys):
+    db.prepare(pg)
+    monkeypatch.setattr(db, "SQL_DIR", sql_folder(tmp_path, **{
+        "9998_settings": "CREATE TABLE upd_seen AS SELECT current_setting('lock_timeout') AS lock, "
+                         "current_setting('statement_timeout') AS statement;",
+        "9999_fail": "SELECT 1 / (SELECT count(*) FROM upd_seen WHERE NOT (lock = '5s' AND statement = '1min'));"}))
+    # 9999 делит на ноль, только если 9998 увидел оба таймаута: так тест читает их из откатываемой транзакции
+    assert server.main(["--check"], env=state_env(tmp_path, AMEMO_DSN=dsn)) == 1
+    assert "DivisionByZero" in capsys.readouterr().err
+
+
+def test_check_is_postponed_while_migration_lock_is_held(pg, dsn, tmp_path, capsys):
+    """Пока другой процесс держит замок миграций, проверка не ждёт и не идёт параллельно: код «отложено»."""
     import psycopg
 
     db.prepare(pg)
     other = psycopg.connect(dsn, autocommit=True)
-    other.execute("SELECT pg_advisory_lock(%s)", (db.MIGRATION_LOCK,))
-    done = []
-    thread = threading.Thread(target=lambda: done.append(server.main(["--check"],
-                                                                     env=state_env(tmp_path, AMEMO_DSN=dsn))))
-    thread.start()
-    thread.join(1.5)
-    assert done == []                              # ждёт замок
-    other.execute("SELECT pg_advisory_unlock(%s)", (db.MIGRATION_LOCK,))
-    other.close()
-    thread.join(30)
-    assert done == [0]
+    try:
+        other.execute("SELECT pg_advisory_lock(%s)", (db.MIGRATION_LOCK,))
+        assert server.main(["--check"], env=state_env(tmp_path, AMEMO_DSN=dsn)) == updates.CHECK_TEMPORARY
+        assert "замок миграций занят" in capsys.readouterr().err
+    finally:
+        other.close()
+    assert server.main(["--check"], env=state_env(tmp_path, AMEMO_DSN=dsn)) == 0
 
 
 def test_check_without_database_is_temporary(tmp_path, capsys):
@@ -888,9 +1069,11 @@ def test_stdio_mcp_answers_updated_and_finishes(env, kb, monkeypatch):
                 assert not first.is_error and not runtime.exiting
                 disk["version"] = NEXT                     # amemo обновили под живым процессом
                 runtime.next_version_check = 0
-                second = await client.call_tool("amemo_search", {"query": "кронштейн"})
-                assert second.is_error and second.structured_content["code"] == "amemo_updated"
-                assert "перезапустите агента" in second.content[0].text and NEXT in second.content[0].text
+                second = await client.call_tool("amemo_vocab", {"scheme": "kind"})
+                # вызов, на котором замечено обновление, выполняется как обычно; к ответу — «перезапустите агента»
+                assert not second.is_error and second.structured_content == first.structured_content
+                notice = second.content[-1].text
+                assert notice.startswith("amemo_updated:") and "перезапустите агента" in notice and NEXT in notice
                 assert runtime.exiting
     anyio.run(main)
 
@@ -920,3 +1103,74 @@ def test_stdio_main_exits_after_updated_answer(monkeypatch):
 def test_preload_imports_the_whole_package():
     assert updates.preload() == []
 
+
+
+# --- ревью: /ui прежней сборки, кэш ручной проверки, отказы установки, адрес релиза ---
+
+def test_service_preloads_and_serves_old_ui_until_restart(http, tmp_path, monkeypatch):
+    import sys
+    import types
+
+    dist = tmp_path / "web" / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>прежняя сборка</html>", encoding="utf-8")
+    module = types.ModuleType("amemo_web")
+    module.static_dir = lambda: dist
+    monkeypatch.setitem(sys.modules, "amemo_web", module)
+    loaded = []
+    real = updates.preload
+    monkeypatch.setattr(updates, "preload", lambda: loaded.append(True) or real())
+    client, updater = http()
+    assert loaded == [True]                              # весь пакет — в памяти при старте службы
+    assert "прежняя сборка" in client.get("/ui/").text
+    updater.check()
+    assert updater.install()["state"] == "ready"
+    (dist / "index.html").write_text("<html>новая сборка</html>", encoding="utf-8")     # файлы пакета заменены
+    copy = tmp_path / "state" / "updates" / f"ui-{CURRENT}"
+    assert client.app.state.ui_root == copy.resolve()
+    assert "прежняя сборка" in client.get("/ui/").text
+    make(tmp_path, current=NEXT).startup()               # новый процесс убирает копию прежней сборки
+    assert not copy.exists()
+
+
+def test_manual_check_at_most_once_a_minute(tmp_path):
+    from datetime import datetime, timedelta, timezone
+
+    moment = {"now": datetime(2026, 11, 10, 12, 0, tzinfo=timezone.utc)}
+    github = GitHub([release("v" + NEXT)])
+    updater = make(tmp_path, github=github, now=lambda: moment["now"])
+    assert updater.check(manual=True)["state"] == "available"
+    assert updater.check(manual=True)["state"] == "available"
+    assert len(github.release_calls()) == 1              # вторая — из кэша
+    moment["now"] += timedelta(seconds=updates.MANUAL_EVERY + 1)
+    updater.check(manual=True)
+    updater.check()                                       # плановая проверка кэшем не ограничена
+    assert len(github.release_calls()) == 3
+
+
+def test_ready_to_install_respects_state_and_failed_versions(tmp_path):
+    updater = ready(tmp_path / "a")
+    with pytest.raises(updates.UpdateError, match="уже установлена") as refused:
+        updater.ready_to_install()
+    assert refused.value.code == "no_update"
+    other = make(tmp_path / "b")
+    other.check()
+    with other._changing() as data:
+        data["failed"] = [NEXT]
+    with pytest.raises(updates.UpdateError, match="уже не встала"):
+        other.ready_to_install()
+
+
+def test_release_url_only_from_our_repository(tmp_path):
+    foreign = {"tag_name": "v" + NEXT, "html_url": "https://example.org/amemo/releases/tag/v0.1.0a2"}
+    assert updates.parse_releases([foreign])[0].url is None
+    status = make(tmp_path, github=GitHub([foreign])).check()
+    contract.component("UpdateStatus", status)
+    assert status["latest"] == {"version": NEXT, "url": None}
+
+
+def test_http_put_accepts_only_auto(http):
+    client, _ = http(person=True)
+    problem(client.put(f"{V1}/updates", json={"auto": False, "extra": 1}), 400, "bad_request", "/updates", "put")
+    with pytest.raises(AssertionError):
+        contract.check_request({"auto": False, "extra": 1}, "/updates", "put")

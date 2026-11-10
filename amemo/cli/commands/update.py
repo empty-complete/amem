@@ -63,7 +63,7 @@ def _code(updater, status: dict) -> int:
 
 def run_check(ctx, args) -> int:
     updater = _updater(ctx)
-    status = updater.check()
+    status = updater.check(manual=True)
     ctx.emit(status, text)
     return _code(updater, status)
 
@@ -73,7 +73,7 @@ def run_install(ctx, args) -> int:
 
     _person_only(ctx, "обновление ставит")
     updater = _updater(ctx)
-    status = updater.check()
+    status = updater.check(manual=True)
     try:
         version = updater.ready_to_install()
     except updates.UpdateError as e:

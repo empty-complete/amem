@@ -120,8 +120,25 @@ def _index(request: Request, root: Path) -> Response:
                         headers={**HEADERS, "Cache-Control": "no-cache"})
 
 
+def root_of(request: Request) -> Path:
+    """Корень сборки этого запуска службы: запомненный при старте (app.state.ui_root; перед обновлением — копия
+    прежней сборки), иначе — по пакету сейчас."""
+    pinned = getattr(request.app.state, "ui_root", None)
+    return pinned if pinned is not None else static_root()
+
+
+def snapshot(root: Path, target: Path) -> Path:
+    """Копия сборки root в target (без символических ссылок): обновление заменит файлы пакета, а открытые вкладки
+    до перезапуска грузят прежние assets."""
+    import shutil
+
+    shutil.rmtree(target, ignore_errors=True)
+    shutil.copytree(root, target, symlinks=True, ignore_dangling_symlinks=True)
+    return target.resolve()
+
+
 def ui_file(request: Request) -> Response:
-    root = static_root()
+    root = root_of(request)
     rel = request.path_params["path"]
     parts = rel.split("/")
     if parts and parts[-1] == "":
@@ -140,7 +157,7 @@ def ui_file(request: Request) -> Response:
 
 
 def ui_root(request: Request) -> Response:
-    static_root()
+    root_of(request)
     return RedirectResponse("/ui/", status_code=307, headers={"X-Content-Type-Options": "nosniff"})
 
 
