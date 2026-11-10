@@ -288,6 +288,46 @@ export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
 - **Web UI.** `/ui` needs the web package: `pip install 'amem[web]'`. Without it `/ui` answers 404 with a hint,
   and the API works as usual.
 
+## Writing from the web
+
+A person writes in the web UI: a form for each kind, their own kinds, file uploads and tasks for agents.
+
+- **Forms from templates.** `GET /templates` gives every atom kind and entity class a form, with or without its
+  own template. Fields come from the template's rules, so the form asks for what `check.submit` will check. An
+  optional `ui` block in a pack template sets the body, the widgets and the labels of fields; it does not change
+  the checks:
+
+  ```yaml
+  code: reading
+  version: 1.0.0
+  target: atom
+  applies_to: reading
+  fields:
+    - {path: about, required: true, entity_classes: [artifact]}
+    - {path: content.values, required: true}
+  ui:
+    body: none                       # wanted | required | none
+    widgets: [sources, values_table] # sources, links, around, values_table, similar, children
+    fields:
+      - {path: "content.values[property=humidity]", label: {ru: Влажность, en: Air humidity}}
+  ```
+
+- **My kinds.** A person adds a kind of their own from the web (`PUT /packs/mine/templates/{code}`). It lives in
+  the database as the `mine` pack and passes the same checks as a pack from files, and so do its records. Every
+  edit is a new version of the template; a code taken by a file pack is refused (`409 template_exists`). A kind
+  can be deleted only while it has no records (`409 template_in_use`). Only a person edits and deletes kinds; a
+  model gets `403 forbidden`. `POST /bundles/export` with `with_packs` takes your kinds along; the import adds
+  the missing ones, and the same code with other content is a `bundle_pack_conflict`.
+- **Uploads and search.** `POST /objects` (multipart `file`, optional `path`) puts a file into the documents
+  folder `AMEM_DOCS`, by default as `Загрузки/<file name>`, and parses it. The same file at that path answers
+  `200`, another file there is `409 object_path_taken` and stays untouched, and without `AMEM_DOCS` the answer is
+  `503 docs_unavailable`. `GET /objects?q=` finds objects by part of the name or path.
+- **Tasks for agents.** In the web a person asks an agent to parse a file (`POST /tasks`); a repeat returns the
+  same task. The agent picks it up over MCP: `amem_tasks` lists open tasks and its own, `amem_task_claim` takes one
+  with a 30-minute lease, `amem_task_release` gives it back, and `amem_task_done` closes it with the result
+  (links to the records it wrote). An expired lease frees the task for another agent. `amem tasks list [--state]`
+  shows the tasks in the terminal, `amem tasks cancel ID` cancels one (the one who set it, or a person).
+
 ## Docker compose
 
 `docker-compose.yml` runs the database and the service; settings live in `.env` (copy `.env.example`), the file
@@ -333,6 +373,7 @@ amem review list|claim|release|resolve|stats
 amem folders tree|create|delete|rename|move
 amem export|inspect|import FILE.zip   bundles (import is a dry run without --apply)
 amem backup create|list|restore|verify
+amem tasks list|cancel              tasks for agents
 amem token create|list|revoke         tokens of a shared service
 amem base [name [NAME]]               database summary and name
 amem doctor [--project DIR]          database, store, model, documents, agents, service
@@ -354,7 +395,7 @@ amem doctor [--project DIR]          database, store, model, documents, agents, 
 
 ## MCP
 
-The MCP server gives an agent 14 tools over the same operations as the HTTP API:
+The MCP server gives an agent 18 tools over the same operations as the HTTP API:
 
 | Tool | What it does |
 |---|---|
@@ -368,6 +409,8 @@ The MCP server gives an agent 14 tools over the same operations as the HTTP API:
 | `amem_move(ref, folder)` | Move a record to an existing folder |
 | `amem_object_status(path)`, `amem_mark_object(path, status, note?)` | What has been atomized from a document |
 | `amem_review_claim`, `amem_review_release`, `amem_review_resolve` | For the semantic reviewer |
+| `amem_tasks(object?, limit?)` | Agent tasks: open ones and those you hold |
+| `amem_task_claim(task?, kind?)`, `amem_task_release(task)`, `amem_task_done(task, result?)` | Take a task with a lease, give it back, close it with the result |
 | `amem_vocab(scheme)` | Vocabulary codes with labels |
 
 Search goes in three steps so the agent reads only what it needs: `amem_search` gives short cards,
@@ -582,6 +625,7 @@ ranking. They never change a status or skip a check.
 - [x] **HTTP service:** `amem serve` with the [v1 contract](docs/api/http-v1.openapi.yaml)
 - [x] **CLI and MCP server:** three-step retrieval, usefulness marks, `<private>` stripping
 - [x] **Agent memory:** Claude Code hooks, Codex CLI, `amem install`, core skills
+- [x] **Writing from the web:** forms from templates, my kinds, uploads, tasks for agents
 - [x] **Web UI:** all screens, on the service and on mock data; checked end to end against the service
 - [ ] **asearch:** file search as an amem plugin
 

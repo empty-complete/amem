@@ -529,7 +529,7 @@ amem doctor                          проверка установки
 
 | Требование | Как проверяется | Сделано |
 |---|---|---|
-| Контракт реализован полностью | Каждый путь файла отвечает, ответы проходят схемы; лишних путей нет | 4a ✓ — кроме путей части D веба (список «будет в 4d» в `tests/test_service_contract.py`) |
+| Контракт реализован полностью | Каждый путь файла отвечает, ответы проходят схемы; лишних путей нет | 4a ✓; 4d ✓ (пути части D веба; список `LATER_4D` в `tests/test_service_contract.py` пуст) |
 | Кто пишет | Браузер с cookie — человек; запрос без cookie и `/mcp` — модель; поле агента в теле игнорируется | 4a ✓ (HTTP); 4b ✓ (`/mcp` и `amem mcp` — всегда `model:`, `X-Amem-Agent`, `person:` — отказ; CLI — агент по окружению) |
 | Защита локальной службы | Чужой `Host` — 421, чужой `Origin` — 403, запись не JSON — 415 | 4a ✓; плюс `AMEM_ALLOWED_HOSTS`, 408 медленного тела, 503 `timeout` у `/graph`, 507 предела места |
 | Запуск | `127.0.0.1:8767` по умолчанию; `--host` не loopback без токенов и без `--no-auth` — код 2; с `--no-auth` — предупреждение | 4a ✓ (`python -m amem.service`, `amem.service.serve`); 4b ✓ (`amem serve`) |
@@ -545,11 +545,11 @@ amem doctor                          проверка установки
 | Установщик | Claude Code и Codex, глобально и `--project`; `uninstall` возвращает разобранное содержимое файлов к исходному | 4c ✓ (`tests/test_install.py` на временном HOME; `amem doctor` проверяет установленное — `tests/test_cli.py`) |
 | Одной командой | `amem init` с готовым DSN, `amem install claude-code`, `amem doctor` — в CI | 4c ✓ (шаг «One command» в `.github/workflows/ci.yml`; задание `docker`: образ, compose, `/health`, `amem doctor` в контейнере) |
 | PostgreSQL 18 и 16 | Все тесты базы — на обеих версиях | 4a ✓ |
-| Формы из шаблонов (4d) | Блок `ui` проверяется по путям шаблона; типы полей выводятся по решению разд. 6a.2; `GET /templates` по строгой схеме | `tests/test_forms.py`, `tests/test_service_4d.py` (задача 17) |
-| «Мои виды» (4d) | Правка — новая версия; код не пересекается с пакетами-файлами; переживают `db.prepare`; удаление с записями — 409; модель — 403 | `tests/test_mine.py`, `tests/test_service_4d.py` (задача 18) |
-| «Мои виды» в подборках (4d) | `with_packs` везёт mine; импорт добавляет вид, конфликт кода — `bundle_pack_conflict` | `tests/test_bundle_export.py`, `tests/test_bundle_import.py` (задача 19) |
-| Поиск и загрузка объектов (4d) | Загрузка не выходит за папку документов и не создаёт дублей по digest; 409, 413, 503 на своих случаях | `tests/test_lookup_lists.py`, `tests/test_service_4d.py` (задача 20) |
-| Задачи агентам (4d) | Задача, поставленная через HTTP, берётся и закрывается через MCP и видна в `GET /tasks`; аренда истекает | `tests/test_tasks.py`, `tests/test_mcp.py`, `tests/test_cli.py` (задача 21) |
+| Формы из шаблонов (4d) | Блок `ui` проверяется по путям шаблона; типы полей выводятся по решению разд. 6a.2; `GET /templates` по строгой схеме | 4d ✓ (`tests/test_forms.py`, `tests/test_service_4d.py`, задача 17) |
+| «Мои виды» (4d) | Правка — новая версия; код не пересекается с пакетами-файлами; переживают `db.prepare`; удаление с записями — 409; модель — 403 | 4d ✓ (`tests/test_mine.py`, `tests/test_service_4d.py`, задача 18) |
+| «Мои виды» в подборках (4d) | `with_packs` везёт mine; импорт добавляет вид, конфликт кода — `bundle_pack_conflict` | 4d ✓ (`tests/test_bundle_export.py`, `tests/test_bundle_import.py`, задача 19) |
+| Поиск и загрузка объектов (4d) | Загрузка не выходит за папку документов и не создаёт дублей по digest; 409, 413, 503 на своих случаях | 4d ✓ (`tests/test_lookup_lists.py`, `tests/test_service_4d.py`, задача 20) |
+| Задачи агентам (4d) | Задача, поставленная через HTTP, берётся и закрывается через MCP и видна в `GET /tasks`; аренда истекает | 4d ✓ (`tests/test_tasks.py`, `tests/test_mcp.py`, `tests/test_cli.py`, задача 21; README «Writing from the web», «MCP») |
 
 ## 10. Риски
 

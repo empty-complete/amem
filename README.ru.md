@@ -286,6 +286,45 @@ export AMEM_DSN=postgresql://amem:amem@127.0.0.1:5435/amem
 - **Веб-UI.** Для `/ui` нужен пакет веба: `pip install 'amem[web]'`. Без него `/ui` отвечает 404 с подсказкой,
   а API работает как обычно.
 
+## Запись из веба
+
+Человек пишет в веб-UI: форма для каждого вида, свои виды, загрузка файлов и задачи агентам.
+
+- **Формы по шаблонам.** `GET /templates` даёт форму каждому виду атома и классу сущности, со своим шаблоном или
+  без. Поля берутся из правил шаблона, поэтому форма просит то, что потом проверит `check.submit`. Необязательный
+  блок `ui` в шаблоне пакета задаёт тело, виджеты и подписи полей; на проверку он не влияет:
+
+  ```yaml
+  code: reading
+  version: 1.0.0
+  target: atom
+  applies_to: reading
+  fields:
+    - {path: about, required: true, entity_classes: [artifact]}
+    - {path: content.values, required: true}
+  ui:
+    body: none                       # wanted | required | none
+    widgets: [sources, values_table] # sources, links, around, values_table, similar, children
+    fields:
+      - {path: "content.values[property=humidity]", label: {ru: Влажность, en: Air humidity}}
+  ```
+
+- **Мои виды.** Человек заводит свой вид из веба (`PUT /packs/mine/templates/{code}`). Он живёт в базе как пакет
+  `mine` и проходит те же проверки, что пакет из файлов, — как и его записи. Каждая правка — новая версия шаблона;
+  код, занятый пакетом из файлов, не принимается (`409 template_exists`). Удалить вид можно, только пока у него
+  нет записей (`409 template_in_use`). Правит и удаляет виды только человек, модель получает `403 forbidden`.
+  `POST /bundles/export` с `with_packs` увозит свои виды с подборкой; импорт добавляет недостающие, а тот же код
+  с другим содержимым — коллизия `bundle_pack_conflict`.
+- **Загрузка и поиск файлов.** `POST /objects` (multipart: `file`, необязательный `path`) кладёт файл в папку
+  документов `AMEM_DOCS`, по умолчанию как `Загрузки/<имя файла>`, и разбирает его. Тот же файл по этому пути —
+  `200`, другой файл там — `409 object_path_taken`, и он не тронут; без `AMEM_DOCS` — `503 docs_unavailable`.
+  `GET /objects?q=` находит объекты по части имени или пути.
+- **Задачи агентам.** В вебе человек просит агента разобрать файл (`POST /tasks`); повтор возвращает ту же
+  задачу. Агент берёт её через MCP: `amem_tasks` — свободные задачи и свои, `amem_task_claim` — взять с арендой
+  на 30 минут, `amem_task_release` — вернуть, `amem_task_done` — закрыть с итогом (ссылками на записанное).
+  Истёкшая аренда освобождает задачу для другого агента. `amem tasks list [--state]` показывает задачи
+  в терминале, `amem tasks cancel ID` отменяет (тот, кто поставил, или человек).
+
 ## Docker compose
 
 `docker-compose.yml` поднимает базу и службу; настройки — в `.env` (образец `.env.example`), в самом файле
@@ -331,6 +370,7 @@ amem review list|claim|release|resolve|stats
 amem folders tree|create|delete|rename|move
 amem export|inspect|import FILE.zip   подборки (import без --apply — пробный)
 amem backup create|list|restore|verify
+amem tasks list|cancel              задачи агентам
 amem token create|list|revoke         токены общей службы
 amem base [name [ИМЯ]]                сводка и имя базы
 amem doctor [--project DIR]          база, хранилище, модель, документы, агенты, служба
@@ -352,7 +392,7 @@ amem doctor [--project DIR]          база, хранилище, модель,
 
 ## MCP
 
-Сервер MCP даёт агенту 14 инструментов над теми же операциями, что HTTP API:
+Сервер MCP даёт агенту 18 инструментов над теми же операциями, что HTTP API:
 
 | Инструмент | Что делает |
 |---|---|
@@ -366,6 +406,8 @@ amem doctor [--project DIR]          база, хранилище, модель,
 | `amem_move(ref, folder)` | Переложить запись в существующую папку |
 | `amem_object_status(path)`, `amem_mark_object(path, status, note?)` | Что из документа уже атомизировано |
 | `amem_review_claim`, `amem_review_release`, `amem_review_resolve` | Для смыслового проверяющего |
+| `amem_tasks(object?, limit?)` | Задачи агентам: свободные и взятые вами |
+| `amem_task_claim(task?, kind?)`, `amem_task_release(task)`, `amem_task_done(task, result?)` | Взять задачу с арендой, вернуть, закрыть с итогом |
 | `amem_vocab(scheme)` | Коды словаря с подписями |
 
 Поиск идёт в три шага, чтобы агент читал только нужное: `amem_search` даёт короткие карточки, `amem_timeline`
@@ -580,6 +622,7 @@ sources:
 - [x] **Служба HTTP:** `amem serve` по [контракту v1](docs/api/http-v1.openapi.yaml)
 - [x] **CLI и сервер MCP:** поиск в три шага, отметки полезности, вырезание `<private>`
 - [x] **Память агентов:** хуки Claude Code, Codex CLI, `amem install`, навыки ядра
+- [x] **Запись из веба:** формы по шаблонам, свои виды, загрузка файлов, задачи агентам
 - [x] **Веб-UI:** все экраны — на службе и на моках; сквозные проверки против службы
 - [ ] **asearch:** поиск по файлам как плагин amem
 
