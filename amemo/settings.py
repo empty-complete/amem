@@ -2,8 +2,13 @@
 
 Порядок источников: явный аргумент → окружение (AMEMO_…) → amemo.toml ($AMEMO_CONFIG, затем ~/.config/amemo/amemo.toml).
 Ключи amemo.toml — имена полей Settings (dsn, data, docs, state, backups, host, port, agent, model_agent, ui_origins,
-allowed_hosts, tokens, query_log, state_quota); неизвестный ключ — ошибка, а не тихий пропуск опечатки. Относительный путь в amemo.toml считается
+allowed_hosts, tokens, query_log, state_quota, ocr, ocr_data, ocr_languages); неизвестный ключ — ошибка, а не тихий пропуск опечатки. Относительный путь в amemo.toml считается
 от папки файла, в окружении и аргументе — от текущей папки; «~» раскрывается везде.
+
+Распознавание сканов (OCR) — расширение на выбор: ocr = none | tesseract (cloud зарезервирован и пока — ошибка
+настройки). Не задано — auto: tesseract, если языковые данные найдены (sources.ocr_setup), иначе none. Данные —
+ocr_data (по умолчанию ~/.local/share/amemo/tessdata, рядом с хранилищем копий; ставит amemo ocr install), затем
+TESSDATA_PREFIX и системный tesseract; языки — ocr_languages (по умолчанию rus, eng).
 
 Токены общей службы — amemo-tokens.toml с правами 0600: строки [[token]] с hash = "sha256:…", agent и write. Сам токен
 в файле не хранится: служба сравнивает sha256 предъявленного токена с записанными. Файл принадлежит пользователю
@@ -32,6 +37,11 @@ DEFAULT_MODEL_AGENT = "model:local"
 FALLBACK_NAME = "local"        # имя человека, если от имени пользователя ОС ничего не осталось
 QUERY_LOG_OFF = "off"
 DEFAULT_STATE_QUOTA = 10 << 30     # байт подборок и загрузок одного владельца в AMEMO_STATE (10 ГиБ)
+OCR_MODES = ("none", "tesseract")     # ocr; не задан — OCR_AUTO
+OCR_AUTO = "auto"
+OCR_RESERVED = ("cloud",)              # облачное распознавание — позже: сейчас ошибка «ещё не поддерживается»
+DEFAULT_OCR_LANGUAGES = ("rus", "eng")
+OCR_LANGUAGE = re.compile(r"[a-z_]{3,}")  # код языка tessdata: rus, eng, chi_sim
 QUOTA_UNITS = {"": 1, "k": 1 << 10, "kib": 1 << 10, "m": 1 << 20, "mib": 1 << 20, "g": 1 << 30, "gib": 1 << 30,
                "t": 1 << 40, "tib": 1 << 40}
 # имя хоста по RFC 1123: метки из латиницы, цифр и «-» (не с краю), через точку; без порта, схемы и пути
@@ -49,6 +59,7 @@ ENV = {
     "host": "AMEMO_HOST", "port": "AMEMO_PORT", "agent": "AMEMO_AGENT", "model_agent": "AMEMO_MODEL_AGENT",
     "ui_origins": "AMEMO_UI_ORIGINS", "allowed_hosts": "AMEMO_ALLOWED_HOSTS", "tokens": "AMEMO_TOKENS",
     "query_log": "AMEMO_QUERY_LOG", "state_quota": "AMEMO_STATE_QUOTA",
+    "ocr": "AMEMO_OCR", "ocr_data": "AMEMO_OCR_DATA", "ocr_languages": "AMEMO_OCR_LANGUAGES",
 }
 
 
@@ -72,6 +83,9 @@ class Settings:
     tokens: Path | None             # файл токенов общей службы; None — локальная служба
     query_log: Path | None          # журнал запросов; None — выключен (AMEMO_QUERY_LOG=off)
     state_quota: int                # байт подборок и загрузок одного владельца в AMEMO_STATE
+    ocr: str                        # распознавание сканов: none | tesseract | auto (не задано — по данным)
+    ocr_data: Path                  # языковые данные tesseract (amemo ocr install); сверх них — системные
+    ocr_languages: tuple[str, ...]  # языки tessdata по порядку: rus, eng
     config: Path | None             # прочитанный amemo.toml, если был
 
 
@@ -134,6 +148,9 @@ def load(env: Mapping[str, str] | None = None, **explicit) -> Settings:
         query_log=query_log,
         state_quota=_quota(raw.get("state_quota")),
         config=config,
+        ocr=_ocr(raw.get("ocr")),
+        ocr_data=path("ocr_data") or home / ".local" / "share" / "amemo" / "tessdata",
+        ocr_languages=_ocr_languages(raw.get("ocr_languages")),
     )
 
 
@@ -360,3 +377,38 @@ def _quota(entry) -> int:
         raise SettingsError(f"{where}: предел {value!r} — нужно целое число байт больше нуля или с единицей "
                             f"(500M, 10G, 1T — двоичные: МиБ, ГиБ, ТиБ)")
     return number * QUOTA_UNITS[unit]
+
+
+def _ocr(entry) -> str:
+    if entry is None:
+        return OCR_AUTO
+    value, where, _ = entry
+    mode = value.strip().lower() if isinstance(value, str) else None
+    if mode in OCR_RESERVED:
+        raise SettingsError(f"{where}: распознавание {mode!r} ещё не поддерживается — допустимы "
+                            f"{', '.join(OCR_MODES)} (языки tesseract: amemo ocr install rus eng)")
+    if mode not in OCR_MODES:
+        raise SettingsError(f"{where}: распознавание сканов {value!r} — нужно {' или '.join(OCR_MODES)}")
+    return mode
+
+
+def ocr_language_list(value) -> list[str]:
+    """Языки из строки («rus+eng», «rus,eng», «rus eng») или списка; без проверки кодов."""
+    items = value if isinstance(value, (list, tuple)) else re.split(r"[+,\s]+", value)
+    return [item.strip() for item in items if item.strip()]
+
+
+def _ocr_languages(entry) -> tuple[str, ...]:
+    if entry is None:
+        return DEFAULT_OCR_LANGUAGES
+    value, where, _ = entry
+    if not (isinstance(value, str) or isinstance(value, (list, tuple)) and all(isinstance(x, str) for x in value)):
+        raise SettingsError(f"{where}: нужен список языков tessdata или строка «rus+eng», получено {value!r}")
+    languages = ocr_language_list(value)
+    for lang in languages:
+        if not OCR_LANGUAGE.fullmatch(lang):
+            raise SettingsError(f"{where}: язык {lang!r} — нужен код tessdata из строчных латинских букв и «_» "
+                                f"(rus, eng, chi_sim)")
+    if not languages:
+        raise SettingsError(f"{where}: список языков пуст — уберите настройку или задайте ocr = \"none\"")
+    return tuple(dict.fromkeys(languages))

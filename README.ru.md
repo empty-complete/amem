@@ -351,7 +351,8 @@ docker compose --profile web up -d --wait amemo-web   # то же с веб-UI �
 - **Профиль `web`.** `amemo-web` — та же служба, собранная с `amemo[web]`. Порт и тома у них общие: запускайте
   либо `amemo`, либо `amemo-web`.
 - **Образ.** `docker build -t amemo .` (цель `service`) или `--target web`; `--build-arg AMEMO_EXTRAS=embed`
-  добавляет локальную модель векторов.
+  добавляет локальную модель векторов. `AMEMO_OCR_LANGS="rus eng"` в `.env` — образ с распознаванием сканов
+  ([OCR](#распознавание-сканов-ocr)).
 
 ## CLI
 
@@ -359,7 +360,7 @@ docker compose --profile web up -d --wait amemo-web   # то же с веб-UI �
 `amemo init --dsn …`, который запоминает строку в `~/.config/amemo/amemo.toml`), служба ей не нужна.
 
 ```
-amemo init [--dsn DSN]                 база и хранилище объектов
+amemo init [--dsn DSN] [--ocr ЯЗЫКИ]   база и хранилище объектов; --ocr rus,eng — распознавание сканов
 amemo serve [--host --port --no-auth]  HTTP API, /mcp и веб-UI
 amemo mcp [--agent model:ИМЯ]          сервер MCP на stdio для агента
 amemo search ЗАПРОС [--kind --limit]   поиск, шаг 1
@@ -374,7 +375,8 @@ amemo backup create|list|restore|verify
 amemo tasks list|cancel              задачи агентам
 amemo token create|list|revoke         токены общей службы
 amemo base [name [ИМЯ]]                сводка и имя базы
-amemo doctor [--project DIR]          база, хранилище, модель, документы, агенты, служба
+amemo ocr install|list|remove          языки распознавания сканов (OCR)
+amemo doctor [--project DIR]          база, хранилище, модель, документы, OCR, агенты, служба
 ```
 
 - **Вывод.** Текст для человека или `--json` с тем же объектом, что HTTP API отдаёт на ту же операцию.
@@ -390,6 +392,40 @@ amemo doctor [--project DIR]          база, хранилище, модель
   в `AMEMO_TOKENS` только его хэш. Выдаёт и отзывает токены только человек.
 - **Бэкап.** Модели доступен `amemo backup create`, но без ротации: `--keep` и `restore` — только человеку.
 - **Отладка.** `AMEMO_DEBUG=1` добавляет в stderr traceback внутренней ошибки.
+
+## Распознавание сканов (OCR)
+
+Страница-скан PDF — картинка без текстового слоя: процитировать с неё можно, только распознав её. OCR в amemo —
+расширение на выбор: можно поставить языки Tesseract, можно не ставить. Без OCR всё работает, а о сканах сказано,
+что текста у них нет.
+
+```bash
+amemo ocr install rus eng            # скачать языки и включить OCR (или: amemo init --ocr rus,eng)
+amemo ocr install deu --quality best # точнее, но файлы в несколько раз больше
+amemo ocr list                       # режим, языки, папка данных
+amemo ocr remove deu
+```
+
+- **Что ставится.** Распознаёт встроенная в PyMuPDF библиотека Tesseract: бинарник `tesseract` не нужен, только
+  языковые файлы `.traineddata`. `amemo ocr install` скачивает их по HTTPS из репозиториев
+  [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast) (по умолчанию, `--quality fast`) или
+  [tessdata_best](https://github.com/tesseract-ocr/tessdata_best) (`--quality best`) в `ocr_data`
+  (`~/.local/share/amemo/tessdata`) и пишет `ocr = "tesseract"` и `ocr_languages` в `amemo.toml`. Повтор ничего
+  не качает; `--force` — скачать заново.
+- **Языки.** Коды tessdata: `rus`, `eng`, `deu`, `fra`, `chi_sim`, … — любые из репозитория. По умолчанию
+  распознаются `rus` и `eng`.
+- **Настройки.** `ocr` (`AMEMO_OCR`): `none` — не распознавать, `tesseract` — распознавать; не задано — Tesseract,
+  если языковые данные найдены. `ocr_data` (`AMEMO_OCR_DATA`) — папка языковых данных; `ocr_languages`
+  (`AMEMO_OCR_LANGUAGES`) — список языков (в окружении — через `+`, запятую или пробел). Системный Tesseract
+  (`apt install tesseract-ocr-rus`, `brew install tesseract-lang`, `TESSDATA_PREFIX`) тоже подходит: он берётся,
+  если в `ocr_data` нужных языков нет.
+- **Кто ставит.** Только человек: модель на `amemo ocr install` и `remove` получает код 2 — это меняет установку.
+- **Docker.** `AMEMO_OCR_LANGS="rus eng"` в `.env` (или `--build-arg OCR_LANGS="rus eng"`) — языки скачиваются
+  при сборке образа; пусто — образ без OCR.
+- **Проверка.** `amemo doctor` показывает строку OCR: режим, языки и папку; предупреждает, если `ocr = "tesseract"`,
+  а данных нет.
+- **Облако.** Облачное распознавание — позже: значение `ocr = "cloud"` зарезервировано и пока даёт ошибку
+  «ещё не поддерживается».
 
 ## MCP
 
@@ -546,10 +582,9 @@ flowchart LR
 1. **Схема и шаблоны:** поля, типы, правила связей, единицы UCUM.
 2. **Привязка к источнику:** цитата найдена в файле, страница совпадает, числа утверждения есть
    во фрагменте. Работает для PDF, Markdown, xlsx и docx. Страница-скан PDF (картинка без текстового слоя)
-   распознаётся Tesseract через PyMuPDF, если установлены языковые данные: в Debian/Ubuntu —
-   `sudo apt install tesseract-ocr tesseract-ocr-rus`, в macOS — `brew install tesseract tesseract-lang`;
-   языки по умолчанию `rus+eng`, свои — `AMEMO_OCR_LANGUAGES`. Цитата, сверенная с распознанным текстом,
-   получает замечание `info` `quote_ocr` и более мягкий порог нечёткости; без Tesseract о такой странице
+   распознаётся Tesseract через PyMuPDF, если OCR поставлен (`amemo ocr install rus eng` или системный
+   Tesseract, см. [распознавание сканов](#распознавание-сканов-ocr)). Цитата, сверенная с распознанным текстом,
+   получает замечание `info` `quote_ocr` и более мягкий порог нечёткости; без OCR о такой странице
    сказано, что у неё нет текстового слоя.
 3. **Здравый смысл:** диапазоны значений, единицы, противоречия с атомами, которые уже есть в базе.
 4. **Дубли:** по тексту и по вектору.

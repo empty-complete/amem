@@ -124,7 +124,8 @@ amemo становится программой, которой пользуют
 
 ## 2. Настройки и запуск
 
-Порядок источников: явный аргумент → окружение → `amemo.toml` (`$AMEMO_CONFIG`, затем `~/.config/amemo/amemo.toml`). Ключи `amemo.toml` — имена настроек без `AMEMO_` строчными (`dsn`, `data`, …, `ui_origins` и `allowed_hosts` — списки, `query_log`, `state_quota`); неизвестный ключ — ошибка, а не тихо пропущенная опечатка. Относительный путь в `amemo.toml` считается от папки файла. При запуске служба выполняет `db.prepare` (миграции, словари, `base_id`).
+Порядок источников: явный аргумент → окружение → `amemo.toml` (`$AMEMO_CONFIG`, затем `~/.config/amemo/amemo.toml`). Ключи `amemo.toml` — имена настроек без `AMEMO_` строчными (`dsn`, `data`, …, `ui_origins` и `allowed_hosts` — списки, `query_log`, `state_quota`, `ocr`, `ocr_data`,
+`ocr_languages` — список); неизвестный ключ — ошибка, а не тихо пропущенная опечатка. Относительный путь в `amemo.toml` считается от папки файла. При запуске служба выполняет `db.prepare` (миграции, словари, `base_id`).
 
 | Настройка | Окружение | По умолчанию |
 |---|---|---|
@@ -141,6 +142,9 @@ amemo становится программой, которой пользуют
 | Токены общей службы | `AMEMO_TOKENS` | — файл; если задан, без токена — 401 |
 | Журнал запросов | `AMEMO_QUERY_LOG` | `AMEMO_STATE/queries.jsonl`; `off` — выключен |
 | Предел места подборок и загрузок одного владельца | `AMEMO_STATE_QUOTA` | `10G` (10 ГиБ); целое число байт или с единицей `K`, `M`, `G`, `T` (двоичные) |
+| Распознавание сканов PDF (разд. 5.3) | `AMEMO_OCR` | — не задано: `tesseract`, если языковые данные найдены, иначе `none`. `none` — не распознавать; `cloud` зарезервирован и пока — ошибка настройки «ещё не поддерживается» |
+| Языковые данные Tesseract | `AMEMO_OCR_DATA` | `~/.local/share/amemo/tessdata` (рядом с хранилищем копий); сверх неё — системный Tesseract (`TESSDATA_PREFIX`, пакет ОС) |
+| Языки OCR | `AMEMO_OCR_LANGUAGES` | `rus`, `eng`; коды tessdata `[a-z_]{3,}`, в окружении — через `+`, запятую или пробел |
 
 `amemo init` подготавливает базу (`db.prepare`) и хранилище. `amemo serve` запускает службу; до CLI (часть 4b) — `python -m amemo.service [--host H] [--port P] [--no-auth]`, обе зовут `amemo.service.serve(settings, no_auth=…)` (uvicorn).
 - **Проверка открытости перед запуском.** Адрес не loopback (`0.0.0.0`, адрес сети, имя, кроме `localhost`) без `AMEMO_TOKENS` и без `--no-auth` — отказ с объяснением, код 2: локальная служба считает любой запрос без cookie моделью с правом записи, и в сети это запись для всех. `--no-auth` снимает отказ (закрытая сеть, compose) и печатает громкое предупреждение; с `AMEMO_TOKENS` `--no-auth` ничего не меняет. Неверная настройка (адрес с портом, нет `AMEMO_DSN`) — тоже код 2.
@@ -320,7 +324,7 @@ amemo становится программой, которой пользуют
 ### 5.2. Команды
 
 ```
-amemo init                            база и хранилище
+amemo init [--dsn --ocr ЯЗЫКИ]        база и хранилище; --ocr rus,eng — языки OCR
 amemo serve [--host --port --no-auth] служба HTTP + /mcp + /ui
 amemo mcp [--agent model:имя]         MCP по stdio (для агентов)
 amemo search QUERY [--kind --limit]   поиск (шаг 1)
@@ -334,6 +338,7 @@ amemo export|inspect|import           подборки
 amemo backup create|restore|verify    бэкап (подпроект 2)
 amemo token create|list|revoke        токены общей службы
 amemo base name NAME                  имя базы
+amemo ocr install|list|remove         языки распознавания сканов (разд. 5.3)
 amemo install AGENT [--project DIR] [--dry-run]
 amemo uninstall AGENT [--project DIR]
 amemo hook EVENT                      вход для хуков агентов (stdin → stdout)
@@ -349,6 +354,40 @@ amemo doctor                          проверка установки
   - переменные Codex (`CODEX_SANDBOX`, `CODEX_HOME` при запуске из Codex) — `model:codex`;
   - явный `AMEMO_AS_MODEL=имя` — `model:имя`.
 - `--agent` задаёт агента явно; `person:` при узнанном окружении агента не принимается.
+
+### 5.3. Распознавание сканов (OCR)
+
+OCR — расширение на выбор при установке: Tesseract с любыми языками или ничего. Распознаёт библиотека, встроенная
+в PyMuPDF, — бинарник `tesseract` не нужен, только файлы `.traineddata`. Облачное распознавание — позже: под него
+зарезервировано значение `ocr = "cloud"`.
+
+```
+amemo ocr install ЯЗЫК… [--quality fast|best] [--force] [--no-config]
+amemo ocr list
+amemo ocr remove ЯЗЫК… [--no-config]
+```
+
+- **install.** Коды tessdata (`rus`, `eng`, `deu`, …; форма `[a-z_]{3,}`, можно через запятую). Файл качается по
+  HTTPS из `https://github.com/tesseract-ocr/tessdata_fast` (по умолчанию) или `tessdata_best`,
+  `raw/main/<язык>.traineddata`, во временный файл в `ocr_data` и встаёт на место `os.replace`. Принимается ответ
+  200, не пустой, с заголовком контейнера tessdata (int32 число частей, их int64 смещения); иначе прежний файл
+  остаётся. Уже установленный язык без `--force` не качается. Затем в `amemo.toml` пишутся `ocr = "tesseract"`
+  и `ocr_languages` — языки папки (порядок — прежней настройки, затем названные); правка атомарная (временный
+  файл и переименование), прочие ключи и комментарии остаются. `--no-config` — файл не трогать (сборка образа).
+- **remove** удаляет файлы языков; когда языков не осталось, `ocr` и `ocr_languages` убираются из `amemo.toml`
+  (снова «по наличию данных»).
+- **list** — режим (`tesseract` или `none`), настройка, языки и папка, из которой они берутся, установленные языки.
+- **Права.** `install` и `remove` — только человек: это меняет установку; модель получает код 2 (`forbidden`).
+  `list` — всем.
+- **Коды выхода** (разд. 5.1): неверный код языка или настройка — 2; языка нет в репозитории (404) или нечего
+  удалять — 4; сеть, неверный ответ — 1.
+- **`amemo init`.** `--ocr rus,eng` ставит языки после подготовки базы. Без флага в интерактивном терминале
+  (stdin — tty, не `--json`, не `CI`) init спрашивает «Распознавать сканы PDF? Языки через пробел (Enter —
+  пропустить)», если OCR ещё не настроен и данных нет; в CI и тестах — без вопроса.
+- **`amemo doctor`** — строка «OCR»: режим, языки, папка; `warn`, если `ocr = "tesseract"`, а данных нет.
+- **Docker.** Build-arg `OCR_LANGS` (compose — `AMEMO_OCR_LANGS` в `.env`): при сборке
+  `amemo ocr install --no-config $OCR_LANGS` в `/usr/share/amemo/tessdata` (`AMEMO_OCR_DATA` образа,
+  `AMEMO_OCR_LANGUAGES` — те же языки); пусто — образ без OCR.
 
 ## 6. Память агентов
 
