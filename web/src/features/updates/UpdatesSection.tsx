@@ -46,7 +46,7 @@ export function UpdatesSection() {
               t("updates.available", { v: s.latest.version })
             )}
           </p>
-          {canInstall(s) && (s.state === "available" || s.state === "failed") && write && (
+          {canInstall(s) && s.state === "available" && write && (
             <Button
               className="pillbtn"
               isPending={act.install.isPending}
