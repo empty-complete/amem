@@ -93,11 +93,15 @@ jobs:
       - if: always()
         run: docker compose down -v
 
-  # Windows без WSL: PostgreSQL из образа раннера (сборка EDB) и pgvector, собранный из исходников (nmake, MSVC);
-  # колесо ветки — через uv tool install, как у пользователя; затем путь docs/install-agent.md (tools/windows_smoke.py)
+  # Windows без WSL — путь docs/install-agent.md: PostgreSQL 18 из установщика EDB (тот же файл, что ставит
+  # winget PostgreSQL.PostgreSQL.18), pgvector из исходников (nmake, MSVC), роль и база amemo — как в «Role and
+  # database»; колесо ветки — через uv tool install, как у пользователя; затем tools/windows_smoke.py
   windows:
     runs-on: windows-latest
     env:
+      PG_INSTALLER: https://get.enterprisedb.com/postgresql/postgresql-18.6-5-windows-x64.exe
+      PG_INSTALLER_SHA256: 227E2BC08091B4C2B8338C7D61B11D057F895711480B006F90BFCFCD2410A58A
+      PGROOT: C:\Program Files\PostgreSQL\18      # в образе раннера PGROOT указывает на его PostgreSQL 17
       PGVECTOR: v0.8.1
       AMEMO_BACKEND: none
     defaults:
@@ -108,20 +112,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: PostgreSQL from the runner image
+      - name: PostgreSQL 18 — EDB installer, unattended
         run: |
-          $root = $env:PGROOT
-          if (-not $root -or -not (Test-Path "$root\bin\initdb.exe")) {
-            $root = (Get-ChildItem "C:\Program Files\PostgreSQL" -Directory -ErrorAction SilentlyContinue |
-                     Sort-Object { [int]$_.Name } | Select-Object -Last 1).FullName
-          }
-          if (-not $root) {
-            choco install postgresql17 --no-progress -y --params "/Password:root /NoPath"
-            $root = "C:\Program Files\PostgreSQL\17"
-          }
-          & "$root\bin\postgres.exe" --version
-          "PGROOT=$root" >> $env:GITHUB_ENV
-          "PGBIN=$root\bin" >> $env:GITHUB_ENV
+          $installer = "$env:RUNNER_TEMP\postgresql-18.exe"
+          Invoke-WebRequest $env:PG_INSTALLER -OutFile $installer -MaximumRetryCount 5 -RetryIntervalSec 10
+          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash
+          if ($hash -ne $env:PG_INSTALLER_SHA256) { throw "postgresql-18 installer: sha256 $hash" }
+          $arguments = "--mode unattended --unattendedmodeui none --superpassword root --serverport 5432 " +
+                       "--disable-components stackbuilder,pgAdmin"
+          $installed = Start-Process $installer -ArgumentList $arguments -Wait -PassThru
+          if ($installed.ExitCode) { throw "postgresql-18 installer: exit code $($installed.ExitCode)" }
+          Get-Service postgresql*
+          & "$env:PGROOT\bin\psql.exe" --version
       - name: pgvector from source (nmake /F Makefile.win)
         shell: cmd
         run: |
@@ -131,14 +133,17 @@ jobs:
           cd /d "%RUNNER_TEMP%\pgvector"
           nmake /NOLOGO /F Makefile.win || exit /b 1
           nmake /NOLOGO /F Makefile.win install || exit /b 1
-      - name: Database cluster on port 5433
+      - name: Role and database amemo (not a superuser), extensions vector and btree_gist
         run: |
-          $data = "$env:RUNNER_TEMP\pgdata"
-          & "$env:PGBIN\initdb.exe" -D $data -U test --auth=trust -E UTF8 --no-locale
+          $env:PGPASSWORD = "root"
+          $psql = "$env:PGROOT\bin\psql.exe"
+          & $psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 `
+            -c "CREATE ROLE amemo LOGIN CREATEDB PASSWORD 'amemo-ci'" -c "CREATE DATABASE amemo OWNER amemo"
           if ($LASTEXITCODE) { exit 1 }
-          & "$env:PGBIN\pg_ctl.exe" -D $data -l "$env:RUNNER_TEMP\postgres.log" -o "-p 5433" -w start
-          if ($LASTEXITCODE) { Get-Content "$env:RUNNER_TEMP\postgres.log"; exit 1 }
-          & "$env:PGBIN\createdb.exe" -h 127.0.0.1 -p 5433 -U test onecmd
+          & $psql -h 127.0.0.1 -U postgres -d amemo -v ON_ERROR_STOP=1 `
+            -c "CREATE EXTENSION IF NOT EXISTS vector" -c "CREATE EXTENSION IF NOT EXISTS btree_gist"
+          if ($LASTEXITCODE) { exit 1 }
+          & $psql -h 127.0.0.1 -U postgres -d template1 -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector"
           if ($LASTEXITCODE) { exit 1 }
       - name: Wheel of this branch, uv tool install
         id: wheel
@@ -158,14 +163,16 @@ jobs:
           python -m pip install --quiet -e . pytest ocfl-py==2.1.0
           python -m pytest -q -p no:cacheprovider tests/test_portable.py tests/test_ocfl_store.py
           if ($LASTEXITCODE) { exit 1 }
-      - name: amemo init, amemo install claude-code, amemo doctor, hooks, tokens, amemo serve /health
+      - name: amemo init, install claude-code, doctor, hooks, tokens, serve /health, backup create and verify
         if: ${{ !cancelled() && steps.wheel.outcome == 'success' }}     # и после упавших тестов хранилища
         run: |
+          Remove-Item Env:PGPASSWORD, Env:PGUSER -ErrorAction SilentlyContinue      # из образа раннера
           $env:HOME = "$env:RUNNER_TEMP\not-the-profile"
+          $env:AMEMO_PG_BIN = "$env:PGROOT\bin"
           (Get-Command amemo).Source
-          python tools/windows_smoke.py "postgresql://test@127.0.0.1:5433/onecmd"
+          python tools/windows_smoke.py "postgresql://amemo:amemo-ci@127.0.0.1:5432/amemo"
           if ($LASTEXITCODE) { exit 1 }
       - if: failure()
         run: |
-          Get-Content "$env:RUNNER_TEMP\postgres.log" -ErrorAction SilentlyContinue
+          Get-ChildItem "$env:PGROOT\data\log" -ErrorAction SilentlyContinue | Get-Content -Tail 50
           Get-Content "$env:USERPROFILE\.local\state\amemo\hooks.log" -ErrorAction SilentlyContinue

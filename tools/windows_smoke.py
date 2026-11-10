@@ -3,7 +3,8 @@
 amemo — из PATH: колесо этой ветки, поставленное `uv tool install`; база — PostgreSQL с pgvector на этой же машине,
 DSN — первый аргумент. Шаги — как в docs/install-agent.md: amemo init, amemo install claude-code (глобально),
 amemo doctor; хуки запускаются так, как их запускает Claude Code (форма exec: command и args, без оболочки);
-токены общей службы (два token create разом — замок файла); amemo serve: /health и поиск с токеном (журнал запросов).
+токены общей службы (два token create разом — замок файла); amemo serve: /health и поиск с токеном (журнал запросов);
+копии: amemo backup create и create --snapshot, обе — amemo backup verify (pg_dump и pg_restore 18 из AMEMO_PG_BIN).
 
 HOME намеренно указывает в другую папку: на Windows amemo и агенты живут в %USERPROFILE%.
 """
@@ -150,12 +151,22 @@ def check_serve(tokens: Path, token: str) -> None:
         print((TMP / "amemo-serve.log").read_text(encoding="utf-8", errors="replace"))
 
 
+def check_backup() -> None:
+    """Дамп и полный снимок; verify восстанавливает каждую копию во временную базу (роль с CREATEDB) и ищет."""
+    dump = json.loads(amemo("backup", "create", "--json"))
+    snapshot = json.loads(amemo("backup", "create", "--snapshot", "--json"))
+    for source in (dump["manifest"], snapshot["path"]):
+        assert Path(source).exists(), source
+        amemo("backup", "verify", source)
+
+
 def main() -> None:
     check_init()
     handlers = check_install()
     check_doctor()
     check_hooks(handlers)
     check_serve(*check_tokens())
+    check_backup()
     print("amemo на Windows: всё прошло")
 
 
