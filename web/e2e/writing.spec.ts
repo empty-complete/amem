@@ -191,9 +191,8 @@ test("неверная цитата — замечание уровня 2 у и�
 });
 
 test("свой вид из конструктора — сразу в /new", async ({ page }) => {
-  await page.goto("./settings");
-  await page.getByRole("button", { name: "Настроить виды" }).click();
-  const dlg = page.getByRole("dialog", { name: "Мои виды" });
+  await page.goto("./kinds");
+  const dlg = page.getByRole("region", { name: "Мои виды" });
   await dlg.getByRole("button", { name: "Вид" }).click();
   await dlg.getByRole("textbox", { name: "Имя вида" }).fill("Обход площадки");
   await dlg.getByRole("button", { name: "Добавить свойство" }).click();
@@ -255,9 +254,8 @@ test("конструктор видов на низком экране: длин
 }) => {
   test.skip(isMobile, "высота окна задаётся явно");
   await page.setViewportSize({ width: 1280, height: 520 });
-  await page.goto("./settings");
-  await page.getByRole("button", { name: "Настроить виды" }).click();
-  const dlg = page.getByRole("dialog", { name: "Мои виды" });
+  await page.goto("./kinds");
+  const dlg = page.getByRole("region", { name: "Мои виды" });
   await dlg.getByRole("button", { name: "Вид", exact: true }).click();
   await dlg.getByRole("textbox", { name: "Имя вида" }).fill("Длинный обход");
   for (const name of ["Что нашли", "Где", "Кто смотрел", "Что сделали"]) {

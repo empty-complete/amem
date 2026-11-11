@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { errorText } from "../../api/errors";
 import { q, REVIEW_LIMIT } from "../../api/queries";
+import { ColumnGrip } from "../../ui/ColumnGrip";
 import { RegionState } from "../../ui/RegionState";
 import { arrange, facets, filterItems, type Grouping, nextAfter } from "./groups";
 import { QueueList } from "./QueueList";
@@ -225,6 +226,7 @@ export function ReviewPage({
   return (
     <div className="review" data-item={itemId ? true : undefined}>
       <section className="review__list" aria-labelledby="review-title">
+        <ColumnGrip name="--review-w" label={t("review.width")} min={280} max={720} initial={380} />
         <h1 id="review-title" className="review__h">
           {t("review.title")}
           {list.data && <span className="count">{items.length}</span>}

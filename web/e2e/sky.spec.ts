@@ -116,7 +116,7 @@ test("правая панель: ширина стрелками, свёрнут
 }) => {
   test.skip(isMobile, "на узком экране панель стоит под записью, ширина не меняется");
   await page.goto(`./atom/${A3}`);
-  const grip = page.getByRole("separator", { name: "Ширина панели" });
+  const grip = page.getByRole("separator", { name: "Ширина панели", exact: true });
   const before = Number(await grip.getAttribute("aria-valuenow"));
   await grip.focus();
   await page.keyboard.press("ArrowLeft");
@@ -124,7 +124,7 @@ test("правая панель: ширина стрелками, свёрнут
   await page.getByRole("tab", { name: "Окрестность" }).click();
   await page.reload();
   await expect(page.getByRole("tab", { name: "Окрестность" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("separator", { name: "Ширина панели" })).toHaveAttribute(
+  await expect(page.getByRole("separator", { name: "Ширина панели", exact: true })).toHaveAttribute(
     "aria-valuenow",
     String(before + 24),
   );

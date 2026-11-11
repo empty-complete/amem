@@ -78,3 +78,39 @@
     opacity: 0.55;
   }
 }
+
+/* край колонки, который тянут: невидим, при наведении — линия, курсор «ширина» */
+.colgrip {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  z-index: 5;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.colgrip::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background-color var(--dur-micro) var(--ease);
+}
+.colgrip:hover::after,
+.colgrip:active::after {
+  background: var(--separator);
+}
+.colgrip:focus-visible {
+  outline: 0;
+}
+.colgrip:focus-visible::after {
+  background: var(--focus);
+}
+@media (max-width: 64rem) {
+  .colgrip {
+    display: none;
+  }
+}

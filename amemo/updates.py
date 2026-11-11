@@ -575,7 +575,8 @@ class Updater:
             message = self._describe(state, latest, data)
         return {"current": self.current, "latest": {"version": latest["version"], "url": latest.get("url")}
                 if latest else None, "channel": channel(self.current), "install": self.kind.kind,
-                "auto": self.auto(data), "state": state, "checked_at": data.get("checked_at"), "message": message}
+                "auto": self.auto(data), "auto_locked": not self.settings.auto_update, "state": state,
+                "checked_at": data.get("checked_at"), "message": message}
 
     def _describe(self, state: str, latest: dict | None, data: dict) -> str:
         if state == "checking":

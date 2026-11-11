@@ -219,9 +219,8 @@ test("«Мои виды» на службе: свой вид, запись по 
   // длинный путь по службе: сохранение вида, запись с окном отмены 6,5 с, снова конструктор
   test.setTimeout(90_000);
   const problems = watch(page);
-  await page.goto("./settings");
-  await page.getByRole("button", { name: "Настроить виды" }).click();
-  const dlg = page.getByRole("dialog", { name: "Мои виды" });
+  await page.goto("./kinds");
+  const dlg = page.getByRole("region", { name: "Мои виды" });
   await dlg.getByRole("button", { name: "Вид", exact: true }).click();
   await dlg.getByRole("textbox", { name: "Имя вида" }).fill("Обход площадки");
   await dlg.getByRole("button", { name: "Добавить свойство" }).click();
@@ -243,8 +242,7 @@ test("«Мои виды» на службе: свой вид, запись по 
   expect(rec.payload.kind).toBe("obkhod_ploshchadki");
   expect(rec.payload.qualifiers?.[0]?.value_text).toBe("растяжка ослабла");
 
-  await page.goto("./settings");
-  await page.getByRole("button", { name: "Настроить виды" }).click();
+  await page.goto("./kinds");
   await dlg.getByRole("button", { name: "Обход площадки" }).click();
   await dlg.getByRole("button", { name: "Удалить вид" }).click();
   await expect(dlg).toContainText("есть записи");

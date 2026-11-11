@@ -118,3 +118,13 @@
 .danger {
   color: var(--danger);
 }
+
+/* «Мои виды» страницей: та же форма, что в панели, шириной страницы настроек */
+.kindspage {
+  display: grid;
+  gap: var(--s-md);
+  max-width: 720px;
+}
+.kindspage .drawer__body {
+  padding: 0;
+}
