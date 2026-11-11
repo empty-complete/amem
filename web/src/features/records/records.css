@@ -74,7 +74,15 @@
   font-size: var(--t-meta);
   color: var(--muted);
   min-width: 0;
-  flex-wrap: wrap;
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* «о чём» и папка — одной строкой: длинное имя сжимается многоточием, строка не растёт в пять этажей */
+.row .line2 > span {
+  flex: 0 1 auto;
+  min-width: 2ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .row .line2 .snip {
   color: var(--ink-2);

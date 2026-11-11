@@ -207,3 +207,17 @@
 .fld--row:hover {
   background: var(--surface-secondary);
 }
+
+.fill__more {
+  font-size: var(--t-meta);
+  color: var(--muted);
+}
+.fill__more summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.fill__more ul {
+  columns: 2 16rem;
+  margin: var(--s-xs) 0 0;
+  padding-left: var(--s-md);
+}
