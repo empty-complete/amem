@@ -66,14 +66,11 @@ The wizard pages alone run in a browser with a mock of the app (`cd web; npm run
 
 ## Update signing key (repository owner, once)
 
-Updates must be signed with a Tauri key pair. Until the owner creates it, CI signs with a throwaway key per run, which
-checks the signing step but is useless for releases.
+Updates must be signed with a Tauri key pair. The public key of the pair is in `plugins.updater.pubkey` of
+`src-tauri/tauri.conf.json`. The private key and its password belong in the repository secrets
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; until they are set, CI signs with a throwaway
+key per run, which checks the signing step but is useless for releases.
 
-```powershell
-npx tauri signer generate -w amemo-updater.key
-```
-
-Put the content of `amemo-updater.key` and its password into the repository secrets `TAURI_SIGNING_PRIVATE_KEY` and
-`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and the content of `amemo-updater.key.pub` into `plugins.updater.pubkey` of
-`src-tauri/tauri.conf.json`. Keep the private key outside the repository: losing it means installed apps can no longer
-be updated.
+Keep the private key outside the repository: losing it means installed apps can no longer be updated. A new pair
+(`npx tauri signer generate -w amemo-updater.key`) replaces both the secrets and the public key, and apps installed
+with the old public key will not accept updates signed with the new one.
