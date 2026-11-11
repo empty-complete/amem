@@ -22,7 +22,18 @@ description: Record 1–3 durable findings of a finished task into the amemo kno
 1. Дубли: `amemo_search` по марке или ключевым словам. Нашлась та же мысль — не пиши вторую: дополни найденную
    (новая ревизия с `record_id`) или запиши только отличие и свяжи их.
 2. Атом: `kind` (словарь — `amemo_vocab kind`), короткий `key`, `label` и `summary_plain` (ru и en, если можешь),
-   `codes` — марки и обозначения, `about` — сущности, о которых атом.
+   `codes`, `tags`, `about`. Поля:
+   - `label` — до 80 знаков: предмет записи, что и по какому документу («Конвективный коэффициент теплообмена по
+     ГОСТ Р 54858, прил. Б»). Без чисел, диапазонов и формул — длиннее сервер вернёт замечание `label_long`;
+   - `summary_plain` — одно предложение простыми словами;
+   - `body` — начинается с точной формулировки утверждения с числами, дальше пояснения; формулы — LaTeX: `$…$`
+     в строке, `$$…$$` отдельной строкой;
+   - `codes` — только марки и обозначения для точного поиска (`m10`, `dn50`, номер пункта, норматив); не значения
+     с единицами и не обычные слова;
+   - `tags` — только сфера знания из тех, что завёл человек (`amemo_vocab tag`); тему говорит вид записи,
+     объект ставится в `about`;
+   - даты, итерации, редакции — в `valid_from`, `valid_to` и свойства, не в название.
+   Одно утверждение — один атом; несколько — несколько атомов со связями или список в тексте.
 3. Источник обязателен: `sources` — `path` документа, место (`selectors`: страница, лист, раздел) и дословная
    `quote` с одной страницы. Нет документа — `basis`: `default` (умолчание методики) или `assumed` (допущение),
    оба — с `derived_from` на правило; `author` ставит только человек.
@@ -48,7 +59,18 @@ technique that proved itself; an open question that cannot be closed now.
 1. Duplicates: `amemo_search` by code or keywords. Same idea found — do not write a second one: extend it (new
    revision with `record_id`) or write only the difference and link them.
 2. Atom: `kind` (vocabulary — `amemo_vocab kind`), short `key`, `label` and `summary_plain` (ru and en when you
-   can), `codes` for designations, `about` for the entities it is about.
+   can), `codes`, `tags`, `about`. Fields:
+   - `label` — up to 80 characters: what the record is about and by which document («Convective heat transfer
+     coefficient per GOST R 54858, annex B»). No numbers, ranges or formulas; longer gets the `label_long` notice;
+   - `summary_plain` — one plain sentence;
+   - `body` — starts with the exact claim with its numbers, then explanations; formulas in LaTeX: `$…$` inline,
+     `$$…$$` on their own line;
+   - `codes` — only designations for exact search (`m10`, `dn50`, clause number, standard); not values with units
+     and not ordinary words;
+   - `tags` — only a sphere of knowledge from those a person set up (`amemo_vocab tag`); the kind says the topic,
+     objects go to `about`;
+   - dates, iterations, editions — in `valid_from`, `valid_to` and properties, not in the label.
+   One claim — one atom; several — several linked atoms or a list in the body.
 3. A source is required: `sources` with the document `path`, the place (`selectors`: page, sheet, section) and a
    verbatim `quote` from one page. No document — `basis`: `default` (method default) or `assumed` (assumption),
    both with `derived_from` pointing to the rule; `author` is for humans only.

@@ -209,6 +209,7 @@ class CheckCode(str, Enum):
     external_source = "external_source"
     source_error = "source_error"
     numbers_unchecked = "numbers_unchecked"
+    label_long = "label_long"
     edition_filled = "edition_filled"
     unknown_property = "unknown_property"
     out_of_range = "out_of_range"

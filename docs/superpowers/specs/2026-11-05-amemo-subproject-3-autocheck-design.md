@@ -143,6 +143,7 @@ check.submit(conn, store, docs, proposals, links=(), *, agent, activity=None, re
 | `external_source` | 2 | warning | Источник — страница сайта или переписка |
 | `source_error` | 2 | warning | Сбой извлечения или сверки |
 | `numbers_unchecked` | 2 | info | Числа не с чем сверить: ни у одного источника нет фрагмента |
+| `label_long` | 1 | info | Название длиннее 80 знаков: в названии — предмет, утверждение — в тексте; статус и очередь не меняет, в сводке ответа агенту есть |
 | `edition_filled` | 2 | info | Редакция подставлена по файлу |
 | `unknown_property` | 3 | warning | Кода величины нет в словаре `property`, хотя словарь величин загружен |
 | `out_of_range` | 3 | warning | Значение вне `plausible_min` – `plausible_max` величины |

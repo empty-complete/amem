@@ -354,7 +354,7 @@ def test_concept_family_in_schema():
 
 def test_core_marks_its_kinds():
     core = packs.load_pack(packs.CORE_PACK)
-    assert core.version == "1.4.1"
+    assert core.version == "1.4.2"
     assert {c.code: c.family for c in core.concepts if c.scheme == "kind"} == {
         "fact": "source", "parameter": "source", "term": "source", "requirement": "source",
         "decision": "work", "lesson": "work", "method": "work", "question": "work", "note": "work"}

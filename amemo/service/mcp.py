@@ -352,9 +352,9 @@ def build(runtime: Runtime) -> MCPServer:
                           lang=lang)
 
     @server.tool(annotations=WRITE, description=(
-        "Записать пакет: proposals [{target: atom|entity, payload, record_id?}], links — связи, reason — причина. "
-        "Пакет проходит автопроверку; <private>…</private> вырезается; ответ — Submitted с warnings. / Submit a "
-        "batch through the check."))
+        "Записать пакет: proposals [{target, payload, record_id?}], links, reason; проходит автопроверку, <private> "
+        "вырезается. Атом: label до 80 знаков — предмет; утверждение с числами и LaTeX — в начало body; codes — "
+        "обозначения; tags — сфера; объекты — в about. / Submit a batch through the check."))
     async def amemo_submit(
             proposals: Annotated[list[dict[str, Any]], Field(description="[{target, payload, record_id?}]")],
             ctx: Context,

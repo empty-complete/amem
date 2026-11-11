@@ -298,3 +298,14 @@ def test_subprocess_session_start_reads_stdin_and_answers_json(kb, env, tmp_path
     text = context(done.stdout.decode("utf-8"), "SessionStart")
     assert f"- {written.refs['@a1']} — «Атом a1» (fact; проверено человеком)" in text
     assert done.stderr == b""
+
+
+def test_prompt_line_carries_the_gist_after_a_short_label(kb, env):
+    """Короткое название — о предмете; суть (summary_plain) идёт в строке подсказки следом."""
+    body = atom("gist", codes=["ВН-47"], label="Кронштейн ВН-47")
+    body.payload["summary_plain"] = {"ru": "Кронштейн держится на одном анкере М10."}
+    refs = records.commit(kb, [body], agent=AGENT).refs
+    out = hooks.run("UserPromptSubmit", event("UserPromptSubmit", prompt="Что с ВН-47?"), env)
+    text = context(out, "UserPromptSubmit")
+    assert (f"- {refs['@gist']} — «Кронштейн ВН-47» (fact; не проверено): "
+            "Кронштейн держится на одном анкере М10.") in text
