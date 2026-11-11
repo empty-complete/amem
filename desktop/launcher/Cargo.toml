@@ -1,0 +1,20 @@
+[package]
+name = "amemo-launcher"
+version = "0.0.0"
+description = "bin\\amemo.exe: runs amemo from the current runtime of the amemo app for Windows"
+edition = "2021"
+license = "AGPL-3.0-only"
+publish = false
+
+[[bin]]
+name = "amemo"
+path = "src/main.rs"
+
+[dependencies]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

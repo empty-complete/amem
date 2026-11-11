@@ -1,7 +1,7 @@
 """Своя установка amemo без Docker и без прав администратора: setup и pg (amemo/localpg.py).
 
 `amemo setup --pg-bin DIR [--data DIR] [--docs DIR] [--lang ru|en] [--port N] [--embed [--embed-models DIR]]
-[--ocr ЯЗЫКИ] [--agents claude-code,codex] [--no-auto-update]` — всё, что делает установщик (спецификация приложения
+[--ocr ЯЗЫКИ] [--agents claude-code,codex] [--no-auto-update] [--progress]` — всё, что делает установщик (спецификация приложения
 для Windows, D1), одной командой без вопросов:
 1. кластер PostgreSQL в <data>/pg (initdb: роль amemo со случайным паролем, UTF8, только localhost, первый свободный
    порт от 5436), если его ещё нет;
@@ -13,6 +13,9 @@
    распознавания, как amemo ocr install; оба — действия человека: из окружения агента — отказ (код 2) до любых
    изменений;
 6. --agents — amemo install для каждого агента.
+
+--progress — ход по шагам для приложения amemo для Windows: строки JSON `{"stage": …, "state": …}` в stderr
+(шаги database, store, search, ocr, agents; состояния running, done, skipped), как у экрана установки мастера.
 
 Повторный запуск продолжает с того места, где остановился: кластер и amemo.toml, созданные setup, переиспользуются
 (пароль не меняется). Файл настроек, который создал не setup (в нём нет pg_data этой установки), не переписывается —
@@ -26,6 +29,7 @@ import json
 import os
 import secrets
 import shutil
+import sys
 from pathlib import Path
 
 from ...portable import O_BINARY, home
@@ -51,6 +55,8 @@ def register(sub, shared) -> None:
     p.add_argument("--agents", metavar="СПИСОК", help="подключить агентов: claude-code,codex")
     p.add_argument("--no-auto-update", action="store_true",
                    help="auto_update = false: обновляет не служба, а программа установки")
+    p.add_argument("--progress", action="store_true",
+                   help="ход по шагам — строки JSON в stderr (приложение amemo для Windows)")
 
     _, inner = group(sub, shared, "pg", "свой PostgreSQL (amemo setup): start, stop, status")
     for name, help_ in (("start", "запустить кластер"), ("stop", "остановить кластер"),
@@ -152,8 +158,13 @@ def run_setup(ctx, args) -> int:
     except localpg.LocalPgError as e:
         raise CliError(str(e), exit=ENV, code="pg_bin") from None
 
+    def stage(name: str, state: str) -> None:
+        if args.progress:
+            print(json.dumps({"stage": name, "state": state}), file=sys.stderr, flush=True)
+
     previous = _existing(ctx, config, cluster.data)
     steps = []
+    stage("database", "running")
     try:
         if previous is None:
             port = args.port or localpg.free_port()
@@ -184,11 +195,15 @@ def run_setup(ctx, args) -> int:
     except localpg.LocalPgError as e:
         raise CliError(str(e), exit=ENV, code="local_pg") from None
 
+    stage("database", "done")
+    stage("store", "running")
     applied, base, root = prepare(ctx)
+    stage("store", "done")
     result = {"base_id": base["base_id"], "config": str(config), "pg_data": str(cluster.data),
               "pg_bin": str(cluster.bin), "port": cluster.port(), "store": str(root),
               "migrations_applied": applied, "steps": steps, "embed": None, "ocr": None, "agents": []}
 
+    stage("search", "running" if args.embed else "skipped")
     if args.embed:
         if args.embed_models:
             from ... import embed
@@ -200,8 +215,12 @@ def run_setup(ctx, args) -> int:
         class _Yes:
             yes = True
         result["embed"] = embed_cmd.enable(ctx, _Yes())
+        stage("search", "done")
+    stage("ocr", "running" if args.ocr else "skipped")
     if args.ocr:
         result["ocr"] = ocr_cmd.install(ctx, ocr_cmd.languages_of([args.ocr]))
+        stage("ocr", "done")
+    stage("agents", "running" if agents else "skipped")
     for name in agents:
         try:
             report = install.install(name, ctx.env)
@@ -209,6 +228,8 @@ def run_setup(ctx, args) -> int:
             raise CliError(f"amemo install {name}: {e}", exit=ENV, code="install_failed") from None
         result["agents"].append({"agent": name, "changed": bool(report.changes or report.commands),
                                  "warnings": report.warnings})
+    if agents:
+        stage("agents", "done")
 
     def text(r):
         lines = [f"amemo готов: база {r['base_id']}, PostgreSQL на 127.0.0.1:{r['port']}",

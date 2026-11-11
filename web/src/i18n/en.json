@@ -699,5 +699,10 @@
     "badge_failed": "Update failed",
     "reload_text": "amemo was updated to {{v}} — reload the page",
     "reload": "Reload"
+  },
+  "window": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "close": "Close"
   }
 }

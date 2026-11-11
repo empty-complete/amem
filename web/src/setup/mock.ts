@@ -1,4 +1,4 @@
-import { type Bridge, type Choices, type Progress, STAGES, type Stage } from "./bridge";
+import { type Bridge, type Choices, PAUSED, type Progress, STAGES, type Stage } from "./bridge";
 
 const GB = 1024 ** 3;
 const MB = 1024 ** 2;
@@ -10,12 +10,16 @@ const MB = 1024 ** 2;
  * - `fail=<шаг установки>` — шаг завершается ошибкой;
  * - `nonansi=1` — папка данных не открывается программами PostgreSQL (кириллица в английской Windows);
  * - `low=1` — места на томе меньше, чем нужно;
+ * - `start=1` — мастер уже пройден: экран запуска; `start=paused` — фон на паузе; `fail=start` — запуск
+ *   завершается ошибкой (один раз), `freeze=start` — запуск не заканчивается (снимок);
  * - `fast=1` — без пауз (тесты). */
 export function mockBridge(params: URLSearchParams): Bridge {
   const fast = params.get("fast") === "1";
   const wait = (ms: number) => new Promise((r) => setTimeout(r, fast ? 0 : ms));
-  const freeze = params.get("freeze") as Stage | null;
-  const fail = params.get("fail") as Stage | null;
+  const freeze = params.get("freeze") as Stage | "start" | null;
+  const fail = params.get("fail") as Stage | "start" | null;
+  let paused = params.get("start") === "paused";
+  let startFailed = false;
   let picked = 0;
   let failed = false; // ошибка — один раз: «Повторить» проходит
   return {
@@ -28,6 +32,7 @@ export function mockBridge(params: URLSearchParams): Bridge {
         docsDir: "C:\\Users\\anna\\Documents",
         agents: { claude: true, codex: false },
         version: "0.1.0a2",
+        mode: params.get("start") ? "start" : "setup",
       };
     },
     async checkFolder(path) {
@@ -76,6 +81,16 @@ export function mockBridge(params: URLSearchParams): Bridge {
     },
     async finish() {
       await wait(300);
+    },
+    async start(resume) {
+      if (paused && !resume) throw PAUSED;
+      paused = false;
+      if (freeze === "start") return new Promise(() => {});
+      await wait(600);
+      if (fail === "start" && !startFailed) {
+        startFailed = true;
+        throw "PostgreSQL amemo не запустился: pg_ctl: could not start server\nЖурнал — C:\\Users\\anna\\amemo-data\\pg\\log";
+      }
     },
     window: { minimize() {}, toggleMaximize() {}, close() {} },
   };

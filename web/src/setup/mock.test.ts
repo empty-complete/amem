@@ -29,3 +29,14 @@ test("заглушка: путь вне кодировки Windows — запа�
   expect(check).toMatchObject({ ansiSafe: false, fallback: "C:\\amemo-data" });
   expect((await b.checkFolder("C:\\amemo-data")).ansiSafe).toBe(true);
 });
+
+test("заглушка: экран запуска — пауза, затем «Продолжить»; ошибка запуска — один раз", async () => {
+  const paused = mockBridge(new URLSearchParams("fast=1&start=paused"));
+  expect((await paused.defaults()).mode).toBe("start");
+  await expect(paused.start(false)).rejects.toBe("paused");
+  await expect(paused.start(true)).resolves.toBeUndefined();
+  const failing = mockBridge(new URLSearchParams("fast=1&start=1&fail=start"));
+  await expect(failing.start(false)).rejects.toMatch("PostgreSQL");
+  await expect(failing.start(false)).resolves.toBeUndefined();
+  expect((await mockBridge(new URLSearchParams("")).defaults()).mode).toBe("setup");
+});

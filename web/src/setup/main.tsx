@@ -4,9 +4,10 @@ import "../styles/app.css";
 import "./setup.css";
 import { bridge } from "./bridge";
 import { setupI18n } from "./i18n";
+import { Start } from "./Start";
 import { Wizard } from "./Wizard";
 
-/** Мастер первого запуска приложения amemo для Windows (setup.html). */
+/** Мастер первого запуска приложения amemo для Windows (setup.html); когда мастер пройден — экран запуска. */
 async function boot() {
   const b = await bridge();
   const defaults = await b.defaults();
@@ -16,7 +17,11 @@ async function boot() {
   if (root)
     createRoot(root).render(
       <StrictMode>
-        <Wizard bridge={b} defaults={defaults} />
+        {defaults.mode === "start" ? (
+          <Start bridge={b} defaults={defaults} />
+        ) : (
+          <Wizard bridge={b} defaults={defaults} />
+        )}
       </StrictMode>,
     );
 }
