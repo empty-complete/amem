@@ -323,7 +323,9 @@ jobs:
           $now = @(Get-ChildItem "$env:USERPROFILE\Проверка приложения\amemo-data\backups" -Recurse -Filter *.json).Count
           if ($now -le $backups) { throw "перед обновлением не сделан бэкап базы ($backups → $now)" }
           $config = Get-Content "$env:USERPROFILE\.config\amemo\amemo.toml" -Raw
-          if ($config -notmatch [regex]::Escape("runtime\$next")) { throw "pg_bin в amemo.toml — не из нового комплекта" }
+          if ($config -notmatch '(?m)^pg_bin = (".*")$') { throw "в amemo.toml нет pg_bin" }
+          $pgBin = $Matches[1] | ConvertFrom-Json                       # строка TOML в кавычках JSON
+          if ($pgBin -notlike "*\runtime\$next\*") { throw "pg_bin в amemo.toml — не из нового комплекта: $pgBin" }
           if (Test-Path "$env:USERPROFILE\Проверка приложения\amemo-data\pg.before-update") { throw "снимок кластера не убран" }
           if (Test-Path "$env:APP_DIR\runtime\$($v.AMEMO_VERSION)") { Write-Output "прежний комплект пока не удалён (занят?)" }
           & $amemo --version
