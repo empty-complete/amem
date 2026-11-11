@@ -343,6 +343,7 @@ export function RecordEditor(p: RecordEditorProps) {
                   suggest={suggest}
                   onSubmit={save}
                   onMenu={setMenu}
+                  live
                 />
               </Suspense>
               <FormatMenu

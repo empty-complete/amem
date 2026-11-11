@@ -7,6 +7,7 @@ import { defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language"
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView, keymap, placeholder as ph } from "@codemirror/view";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { livePreview } from "./livePreview";
 
 export interface BodyEditorApi {
   wrap: (before: string, after?: string) => void;
@@ -88,6 +89,8 @@ const BodyEditor = forwardRef<
     onSubmit?: () => void;
     /** Правая кнопка на выделении — меню оформления в точке щелчка; без выделения — меню браузера. */
     onMenu?: (at: { x: number; y: number }) => void;
+    /** Живой предпросмотр: разметка скрыта вне строки с курсором (тело записи, не исходник). */
+    live?: boolean;
   }
 >(function BodyEditor(p, ref) {
   const box = useRef<HTMLDivElement>(null);
@@ -123,6 +126,7 @@ const BodyEditor = forwardRef<
           EditorView.lineWrapping,
           markdown(),
           syntaxHighlighting(defaultHighlightStyle),
+          p.live ? livePreview : [],
           ph(p.placeholder),
           autocompletion({ override: [source], icons: false }),
           keymap.of([
