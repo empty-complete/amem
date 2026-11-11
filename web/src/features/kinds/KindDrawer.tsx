@@ -257,7 +257,7 @@ export function KindDrawer({ page = false }: { page?: boolean } = {}) {
   const open = useKindsOpen();
   const editCode = useKindsEdit();
   const qc = useQueryClient();
-  const list = useQuery({ ...q.templates("atom"), enabled: open });
+  const list = useQuery({ ...q.templates("atom"), enabled: open || page });
   const mine = (list.data ?? []).filter((x) => x.editable);
   const [code, setCode] = useState<string | null>(null);
   const [codeTouched, setCodeTouched] = useState(false);
