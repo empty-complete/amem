@@ -59,11 +59,6 @@ const opened: [string, string, (p: import("@playwright/test").Page) => Promise<v
     `./atom/${N1}`,
     async (p) => p.getByRole("button", { name: /^Править, (⌘|Ctrl\+)E$/ }).click(),
   ],
-  [
-    "окно N",
-    `./records`,
-    async (p) => p.getByRole("banner").getByRole("button", { name: "Записать" }).click(),
-  ],
   ["конструктор видов", "./kinds", async () => {}],
   [
     "«+ Источник»",

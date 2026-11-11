@@ -28,7 +28,7 @@ function Summary({ card }: { card: Card }) {
     [
       s.parts.conflict ? t("card.conflicts", { count: s.parts.conflict }) : "",
       s.parts.asked ? t("card.asked_n", { count: s.parts.asked }) : "",
-      s.blockers.length ? t("card.blockers", { list: s.blockers.join(", ").toLowerCase() }) : "",
+      s.blockers.length ? t("card.blockers_n", { count: s.blockers.length }) : "",
     ]
       .filter(Boolean)
       .join(", ")
@@ -46,6 +46,17 @@ function Summary({ card }: { card: Card }) {
         ))}
       </div>
       <p className="fill__line">{line}</p>
+      {/* перечень незаполненного — по запросу: стена из сорока полей в строку не читается */}
+      {s.blockers.length > 0 && (
+        <details className="fill__more">
+          <summary>{t("card.blockers_show")}</summary>
+          <ul>
+            {s.blockers.map((b) => (
+              <li key={b}>{b}</li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }

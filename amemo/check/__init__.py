@@ -226,10 +226,9 @@ def _write(conn, batch: Batch, plans: list[_Plan], checks: dict[str, list[Source
     at = conn.execute("SELECT created_at FROM changeset WHERE id = %s", (cs,)).fetchone()[0]
     queued: list[dict] = []
     out: list[dict] = []
-    # @имя записи пачки → её ссылка: кандидаты уровней 3–4 внутри пачки названы по имени, а в пункте очереди
-    # человеку нужна запись, которую можно открыть
-    named = {p.item.label: f"{records.PREFIX[rev.target]}:{rev.record_id}" for p, rev in zip(plans, result.revisions)
-             if p.item.label.startswith("@")}
+    # метка записи пачки (@имя или items[i] у правки без имени) → её ссылка: кандидаты уровней 3–4 внутри пачки
+    # названы меткой, а в пункте очереди человеку нужна запись, которую можно открыть
+    named = {p.item.label: f"{records.PREFIX[rev.target]}:{rev.record_id}" for p, rev in zip(plans, result.revisions)}
     for p, rev in zip(plans, result.revisions):
         t, label = rev.target, p.item.label
         if rev.created and p.item.record_id is not None and not p.pending:

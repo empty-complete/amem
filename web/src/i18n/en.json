@@ -342,7 +342,12 @@
     "ask_whom": "ask: {{who}}",
     "when": "needed {{when}}",
     "rule": "Rule of template {{rule}}",
-    "unsaved": "not saved"
+    "unsaved": "not saved",
+    "blockers_n_one": "{{count}} required field missing",
+    "blockers_n_few": "{{count}} required fields missing",
+    "blockers_n_many": "{{count}} required fields missing",
+    "blockers_n_other": "{{count}} required fields missing",
+    "blockers_show": "Which fields are empty"
   },
   "changes": {
     "title": "Changes",
