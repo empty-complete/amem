@@ -68,15 +68,20 @@ export const q = {
     }),
   /** Список записей страницами по cursor (предел контракта — 200): «Все записи» и папка доходят до конца.
    * Фильтры складываются (И): теги — все сразу, виды и статусы — любой из. */
-  recordPages: (folder: string | null, f: RecordFilter = {}) =>
+  recordPages: (folder: string | null, f: RecordFilter = {}, nested = true) =>
     infiniteQueryOptions({
-      queryKey: ["records", folder, "pages", f],
+      queryKey: ["records", folder, "pages", f, nested],
       initialPageParam: null as string | null,
       queryFn: async ({ pageParam }) =>
         data(
           await api.GET("/records", {
             params: {
-              query: { ...recordQuery(folder, f), limit: 200, ...(pageParam ? { cursor: pageParam } : {}) },
+              query: {
+                ...recordQuery(folder, f),
+                ...(nested ? {} : { nested: false }),
+                limit: 200,
+                ...(pageParam ? { cursor: pageParam } : {}),
+              },
             },
           }),
         ),

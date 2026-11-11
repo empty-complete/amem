@@ -159,7 +159,7 @@ test("папки: создать, перенести запись из меню,
   await nav.getByRole("button", { name: "Папка", exact: true }).click();
   await page.getByRole("textbox", { name: "Имя новой папки" }).fill("Обходы");
   await page.keyboard.press("Enter");
-  await expect(nav.getByRole("link", { name: /^Обходы/ })).toBeVisible();
+  await expect(nav.getByRole("button", { name: /^Обходы/ })).toBeVisible();
 
   await page.goto(`./atom/${ref}`);
   await page.getByRole("button", { name: "Ещё" }).click();
@@ -174,7 +174,7 @@ test("папки: создать, перенести запись из меню,
   await page.getByRole("menuitem", { name: "Переименовать" }).click();
   await page.getByRole("textbox").filter({ hasText: "" }).last().fill("Обходы площадки");
   await page.keyboard.press("Enter");
-  await expect(nav.getByRole("link", { name: /^Обходы площадки/ })).toBeVisible();
+  await expect(nav.getByRole("button", { name: /^Обходы площадки/ })).toBeVisible();
   const moved = await page.request.get(`/api/v1/records/${ref}`);
   expect(((await moved.json()) as { folder: string }).folder).toBe("Обходы площадки");
 
@@ -185,7 +185,7 @@ test("папки: создать, перенести запись из меню,
   await page.reload();
   await nav.getByRole("button", { name: "Папка «Обходы площадки»: действия" }).click();
   await page.getByRole("menuitem", { name: "Удалить" }).click();
-  await expect(nav.getByRole("link", { name: /^Обходы площадки/ })).toHaveCount(0);
+  await expect(nav.getByRole("button", { name: /^Обходы площадки/ })).toHaveCount(0);
   expect(problems).toEqual([]);
 });
 

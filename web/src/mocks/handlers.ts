@@ -26,6 +26,8 @@ export function filterSummaries<
   const tags = url.searchParams.getAll("tag").filter(Boolean);
   let items = list;
   if (folder === "-") items = items.filter((r) => !r.folder);
+  else if (folder && url.searchParams.get("nested") === "false")
+    items = items.filter((r) => r.folder === folder);
   else if (folder) items = items.filter((r) => r.folder === folder || r.folder?.startsWith(`${folder}/`));
   if (status.length) items = items.filter((r) => status.includes(r.status));
   if (kind.length) items = items.filter((r) => kind.includes(r.kind_or_class));

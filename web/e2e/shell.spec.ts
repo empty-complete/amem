@@ -13,15 +13,23 @@ test("папки и «Все записи»", async ({ page, isMobile }) => {
   } else {
     await expect(menu).toBeHidden();
   }
-  await page
-    .getByRole("navigation", { name: "Папки" })
-    .getByRole("link", { name: /^Архив/ })
-    .click();
+  const nav = page.getByRole("navigation", { name: "Папки" });
+  // папка раскрывается в панели; запись открывается из неё, а в центре — запись, не список
+  await nav.getByRole("button", { name: /^Станция 2024/ }).click();
+  await nav.getByRole("link", { name: /Корпус МС-1 из алюминия/ }).click();
+  await expect(page).toHaveURL(/\/(atom|entity)\//);
+  // в центре — запись, а не список папки
+  await expect(page.locator(".page-head")).toHaveCount(0);
+  if (isMobile) {
+    await expect(nav).toBeHidden();
+    await menu.click();
+  }
+  // широкий список — по значку справа от папки
+  await nav.getByRole("link", { name: "«Архив» списком" }).click();
   await expect(page).toHaveURL(/folder=/);
   await expect(page.getByRole("heading", { level: 1, name: "Архив" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Корпус МС-1 из алюминия/ })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: /Корпус МС-1 из алюминия/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /Ставим мачту/ })).toHaveCount(0);
-  if (isMobile) await expect(page.getByRole("navigation", { name: "Папки" })).toBeHidden();
 });
 
 test("на телефоне меню ведёт в разделы и страница не шире экрана", async ({ page, isMobile }) => {
