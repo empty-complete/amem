@@ -54,7 +54,6 @@
   field-sizing: content;
   resize: none;
   overflow: hidden;
-  line-height: 1.25;
   margin: 0;
   padding: var(--s-2xs) 0;
   border: 0;
@@ -64,6 +63,7 @@
   font: inherit;
   font-size: var(--t-title);
   font-weight: 600;
+  line-height: 1.25;
   letter-spacing: -0.015em;
 }
 .title--edit:focus-visible {
