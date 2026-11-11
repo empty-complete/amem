@@ -1151,6 +1151,12 @@ export interface components {
             verdicts?: Record<string, never>;
             /** @description Аудит по автору пакета: decided, refuted */
             audit?: Record<string, never>;
+            /** @description Проверяющая модель (llm_judge): последнее решение и сколько решено за окно */
+            verifier?: {
+                /** Format: date-time */
+                last_at?: string | null;
+                decided?: number;
+            };
         };
         Submitted: {
             changeset_id: string;
@@ -1767,6 +1773,11 @@ export interface operations {
                 project?: string;
                 rels?: string[];
                 status?: components["parameters"]["StatusFilter"];
+                /** @description Только обзор: записи со всеми этими тегами и связанные с ними объекты */
+                tag?: string[];
+                kind?: components["parameters"]["Kind"];
+                /** @description Только обзор: папка с вложенными; «-» — без папки */
+                folder?: string;
             };
             header?: never;
             path?: never;

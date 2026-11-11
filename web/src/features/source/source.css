@@ -335,3 +335,30 @@ blockquote.quote {
     height: 70dvh;
   }
 }
+
+/* DOCX с вёрсткой: страница документа на светлом листе, цитата подсвечена */
+.docxview {
+  height: 100%;
+  overflow: auto;
+}
+.docxview__doc {
+  padding: var(--s-md);
+  border-radius: var(--r-panel);
+  background: #fff;
+  color: #111;
+  font-size: var(--t-label);
+}
+.docxview__doc .docx {
+  padding: 0 !important;
+  width: auto !important;
+  min-height: 0 !important;
+  box-shadow: none !important;
+}
+.docxview__doc table {
+  border-collapse: collapse;
+}
+.docx__quote {
+  background: color-mix(in oklab, var(--fam-source, #f5c542) 45%, #fff);
+  color: inherit;
+  border-radius: 2px;
+}

@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { errorText } from "../../api/errors";
 import { q } from "../../api/queries";
-import { agentName, formatTime } from "../../ui/format";
+import { formatTime } from "../../ui/format";
 import { RegionState } from "../../ui/RegionState";
 import { recordPath } from "../records/RecordList";
 import { eventText } from "./event";
@@ -58,6 +58,7 @@ export function ChangesPage({ who = "all", since = "7" }: { who?: Who; since?: S
   // срок округляем до часа, чтобы ключ запроса не менялся на каждом рендере
   const from = useMemo(() => sinceIso(since)?.slice(0, 13).concat(":00:00Z"), [since]);
   const list = useQuery(q.changes({ who, since: from }));
+  const me = useQuery(q.session()).data?.agent;
   const groups = useMemo(
     () =>
       list.data
@@ -112,7 +113,9 @@ export function ChangesPage({ who = "all", since = "7" }: { who?: Who; since?: S
               {g.events.map((e) => (
                 <li key={e.id} className="ev">
                   <time dateTime={e.at}>{formatTime(e.at, i18n.language)}</time>
-                  <span className="ev__what">{eventText(e, t)}</span>
+                  <span className="ev__what" data-model={e.agent?.startsWith("model:") || undefined}>
+                    {eventText(e, t, i18n.language, me)}
+                  </span>
                   {e.ref ? (
                     <Link className="ev__rec" {...recordPath(e.ref)}>
                       {e.label ?? e.ref}
@@ -120,9 +123,6 @@ export function ChangesPage({ who = "all", since = "7" }: { who?: Who; since?: S
                   ) : (
                     <span />
                   )}
-                  <span className="ev__who" data-model={e.agent?.startsWith("model:") || undefined}>
-                    {agentName(e.agent, i18n.language)}
-                  </span>
                 </li>
               ))}
             </ol>

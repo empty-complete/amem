@@ -176,7 +176,7 @@ pub async fn setup_pick_folder(app: AppHandle, initial: Option<String>) -> Optio
 }
 
 /// Откуда качать файлы релиза: `AMEMO_RELEASE_BASE` (проверки CI — свой сервер) или страница релиза этой версии.
-fn release_base(version: &str) -> String {
+pub fn release_base(version: &str) -> String {
     match env::var("AMEMO_RELEASE_BASE").ok().filter(|v| !v.is_empty()) {
         Some(base) if base.ends_with('/') => base,
         Some(base) => format!("{base}/"),
@@ -397,11 +397,16 @@ pub async fn install(paths: &Paths, version: &str, choices: &Choices, emit: &Emi
 
 #[tauri::command]
 pub async fn setup_install(app: AppHandle, choices: Choices) -> Result<(), String> {
-    let paths = app.state::<crate::App>().paths.clone();
+    use std::sync::atomic::Ordering;
+
+    let state = app.state::<crate::App>();
+    state.installing.store(true, Ordering::SeqCst);
+    let paths = state.paths.clone();
     let version = version(&app);
     let emit: Emit = std::sync::Arc::new(move |p: Progress| {
         let _ = app.emit("setup://progress", p);
     });
+    // флаг не снимается до конца мастера: обновление не прерывает и шаги после установки
     install(&paths, &version, &choices, &emit).await
 }
 

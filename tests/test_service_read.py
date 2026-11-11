@@ -496,6 +496,14 @@ def test_graph_without_ref_is_the_overview(serve, world):
     assert body["total"] == 5 and all("depth" not in n for n in body["nodes"])
     assert {n["ref"] for n in body["nodes"] if n["pending"]} == {world.w0}
     assert len(body["edges"]) == 5 and contract.check(client.get(f"{V1}/graph", params={"ref": ""}), "/graph") == body
+    # фильтры обзора: тег (w0 — «ветер») с объектом, о котором он; вид; папка
+    by_tag = contract.check(client.get(f"{V1}/graph", params={"tag": "ветер"}), "/graph")
+    assert {n["ref"] for n in by_tag["nodes"]} == {world.w0, world.sensor}
+    assert {n["ref"] for n in contract.check(client.get(f"{V1}/graph", params={"kind": "lesson"}),
+                                             "/graph")["nodes"]} == {world.gusts}
+    assert {n["ref"] for n in contract.check(client.get(f"{V1}/graph", params={"folder": "Проекты"}),
+                                             "/graph")["nodes"]} == {world.w0}
+    problem(client.get(f"{V1}/graph", params={"folder": "a/../b"}), 422, "folder_invalid", "/graph")
     cut = contract.check(client.get(f"{V1}/graph", params={"limit": "2", "depth": "3"}), "/graph")
     kept = {n["ref"] for n in cut["nodes"]}
     assert (len(kept), cut["total"], cut["truncated"]) == (2, 5, True)

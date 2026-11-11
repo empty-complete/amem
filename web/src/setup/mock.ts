@@ -11,7 +11,8 @@ const MB = 1024 ** 2;
  * - `nonansi=1` — папка данных не открывается программами PostgreSQL (кириллица в английской Windows);
  * - `low=1` — места на томе меньше, чем нужно;
  * - `synced=1` — плагин amemo уже загружен в аккаунт и виден в Claude Code;
- * - `start=1` — мастер уже пройден: экран запуска; `start=paused` — фон на паузе; `fail=start` — запуск
+ * - `start=1` — мастер уже пройден: экран запуска; `start=paused` — фон на паузе; `start=updating` — переход на
+ *   комплект новой версии (шаг migrate, снимок — с `freeze=start`); `fail=start` — запуск
  *   завершается ошибкой (один раз), `freeze=start` — запуск не заканчивается (снимок);
  * - `fast=1` — без пауз (тесты). */
 export function mockBridge(params: URLSearchParams): Bridge {
@@ -87,6 +88,14 @@ export function mockBridge(params: URLSearchParams): Bridge {
     async showFile() {},
     async finish() {
       await wait(300);
+    },
+    async status() {
+      const updating = params.get("start") === "updating";
+      return {
+        state: updating ? "updating" : "starting",
+        step: updating ? "migrate" : null,
+        version: "0.1.0a2",
+      };
     },
     async start(resume) {
       if (paused && !resume) throw PAUSED;

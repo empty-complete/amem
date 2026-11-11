@@ -521,6 +521,7 @@ def stats(conn: psycopg.Connection, *, days: int = 7, now: datetime | None = Non
     """Метрики очереди и проверки (разд. 8.7) одним словарём, который сериализуется в JSON.
 
     Окно days считается назад от now и относится только к done и changesets (closed_at и created_at в (now-days, now]);
+    verifier — проверяющая модель: last_at — её последнее решение (не позже now), decided — решений за окно;
     остальные разделы — на now, audit — за всё время. error_codes считает замечания violation (а не пакеты):
     пакет с двумя одинаковыми замечаниями даёт 2.
     queue: claimed — аренда действует, expired — истекла (claimed_until < now), эти два числа не пересекаются.
@@ -572,9 +573,16 @@ def stats(conn: psycopg.Connection, *, days: int = 7, now: datetime | None = Non
         "JOIN changeset cs ON cs.id = coalesce(ri.changeset_id, ar.changeset_id, er.changeset_id) "
         "WHERE ri.reason = 'audit' GROUP BY cs.agent ORDER BY cs.agent")}
 
+    # проверяющая модель (навык amemo-verify): когда решала последний раз и сколько решила за окно
+    last, decided = conn.execute(
+        "SELECT max(created_at), count(*) FILTER (WHERE created_at > %s AND created_at <= %s) "
+        "FROM verification WHERE method = 'llm_judge' AND created_at <= %s",
+        (since, now, now)).fetchone()
+
     return {
         "now": now.isoformat(), "days": days,
         "queue": queue,
+        "verifier": {"last_at": last.isoformat() if last else None, "decided": decided},
         "done": {"by_reason": done, "obsolete": obsolete},
         "changesets": {"approved": states.get("approved", 0), "rejected": states.get("rejected", 0),
                        "error_codes": {code: n for code, n in codes}},

@@ -28,12 +28,19 @@ one program that is the installer wizard, the amemo window and the tray icon.
   size and position are remembered.
 - The NSIS installer installs for the current user into `%LOCALAPPDATA%\amemo` — no administrator rights, no UAC;
   WebView2 comes from the bootstrapper when Windows lacks it.
-- The updater checks `releases/latest/download/latest.json` at start (installing updates is part D7).
+- **Updates** (`src-tauri/src/update.rs`, `upgrade.rs`): at start and every 6 hours the app reads
+  `releases/download/updates/latest.json` (`latest-pre.json` for a pre-release app) and installs a newer version at
+  once (NSIS passive, the app restarts with the same arguments). The new version then moves amemo to its runtime:
+  `amemo backup create`, a copy of the cluster folder and `amemo.toml`, `amemo setup` with the new runtime
+  (migrations), start; if the service does not come up, the copy is put back and the previous runtime runs. Tray:
+  `Update automatically`.
+- **Uninstall** stops the background, removes the Claude Code and Codex connections, the runtime, logs and state;
+  the data folder and `amemo.toml` stay.
 - Commands of the app are allowed to its own pages only (`capabilities/main.json`, `build.rs`); the amemo web UI on
   `http://127.0.0.1:*` may use window commands only (`capabilities/service.json`) — it draws the window buttons in its
   top bar (`web/src/app/shell/WindowControls.tsx`).
 
-Update installation (D7) and releases with the runtime attached (D8) come next.
+Releases with the runtime attached and the update manifests (D8) come next.
 Until D8 a release has no runtime to download: CI serves the runtime of the branch from a local server
 (`AMEMO_RELEASE_BASE`).
 
@@ -59,14 +66,11 @@ The wizard pages alone run in a browser with a mock of the app (`cd web; npm run
 
 ## Update signing key (repository owner, once)
 
-Updates must be signed with a Tauri key pair. Until the owner creates it, CI signs with a throwaway key per run, which
-checks the signing step but is useless for releases.
+Updates must be signed with a Tauri key pair. The public key of the pair is in `plugins.updater.pubkey` of
+`src-tauri/tauri.conf.json`. The private key and its password belong in the repository secrets
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; until they are set, CI signs with a throwaway
+key per run, which checks the signing step but is useless for releases.
 
-```powershell
-npx tauri signer generate -w amemo-updater.key
-```
-
-Put the content of `amemo-updater.key` and its password into the repository secrets `TAURI_SIGNING_PRIVATE_KEY` and
-`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and the content of `amemo-updater.key.pub` into `plugins.updater.pubkey` of
-`src-tauri/tauri.conf.json`. Keep the private key outside the repository: losing it means installed apps can no longer
-be updated.
+Keep the private key outside the repository: losing it means installed apps can no longer be updated. A new pair
+(`npx tauri signer generate -w amemo-updater.key`) replaces both the secrets and the public key, and apps installed
+with the old public key will not accept updates signed with the new one.

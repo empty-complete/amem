@@ -41,11 +41,14 @@ export default defineConfig({
     manifest: true,
     rollupOptions: {
       output: {
-        // CodeMirror делят исходник и редактор тела — один ленивый кусок с понятным именем для бюджета
+        // CodeMirror делят исходник и редактор тела — один ленивый кусок с понятным именем для бюджета;
+        // docx-preview с jszip — свой ленивый кусок: грузится, только когда открыт источник DOCX
         manualChunks: (id) =>
           /node_modules\/(@codemirror|@lezer|crelt|style-mod|w3c-keyname)\//.test(id)
             ? "codemirror"
-            : undefined,
+            : /node_modules\/(docx-preview|jszip|pako|lie|immediate|setimmediate)\//.test(id)
+              ? "docx"
+              : undefined,
       },
     },
   },

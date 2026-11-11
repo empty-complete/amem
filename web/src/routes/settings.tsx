@@ -9,6 +9,7 @@ import { changeLocale, type Locale } from "../app/i18n";
 import { useFolderDepth } from "../app/shell/folderTree";
 import { applyTheme, readTheme, type Theme } from "../app/theme";
 import { kindsStore } from "../features/kinds/store";
+import { LABEL_CHOICES, useLabelMax } from "../features/sky/prefs";
 import { UpdatesSection } from "../features/updates/UpdatesSection";
 import { agentName } from "../ui/format";
 import "../features/records/records.css";
@@ -48,6 +49,7 @@ function Settings() {
   const [theme, setTheme] = useState<Theme>(readTheme());
   const session = useQuery(q.session());
   const token = useAuthToken();
+  const [labelMax, setLabelMax] = useLabelMax();
   const [depth, setDepth] = useFolderDepth();
   return (
     <section aria-labelledby="settings-title" style={{ display: "grid", gap: 24, maxWidth: 520 }}>
@@ -88,6 +90,17 @@ function Settings() {
           onChange={(v) => setDepth(Number(v))}
         />
         <p className="muted">{t("settings.folder_depth_hint")}</p>
+      </div>
+      <div>
+        <Choice
+          label={t("settings.sky_label")}
+          value={String(labelMax)}
+          options={LABEL_CHOICES.map(
+            (n) => [String(n), t("settings.sky_label_n", { n })] as [string, string],
+          )}
+          onChange={(v) => setLabelMax(Number(v))}
+        />
+        <p className="muted">{t("settings.sky_label_hint")}</p>
       </div>
       {token && (
         <div>

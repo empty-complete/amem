@@ -73,6 +73,14 @@ export interface PluginInfo {
   synced: boolean;
 }
 
+/** Фон для экрана запуска: updating — переход на комплект новой версии после обновления приложения. */
+export interface AppStatus {
+  state: "stopped" | "starting" | "updating" | "ready" | "failed" | "paused";
+  /** шаг обновления: backup, download, migrate */
+  step: string | null;
+  version: string;
+}
+
 export interface Finish {
   desktopShortcut: boolean;
   autostart: boolean;
@@ -98,6 +106,8 @@ export interface Bridge {
   /** экран запуска: дождаться базы и службы — окно само перейдёт в amemo. resume — снять паузу. Отказ — текст
    * ошибки или PAUSED (фон на паузе из значка в области уведомлений) */
   start(resume: boolean): Promise<void>;
+  /** состояние фона (экран запуска опрашивает его, пока ждёт start) */
+  status(): Promise<AppStatus>;
   window: { minimize(): void; toggleMaximize(): void; close(): void };
 }
 
@@ -113,7 +123,7 @@ function tauri(): TauriGlobal | undefined {
 
 /** Команды приложения (desktop/src-tauri/src/setup.rs и main.rs): setup_defaults, setup_check_folder,
  * setup_pick_folder, setup_install (события setup://progress), setup_plugin, setup_open_claude, setup_show_file,
- * setup_finish, app_start, app_resume. */
+ * setup_finish, app_start, app_resume, app_status. */
 function tauriBridge(t: TauriGlobal): Bridge {
   const win = t.window.getCurrentWindow();
   return {
@@ -134,6 +144,7 @@ function tauriBridge(t: TauriGlobal): Bridge {
     showFile: (path) => t.core.invoke("setup_show_file", { path }),
     finish: (options) => t.core.invoke("setup_finish", { options }),
     start: (resume) => t.core.invoke(resume ? "app_resume" : "app_start"),
+    status: () => t.core.invoke<AppStatus>("app_status"),
     window: {
       minimize: () => win.minimize(),
       toggleMaximize: () => win.toggleMaximize(),

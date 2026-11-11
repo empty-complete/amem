@@ -38,7 +38,40 @@ export const handlersC = [
     if (!ref) {
       if (project === "empty")
         return HttpResponse.json({ ref: null, nodes: [], edges: [], truncated: false, total: 0 });
-      return HttpResponse.json(project === "big" ? big : baseNow());
+      if (project === "big") return HttpResponse.json(big);
+      // фильтры обзора, как у службы: теги — все сразу (и объекты, связанные с отобранными), вид, папка
+      const tags = url.searchParams.getAll("tag").filter(Boolean);
+      const kinds = url.searchParams.getAll("kind").filter(Boolean);
+      const folder = url.searchParams.get("folder");
+      const g = baseNow();
+      if (!tags.length && !kinds.length && !folder) return HttpResponse.json(g);
+      const rec = new Map(db.records.map((r) => [r.ref, r]));
+      const inFolder = (f: string | null | undefined) =>
+        !folder || (folder === "-" ? !f : f === folder || !!f?.startsWith(`${folder}/`));
+      const atoms = g.nodes.filter((n) => {
+        const r = rec.get(n.ref);
+        return (
+          n.ref.startsWith("atm:") &&
+          (!kinds.length || kinds.includes(n.kind_or_class)) &&
+          inFolder(r?.folder) &&
+          (!tags.length || tags.every((t) => r?.tags?.includes(t)))
+        );
+      });
+      const picked = new Set(atoms.map((n) => n.ref));
+      const near = new Set(
+        g.edges.flatMap((e) => (picked.has(e.src) ? [e.dst] : picked.has(e.dst) ? [e.src] : [])),
+      );
+      const ents = g.nodes.filter(
+        (n) =>
+          n.ref.startsWith("ent:") &&
+          (!kinds.length || kinds.includes(n.kind_or_class)) &&
+          inFolder(rec.get(n.ref)?.folder) &&
+          (!tags.length || near.has(n.ref)),
+      );
+      const nodes = [...atoms, ...ents];
+      const keep = new Set(nodes.map((n) => n.ref));
+      const edges = g.edges.filter((e) => keep.has(e.src) && keep.has(e.dst));
+      return HttpResponse.json({ ...g, nodes, edges, truncated: false, total: nodes.length });
     }
     const g0 = around[ref];
     if (g0) {

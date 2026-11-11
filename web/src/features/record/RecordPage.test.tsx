@@ -88,3 +88,21 @@ test("нет записи — 404 словами", async () => {
   await renderWithApp(<RecordPage recordRef="atm:нет" view="human" />, "/atom/atm:нет");
   expect(await screen.findByRole("alert")).toHaveTextContent("Записи atm:нет нет");
 });
+
+test("источник — диапазон листа: панель показывает таблицу с процитированными ячейками", async () => {
+  await renderWithApp(<RecordPage recordRef={A16} view="human" />, `/atom/${A16}`);
+  const panel = await screen.findByRole("complementary", { name: "Источник" });
+  await userEvent.click(
+    within(panel).getByRole("radio", { name: "Источник 2" }).closest("button") ??
+      within(panel).getByRole("radio", { name: "Источник 2" }),
+  );
+  expect(await within(panel).findByRole("tab", { name: "В-2" })).toBeInTheDocument();
+  expect(within(panel).queryByText(/превью нет/)).not.toBeInTheDocument();
+});
+
+test("у имени свойства — подсказка: что это и откуда берётся", async () => {
+  const user = userEvent.setup();
+  await renderWithApp(<RecordPage recordRef={A3} view="human" />, `/atom/${A3}`);
+  await user.hover(await screen.findByRole("button", { name: "Вид" }));
+  expect(await screen.findByRole("tooltip")).toHaveTextContent(/^Вид записи: факт, параметр/);
+});

@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import importlib.util
 import time
+import unicodedata
 import uuid
 from datetime import datetime
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from . import embed, records, search, usefulness
 
@@ -768,6 +770,34 @@ _OVERVIEW_NODES = {
 }
 
 
+# Узлы обзора с фильтрами (небо на главной: «только тег наука и вид факт»): атомы с текущей ревизией и статусом из
+# набора, у которых все теги %(tags)s, вид из %(kinds)s и папка %(folder)s (с вложенными); сущности — с классом из
+# %(kinds)s и папкой, а с тегами — только связанные хотя бы с одним отобранным атомом (у сущностей тегов нет).
+# Пустой фильтр — без условия.
+def _overview_filtered(tags: bool, kinds: bool, folder: str | None) -> str:
+    def where(col_kind: str) -> list[str]:
+        out = []
+        if kinds:
+            out.append(f"x.{col_kind} = ANY(%(kinds)s::text[])")
+        if folder == "-":                                           # «-» — без папки, как в списке записей
+            out.append("x.folder IS NULL")
+        elif folder:
+            out.append("(x.folder = %(folder)s OR starts_with(x.folder, %(folder)s || '/'))")
+        return out
+    atom_where = ["x.status = ANY(%(statuses)s)", *where("kind")]
+    if tags:
+        atom_where.append("r.payload->'tags' @> %(tags)s")
+    entity_where = ["x.status = ANY(%(statuses)s)", *where("entity_class"), _CURRENT_ENTITY.replace("e.id", "x.id")]
+    sql = ("picked_atoms AS MATERIALIZED (SELECT x.id, x.created_at FROM atom x JOIN cur c ON c.atom_id = x.id "
+           f"JOIN atom_revision r ON r.id = c.id WHERE {' AND '.join(atom_where)}), ")
+    if tags:
+        sql += ("tag_entities AS (SELECT far AS id FROM ("
+                + _graph_adjacent_sql(None, ids="ARRAY(SELECT id FROM picked_atoms)") + ") e), ")
+        entity_where.append("x.id IN (SELECT id FROM tag_entities)")
+    return sql + ("nodes AS (SELECT 'atm' AS prefix, id, created_at FROM picked_atoms "
+                  f"UNION ALL SELECT 'ent', x.id, x.created_at FROM entity x WHERE {' AND '.join(entity_where)})")
+
+
 # Отбор обзора: ranked — все узлы под фильтром по degree (при равенстве новые первыми) с номером и total; хабы —
 # первые %(hubs)s; near — соседи хабов по текущим рёбрам (тем же, что считает degree). Предел заполняется по очереди:
 # хабы, их соседи по degree, остальные по degree — иначе top-N по degree на базе с хабами — почти одни сущности,
@@ -784,7 +814,7 @@ _OVERVIEW_PICK = (
 
 
 def overview(conn: psycopg.Connection, *, limit: int | None = GRAPH_LIMIT, project: str | None = None,
-             statuses=None, rels=None) -> dict:
+             statuses=None, rels=None, tags=None, kinds=None, folder: str | None = None) -> dict:
     """Обзор базы без начальной записи (небо на главной): текущие сущности и записи, не больше limit узлов (None —
     все). Отбор: хабы — limit // 4 узлов (не меньше одного) с наибольшим degree, затем их соседи по текущим рёбрам
     по degree, оставшиеся места — прочие узлы по degree; при равенстве degree — новые первыми (время создания записи,
@@ -796,7 +826,9 @@ def overview(conn: psycopg.Connection, *, limit: int | None = GRAPH_LIMIT, proje
     узлов было бы без предела (с тем же project и статусами), truncated — total > limit. project — ent:<UUID или
     ключ>: атомы с scope.project этого проекта и сущности, связанные хотя бы с одним из них (атомы — под фильтром
     статусов). statuses — как у других рецептов, ко всем шагам отбора; rels — виды рёбер выдачи (как
-    у around_entity), на отбор узлов и степень не влияют.
+    у around_entity), на отбор узлов и степень не влияют. tags (все сразу), kinds (виды атомов и классы сущностей)
+    и folder (с вложенными) сужают узлы, как фильтры списка записей; сущности с tags — только связанные с отобранными
+    атомами. С project фильтры не сочетаются: project — свой отбор.
 
     Отбор — один запрос: степень агрегатом по всем рёбрам, номер по degree и total — оконными функциями, соседи
     хабов — по индексам рёбер, предел — в базе; в Python приходят только вернувшиеся узлы."""
@@ -811,10 +843,17 @@ def overview(conn: psycopg.Connection, *, limit: int | None = GRAPH_LIMIT, proje
         target, _, project_ref = _history_ref(conn, project)
         if target != "entity":
             raise records.RecordError(f"project {project}: нужна сущность ent:, а не атом")
+    tags = sorted({unicodedata.normalize("NFC", t) for t in (tags or ()) if isinstance(t, str) and t})
+    kinds = sorted({k for k in (kinds or ()) if isinstance(k, str) and k})
+    folder = folder or None
+    filtered = project_ref is None and bool(tags or kinds or folder)
+    nodes_sql = (_overview_filtered(bool(tags), bool(kinds), folder) if filtered
+                 else _OVERVIEW_NODES[project_ref is not None])
     rows = conn.execute(
-        f"WITH {_OVERVIEW_DEGREE}, {_OVERVIEW_NODES[project_ref is not None]}, {_OVERVIEW_PICK}",
+        f"WITH {_OVERVIEW_DEGREE}, {nodes_sql}, {_OVERVIEW_PICK}",
         {"statuses": list(allowed_statuses), "project": project_ref, "limit": limit,
-         "hubs": max(1, limit // 4) if limit is not None else 0}).fetchall()
+         "hubs": max(1, limit // 4) if limit is not None else 0, "tags": Jsonb(tags), "kinds": kinds,
+         "folder": folder}, prepare=False).fetchall()
     rows.sort(key=lambda row: row[4])                             # выдача — по degree, как номер в ranked
     total = rows[0][3] if rows else 0
     refs = [f"{prefix}:{record_id}" for prefix, record_id, *_ in rows]

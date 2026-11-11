@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { HomeSky } from "../features/home/HomeSky";
+import { list } from "../features/search/params";
 
 const FAMILIES = ["source", "work", "object"] as const;
 
@@ -20,9 +21,20 @@ export const Route = createFileRoute("/")({
     pending: z.coerce.boolean().optional().catch(undefined),
     center: z.string().optional().catch(undefined),
     project: z.string().optional().catch(undefined),
+    tag: list.optional(),
+    kind: z.string().optional().catch(undefined),
+    folder: z.string().optional().catch(undefined),
   }),
   component: function Home() {
     const s = Route.useSearch();
-    return <HomeSky families={s.f} pending={!!s.pending} center={s.center} project={s.project} />;
+    return (
+      <HomeSky
+        families={s.f}
+        pending={!!s.pending}
+        center={s.center}
+        project={s.project}
+        scope={{ tag: s.tag, kind: s.kind, folder: s.folder }}
+      />
+    );
   },
 });

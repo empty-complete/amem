@@ -127,7 +127,10 @@
     "language": "Language",
     "who": "Signed in as",
     "service": "Service",
-    "version": "amemo version"
+    "version": "amemo version",
+    "sky_label": "Sky label length",
+    "sky_label_hint": "A star label is at most this many characters; the full title is in the star card.",
+    "sky_label_n": "{{n}} characters"
   },
   "theme": {
     "system": "Match system",
@@ -211,7 +214,19 @@
     "compare_now": "Compare with current",
     "restore": "Restore this revision",
     "restored": "restore of revision {{n}}",
-    "same_as_now": "Same as the current one"
+    "same_as_now": "Same as the current one",
+    "hint": {
+      "kind": "The record kind: fact, parameter, decision, question, lesson or note. Set when recording; the fields depend on it.",
+      "summary": "One sentence on the main point. The agent reads it first; search uses it too.",
+      "about": "The objects the record is about: an instrument, a node, a project. The record shows on their pages.",
+      "values": "The record's quantities with units: value, tolerance, range. Hover a quantity name for its description from the property vocabulary.",
+      "codes": "Designations from documents: grades, numbers, ciphers. Exact search uses them.",
+      "when": "From when and until when the claim holds about the world, not the time it was recorded.",
+      "tags": "Labels for filters and bundles. Click a tag for all records with it.",
+      "basis": "What the claim rests on when it is not a quote from a source: the author's word, a method default or an assumption.",
+      "by": "Who recorded the current revision: a person or a model. For a model, its confidence.",
+      "qualifier": "A property of this record's own, added while editing or in the kind settings."
+    }
   },
   "source": {
     "panel": "Source",
@@ -274,7 +289,9 @@
     "goto_page": "Go to page",
     "goto_ph": "#",
     "full": "Full screen",
-    "full_exit": "Exit full screen"
+    "full_exit": "Exit full screen",
+    "docx": "Document",
+    "this_record": "this record"
   },
   "card": {
     "tab_card": "Card",
@@ -336,13 +353,33 @@
     "who": "Who",
     "when": "Period",
     "ev": {
-      "revision": "new revision",
-      "revision_first": "recorded",
-      "review": "review decision",
-      "status": "status: {{status}}",
-      "link_created": "link added",
-      "link_retired": "link removed",
-      "folder": "moved to a folder"
+      "you": {
+        "first": "You recorded it",
+        "revision": "You recorded revision {{n}}",
+        "status": "You set the status “{{status}}”",
+        "accepted": "You accepted the edit",
+        "declined": "You declined the edit",
+        "review": "You decided a review item",
+        "moved": "You moved it to “{{to}}”",
+        "unfiled": "You took it out of a folder",
+        "linked": "You added a link",
+        "linked_rel": "You added a link “{{rel}}”",
+        "unlinked": "You removed a link"
+      },
+      "they": {
+        "first": "Recorded by {{who}}",
+        "revision": "Revision {{n}} by {{who}}",
+        "status": "Status “{{status}}” set by {{who}}",
+        "accepted": "Edit accepted by {{who}}",
+        "declined": "Edit declined by {{who}}",
+        "review": "Review item decided by {{who}}",
+        "moved": "Moved to “{{to}}” by {{who}}",
+        "unfiled": "Taken out of a folder by {{who}}",
+        "linked": "Link added by {{who}}",
+        "linked_rel": "Link “{{rel}}” added by {{who}}",
+        "unlinked": "Link removed by {{who}}"
+      },
+      "auto_verified": "Verified automatically"
     }
   },
   "palette": {
@@ -400,7 +437,12 @@
     "keys": "/ search · N note · 1 2 3 depth · Esc clear",
     "empty": "The base is empty. Agents write to it over MCP or the CLI, and you can write the first note.",
     "write": "Write a note",
-    "all": "All records"
+    "all": "All records",
+    "scope": "What the sky shows",
+    "folder": "Folder",
+    "folder_any": "Any folder",
+    "scope_btn": "Narrow the sky",
+    "scope_open": "Narrow the sky: tags, kind, folder"
   },
   "write": {
     "saved": "Saved: {{what}}",
@@ -536,6 +578,22 @@
     "type_tags": "Tags"
   },
   "review": {
+    "tabs": "Whose queue",
+    "tab_you": "Waiting for you",
+    "tab_model": "The model handles",
+    "intro": "These items only a person decides. Review is not required: drafts and records waiting for review are found by search too, with their status.",
+    "model_last_one": "Semantic checks are handled by the reviewing model. Last pass {{when}}; {{count}} item decided in 7 days. You can decide an item too.",
+    "model_last_other": "Semantic checks are handled by the reviewing model. Last pass {{when}}; {{count}} items decided in 7 days. You can decide an item too.",
+    "model_never": "Semantic checks are handled by the reviewing model (the amemo-verify skill). It has not run yet: items wait for it or for you.",
+    "empty_you": "Nothing waits for you. Drafts and unreviewed records are still found by search, with their status.",
+    "empty_model": "No semantic checks in the queue.",
+    "after_confirm": "Confirm: the record becomes verified.",
+    "after_refute": "Reject: the record gets the status “Rejected” and leaves search.",
+    "after_confirm_edit": "Confirm: the edit becomes the current version.",
+    "after_refute_edit": "Reject: the edit is dropped, the previous version stays.",
+    "after_skip": "Skip: the item stays in the queue, you can come back to it.",
+    "model_last_few": "Semantic checks are handled by the reviewing model. Last pass {{when}}; {{count}} items decided in 7 days. You can decide an item too.",
+    "model_last_many": "Semantic checks are handled by the reviewing model. Last pass {{when}}; {{count}} items decided in 7 days. You can decide an item too.",
     "title": "Review",
     "reason": "Reason",
     "any": "Any",

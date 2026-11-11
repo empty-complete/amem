@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from amemo import db, ids, recipes, records, review, usefulness
+from amemo import db, folders, ids, recipes, records, review, usefulness
 from amemo.records import Item, RecordError, RecordNotFound
 
 AGENT = "model:test"
@@ -580,3 +580,28 @@ def test_overview_takes_hubs_then_their_neighbours_so_the_sky_has_lines(kb):
     assert len(many["nodes"]) == 32 and hubs <= {n["ref"] for n in many["nodes"]}
     assert {refs["@lone1"], refs["@lone2"]}.isdisjoint({n["ref"] for n in many["nodes"]})
     assert len(recipes.overview(kb, limit=36)["edges"]) == 30                # все хабы и листья, без одиночек
+
+
+def test_overview_filters_by_tags_kind_and_folder(kb):
+    """Фильтры обзора, как у списка записей: теги — все сразу (с ними — и объекты, связанные с отобранными
+    атомами), вид или класс, папка с вложенными и «-» — без папки."""
+    sci1 = atom("sci1", about=["@e1"])
+    sci1.payload["tags"] = ["наука"]
+    sci2 = atom("sci2")
+    sci2.payload["tags"] = ["наука", "ветер"]
+    sci2.payload["kind"] = "lesson"
+    plain = atom("plain", about=["@e2"])
+    refs = records.commit(kb, [entity("e1"), entity("e2"), entity("lone"), sci1, sci2, plain], agent=AGENT).refs
+    folders.move(kb, refs["@sci1"], "Наука/Ветер", agent=AGENT)
+
+    def picked(**kw):
+        return {n["ref"] for n in recipes.overview(kb, **kw)["nodes"]}
+
+    assert picked(tags=["наука"]) == {refs["@sci1"], refs["@sci2"], refs["@e1"]}
+    assert picked(tags=["наука", "ветер"]) == {refs["@sci2"]}
+    assert picked(kinds=["lesson"]) == {refs["@sci2"]}
+    assert picked(kinds=["document"]) == {refs["@e1"], refs["@e2"], refs["@lone"]}
+    assert picked(folder="Наука") == {refs["@sci1"]}
+    assert picked(folder="-") == {refs["@sci2"], refs["@plain"], refs["@e1"], refs["@e2"], refs["@lone"]}
+    assert picked(tags=["наука"], kinds=["fact"]) == {refs["@sci1"]}          # вид сужает и объекты
+    assert recipes.overview(kb, tags=["наука"])["total"] == 3

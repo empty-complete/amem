@@ -12,6 +12,7 @@ import { placeStore } from "../write/place";
 import { skyBus } from "./bus";
 import { useReducedMotion, useSkyColors } from "./colors";
 import { arrowNeighbour, buildSky, dimmed, type Filter } from "./model";
+import { type SkyScope, useLabelMax } from "./prefs";
 import type { SkyCanvasApi } from "./SkyCanvas";
 import { StarCard } from "./StarCard";
 import "./sky.css";
@@ -51,6 +52,8 @@ export interface SkyProps {
   onSummary?: (s: { records: number; objects: number; pending: number }) => void;
   label?: string;
   showDepth?: boolean;
+  /** Фильтры обзора (главная): теги, вид, папка; к окрестности записи не применяются. */
+  scope?: SkyScope;
 }
 
 /** Окно неба (разд. 4.4): одно на главной, объекте, записи и в проверке — отличается только центром. */
@@ -73,7 +76,8 @@ export function Sky(props: SkyProps) {
   const canvas = useRef<SkyCanvasApi>(null);
   const colors = useSkyColors(host);
   const reduced = useReducedMotion();
-  const graph = useQuery(q.graph({ ref: props.centerRef, depth, project: props.project }));
+  const [labelMax] = useLabelMax();
+  const graph = useQuery(q.graph({ ref: props.centerRef, depth, project: props.project, ...props.scope }));
   const [extra, setExtra] = useState<
     { star: import("./model").Star; links: { source: string; target: string; rel: string }[] }[]
   >([]);
@@ -221,6 +225,7 @@ export function Sky(props: SkyProps) {
           reducedMotion={reduced}
           onSelect={select}
           onOpen={open}
+          labelMax={labelMax}
         />
       )}
     </Suspense>

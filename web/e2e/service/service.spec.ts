@@ -97,7 +97,8 @@ test("быстрая запись по N: «Отменить» — ничего 
 
 test("проверка: Y — решено в службе после окна; второй раз — «Уже решено»", async ({ page }) => {
   const problems = watch(page);
-  await page.goto("./review");
+  // пункты образца — смысловая проверка черновиков модели: вкладка «Разбирает модель»
+  await page.goto("./review?who=model");
   const list = page.getByRole("listbox", { name: "Очередь проверки" });
   await expect(list.getByRole("option")).toHaveCount(2);
   await list.getByRole("option").first().click();
@@ -124,11 +125,14 @@ test("проверка: Y — решено в службе после окна; 
 test("очередь по документам: пункт знает документ, группа с его именем", async ({ page }) => {
   const problems = watch(page);
   const items = (await (await page.request.get("/api/v1/review/items?state=queued&limit=500")).json()) as {
+    reason: string;
     source: { object_name: string } | null;
   }[];
-  const named = items.find((i) => i.source?.object_name)?.source?.object_name;
+  const hit = items.find((i) => i.source?.object_name);
+  const named = hit?.source?.object_name;
   expect(named, "у открытого пункта образца есть документ").toBeTruthy();
-  await page.goto("./review?group=source");
+  // смысловую проверку показывает вкладка «Разбирает модель», остальное — «Ждут вас»
+  await page.goto(`./review?group=source${hit?.reason === "semantic" ? "&who=model" : ""}`);
   const list = page.getByRole("listbox", { name: "Очередь проверки" });
   await expect(list.locator(".qhead").first()).toContainText(named as string);
   await axe(page);
