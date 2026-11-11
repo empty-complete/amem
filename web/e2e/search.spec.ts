@@ -51,10 +51,10 @@ test("фильтр списка записей живёт в адресе: пе�
 test("все отобранные — в папку одним запросом, одна строка «Отменить»; те же — в подборку", async ({
   page,
 }) => {
-  await page.goto("./records?folder=-");
-  await page.getByRole("combobox", { name: "Статус" }).selectOption("verified");
+  await page.goto("./records?status=needs_review");
+  await expect(page.getByRole("combobox", { name: "Статус" })).toHaveValue("needs_review");
   const count = page.locator(".page-head .count");
-  await expect(count).toHaveText(/\d/);
+  await expect(count).toHaveText(/^3 /);
   const n = Number((await count.textContent())?.match(/\d+/)?.[0]);
   await page
     .getByRole("checkbox", { name: /^Выбрать «/ })
@@ -74,7 +74,7 @@ test("все отобранные — в папку одним запросом,
   await page.getByRole("radio", { name: "Архив" }).check({ force: true });
   await page.getByRole("dialog").getByRole("button", { name: "Переместить в папку" }).click();
   await expect(page.getByRole("button", { name: "Отменить" })).toHaveCount(1);
-  await expect(page.getByRole("main").getByRole("checkbox", { name: /^Выбрать «/ })).toHaveCount(0);
+  await expect(bar).toBeHidden();
   await expect.poll(() => moves.length).toBe(1);
   await page.getByRole("button", { name: "Отменить" }).click();
   await expect(count).toHaveText(new RegExp(`^${n} `));
