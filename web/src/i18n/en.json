@@ -331,13 +331,33 @@
     "who": "Who",
     "when": "Period",
     "ev": {
-      "revision": "new revision",
-      "revision_first": "recorded",
-      "review": "review decision",
-      "status": "status: {{status}}",
-      "link_created": "link added",
-      "link_retired": "link removed",
-      "folder": "moved to a folder"
+      "you": {
+        "first": "You recorded it",
+        "revision": "You recorded revision {{n}}",
+        "status": "You set the status “{{status}}”",
+        "accepted": "You accepted the edit",
+        "declined": "You declined the edit",
+        "review": "You decided a review item",
+        "moved": "You moved it to “{{to}}”",
+        "unfiled": "You took it out of a folder",
+        "linked": "You added a link",
+        "linked_rel": "You added a link “{{rel}}”",
+        "unlinked": "You removed a link"
+      },
+      "they": {
+        "first": "Recorded by {{who}}",
+        "revision": "Revision {{n}} by {{who}}",
+        "status": "Status “{{status}}” set by {{who}}",
+        "accepted": "Edit accepted by {{who}}",
+        "declined": "Edit declined by {{who}}",
+        "review": "Review item decided by {{who}}",
+        "moved": "Moved to “{{to}}” by {{who}}",
+        "unfiled": "Taken out of a folder by {{who}}",
+        "linked": "Link added by {{who}}",
+        "linked_rel": "Link “{{rel}}” added by {{who}}",
+        "unlinked": "Link removed by {{who}}"
+      },
+      "auto_verified": "Verified automatically"
     }
   },
   "palette": {

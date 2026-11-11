@@ -15,7 +15,7 @@
 }
 .ev {
   display: grid;
-  grid-template-columns: 3.5rem 11rem minmax(0, 1fr) auto;
+  grid-template-columns: 3.5rem minmax(0, 20rem) minmax(0, 1fr);
   gap: var(--s-sm);
   align-items: baseline;
   padding: var(--s-xs) var(--s-2xs);
@@ -40,16 +40,11 @@
 .ev__rec:hover {
   text-decoration: underline;
 }
-.ev__who {
-  color: var(--muted);
-  font-size: var(--t-meta);
-}
 @media (max-width: 40rem) {
   .ev {
     grid-template-columns: 3.5rem minmax(0, 1fr);
   }
-  .ev__rec,
-  .ev__who {
+  .ev__rec {
     grid-column: 2;
   }
 }
