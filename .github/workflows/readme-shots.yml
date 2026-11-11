@@ -90,8 +90,11 @@ jobs:
           cat /tmp/service.log; exit 1
       - name: Agent session over MCP (amemo mcp, stdio)
         run: /tmp/amemo/bin/python tools/readme_agent_session.py "$AGENT_TRANSCRIPT" --query "$SHOT_QUERY" --prompt "$SHOT_PROMPT"
-      - run: npx playwright install --with-deps chromium
+      - name: Chromium
         working-directory: web
+        # системные пакеты — через apt; зеркала Ubuntu бывают недоступны с машин GitHub, а нужные Chromium
+        # библиотеки на образе уже есть — тогда только сам браузер
+        run: timeout 300 npx playwright install --with-deps chromium || npx playwright install chromium
       - name: Screens
         working-directory: web
         run: node tools/readme-shots.mjs http://127.0.0.1:8770 "$SHOT_LANG"
@@ -101,7 +104,14 @@ jobs:
           path: docs/assets/readme/${{ matrix.lang }}/*.png
           retention-days: 14
       - name: ffmpeg
-        run: command -v ffmpeg || { sudo apt-get update && sudo apt-get install -y ffmpeg; }
+        # статическая сборка с PyPI, без apt: зеркала Ubuntu бывают недоступны с машин GitHub
+        run: |
+          command -v ffmpeg && exit 0
+          python -m pip install -q imageio-ffmpeg
+          mkdir -p "$RUNNER_TEMP/bin"
+          ln -sf "$(python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')" "$RUNNER_TEMP/bin/ffmpeg"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/ffmpeg" -hide_banner -filters | grep -E "palettegen|paletteuse"
       - name: Usage GIFs
         working-directory: web
         run: |
