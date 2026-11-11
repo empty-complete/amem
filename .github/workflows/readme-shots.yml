@@ -104,7 +104,9 @@ jobs:
         run: command -v ffmpeg || { sudo apt-get update && sudo apt-get install -y ffmpeg; }
       - name: Usage GIFs
         working-directory: web
-        run: node tools/readme-gifs.mjs http://127.0.0.1:8770 "$SHOT_LANG"
+        run: |
+          rm -f ../docs/assets/readme/"$SHOT_LANG"/demo-*.gif   # иначе упавший прогон выложил бы старые GIF из репозитория
+          node tools/readme-gifs.mjs http://127.0.0.1:8770 "$SHOT_LANG"
       - if: always()
         uses: actions/upload-artifact@v4
         with:
