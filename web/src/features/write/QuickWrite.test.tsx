@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef } from "react";
+import { setNewNoteFolder } from "../../app/shell/folderTree";
 import { db } from "../../mocks/db";
 import { renderWithApp } from "../../test/render";
 import { CardPage } from "../card/CardPage";
@@ -127,4 +128,23 @@ test("подсказки: @ — объект плашкой «О чём», # —
   await user.clear(box);
   await user.type(box, "Нужен ли обогрев?");
   expect(within(dlg).getByText("в конце «?»")).toBeInTheDocument();
+});
+
+test("новая запись ложится в папку из настроек «куда класть новые записи»", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  setNewNoteFolder("Архив");
+  const before = new Set(db.records.map((r) => r.ref));
+  await renderWithApp(<Harness />, "/records");
+  act(() => placeStore.openQuick(true));
+  const dlg = await screen.findByRole("dialog", { name: "Новая запись" });
+  await user.type(within(dlg).getByRole("textbox", { name: "Текст записи" }), "Проверить растяжки весной");
+  await user.keyboard("{Enter}");
+  await act(() => vi.advanceTimersByTimeAsync(UNDO_MS + 50));
+  await waitFor(() => {
+    const made = db.records.filter((r) => !before.has(r.ref));
+    expect(made.length).toBe(1);
+    expect(made[0]?.folder).toBe("Архив");
+  });
+  setNewNoteFolder("");
 });

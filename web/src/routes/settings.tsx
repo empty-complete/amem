@@ -5,8 +5,9 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { auth, useAuthToken } from "../api/auth";
 import { q } from "../api/queries";
+import type { components } from "../api/schema";
 import { changeLocale, type Locale } from "../app/i18n";
-import { useFolderDepth } from "../app/shell/folderTree";
+import { useFolderDepth, useNewNoteFolder } from "../app/shell/folderTree";
 import { applyTheme, readTheme, type Theme } from "../app/theme";
 import { kindsStore } from "../features/kinds/store";
 import { LABEL_CHOICES, useLabelMax } from "../features/sky/prefs";
@@ -15,6 +16,10 @@ import { agentName } from "../ui/format";
 import "../features/records/records.css";
 
 export const Route = createFileRoute("/settings")({ component: Settings });
+
+type Folder = components["schemas"]["Folder"];
+const flat = (fs: Folder[], depth = 0): { path: string; name: string; depth: number }[] =>
+  fs.flatMap((f) => [{ path: f.path, name: f.name, depth }, ...flat(f.children, depth + 1)]);
 
 function Choice({
   label,
@@ -51,6 +56,8 @@ function Settings() {
   const token = useAuthToken();
   const [labelMax, setLabelMax] = useLabelMax();
   const [depth, setDepth] = useFolderDepth();
+  const [newIn, setNewIn] = useNewNoteFolder();
+  const tree = useQuery(q.folders());
   return (
     <section aria-labelledby="settings-title" style={{ display: "grid", gap: 24, maxWidth: 520 }}>
       <div className="page-head">
@@ -102,6 +109,24 @@ function Settings() {
         />
         <p className="muted">{t("settings.sky_label_hint")}</p>
       </div>
+      <label className="fl" style={{ display: "grid", gap: 6 }}>
+        <span>{t("settings.new_in")}</span>
+        <select
+          className="fld"
+          value={newIn}
+          onChange={(e) => setNewIn(e.target.value)}
+          style={{ maxWidth: 320 }}
+        >
+          <option value="">{t("settings.new_in_root")}</option>
+          {flat(tree.data?.folders ?? []).map((f) => (
+            <option key={f.path} value={f.path}>
+              {"  ".repeat(f.depth)}
+              {f.name}
+            </option>
+          ))}
+        </select>
+        <span className="muted">{t("settings.new_in_hint")}</span>
+      </label>
       {token && (
         <div>
           <Button variant="outline" onPress={() => auth.clear()}>

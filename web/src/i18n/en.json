@@ -130,7 +130,10 @@
     "version": "amemo version",
     "sky_label": "Sky label length",
     "sky_label_hint": "A star label is at most this many characters; the full title is in the star card.",
-    "sky_label_n": "{{n}} characters"
+    "sky_label_n": "{{n}} characters",
+    "new_in": "Where new records go",
+    "new_in_root": "To the root, no folder",
+    "new_in_hint": "As in Obsidian: new records from this window land here. Agents' records go to the root. For example, make an «Inbox» folder and pick it."
   },
   "theme": {
     "system": "Match system",
