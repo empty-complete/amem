@@ -865,6 +865,8 @@ def test_http_backup_required_409(http):
 def test_http_auto_off_by_setting_409(http):
     client, updater = http(person=True, env={"AMEMO_AUTO_UPDATE": "false"})
     problem(client.put(f"{V1}/updates", json={"auto": True}), 409, "auto_update_off", "/updates", "put")
+    status = contract.check(client.get(f"{V1}/updates"), "/updates")
+    assert status["auto_locked"] is True and status["auto"] is False      # интерфейс прячет переключатель
 
 
 def test_http_tokens_read_only_checks_but_does_not_change(http, tmp_path):

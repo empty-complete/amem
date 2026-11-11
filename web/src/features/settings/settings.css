@@ -1,0 +1,48 @@
+/* Настройки: строки «подпись — значение», как в настройках Obsidian */
+.settings {
+  display: grid;
+  gap: var(--s-lg);
+  max-width: 720px;
+}
+.settings__group {
+  display: grid;
+  border-top: 1px solid var(--separator);
+}
+.settings__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 18rem);
+  gap: var(--s-md);
+  align-items: center;
+  padding: var(--s-sm) 0;
+  border-bottom: 1px solid var(--separator);
+  font-size: var(--t-label);
+}
+.settings__row > span {
+  display: grid;
+  gap: var(--s-3xs);
+}
+.settings__row small {
+  font-size: var(--t-meta);
+  text-wrap: pretty;
+}
+.settings__row .fld {
+  width: 100%;
+}
+.settings__about {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--s-xs) var(--s-lg);
+  margin: 0;
+  font-size: var(--t-label);
+}
+.settings__about dt {
+  color: var(--muted);
+}
+.settings__about dd {
+  margin: 0;
+}
+@media (max-width: 40rem) {
+  .settings__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1321,6 +1321,8 @@ export interface components {
             install: "pipx" | "pip" | "uv" | "docker" | "source";
             /** @description Автообновление включено */
             auto: boolean;
+            /** @description auto_update = false в настройках службы: переключатель здесь не действует — обновления ставит тот, кто ставил amemo (приложение для Windows — пункт значка «Обновлять автоматически») */
+            auto_locked?: boolean;
             /** @enum {string} */
             state: "idle" | "checking" | "available" | "installing" | "ready" | "restarting" | "failed";
             /**

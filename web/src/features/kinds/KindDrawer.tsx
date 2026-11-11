@@ -250,7 +250,9 @@ function FieldRow({
 }
 
 /** Конструктор вида (разд. 5.9): свои виды и свойства в пакете «Мои виды»; ничего не зашито. */
-export function KindDrawer() {
+/** Конструктор видов: page — отдельной страницей «Мои виды» (/kinds), иначе — панелью поверх экрана
+ * (из выбора вида в правке). */
+export function KindDrawer({ page = false }: { page?: boolean } = {}) {
   const { t, i18n } = useTranslation();
   const open = useKindsOpen();
   const editCode = useKindsEdit();
@@ -355,26 +357,10 @@ export function KindDrawer() {
   };
   const setForm = (form: FormField[]) => d && setD({ ...d, form });
 
-  return (
-    <ModalOverlay
-      isOpen={open}
-      onOpenChange={(o) => !o && kindsStore.close()}
-      isDismissable
-      className="modal-overlay drawer-overlay"
-    >
-      <Modal className="drawer">
-        <Dialog className="drawer__in" aria-label={t("kinds.title")}>
-          <header className="drawer__head">
-            <Heading slot="title">{t("kinds.title")}</Heading>
-            <button
-              type="button"
-              className="iconbtn"
-              aria-label={t("sky.close")}
-              onClick={() => kindsStore.close()}
-            >
-              <Icon name="cross" />
-            </button>
-          </header>
+  const content = (
+    <>
+
+          
           {!d ? (
             <div className="drawer__body">
               <p className="muted">{t("kinds.intro")}</p>
@@ -532,8 +518,41 @@ export function KindDrawer() {
               </div>
             </div>
           )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+    </>
+  );
+
+  return (
+    page ? (
+      <section className="kindspage" aria-labelledby="kinds-title">
+        <div className="page-head">
+          <h1 id="kinds-title">{t("kinds.title")}</h1>
+        </div>
+        {content}
+      </section>
+    ) : (
+      <ModalOverlay
+        isOpen={open}
+        onOpenChange={(o) => !o && kindsStore.close()}
+        isDismissable
+        className="modal-overlay drawer-overlay"
+      >
+        <Modal className="drawer">
+          <Dialog className="drawer__in" aria-label={t("kinds.title")}>
+            <header className="drawer__head">
+              <Heading slot="title">{t("kinds.title")}</Heading>
+              <button
+                type="button"
+                className="iconbtn"
+                aria-label={t("sky.close")}
+                onClick={() => kindsStore.close()}
+              >
+                <Icon name="cross" />
+              </button>
+            </header>
+            {content}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+    )
   );
 }

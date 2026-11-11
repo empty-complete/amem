@@ -35,7 +35,8 @@
     "menu": "Folder “{{name}}”: actions",
     "move_to": "Move to folder",
     "move_title": "Move to",
-    "drag": "Drag onto a folder on the left"
+    "drag": "Drag onto a folder on the left",
+    "width": "Folder panel width"
   },
   "records": {
     "empty": "Nothing here yet. Agents write to the base over MCP, and you can write the first note.",
@@ -133,7 +134,8 @@
     "sky_label_n": "{{n}} characters",
     "new_in": "Where new records go",
     "new_in_root": "To the root, no folder",
-    "new_in_hint": "As in Obsidian: new records from this window land here. Agents' records go to the root. For example, make an «Inbox» folder and pick it."
+    "new_in_hint": "As in Obsidian: new records from this window land here. Agents' records go to the root. For example, make an «Inbox» folder and pick it.",
+    "base_unnamed": "unnamed"
   },
   "theme": {
     "system": "Match system",
@@ -695,7 +697,8 @@
     "all_about": "All objects",
     "no_source": "No source",
     "entities": "Entities",
-    "first_n": "Showing the first {{n}} items — narrow the queue by reason or document."
+    "first_n": "Showing the first {{n}} items — narrow the queue by reason or document.",
+    "width": "Review list width"
   },
   "basepage": {
     "title": "Base",
@@ -815,7 +818,8 @@
     "badge_ready": "Update installed",
     "badge_failed": "Update failed",
     "reload_text": "amemo was updated to {{v}} — reload the page",
-    "reload": "Reload"
+    "reload": "Reload",
+    "locked": "The amemo app installs updates: turn automatic updates on or off in the amemo tray icon menu, «Update automatically»."
   },
   "window": {
     "minimize": "Minimize",

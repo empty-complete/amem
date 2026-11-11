@@ -1370,6 +1370,7 @@ components:
         channel: { type: string, enum: [stable, pre], description: "pre — стоит предварительная версия (a, b, rc): видны и предварительные релизы" }
         install: { type: string, enum: [pipx, pip, uv, docker, source], description: "Вид установки; docker и source сами не обновляются" }
         auto: { type: boolean, description: "Автообновление включено" }
+        auto_locked: { type: boolean, description: "auto_update = false в настройках службы: переключатель здесь не действует — обновления ставит тот, кто ставил amemo (приложение для Windows — пункт значка «Обновлять автоматически»)" }
         state: { type: string, enum: [idle, checking, available, installing, ready, restarting, failed] }
         checked_at: { type: [string, "null"], format: date-time, description: "Последняя проверка релизов; null — ещё не было" }
         message: { type: string, description: "Словами: что произошло и что делать" }

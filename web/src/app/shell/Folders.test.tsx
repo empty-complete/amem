@@ -86,10 +86,3 @@ test("папка раскрывается в панели: внутри её з�
     expect(within(nav()).queryByRole("link", { name: r.label })).not.toBeInTheDocument();
 });
 
-test("по умолчанию папку внутри папки не создать", async () => {
-  const user = userEvent.setup();
-  await renderWithApp(<Folders />);
-  await user.click(await screen.findByRole("button", { name: "Папка «Архив»: действия" }));
-  expect(await screen.findByRole("menuitem", { name: "Переименовать" })).toBeInTheDocument();
-  expect(screen.queryByRole("menuitem", { name: "Папка внутри" })).not.toBeInTheDocument();
-});

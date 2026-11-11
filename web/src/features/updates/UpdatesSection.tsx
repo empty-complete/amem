@@ -57,23 +57,30 @@ export function UpdatesSection() {
           )}
         </div>
       )}
-      {s.message && (
+      {s.message && s.state !== "idle" && (
         <p className="upd__msg" role="status" data-state={s.state}>
           {s.message}
         </p>
       )}
-      <label className="chk upd__auto">
-        <input
-          type="checkbox"
-          role="switch"
-          aria-checked={s.auto}
-          checked={s.auto}
-          disabled={!write || act.toggle.isPending}
-          onChange={(e) => act.toggle.mutate(e.target.checked)}
-        />
-        {t("updates.auto")}
-      </label>
-      {!canInstall(s) && <p className="muted">{t(`updates.manual_${s.install}`)}</p>}
+      {s.auto_locked ? (
+        // службу обновляет тот, кто её ставил (приложение для Windows): переключатель здесь не действует
+        <p className="muted upd__locked">{t("updates.locked")}</p>
+      ) : (
+        <>
+          <label className="chk upd__auto">
+            <input
+              type="checkbox"
+              role="switch"
+              aria-checked={s.auto}
+              checked={s.auto}
+              disabled={!write || act.toggle.isPending}
+              onChange={(e) => act.toggle.mutate(e.target.checked)}
+            />
+            {t("updates.auto")}
+          </label>
+          {!canInstall(s) && <p className="muted">{t(`updates.manual_${s.install}`)}</p>}
+        </>
+      )}
       <div>
         <Button
           variant="outline"

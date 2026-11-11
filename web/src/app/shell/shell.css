@@ -160,7 +160,7 @@ kbd {
 
 .body {
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: var(--folders-w, 248px) minmax(0, 1fr);
   min-height: 0;
 }
 .body > * {
@@ -176,6 +176,7 @@ kbd {
 }
 
 .folders {
+  position: relative;
   overflow: auto;
   padding: var(--s-md) var(--s-sm);
   border-right: 1px solid var(--separator);
@@ -343,11 +344,21 @@ kbd {
 }
 .folders .frow > .flist {
   display: inline-grid;
+  flex: none;
   place-items: center;
   width: 28px;
   height: 28px;
   padding: 0;
   opacity: 0;
+}
+/* открытый списком раздел — значок заметнее, без заливки на полстроки */
+.folders .frow > .flist[aria-current="page"] {
+  background: none;
+  color: var(--foreground);
+  font-weight: inherit;
+}
+.folders .frow > .flist[aria-current="page"] svg {
+  color: var(--foreground);
 }
 .frow:hover > .flist,
 .frow:focus-within > .flist,

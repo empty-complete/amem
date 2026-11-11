@@ -58,12 +58,12 @@ test("страница не прокручивается, прокручивае
   expect(main_scroll).toBe(true);
 });
 
-test("тема и язык переключаются в настройках", async ({ page }) => {
+test("язык меняется в настройках и переживает перезагрузку", async ({ page }) => {
   await page.goto("./settings");
-  await page.getByRole("radio", { name: "Тёмная" }).check({ force: true });
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await page.getByRole("radio", { name: "English" }).check({ force: true });
+  await page.getByRole("combobox", { name: "Язык" }).selectOption("en");
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
 });
+
+

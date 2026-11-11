@@ -8,13 +8,14 @@
 }
 .review {
   display: grid;
-  grid-template-columns: 380px minmax(0, 1fr);
+  grid-template-columns: var(--review-w, 380px) minmax(0, 1fr);
   height: 100%;
   min-height: 0;
 }
 .review__list {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
   gap: var(--s-xs);
   min-height: 0;
   padding: var(--s-md) 0 var(--s-sm);
@@ -24,7 +25,13 @@
   margin-inline: var(--s-md);
 }
 .review__list > .queue {
+  flex: 1 1 auto;
+  min-height: 0;
   margin-inline: 0;
+}
+/* подсказка клавиш — внизу колонки, сколько бы ни было фильтров и строк над очередью */
+.review__list > .review__keys {
+  margin-top: auto;
 }
 .review__h {
   display: flex;
@@ -324,7 +331,7 @@
 .rtabs {
   display: flex;
   gap: var(--s-2xs);
-  margin: 0 0 var(--s-xs);
+  margin-block: 0 var(--s-xs);
   border-bottom: 1px solid var(--separator);
 }
 .rtab {
@@ -351,7 +358,7 @@
   outline-offset: -2px;
 }
 .review__intro {
-  margin: 0 0 var(--s-sm);
+  margin-block: 0 var(--s-sm);
   font-size: var(--t-meta);
   text-wrap: pretty;
 }
@@ -366,4 +373,7 @@
 }
 .review__item .decide {
   flex-wrap: wrap;
+}
+.review__list > .colgrip {
+  margin: 0;
 }

@@ -10,9 +10,10 @@ import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
 import { recordPath } from "../../features/records/RecordList";
 import { useMoveRecord } from "../../features/write/move";
+import { ColumnGrip } from "../../ui/ColumnGrip";
 import { Icon, type IconName } from "../../ui/icons";
 import { applyTheme, readTheme, resolveTheme } from "../theme";
-import { useFolderDepth, useOpen } from "./folderTree";
+import { useOpen } from "./folderTree";
 import { menuStore, useMenuOpen } from "./menu";
 
 type Folder = components["schemas"]["Folder"];
@@ -177,7 +178,6 @@ function FolderItem({
 }) {
   const { t } = useTranslation();
   const [open, toggle] = useOpen(f.path);
-  const [maxDepth] = useFolderDepth();
   const qc = useQueryClient();
   const move = useMoveRecord();
   const [mode, setMode] = useState<"idle" | "rename" | "child">("idle");
@@ -253,11 +253,9 @@ function FolderItem({
                     }
                   }}
                 >
-                  {depth + 1 < maxDepth ? (
-                    <Dropdown.Item id="child" textValue={t("folders.new_inside")}>
-                      <Label>{t("folders.new_inside")}</Label>
-                    </Dropdown.Item>
-                  ) : null}
+                  <Dropdown.Item id="child" textValue={t("folders.new_inside")}>
+                    <Label>{t("folders.new_inside")}</Label>
+                  </Dropdown.Item>
                   <Dropdown.Item id="rename" textValue={t("folders.rename")}>
                     <Label>{t("folders.rename")}</Label>
                   </Dropdown.Item>
@@ -346,6 +344,7 @@ export function Folders() {
   });
   return (
     <nav id="folders" className="folders" aria-label={t("folders.title")} data-open={menuOpen || undefined}>
+      <ColumnGrip name="--folders-w" label={t("folders.width")} min={180} max={520} initial={248} />
       <ul>
         {tree.data?.folders.map((f) => (
           <FolderItem key={f.path} f={f} current={current} person={person} />
