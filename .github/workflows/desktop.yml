@@ -8,7 +8,8 @@ name: desktop
 #   /health службы, смысловой поиск, хук через запускатель; второй запуск не создаёт второй процесс; --quit
 #   останавливает службу и PostgreSQL; обновление N → N+1 (вторая сборка с версией N+1, latest.json со своего
 #   сервера): приложение, затем комплект с бэкапом, база та же; удаление убирает всё, кроме папки данных.
-# release.yml подключит его как workflow_call (D8).
+# release.yml зовёт его на метке v* с release: true (D8): один выпуск, только ключом владельца; файлы — артефакты
+# desktop-windows-x64 и runtime-windows-x64 этого запуска.
 #
 # Подпись обновлений: секрет TAURI_SIGNING_PRIVATE_KEY (и TAURI_SIGNING_PRIVATE_KEY_PASSWORD) — ключ владельца,
 # открытый ключ — plugins.updater.pubkey в desktop/src-tauri/tauri.conf.json. Пока секрета нет, сборка подписывает
@@ -17,13 +18,18 @@ on:
   pull_request:
     paths: ["desktop/**", ".github/workflows/desktop.yml", "web/public/favicon.svg", "web/src/setup/**",
             "web/setup.html", "web/vite.setup.config.ts", "amemo/__init__.py", "amemo/cli/commands/local.py",
-            "amemo/localpg.py", "amemo/agents/**", "tools/release.py", "tools/runtime.py",
-            ".github/workflows/runtime.yml"]
+            "amemo/localpg.py", "amemo/agents/**", "tools/release.py", "tools/runtime.py", "tools/carousel.py",
+            "docs/assets/readme/**", ".github/workflows/runtime.yml"]
   push:
     branches: [main]
     paths: ["desktop/**", ".github/workflows/desktop.yml", "web/src/setup/**"]
   workflow_dispatch:
   workflow_call:
+    inputs:
+      release:
+        description: "выпуск (release.yml): только ключ владельца, без тестовой сборки N+1 и без http для updater"
+        type: boolean
+        default: false
     secrets:
       TAURI_SIGNING_PRIVATE_KEY:
         required: false
@@ -62,6 +68,15 @@ jobs:
       - name: npm ci (web — pages of the wizard)
         working-directory: web
         run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: web/src/setup/media
+          key: carousel-${{ hashFiles('docs/assets/readme/*/demo-*.gif', 'tools/carousel.py') }}
+      - name: Carousel — README animations as WebP (tools/carousel.py), GIFs stay out of the installer
+        run: |
+          python -m pip install --quiet pillow
+          python ../tools/carousel.py
+          if ($LASTEXITCODE) { exit 1 }
       - name: Icons from web/public/favicon.svg
         run: |
           npx tauri icon ../web/public/favicon.svg -o src-tauri/icons
@@ -70,6 +85,7 @@ jobs:
         env:
           OWNER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           OWNER_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          RELEASE: ${{ inputs.release && '1' || '' }}
         run: |
           python -m pip install --quiet packaging
           $version = python ../tools/release.py semver
@@ -77,22 +93,26 @@ jobs:
           # версия PEP 440 — в имена файлов релиза (комплект, модель), которые качает мастер
           $env:AMEMO_VERSION = (Select-String -Path ../amemo/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
           $config = @{ version = $version }
-          $insecure = $false
           if ($env:OWNER_KEY) {
             $pubkey = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).plugins.updater.pubkey
             if (-not $pubkey) { throw "секрет TAURI_SIGNING_PRIVATE_KEY есть, а plugins.updater.pubkey пуст" }
             $env:TAURI_SIGNING_PRIVATE_KEY = $env:OWNER_KEY
             $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = $env:OWNER_KEY_PASSWORD
+            $config.plugins = @{ updater = @{} }
+          } elseif ($env:RELEASE) {
+            throw "выпуск без ключа владельца: обновления выпущенного приложения нечем было бы проверить (desktop/README.md)"
           } else {
             Write-Output "ключа владельца нет: подпись одноразовым ключом этого запуска"
             npx tauri signer generate --ci -w "$env:RUNNER_TEMP\updater.key"       # --ci: без пароля и вопросов
             if ($LASTEXITCODE) { exit 1 }
-            # проверка обновления N → N+1 (job check) идёт со своего сервера http://127.0.0.1 — только в сборках CI
-            $config.plugins = @{ updater = @{ pubkey = (Get-Content "$env:RUNNER_TEMP\updater.key.pub" -Raw).Trim();
-                                              dangerousInsecureTransportProtocol = $true } }
+            $config.plugins = @{ updater = @{ pubkey = (Get-Content "$env:RUNNER_TEMP\updater.key.pub" -Raw).Trim() } }
             $env:TAURI_SIGNING_PRIVATE_KEY = (Get-Content "$env:RUNNER_TEMP\updater.key" -Raw).Trim()
             $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
-            $insecure = $true
+          }
+          $insecure = -not $env:RELEASE
+          if ($insecure) {
+            # проверка обновления N → N+1 (job check) идёт со своего сервера http://127.0.0.1 — только в сборках CI
+            $config.plugins.updater.dangerousInsecureTransportProtocol = $true
           }
           $config | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8NoBOM "$env:RUNNER_TEMP\tauri.ci.json"
           Get-Content "$env:RUNNER_TEMP\tauri.ci.json"
@@ -274,6 +294,7 @@ jobs:
           if ($status.running) { throw "PostgreSQL работает после --quit" }
           Write-Output "фон: запуск, запускатель, один экземпляр, остановка — ок"
       - name: Update N → N+1 — app by the updater, then its runtime with a backup; the base is kept
+        if: ${{ !inputs.release }}             # выпуск собирает одну версию
         run: |
           [Console]::OutputEncoding = [Text.Encoding]::UTF8
           $v = ConvertFrom-StringData (Get-Content "$env:SETUP\version.txt" -Raw)

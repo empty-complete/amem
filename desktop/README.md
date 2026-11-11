@@ -40,7 +40,10 @@ one program that is the installer wizard, the amemo window and the tray icon.
   `http://127.0.0.1:*` may use window commands only (`capabilities/service.json`) — it draws the window buttons in its
   top bar (`web/src/app/shell/WindowControls.tsx`).
 
-Releases with the runtime attached and the update manifests (D8) come next.
+Releases (D8): a `v*` tag runs `release.yml`, whose `desktop` job calls `desktop.yml` with `release: true` — the
+owner's signing key is required (the release refuses without it), and the release gets the installer with its `.sig`,
+the runtime, the model and `.sha256` files; the updater manifests and the permanent `amemo-setup-windows-x64.exe`
+link live in the release `updates`. The carousel animations ship as WebP (`tools/carousel.py`).
 Until D8 a release has no runtime to download: CI serves the runtime of the branch from a local server
 (`AMEMO_RELEASE_BASE`).
 

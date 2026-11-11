@@ -10,3 +10,4 @@ backups/
 
 # Hallmark build log (design sweeps)
 .hallmark/
+web/src/setup/media/

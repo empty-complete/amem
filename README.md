@@ -22,6 +22,7 @@
 </p>
 
 <p align="center">
+  <a href="#download"><b>Download</b></a> ·
   <a href="#install-with-your-agent"><b>Install</b></a> ·
   <a href="#see-it-in-action"><b>Demo</b></a> ·
   <a href="#quickstart"><b>Quickstart</b></a> ·
@@ -45,6 +46,17 @@
 > Claude Code and Codex work today and are tested in CI on PostgreSQL 18. The schema and the HTTP
 > contract may still change. The screenshots on this page come from the real service on a sample base
 > (`tools/seed_sample_en.py`, a fictional network of weather stations).
+
+## Download
+
+**Windows 10 and 11:** [amemo-setup-windows-x64.exe](https://github.com/empty-complete/amemo/releases/download/updates/amemo-setup-windows-x64.exe) — one installer for the current user, no
+administrator rights and no terminal. The wizard downloads PostgreSQL, Python and the semantic search model (about
+450 MB), creates the base in a folder you choose, connects the Claude app, Claude Code and Codex, and keeps amemo up
+to date. The installer is not code-signed yet: if SmartScreen says "Windows protected your PC", choose **More info →
+Run anyway**. Every version is on the [releases page](https://github.com/empty-complete/amemo/releases).
+
+**Linux, macOS, servers:** `pipx install "amemo[web]"`, then the [Quickstart](#quickstart) — or let your agent do it
+([Install with your agent](#install-with-your-agent)).
 
 ## Why amemo
 
