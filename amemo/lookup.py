@@ -301,7 +301,7 @@ def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: 
     unknown = set(statuses or ()) - set(search._STATUSES)
     if unknown:
         raise RecordError(f"statuses: неизвестные статусы {', '.join(sorted(unknown))}")
-    tags = [tag] if isinstance(tag, str) or tag is None else list(tag)
+    tags = [tag] if isinstance(tag, str) or tag is None else list(tag) if isinstance(tag, (list, tuple, set)) else [tag]
     if not all(t is None or isinstance(t, str) for t in tags):
         raise RecordError(f"tag {tag!r}: нужна строка или список строк")
     # теги в теле ревизии — в NFC (canon); пустые — без фильтра
