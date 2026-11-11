@@ -269,7 +269,12 @@
     "zoom_fit": "Fit width",
     "task_set": "Task set: an agent will pick it up over MCP",
     "task_open": "Task is with the agents",
-    "original_colors": "Original colours"
+    "original_colors": "Original colours",
+    "page_of": "Page {{n}} of {{total}}",
+    "goto_page": "Go to page",
+    "goto_ph": "#",
+    "full": "Full screen",
+    "full_exit": "Exit full screen"
   },
   "card": {
     "tab_card": "Card",

@@ -103,3 +103,25 @@ test("страница PDF в тёмной теме: перекрашена по
   });
   await expect(page.getByRole("button", { name: "Как в файле" })).toHaveAttribute("aria-pressed", "true");
 });
+
+test("PDF целиком: открыт на странице цитаты, листается и переходит к странице; на весь экран", async ({
+  page,
+}) => {
+  await page.goto("./atom/atm:0193b7c2-5e1a-7d40-9f2e-00000000000b");
+  const panel = page.getByRole("complementary", { name: "Источник" });
+  await expect(panel.locator(".textLayer mark.q").first()).toBeAttached({ timeout: 15_000 });
+  const where = panel.getByText(/^Стр\. \d+ из 2$/);
+  await expect(where).toBeVisible();
+  await expect(panel.locator(".pdf__sheet")).toHaveCount(2);
+  const go = panel.getByRole("textbox", { name: "Перейти к странице" });
+  await go.fill("1");
+  await go.press("Enter");
+  await expect(where).toHaveText("Стр. 1 из 2");
+  await go.fill("2");
+  await go.press("Enter");
+  await expect(where).toHaveText("Стр. 2 из 2");
+  await panel.getByRole("button", { name: "На весь экран" }).click();
+  await expect(panel.locator(".pdf[data-full]")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(panel.locator(".pdf[data-full]")).toHaveCount(0);
+});

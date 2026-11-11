@@ -589,3 +589,8 @@ textarea.fld {
   color: var(--muted);
   font-size: var(--t-meta);
 }
+/* PDF в окне выбора источника листается сам: страницы рисуются только рядом с видимой частью */
+.pick__preview:has(.pdf) {
+  height: 52dvh;
+  overflow: hidden;
+}

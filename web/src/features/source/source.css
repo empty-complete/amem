@@ -115,6 +115,48 @@
 .pdf__zoom {
   overflow-x: auto;
 }
+/* весь документ: страницы друг под другом, прокрутка внутри панели */
+.pdf__doc {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.pdf__doc .pdf__page {
+  display: grid;
+  justify-items: center;
+  gap: var(--s-sm);
+  padding: var(--s-2xs);
+}
+.pdf__inner {
+  inset: 0;
+}
+.pdf__pages {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-xs);
+  font-size: var(--t-meta);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.fld.pdf__goto {
+  width: 4.5rem;
+  height: 28px;
+}
+.pdf__tools .spacer {
+  flex: 1;
+}
+.pdf {
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100%;
+}
+.pdf[data-full] {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  padding: var(--s-md);
+  background: var(--background);
+}
 
 .textLayer {
   position: absolute;
@@ -196,6 +238,8 @@ blockquote.quote {
 }
 .objpdf {
   max-width: 560px;
+  /* документ листается внутри окна заданной высоты: страницы рисуются только рядом с видимой частью */
+  height: min(80dvh, 900px);
 }
 .objimg {
   max-width: 100%;
@@ -284,4 +328,10 @@ blockquote.quote {
 .sheet table:has(td[data-picked]),
 .sheet td {
   user-select: none;
+}
+/* на узком экране панель стоит под записью: у документа своя высота, листается внутри */
+@media (max-width: 64rem) {
+  .srcpanel .pdf:not([data-full]) {
+    height: 70dvh;
+  }
 }
