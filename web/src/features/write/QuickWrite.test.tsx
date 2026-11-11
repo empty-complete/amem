@@ -135,7 +135,7 @@ test("новая запись ложится в папку из настроек
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
   setNewNoteFolder("Архив");
   const before = new Set(db.records.map((r) => r.ref));
-  await renderWithApp(<Harness />, "/records");
+  await renderWithApp(<Harness />, `/entity/${E3}`);
   act(() => placeStore.openQuick(true));
   const dlg = await screen.findByRole("dialog", { name: "Новая запись" });
   await user.type(within(dlg).getByRole("textbox", { name: "Текст записи" }), "Проверить растяжки весной");
