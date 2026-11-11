@@ -582,3 +582,37 @@ li[data-state="done"] .wz__num-dot {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* экран запуска (мастер пройден): посередине окна, пока поднимаются база и служба */
+.st__main {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--s-xl) var(--s-lg);
+}
+.st__card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: min(100%, 520px);
+  animation: wz-in 220ms var(--ease);
+}
+.st__brand {
+  margin-bottom: var(--s-lg);
+}
+.st__spin {
+  display: inline-block;
+}
+.st__error {
+  white-space: pre-wrap;
+  width: 100%;
+  padding: var(--s-sm) var(--s-md);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius);
+  background: var(--surface-secondary);
+}
+.st__actions {
+  margin-top: var(--s-lg);
+}

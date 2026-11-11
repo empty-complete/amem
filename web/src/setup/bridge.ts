@@ -1,6 +1,6 @@
 /** Мост мастера к приложению для Windows (desktop/, Tauri): что мастер спрашивает у машины и что просит сделать.
  *
- * В приложении это команды Rust (`invoke`, часть D5 спецификации приложения для Windows); в браузере, в тестах и в
+ * В приложении это команды Rust (`invoke`, desktop/src-tauri); в браузере, в тестах и в
  * снимках — заглушка `mock.ts`. Мастер знает только этот интерфейс. */
 
 export type Lang = "ru" | "en";
@@ -10,6 +10,9 @@ export const OCR_LANGS = ["rus", "eng", "ukr", "deu", "fra", "spa"] as const;
 export type OcrLang = (typeof OCR_LANGS)[number];
 
 export type AgentId = "claude" | "codex";
+
+/** отказ start(), когда фон на паузе */
+export const PAUSED = "paused";
 
 export interface Defaults {
   lang: Lang;
@@ -21,6 +24,8 @@ export interface Defaults {
   agents: Record<AgentId, boolean>;
   /** версия устанавливаемого amemo */
   version: string;
+  /** "setup" — мастер; "start" — мастер уже пройден: экран запуска, пока поднимаются база и служба */
+  mode: "setup" | "start";
 }
 
 export interface FolderCheck {
@@ -77,6 +82,9 @@ export interface Bridge {
   install(choices: Choices, onProgress: (p: Progress) => void): Promise<void>;
   /** ярлык, автозапуск и переход в окно amemo */
   finish(options: Finish): Promise<void>;
+  /** экран запуска: дождаться базы и службы — окно само перейдёт в amemo. resume — снять паузу. Отказ — текст
+   * ошибки или PAUSED (фон на паузе из значка в области уведомлений) */
+  start(resume: boolean): Promise<void>;
   window: { minimize(): void; toggleMaximize(): void; close(): void };
 }
 
@@ -90,8 +98,8 @@ function tauri(): TauriGlobal | undefined {
   return (window as unknown as { __TAURI__?: TauriGlobal }).__TAURI__;
 }
 
-/** Команды приложения: setup_defaults, setup_check_folder, setup_pick_folder, setup_install (события
- * setup://progress), setup_finish. */
+/** Команды приложения (desktop/src-tauri/src/setup.rs и main.rs): setup_defaults, setup_check_folder,
+ * setup_pick_folder, setup_install (события setup://progress), setup_finish, app_start, app_resume. */
 function tauriBridge(t: TauriGlobal): Bridge {
   const win = t.window.getCurrentWindow();
   return {
@@ -108,6 +116,7 @@ function tauriBridge(t: TauriGlobal): Bridge {
       }
     },
     finish: (options) => t.core.invoke("setup_finish", { options }),
+    start: (resume) => t.core.invoke(resume ? "app_resume" : "app_start"),
     window: {
       minimize: () => win.minimize(),
       toggleMaximize: () => win.toggleMaximize(),

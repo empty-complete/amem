@@ -12,6 +12,39 @@
   border-bottom: 1px solid var(--separator);
   background: var(--background);
 }
+/* в окне приложения для Windows (без системной рамки) — кнопки окна в правом конце панели, вплотную к краю */
+.bar[data-app="tauri"] {
+  padding-right: 0;
+  user-select: none;
+}
+.winctl {
+  display: flex;
+  align-self: stretch;
+  margin-left: calc(-1 * var(--s-sm));
+}
+.winctl button {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  transition: background 120ms var(--ease);
+}
+.winctl button:hover {
+  background: var(--surface-tertiary);
+}
+.winctl .winctl__close:hover {
+  background: var(--danger);
+  color: var(--danger-foreground);
+}
+.winctl svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+}
 .wordmark {
   font-weight: 600;
   font-size: var(--t-section);

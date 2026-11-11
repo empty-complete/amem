@@ -374,7 +374,7 @@ export function Wizard({ bridge, defaults }: { bridge: Bridge; defaults: Default
 
   return (
     <div className="wz" data-step={step}>
-      {bridge.inApp && <TitleBar bridge={bridge} />}
+      {bridge.inApp && <TitleBar bridge={bridge} title={t("title")} />}
       <div className="wz__body">
         <nav className="wz__rail" aria-label={t("steps.label")}>
           <div className="wz__brand">
@@ -410,7 +410,7 @@ export function Wizard({ bridge, defaults }: { bridge: Bridge; defaults: Default
             </h1>
             {lead[step] && <p className="wz__lead">{lead[step]}</p>}
             {body}
-            {step === "install" && installState === "failed" && error && (
+            {((step === "install" && installState === "failed") || step === "done") && error && (
               <p className="wz__error" role="alert">
                 {error}
               </p>
@@ -439,8 +439,11 @@ export function Wizard({ bridge, defaults }: { bridge: Bridge; defaults: Default
                 isPending={opening}
                 onPress={async () => {
                   setOpening(true);
+                  setError(null);
                   try {
                     await bridge.finish({ desktopShortcut: shortcut, autostart });
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : String(e));
                   } finally {
                     setOpening(false);
                   }
@@ -496,12 +499,12 @@ function StageMark({ state }: { state: Progress["state"] }) {
   );
 }
 
-function TitleBar({ bridge }: { bridge: Bridge }) {
+export function TitleBar({ bridge, title }: { bridge: Bridge; title: string }) {
   const { t } = useTranslation();
   return (
     <header className="wz__bar" data-tauri-drag-region>
       <span className="wz__bar-title" data-tauri-drag-region>
-        {t("title")}
+        {title}
       </span>
       <div className="wz__bar-buttons">
         <button type="button" aria-label={t("window.minimize")} onClick={() => bridge.window.minimize()}>

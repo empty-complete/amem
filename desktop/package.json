@@ -3,7 +3,8 @@
   "private": true,
   "description": "amemo for Windows (Tauri 2): see README.md",
   "scripts": {
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build:parts": "npm --prefix ../web run build:setup && cargo build --release --manifest-path launcher/Cargo.toml"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.4"

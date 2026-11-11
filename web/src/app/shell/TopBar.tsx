@@ -11,6 +11,7 @@ import { Icon } from "../../ui/icons";
 import { useHotkeys } from "../keys";
 import { applyTheme, readTheme, resolveTheme } from "../theme";
 import { menuStore, useMenuOpen } from "./menu";
+import { dragRegion, inApp, WindowControls } from "./WindowControls";
 
 export function TopBar() {
   const { t } = useTranslation();
@@ -24,7 +25,7 @@ export function TopBar() {
   const toggleTheme = () => applyTheme(resolveTheme(readTheme()) === "dark" ? "light" : "dark");
 
   return (
-    <header className="bar">
+    <header className="bar" data-app={inApp ? "tauri" : undefined} {...dragRegion}>
       <button
         type="button"
         className="iconbtn show-s"
@@ -70,6 +71,7 @@ export function TopBar() {
           <Icon name="user" />
         </Link>
       </nav>
+      <WindowControls />
     </header>
   );
 }

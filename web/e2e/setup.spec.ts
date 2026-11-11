@@ -111,3 +111,33 @@ test("карусель: следующий пример, пауза, подпи�
   // «уменьшить движение» — сюжеты меняет только человек: кнопка «Дальше», а не «Пауза»
   await expect(carousel.getByRole("button", { name: "Play" })).toBeVisible();
 });
+
+const START = { starting: "freeze=start", failed: "fail=start&fast=1", paused: "fast=1" } as const;
+
+for (const lang of ["ru", "en"] as const) {
+  for (const theme of ["light", "dark"] as const) {
+    test(`снимки экрана запуска: ${lang}, ${theme}`, async ({ page }, info) => {
+      for (const [state, query] of Object.entries(START)) {
+        await open(page, `lang=${lang}&start=${state === "paused" ? "paused" : "1"}&${query}`, theme);
+        if (state !== "starting") await expect(page.getByRole("button")).toBeVisible();
+        await axe(page);
+        const shot = await page.screenshot({ path: `setup-shots/${lang}-${theme}-start-${state}.png` });
+        await info.attach(`${lang}-${theme}-start-${state}`, { body: shot, contentType: "image/png" });
+      }
+    });
+  }
+}
+
+test("экран запуска: ошибка и «Повторить», пауза и «Продолжить»", async ({ page }) => {
+  await open(page, "start=1&fail=start&fast=1", "light");
+  await expect(page.getByRole("heading", { name: "amemo не запустился" })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("PostgreSQL amemo не запустился");
+  await page.getByRole("button", { name: "Повторить" }).click();
+  await expect(page.getByRole("heading", { name: "amemo запускается" })).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+
+  await open(page, "lang=en&start=paused&fast=1", "dark");
+  await expect(page.getByRole("heading", { name: "amemo is paused" })).toBeVisible();
+  await page.getByRole("button", { name: "Resume" }).click();
+  await expect(page.getByRole("heading", { name: "amemo is starting" })).toBeVisible();
+});

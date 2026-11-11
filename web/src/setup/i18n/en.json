@@ -126,5 +126,21 @@
   "time": {
     "s": "{{n}} s",
     "m": "{{n}} min"
+  },
+  "start": {
+    "starting": {
+      "title": "amemo is starting",
+      "lead": "Bringing up the base and the service takes a few seconds. The window opens by itself."
+    },
+    "failed": {
+      "title": "amemo did not start",
+      "lead": "The base or the service did not come up. Your records are safe: this is a start-up error, not a data one."
+    },
+    "paused": {
+      "title": "amemo is paused",
+      "lead": "The base and the service were stopped from the tray icon. While amemo is paused, agents cannot see it."
+    },
+    "retry": "Try again",
+    "resume": "Resume"
   }
 }

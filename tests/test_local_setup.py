@@ -187,9 +187,13 @@ def test_setup_creates_cluster_base_and_config(run, env, tmp_path):
     cluster = localpg.Cluster(Path(SERVER_BIN), data / "pg")
     try:
         code, out, err = run("setup", "--pg-bin", SERVER_BIN, "--data", str(data), "--lang", "ru",
-                             "--no-auto-update", "--json")
+                             "--no-auto-update", "--progress", "--json")
         assert code == 0, err
         first = json.loads(out)
+        progress = [json.loads(line) for line in err.splitlines() if line.startswith('{"stage"')]
+        assert [(p["stage"], p["state"]) for p in progress] == [
+            ("database", "running"), ("database", "done"), ("store", "running"), ("store", "done"),
+            ("search", "skipped"), ("ocr", "skipped"), ("agents", "skipped")], err
         assert first["base_id"] and first["migrations_applied"]
         assert first["pg_data"] == str(data / "pg") and first["store"] == str(data / "objects")
         assert first["port"] >= localpg.PORT_FROM
