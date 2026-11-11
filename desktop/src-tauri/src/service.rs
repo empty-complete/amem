@@ -7,9 +7,12 @@
 //!   ошибка, которую показывает экран запуска.
 //! - Пауза и выход: служба завершается, кластер останавливается (`amemo pg stop`).
 //!
+//! - Обновление: комплект не той версии, что приложение, — сначала переход на свой (upgrade.rs, Status::Updating);
+//!   служба нового комплекта не поднялась — откат на прежний и запуск с ним.
+//!
 //! Вывод службы — `logs\serve.log`.
 
-use crate::{paths, paths::Paths, setup};
+use crate::{paths, paths::Paths, setup, upgrade};
 use std::{
     fs::{self, OpenOptions},
     io::{Read, Write},
@@ -30,6 +33,8 @@ pub const DEFAULT_PORT: u16 = 8767; // amemo/settings.py DEFAULT_PORT
 pub enum Status {
     Stopped,
     Starting,
+    /// переход на комплект новой версии: шаг backup, download или migrate
+    Updating(String),
     Ready,
     Failed(String),
     Paused,
@@ -37,6 +42,8 @@ pub enum Status {
 
 pub struct Service {
     paths: Paths,
+    /// версия amemo этого приложения — версия его комплекта
+    version: String,
     status: watch::Sender<Status>,
     child: Mutex<Option<Child>>,
     /// запуск или остановка идёт: второй не начинается, слежение не вмешивается
@@ -46,9 +53,10 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn new(paths: Paths) -> Arc<Self> {
+    pub fn new(paths: Paths, version: String) -> Arc<Self> {
         Arc::new(Self {
             paths,
+            version,
             status: watch::channel(Status::Stopped).0,
             child: Mutex::new(None),
             busy: Mutex::new(()),
@@ -80,7 +88,7 @@ impl Service {
 
     /// Запустить в фоне (не ждёт). Уже запущенный или запускающийся — ничего.
     pub fn start(self: &Arc<Self>) {
-        if matches!(self.status(), Status::Starting | Status::Ready) {
+        if matches!(self.status(), Status::Starting | Status::Updating(_) | Status::Ready) {
             return;
         }
         self.set(Status::Starting);
@@ -96,7 +104,44 @@ impl Service {
         });
     }
 
+    /// Переход на свой комплект, если нужен, затем фон; служба нового комплекта не поднялась — откат и запуск
+    /// с прежним.
     fn bring_up(&self) -> Result<(), String> {
+        let pending = upgrade::needed(&self.paths, &self.version).and_then(|old| {
+            match upgrade::prepare(&self.paths, &self.version, old, &|step| self.set(Status::Updating(step.into()))) {
+                Ok(pending) => Some(pending),
+                Err(e) => {
+                    crate::log!("переход на комплект {}: {e}", self.version);
+                    None
+                }
+            }
+        });
+        if !matches!(self.status(), Status::Starting) {
+            self.set(Status::Starting);
+        }
+        match (self.run_current(), pending) {
+            (Ok(()), Some(pending)) => {
+                pending.commit(&self.paths);
+                Ok(())
+            }
+            (Ok(()), None) => {
+                upgrade::cleanup(&self.paths); // прежний комплект, который был занят при прошлом переходе
+                Ok(())
+            }
+            (Err(e), Some(pending)) => {
+                if let Some(mut child) = self.child.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
+                pending.rollback(&self.paths, &e);
+                self.run_current()
+            }
+            (Err(e), None) => Err(e),
+        }
+    }
+
+    /// PostgreSQL и служба текущего комплекта.
+    fn run_current(&self) -> Result<(), String> {
         let runtime = self
             .paths
             .current()

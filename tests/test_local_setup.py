@@ -99,6 +99,17 @@ def test_native_paths_for_postgresql_on_windows(monkeypatch, tmp_path):
         localpg.native(Path("C:/Users/Анна/amemo-data"))
 
 
+def test_set_config_value_replaces_one_line(tmp_path):
+    path = tmp_path / "amemo.toml"
+    local.write_config(path, {"dsn": "postgresql://x", "pg_bin": "/old/bin", "lang": "ru"})
+    new = tmp_path / "runtime" / "0.2.0" / "pgsql" / "bin"
+    local.set_config_value(path, "pg_bin", new)
+    local.set_config_value(path, "port", 8770)
+    found = settings.load({"AMEMO_CONFIG": str(path), "HOME": str(tmp_path)})
+    assert found.pg_bin == new and found.lang == "ru" and found.port == 8770
+    assert path.read_text(encoding="utf-8").count("pg_bin =") == 1 and "port = " in path.read_text(encoding="utf-8")
+
+
 def test_config_round_trips_through_settings(tmp_path):
     path = tmp_path / "cfg" / "amemo.toml"
     data = tmp_path / "данные \"с кавычками\""
@@ -215,6 +226,22 @@ def test_setup_creates_cluster_base_and_config(run, env, tmp_path):
         again = json.loads(out)
         assert again["base_id"] == first["base_id"] and again["migrations_applied"] == []
         assert config.read_text(encoding="utf-8") == text
+
+        # новый комплект: та же мажорная версия из другой папки — pg_bin переписан, база та же
+        moved = tmp_path / "runtime-2" / "bin"
+        moved.parent.mkdir()
+        try:
+            moved.symlink_to(SERVER_BIN, target_is_directory=True)
+        except OSError:                       # Windows без права на символьные ссылки — эту часть не проверить
+            moved = None
+        if moved is not None:
+            code, out, err = run("setup", "--pg-bin", str(moved), "--data", str(data), "--json")
+            assert code == 0, err
+            switched = json.loads(out)
+            assert switched["base_id"] == first["base_id"]
+            assert f"программы PostgreSQL: {moved}" in switched["steps"], switched["steps"]
+            text = config.read_text(encoding="utf-8")
+            assert f"pg_bin = {json.dumps(str(moved))}" in text and "auto_update = false" in text
 
         code, out, err = run("doctor", "--json")
         checks = {c["name"]: c["status"] for c in json.loads(out)["checks"]}

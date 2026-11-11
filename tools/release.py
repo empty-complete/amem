@@ -7,13 +7,19 @@
                                                       копирайта — без «© …»: имя автора остаётся только на GitHub
     python tools/release.py semver [VERSION]          версия amemo (PEP 440) в semver для приложения Tauri:
                                                       0.1.0a1 → 0.1.0-alpha.1, 1.2.0rc2 → 1.2.0-rc.2
+    python tools/release.py latest --setup EXE --url URL [--version V] [--notes TEXT] [--out FILE]
+                                                      latest.json для updater приложения (спецификация приложения
+                                                      для Windows, п. 3): версия semver, подпись EXE.sig, адрес
+                                                      установщика; печатает в stdout или пишет в FILE
 """
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 import tomllib
+from datetime import datetime, timezone
 from pathlib import Path
 
 from packaging.version import Version
@@ -87,6 +93,23 @@ def semver(version: str) -> str:
     return f"{core}-{_PRE[v.pre[0]]}.{v.pre[1]}" if v.pre else core
 
 
+UPDATER_TARGET = "windows-x86_64"         # платформа updater Tauri для установщика NSIS x64
+
+
+def latest(setup: Path, url: str, version: str, notes: str = "", now: datetime | None = None) -> dict:
+    """Статичный манифест updater Tauri (https://v2.tauri.app/plugin/updater/, «Static JSON File»): version (semver),
+    notes, pub_date (RFC 3339), platforms.<цель>.{signature, url}; подпись — содержимое файла EXE.sig, который пишет
+    `tauri build` с createUpdaterArtifacts."""
+    signature = Path(f"{setup}.sig")
+    if not signature.is_file():
+        sys.exit(f"нет подписи {signature}: установщик собран без ключа подписи обновлений")
+    if not url.startswith(("https://", "http://")):
+        sys.exit(f"--url {url}: нужен адрес http(s) установщика")
+    stamp = (now or datetime.now(timezone.utc)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return {"version": semver(version), "notes": notes, "pub_date": stamp,
+            "platforms": {UPDATER_TARGET: {"signature": signature.read_text(encoding="utf-8").strip(), "url": url}}}
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="tools/release.py")
     sub = ap.add_subparsers(dest="command", required=True)
@@ -96,11 +119,24 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("ref")
     s = sub.add_parser("semver")
     s.add_argument("version", nargs="?")
+    j = sub.add_parser("latest")
+    j.add_argument("--setup", type=Path, required=True)
+    j.add_argument("--url", required=True)
+    j.add_argument("--version")
+    j.add_argument("--notes", default="")
+    j.add_argument("--out", type=Path)
     args = ap.parse_args(argv)
     if args.command == "versions":
         print(versions(args.tag))
     elif args.command == "semver":
         print(semver(args.version or _version_of(ROOT / "amemo" / "__init__.py")))
+    elif args.command == "latest":
+        data = latest(args.setup, args.url, args.version or _version_of(ROOT / "amemo" / "__init__.py"), args.notes)
+        text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+        if args.out:
+            args.out.write_text(text, encoding="utf-8")
+        else:
+            sys.stdout.write(text)
     else:
         path = ROOT / "README.md"
         path.write_text(pypi_readme(path.read_text(encoding="utf-8"), args.ref), encoding="utf-8")
