@@ -85,6 +85,13 @@ test("мастер от языка до «Готово»", async ({ page }) => {
 test("плагин: загруженный виден сразу; без Claude шага нет", async ({ page }) => {
   await open(page, "step=plugin&synced=1&fast=1", "light");
   await expect(page.getByRole("status")).toContainText("Плагин загружен");
+  // схема «куда нажимать»: при «уменьшить движение» шаги переключает человек
+  const howto = page.getByRole("figure", { name: "Куда нажимать в приложении Claude" });
+  await expect(howto).toContainText("Слева — Customize.");
+  await howto.getByRole("button", { name: "Шаг 4" }).click();
+  await expect(howto).toContainText("Upload plugin — загрузить плагин из файла.");
+  await howto.getByRole("button", { name: "Шаг 5" }).click();
+  await expect(howto).toContainText("Выберите amemo-plugin.zip в папке «Загрузки» и нажмите Open.");
   await page.getByRole("button", { name: "Далее" }).click();
   await expect(page.getByRole("heading", { name: "amemo готов" })).toBeVisible();
 

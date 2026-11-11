@@ -18,6 +18,7 @@ import {
 import { Carousel } from "./Carousel";
 import { left, size } from "./format";
 import { setLang } from "./i18n";
+import { PluginHowTo } from "./PluginHowTo";
 
 export const STEPS = ["lang", "data", "docs", "features", "agents", "install", "plugin", "done"] as const;
 export type Step = (typeof STEPS)[number];
@@ -344,53 +345,56 @@ export function Wizard({ bridge, defaults }: { bridge: Bridge; defaults: Default
   } else if (step === "plugin") {
     const file = plugin?.path.split(/[\\/]/).pop() ?? "amemo-plugin.zip";
     body = (
-      <>
-        <ol className="wz__list wz__tips">
-          <li className="wz__row wz__row--action">
-            <span className="wz__num-dot" aria-hidden="true">
-              1
-            </span>
-            <p className="wz__tip">
-              <span className="wz__row-title">{t("plugin.open")}</span>
-            </p>
-            <Button variant="outline" onPress={() => void bridge.openClaude()}>
-              {t("plugin.openButton")}
-            </Button>
-          </li>
-          <li className="wz__row">
-            <span className="wz__num-dot" aria-hidden="true">
-              2
-            </span>
-            <p className="wz__tip">
-              <span className="wz__row-title">{t("plugin.menu")}</span>
-              <span className="wz__meta"> — {t("plugin.path")}</span>
-            </p>
-          </li>
-          <li className="wz__row wz__row--action">
-            <span className="wz__num-dot" aria-hidden="true">
-              3
-            </span>
-            <p className="wz__tip">
-              <span className="wz__row-title">{t("plugin.file", { file })}</span>
-              {plugin && <span className="wz__meta wz__path-inline"> — {plugin.path}</span>}
-            </p>
-            <Button
-              variant="outline"
-              isDisabled={!plugin}
-              onPress={() => plugin && void bridge.showFile(plugin.path)}
-            >
-              {t("plugin.show")}
-            </Button>
-          </li>
-        </ol>
-        <p
-          className="wz__meta wz__plugin-state"
-          role="status"
-          data-state={plugin?.synced ? "done" : "waiting"}
-        >
-          {plugin?.synced ? t("plugin.synced") : t("plugin.waiting")}
-        </p>
-      </>
+      <div className="wz__plugin">
+        <div>
+          <ol className="wz__list wz__tips">
+            <li className="wz__row wz__row--action">
+              <span className="wz__num-dot" aria-hidden="true">
+                1
+              </span>
+              <p className="wz__tip">
+                <span className="wz__row-title">{t("plugin.open")}</span>
+              </p>
+              <Button variant="outline" onPress={() => void bridge.openClaude()}>
+                {t("plugin.openButton")}
+              </Button>
+            </li>
+            <li className="wz__row">
+              <span className="wz__num-dot" aria-hidden="true">
+                2
+              </span>
+              <p className="wz__tip">
+                <span className="wz__row-title">{t("plugin.menu")}</span>
+                <span className="wz__meta"> — {t("plugin.path")}</span>
+              </p>
+            </li>
+            <li className="wz__row wz__row--action">
+              <span className="wz__num-dot" aria-hidden="true">
+                3
+              </span>
+              <p className="wz__tip">
+                <span className="wz__row-title">{t("plugin.file", { file })}</span>
+                {plugin && <span className="wz__meta wz__path-inline"> — {plugin.path}</span>}
+              </p>
+              <Button
+                variant="outline"
+                isDisabled={!plugin}
+                onPress={() => plugin && void bridge.showFile(plugin.path)}
+              >
+                {t("plugin.show")}
+              </Button>
+            </li>
+          </ol>
+          <p
+            className="wz__meta wz__plugin-state"
+            role="status"
+            data-state={plugin?.synced ? "done" : "waiting"}
+          >
+            {plugin?.synced ? t("plugin.synced") : t("plugin.waiting")}
+          </p>
+        </div>
+        <PluginHowTo file={file} />
+      </div>
     );
   } else {
     body = (
