@@ -11,6 +11,7 @@ const COMMANDS: &[&str] = &[
     "setup_show_file",
     "app_start",
     "app_resume",
+    "app_status",
 ];
 
 fn main() {

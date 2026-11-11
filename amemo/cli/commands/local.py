@@ -19,7 +19,8 @@
 (шаги database, store, search, ocr, agents; состояния running, done, skipped), как у экрана установки мастера.
 
 Повторный запуск продолжает с того места, где остановился: кластер и amemo.toml, созданные setup, переиспользуются
-(пароль не меняется). Файл настроек, который создал не setup (в нём нет pg_data этой установки), не переписывается —
+(пароль не меняется). Другой --pg-bin той же мажорной версии (новый комплект приложения для Windows) — pg_bin в
+amemo.toml переписывается, база остаётся; другая мажорная версия — отказ: нужен pg_upgrade. Файл настроек, который создал не setup (в нём нет pg_data этой установки), не переписывается —
 отказ с подсказкой.
 
 `amemo pg start|stop|status` — кластер из pg_bin и pg_data настроек.
@@ -28,6 +29,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import shutil
 import sys
@@ -80,22 +82,43 @@ def _toml(value) -> str:
     return json.dumps(str(value), ensure_ascii=False)        # строка JSON — допустимая базовая строка TOML
 
 
-def write_config(path: Path, values: dict) -> None:
-    """amemo.toml целиком, атомарно, с правами 0600 (в dsn — пароль)."""
-    lines = ["# настройки amemo (amemo setup); пароль — в dsn, файл читает только владелец"]
-    lines += [f"{key} = {_toml(value)}" for key, value in values.items() if value is not None]
+def _write_private(path: Path, text: str) -> None:
+    """Файл атомарно, с правами 0600 (в amemo.toml — пароль в dsn)."""
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | O_BINARY, 0o600)
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as out:
-            out.write("\n".join(lines) + "\n")
+            out.write(text)
             out.flush()
             os.fsync(out.fileno())
         os.replace(tmp, path)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
+
+
+def write_config(path: Path, values: dict) -> None:
+    """amemo.toml целиком."""
+    lines = ["# настройки amemo (amemo setup); пароль — в dsn, файл читает только владелец"]
+    lines += [f"{key} = {_toml(value)}" for key, value in values.items() if value is not None]
+    _write_private(path, "\n".join(lines) + "\n")
+
+
+def set_config_value(path: Path, key: str, value) -> None:
+    """Одна строка верхнего уровня `ключ = значение` в amemo.toml; остальное — как было. Нет строки — дописывается
+    перед первой таблицей."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    line = f"{key} = {_toml(value)}"
+    pattern = re.compile(rf"^\s*{re.escape(key)}\s*=")
+    tables = next((i for i, x in enumerate(lines) if x.lstrip().startswith("[")), len(lines))
+    for i, x in enumerate(lines[:tables]):
+        if pattern.match(x):
+            lines[i] = line
+            break
+    else:
+        lines.insert(tables, line)
+    _write_private(path, "\n".join(lines) + "\n")
 
 
 def _existing(ctx, path: Path, pg_data: Path):
@@ -190,6 +213,16 @@ def run_setup(ctx, args) -> int:
             steps.append(f"настройки: {config}")
         else:
             steps.append(f"настройки уже есть: {config}")
+            wanted = localpg.native(cluster.bin)
+            if str(previous.pg_bin or "") != wanted:
+                # новый комплект приложения: те же данные, программы PostgreSQL из другой папки
+                on_disk = (cluster.data / "PG_VERSION").read_text(encoding="utf-8").strip()
+                if on_disk != str(major):
+                    raise CliError(f"кластер {cluster.data} — PostgreSQL {on_disk}, а программы {cluster.bin} — "
+                                   f"{major}: данные другой мажорной версии без pg_upgrade не открыть", exit=ENV,
+                                   code="pg_major")
+                set_config_value(config, "pg_bin", wanted)
+                steps.append(f"программы PostgreSQL: {wanted}")
         if cluster.start():
             steps.append("кластер запущен")
         ctx._settings = settings_.load(ctx.env)

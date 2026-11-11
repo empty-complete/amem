@@ -15,8 +15,8 @@
 //! - Размер и положение окна запоминаются; видимость — нет: окно показывает приложение.
 //! - Claude выбран в мастере — плагин amemo из аккаунта, когда он появится в Claude Code, заменяет прямую
 //!   установку там (`watch_claude`).
-//! - Обновление проверяется при запуске (`latest.json` последнего релиза); пока только сообщается в журнал,
-//!   установка — D7.
+//! - Обновления (update.rs): при запуске и раз в 6 часов; новая версия ставится сама и переходит на свой комплект
+//!   с бэкапом и откатом (upgrade.rs). Выключатель — пункт значка «Обновлять автоматически».
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -25,17 +25,18 @@ mod log;
 mod paths;
 mod service;
 mod setup;
+mod update;
+mod upgrade;
 mod winpath;
 
 use paths::Paths;
 use service::{Service, Status};
-use std::sync::{Arc, Mutex};
+use std::sync::{atomic::AtomicBool, Arc, Mutex};
 use tauri::{
-    menu::{MenuBuilder, MenuItem, MenuItemBuilder},
+    menu::{CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItem, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager, RunEvent, WindowEvent, Wry,
 };
-use tauri_plugin_updater::UpdaterExt;
 use tauri_plugin_window_state::StateFlags;
 
 const MAIN: &str = "main";
@@ -47,6 +48,9 @@ pub struct App {
     pub paths: Paths,
     pub service: Arc<Service>,
     pause: Mutex<Option<MenuItem<Wry>>>,
+    auto_update: Mutex<Option<CheckMenuItem<Wry>>>,
+    /// идёт установка мастером: обновление приложения её не прерывает (update.rs)
+    pub installing: AtomicBool,
 }
 
 fn configured(app: &AppHandle) -> bool {
@@ -82,7 +86,7 @@ pub async fn open_service(app: &AppHandle, resume: bool) -> Result<(), String> {
     let service = app.state::<App>().service.clone();
     match service.status() {
         Status::Paused if !resume => return Err("paused".into()),
-        Status::Ready | Status::Starting => {}
+        Status::Ready | Status::Starting | Status::Updating(_) => {}
         _ => service.start(),
     }
     let mut changes = service.subscribe();
@@ -108,18 +112,48 @@ async fn app_resume(app: AppHandle) -> Result<(), String> {
     open_service(&app, true).await
 }
 
+#[derive(serde::Serialize)]
+struct AppStatus {
+    state: &'static str,
+    /// шаг перехода на новый комплект (updating): backup, download, migrate
+    step: Option<String>,
+    version: String,
+}
+
+/// Состояние фона для экрана запуска: он показывает шаги обновления комплекта.
+#[tauri::command]
+fn app_status(app: AppHandle) -> AppStatus {
+    let state = app.state::<App>();
+    let (name, step) = match state.service.status() {
+        Status::Stopped => ("stopped", None),
+        Status::Starting => ("starting", None),
+        Status::Updating(step) => ("updating", Some(step)),
+        Status::Ready => ("ready", None),
+        Status::Failed(_) => ("failed", None),
+        Status::Paused => ("paused", None),
+    };
+    AppStatus { state: name, step, version: setup::version(&app) }
+}
+
 struct Labels {
     open: &'static str,
     pause: &'static str,
     resume: &'static str,
+    updates: &'static str,
     quit: &'static str,
 }
 
 fn labels() -> Labels {
     if setup::ui_lang() == "en" {
-        Labels { open: "Open amemo", pause: "Pause", resume: "Resume", quit: "Quit" }
+        Labels { open: "Open amemo", pause: "Pause", resume: "Resume", updates: "Update automatically", quit: "Quit" }
     } else {
-        Labels { open: "Открыть amemo", pause: "Пауза", resume: "Продолжить", quit: "Выход" }
+        Labels {
+            open: "Открыть amemo",
+            pause: "Пауза",
+            resume: "Продолжить",
+            updates: "Обновлять автоматически",
+            quit: "Выход",
+        }
     }
 }
 
@@ -131,7 +165,7 @@ pub fn tray_refresh(app: &AppHandle) {
     let status = state.service.status();
     let text = labels();
     let _ = item.set_text(if status == Status::Paused { text.resume } else { text.pause });
-    let _ = item.set_enabled(configured(app) && status != Status::Starting);
+    let _ = item.set_enabled(configured(app) && !matches!(status, Status::Starting | Status::Updating(_)));
 }
 
 fn toggle_pause(app: &AppHandle) {
@@ -147,6 +181,18 @@ fn toggle_pause(app: &AppHandle) {
     });
 }
 
+/// «Обновлять автоматически»: флажок пункта уже переключён — сохранить его.
+fn toggle_updates(app: &AppHandle) {
+    let state = app.state::<App>();
+    let checked = state.auto_update.lock().ok().and_then(|i| i.as_ref().and_then(|i| i.is_checked().ok()));
+    let mut saved = state.paths.state();
+    saved.no_auto_update = !checked.unwrap_or(true);
+    log!("обновления {}", if saved.no_auto_update { "выключены" } else { "включены" });
+    if let Err(e) = state.paths.save_state(&saved) {
+        log!("state.json: {e}");
+    }
+}
+
 /// Остановить фон и завершиться; ждёт остановки (второй экземпляр с `--quit` ждёт вместе с ним).
 fn quit(app: &AppHandle) {
     log!("выход");
@@ -158,10 +204,21 @@ fn tray(app: &AppHandle) -> tauri::Result<()> {
     let text = labels();
     let open = MenuItemBuilder::with_id("open", text.open).build(app)?;
     let pause = MenuItemBuilder::with_id("pause", text.pause).enabled(false).build(app)?;
+    let auto = !app.state::<App>().paths.state().no_auto_update;
+    let updates = CheckMenuItemBuilder::with_id("updates", text.updates).checked(auto).build(app)?;
     let quit_item = MenuItemBuilder::with_id("quit", text.quit).build(app)?;
-    let menu = MenuBuilder::new(app).items(&[&open, &pause]).separator().items(&[&quit_item]).build()?;
+    let menu = MenuBuilder::new(app)
+        .items(&[&open, &pause])
+        .separator()
+        .items(&[&updates])
+        .separator()
+        .items(&[&quit_item])
+        .build()?;
     if let Ok(mut slot) = app.state::<App>().pause.lock() {
         *slot = Some(pause);
+    }
+    if let Ok(mut slot) = app.state::<App>().auto_update.lock() {
+        *slot = Some(updates);
     }
     let mut builder = TrayIconBuilder::with_id("amemo")
         .tooltip("amemo")
@@ -170,6 +227,7 @@ fn tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => open_window(app),
             "pause" => toggle_pause(app),
+            "updates" => toggle_updates(app),
             "quit" => quit(app),
             _ => {}
         })
@@ -223,21 +281,6 @@ fn watch_claude(app: AppHandle) {
     });
 }
 
-async fn check_update(app: AppHandle) {
-    let updater = match app.updater() {
-        Ok(updater) => updater,
-        Err(e) => {
-            log!("обновления недоступны: {e}");
-            return;
-        }
-    };
-    match updater.check().await {
-        Ok(Some(update)) => log!("доступна версия {} (установка — следующей частью)", update.version),
-        Ok(None) => {}
-        Err(e) => log!("проверка обновлений не удалась: {e}"),
-    }
-}
-
 fn unattended(paths: &Paths, version: &str, file: Option<&str>) -> i32 {
     let Some(file) = file else {
         log!("{UNATTENDED}: нужен файл с выбором мастера (JSON)");
@@ -285,7 +328,7 @@ fn main() {
     }
     let background = args.iter().any(|a| a == BACKGROUND);
     let quit_only = args.iter().any(|a| a == QUIT);
-    let service = Service::new(paths.clone());
+    let service = Service::new(paths.clone(), version.clone());
     let app = tauri::Builder::default()
         // первым: второй экземпляр завершается до того, как что-то создаст
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
@@ -303,7 +346,13 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec![BACKGROUND])))
-        .manage(App { paths, service, pause: Mutex::new(None) })
+        .manage(App {
+            paths,
+            service,
+            pause: Mutex::new(None),
+            auto_update: Mutex::new(None),
+            installing: AtomicBool::new(false),
+        })
         .invoke_handler(tauri::generate_handler![
             setup::setup_defaults,
             setup::setup_check_folder,
@@ -315,6 +364,7 @@ fn main() {
             setup::setup_show_file,
             app_start,
             app_resume,
+            app_status,
         ])
         .setup(move |app| {
             if quit_only {
@@ -331,7 +381,7 @@ fn main() {
             if !background {
                 show_main(&handle);
             }
-            tauri::async_runtime::spawn(check_update(handle));
+            update::schedule(handle);
             Ok(())
         })
         .on_window_event(|window, event| {

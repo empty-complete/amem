@@ -142,7 +142,13 @@
       "lead": "The base and the service were stopped from the tray icon. While amemo is paused, agents cannot see it."
     },
     "retry": "Try again",
-    "resume": "Resume"
+    "resume": "Resume",
+    "updating": {
+      "title": "Updating amemo to {{version}}",
+      "backup": "Saving a backup of the base — your records are safe.",
+      "download": "Downloading the new amemo runtime.",
+      "migrate": "Moving the base to the new version. If anything goes wrong, amemo returns to the previous one."
+    }
   },
   "plugin": {
     "title": "Connect the Claude app",
