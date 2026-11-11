@@ -17,6 +17,8 @@
   },
   "folders": {
     "moved_many_one": "{{count}} record moved to “{{to}}”",
+    "moved_many_few": "{{count}} records moved to “{{to}}”",
+    "moved_many_many": "{{count}} records moved to “{{to}}”",
     "moved_many_other": "{{count}} records moved to “{{to}}”",
     "title": "Folders",
     "all": "All records",
@@ -62,6 +64,8 @@
     "bar": "Selected records",
     "one": "Select “{{what}}”",
     "count_one": "{{count}} record selected",
+    "count_few": "{{count}} records selected",
+    "count_many": "{{count}} records selected",
     "count_other": "{{count}} records selected",
     "all": "Select all matching: {{count}}",
     "all_on": "All matching selected: {{count}}",
@@ -645,6 +649,8 @@
   },
   "bundles": {
     "picked_one": "{{count}} record selected: the bundle holds it.",
+    "picked_few": "{{count}} records selected: the bundle holds them.",
+    "picked_many": "{{count}} records selected: the bundle holds them.",
     "picked_other": "{{count}} records selected: the bundle holds them.",
     "dialog": "Export as a bundle",
     "title": "Bundles",

@@ -68,7 +68,13 @@ export function RecordRow({
           aria-label={t("select.one", { what: r.label })}
           checked={!!selected}
           onChange={() => {}}
-          onClick={(e) => onPick({ range: e.shiftKey })}
+          // щелчок по флажку — выбор, а не начало перетаскивания строки (useDrag на li)
+          onPointerDown={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onPick({ range: e.shiftKey });
+          }}
         />
       )}
       <Link
@@ -78,6 +84,7 @@ export function RecordRow({
           // Ctrl/⌘ и Shift выбирают строку, а не открывают запись
           if (!onPick || !(e.ctrlKey || e.metaKey || e.shiftKey)) return;
           e.preventDefault();
+          e.stopPropagation();
           onPick({ range: e.shiftKey });
         }}
       >

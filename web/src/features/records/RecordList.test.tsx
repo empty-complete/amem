@@ -107,7 +107,8 @@ test("Ctrl-щелчок по строке выбирает её, а не отк�
   const first = db.records[0];
   if (!first) throw new Error("нет образцов");
   await renderWithApp(<FilterHarness />);
-  const link = (await screen.findByText(first.label)).closest("a") as HTMLElement;
+  const box = await screen.findByRole("checkbox", { name: `Выбрать «${first.label}»` });
+  const link = box.parentElement?.querySelector("a.row") as HTMLElement;
   await user.keyboard("{Control>}");
   await user.click(link);
   await user.keyboard("{/Control}");
