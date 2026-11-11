@@ -1,6 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { placeStore } from "../features/write/place";
+import { collapseAll, treePick } from "./shell/folderTree";
 
 function inField(el: Element | null) {
   return !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || (el as HTMLElement).isContentEditable);
@@ -31,6 +32,12 @@ export function useHotkeys(h: { focusSearch: () => void }) {
       } else if (e.code === "KeyN") {
         e.preventDefault();
         placeStore.openQuick(true);
+      } else if (e.code === "KeyC" && e.shiftKey) {
+        // Shift+C — свернуть все папки в панели
+        e.preventDefault();
+        collapseAll();
+      } else if (e.code === "Escape") {
+        treePick.clear();
       } else if (e.code === "KeyG") {
         g = true;
         clearTimeout(gTimer);
