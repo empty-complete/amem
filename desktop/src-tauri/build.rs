@@ -6,6 +6,9 @@ const COMMANDS: &[&str] = &[
     "setup_pick_folder",
     "setup_install",
     "setup_finish",
+    "setup_plugin",
+    "setup_open_claude",
+    "setup_show_file",
     "app_start",
     "app_resume",
 ];

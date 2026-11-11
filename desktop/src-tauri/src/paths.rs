@@ -26,6 +26,10 @@ pub struct State {
     /// мастер пройден: при запуске — фон и окно amemo, а не мастер
     #[serde(default)]
     pub setup_done: bool,
+    /// zip плагина для приложения Claude, если в мастере выбран Claude: тогда приложение следит, когда плагин из
+    /// аккаунта появится в Claude Code, и снимает прямую установку (`amemo install claude-code --unless-synced`)
+    #[serde(default)]
+    pub plugin: Option<String>,
 }
 
 impl Paths {
@@ -88,6 +92,13 @@ pub fn complete(runtime: &Path) -> bool {
 
 pub fn python(runtime: &Path) -> PathBuf {
     runtime.join("python").join("python.exe")
+}
+
+/// Запускатель `bin\amemo.exe` для комплекта `runtime\<версия>` — постоянный путь к amemo для агентов.
+pub fn launcher(runtime: &Path) -> Option<PathBuf> {
+    let root = runtime.parent()?.parent()?;
+    let exe = root.join("bin").join("amemo.exe");
+    exe.is_file().then_some(exe)
 }
 
 pub fn pg_bin(runtime: &Path) -> PathBuf {

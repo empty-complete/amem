@@ -66,6 +66,13 @@ export interface Progress {
   message?: string;
 }
 
+/** Плагин amemo для приложения Claude: zip, который человек загружает сам (Customize → Plugins → Add → Upload
+ * plugin), и загружен ли он уже — его видно в Claude Code как amemo@synced. */
+export interface PluginInfo {
+  path: string;
+  synced: boolean;
+}
+
 export interface Finish {
   desktopShortcut: boolean;
   autostart: boolean;
@@ -80,6 +87,12 @@ export interface Bridge {
   pickFolder(initial: string | null): Promise<string | null>;
   /** установка по выбору; onProgress — каждое изменение шага; ошибка шага — отказ промиса */
   install(choices: Choices, onProgress: (p: Progress) => void): Promise<void>;
+  /** шаг «плагин»: где zip и загружен ли плагин (приложение заодно снимает прямую установку в Claude Code) */
+  plugin(): Promise<PluginInfo>;
+  /** открыть приложение Claude */
+  openClaude(): Promise<void>;
+  /** показать файл в Проводнике */
+  showFile(path: string): Promise<void>;
   /** ярлык, автозапуск и переход в окно amemo */
   finish(options: Finish): Promise<void>;
   /** экран запуска: дождаться базы и службы — окно само перейдёт в amemo. resume — снять паузу. Отказ — текст
@@ -99,7 +112,8 @@ function tauri(): TauriGlobal | undefined {
 }
 
 /** Команды приложения (desktop/src-tauri/src/setup.rs и main.rs): setup_defaults, setup_check_folder,
- * setup_pick_folder, setup_install (события setup://progress), setup_finish, app_start, app_resume. */
+ * setup_pick_folder, setup_install (события setup://progress), setup_plugin, setup_open_claude, setup_show_file,
+ * setup_finish, app_start, app_resume. */
 function tauriBridge(t: TauriGlobal): Bridge {
   const win = t.window.getCurrentWindow();
   return {
@@ -115,6 +129,9 @@ function tauriBridge(t: TauriGlobal): Bridge {
         stop();
       }
     },
+    plugin: () => t.core.invoke<PluginInfo>("setup_plugin"),
+    openClaude: () => t.core.invoke("setup_open_claude"),
+    showFile: (path) => t.core.invoke("setup_show_file", { path }),
     finish: (options) => t.core.invoke("setup_finish", { options }),
     start: (resume) => t.core.invoke(resume ? "app_resume" : "app_start"),
     window: {

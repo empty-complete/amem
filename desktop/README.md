@@ -9,6 +9,11 @@ one program that is the installer wizard, the amemo window and the tray icon.
   PostgreSQL in the chosen data folder, the base, semantic search, OCR languages, agents. The wizard checks that
   PostgreSQL can open the data folder (8.3 short names for paths outside the ANSI code page) and offers
   `C:\amemo-data` otherwise. "Finish" sets the desktop shortcut and autostart and opens amemo.
+- **Claude** (part D6): when the wizard has the Claude app checked, `amemo setup` connects Claude Code directly and
+  builds the plugin zip (`Downloads\amemo-plugin.zip`: MCP server, hooks, skills, all through `bin\amemo.exe`). The
+  "Plugin" step tells where to upload it (Customize → Plugins → Add → Upload plugin), opens the Claude app and
+  shows the file. Once the plugin from the account shows up in Claude Code (`amemo@synced`), the app removes the
+  direct install there — at the plugin step, at start and hourly (`amemo install claude-code --unless-synced`).
 - **Background** (`src-tauri/src/service.rs`): PostgreSQL (`amemo pg start`) and `amemo serve` run as child processes
   of the app; the window switches to the web UI of the service (`http://127.0.0.1:8767/ui/`) once `/health` answers.
   A service that exits by itself is restarted (more than three times in 10 minutes — an error on the start screen).
@@ -28,7 +33,7 @@ one program that is the installer wizard, the amemo window and the tray icon.
   `http://127.0.0.1:*` may use window commands only (`capabilities/service.json`) — it draws the window buttons in its
   top bar (`web/src/app/shell/WindowControls.tsx`).
 
-The Claude plugin with hooks (D6), update installation (D7) and releases with the runtime attached (D8) come next.
+Update installation (D7) and releases with the runtime attached (D8) come next.
 Until D8 a release has no runtime to download: CI serves the runtime of the branch from a local server
 (`AMEMO_RELEASE_BASE`).
 

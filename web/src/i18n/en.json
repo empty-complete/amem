@@ -74,6 +74,12 @@
     "clear": "Clear selection",
     "hint": "Ctrl or ⌘ selects a record, Shift a range"
   },
+  "side": {
+    "title": "Source and neighbourhood",
+    "width": "Panel width",
+    "collapse": "Collapse the panel",
+    "expand": "Expand the panel: source and neighbourhood"
+  },
   "search": {
     "title": "Results for “{{q}}”",
     "prompt": "Type a query in the search field above.",

@@ -8,7 +8,8 @@
 `amemo install AGENT [--project DIR] [--dry-run]` ставит в Claude Code или Codex сервер MCP, хуки и навыки;
 `amemo uninstall AGENT [--project DIR] [--dry-run]` убирает ровно поставленное. Базы установщик не касается.
 `amemo install cowork [--out FILE]` собирает zip-плагин для Claude Cowork (amemo/agents/cowork.py): в аккаунт его
-загружает человек.
+загружает человек. `amemo install claude-code --unless-synced` — прямая установка, пока в Claude Code нет плагина
+amemo из аккаунта, и её снятие, когда он появился (install.prefer_plugin; так делает приложение для Windows).
 """
 from __future__ import annotations
 
@@ -34,6 +35,10 @@ def register(sub, shared) -> None:
         p.add_argument("--out", metavar="FILE", type=Path,
                        help="cowork: путь к zip плагина (по умолчанию ~/amemo-plugin.zip)")
         p.add_argument("--dry-run", action="store_true", help="показать изменения, ничего не записывая")
+        if name == "install":
+            p.add_argument("--unless-synced", action="store_true",
+                           help="claude-code: если плагин amemo из аккаунта claude.ai уже в Claude Code — снять "
+                                "прямую установку, иначе поставить")
 
 
 def run_hook(ctx, args) -> int:
@@ -55,6 +60,10 @@ def _run(ctx, args, *, remove: bool) -> int:
 
     if args.target != "cowork" and args.out is not None:
         raise CliError("--out — только для cowork", exit=USAGE, code="install")
+    unless_synced = getattr(args, "unless_synced", False)
+    if unless_synced and (args.target != "claude-code" or args.project is not None):
+        raise CliError("--unless-synced — только для claude-code и без --project: плагин из аккаунта — глобальный",
+                       exit=USAGE, code="install")
     if args.target == "cowork" and args.project is not None:
         raise CliError("--project — не для cowork: плагин ставится в аккаунт, а не в проект", exit=USAGE,
                        code="install")
@@ -62,6 +71,8 @@ def _run(ctx, args, *, remove: bool) -> int:
         if args.target == "cowork":
             do_plugin = cowork.remove if remove else cowork.build
             report = do_plugin(ctx.env, args.out, dry_run=args.dry_run)
+        elif unless_synced:
+            report, synced = install.prefer_plugin(ctx.env, dry_run=args.dry_run)
         else:
             do = install.uninstall if remove else install.install
             report = do(args.target, ctx.env, args.project, dry_run=args.dry_run)
@@ -75,5 +86,8 @@ def _run(ctx, args, *, remove: bool) -> int:
             ctx.note(f"amemo: {line}")
         for line in report.warnings:
             ctx.note(f"amemo: предупреждение: {line}")
-    ctx.emit(report.to_json(), lambda data: "\n".join(report.lines()))
+    data = report.to_json()
+    if unless_synced:
+        data["synced"] = synced
+    ctx.emit(data, lambda _: "\n".join(report.lines()))
     return 0

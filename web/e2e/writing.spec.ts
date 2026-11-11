@@ -1,9 +1,21 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 const E3 = "ent:0193b7c2-5e1a-7d40-9f2e-000000000003";
 const N1 = "atm:0193b7c2-5e1a-7d40-9f2e-00000000001e";
 const A3 = "atm:0193b7c2-5e1a-7d40-9f2e-00000000000b";
 const WINDOW = 6500;
+
+/**
+ * Заменить текст редактора CodeMirror. fill() выделяет всё DOM-диапазоном и сразу вставляет текст, а на телефоне
+ * (Android) CodeMirror вводит через EditContext, чьё выделение он сверяет с DOM только по асинхронному
+ * selectionchange: вставка иногда успевает раньше и ложится в начало, к прежнему тексту. Ctrl+A идёт через
+ * клавиши редактора и передаёт выделение в EditContext сразу.
+ */
+async function setEditorText(editor: Locator, text: string) {
+  await editor.focus();
+  await editor.press("ControlOrMeta+a");
+  await editor.page().keyboard.insertText(text);
+}
 
 const skyCount = (page: Page) =>
   page.evaluate(
@@ -78,7 +90,7 @@ test("правка: «Суть» — строка свойств; правая �
   await page.getByRole("button", { name: /^Править, (⌘|Ctrl\+)E$/ }).click();
   await page.getByRole("textbox", { name: "Суть" }).fill("Растяжки проверять после каждого шторма");
   const body = page.getByRole("textbox", { name: "Текст записи" });
-  await body.fill("проверить растяжки");
+  await setEditorText(body, "проверить растяжки");
   await body.press("ControlOrMeta+a");
   await body.click({ button: "right" });
   const menu = page.getByRole("menu", { name: "Оформление" });
@@ -102,7 +114,7 @@ test("живой предпросмотр: разметка скрыта вне 
   await page.goto(`./atom/${N1}`);
   await page.getByRole("button", { name: /^Править, (⌘|Ctrl\+)E$/ }).click();
   const body = page.getByRole("textbox", { name: "Текст записи" });
-  await body.fill("## Растяжки\n\n**жирный** и [[Мачта]]");
+  await setEditorText(body, "## Растяжки\n\n**жирный** и [[Мачта]]");
   await page.getByRole("textbox", { name: "Заголовок" }).click();
   await expect(body).toContainText("жирный и Мачта");
   await expect(body).not.toContainText("**");
