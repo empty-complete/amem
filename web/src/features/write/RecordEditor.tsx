@@ -328,7 +328,8 @@ export function RecordEditor(p: RecordEditorProps) {
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => editor.current && x.run(editor.current)}
                   >
-                    {x.text}
+                    {/* значок — для глаз; имя кнопки — из подписи (иначе «1.» не совпадает с именем) */}
+                    <span aria-hidden="true">{x.text}</span>
                   </button>
                 ))}
               </div>
