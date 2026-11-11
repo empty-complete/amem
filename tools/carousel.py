@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         import PIL  # noqa: F401
     except ImportError:
-        sys.exit("нужен Pillow: pip install pillow")
+        sys.exit("Pillow is required: pip install pillow")
     manifest_path = TARGET / "manifest.json"
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -70,13 +70,15 @@ def main(argv: list[str] | None = None) -> int:
         if manifest.get(name) == digest and out.is_file():
             continue
         convert(src, out, args.width, args.quality)
-        print(f"{src.relative_to(ROOT)}: {src.stat().st_size >> 10} КБ → {out.stat().st_size >> 10} КБ", flush=True)
+        # вывод — ASCII: консоль Windows раннера в кодовой странице 1252
+        print(f"{src.relative_to(ROOT).as_posix()}: {src.stat().st_size >> 10} KB -> {out.stat().st_size >> 10} KB",
+              flush=True)
     for stale in set(manifest) - set(wanted):        # сюжет убрали из README
         (TARGET / stale).unlink(missing_ok=True)
     TARGET.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(wanted, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     total = sum((TARGET / name).stat().st_size for name in wanted)
-    print(f"карусель: {len(wanted)} анимаций, {total >> 10} КБ")
+    print(f"carousel: {len(wanted)} animations, {total >> 10} KB")
     return 0
 
 
