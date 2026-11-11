@@ -128,6 +128,7 @@ def test_stats_all_sections(kb, store, docs):
     assert out["done"]["obsolete"] == 1
     assert out["changesets"] == {"approved": 10, "rejected": 1, "error_codes": {"quote_not_found": 1}}
     assert out["audit"] == {AUTHOR: {"decided": 2, "refuted": 1}}
+    assert out["verifier"] == {"last_at": None, "decided": 0}          # здесь решал только человек
     # draft: a, b, c, o; needs_review: x (источник-письмо); verified: d1, d2, u2; rejected: u1 (аудит refuted)
     assert out["records"]["atoms"] == {"draft": 4, "needs_review": 1, "auto_verified": 0, "verified": 3,
                                        "rejected": 1, "deprecated": 0, "superseded": 0}
@@ -185,3 +186,18 @@ def test_audit_two_authors_and_manual_item(kb, store, docs):
     review.resolve(kb, manual, "refuted", agent=PERSON, now=base)
     out = review.stats(kb, now=base + timedelta(hours=1))
     assert out["audit"] == {AUTHOR: {"decided": 1, "refuted": 0}, "model:other": {"decided": 2, "refuted": 2}}
+
+
+def test_stats_verifier_last_pass(kb, store, docs):
+    """verifier: когда проверяющая модель решала последний раз и сколько решила за окно; будущее — не видно."""
+    base = datetime.now(timezone.utc) + timedelta(hours=1)
+    r = {n: send(kb, store, docs, n) for n in ("v1", "v2")}
+    settle(kb)
+    review.resolve(kb, put(kb, r["v1"], "semantic", base), "confirmed", agent=MODEL, confidence=0.9,
+                   now=base + timedelta(minutes=5))
+    review.resolve(kb, put(kb, r["v2"], "semantic", base), "refuted", agent=MODEL, confidence=0.8,
+                   now=base + timedelta(minutes=30))
+    seen = review.stats(kb, now=base + timedelta(minutes=10))["verifier"]
+    assert seen["decided"] == 1
+    assert abs(datetime.fromisoformat(seen["last_at"]) - (base + timedelta(minutes=5))) < timedelta(seconds=1)
+    assert review.stats(kb, now=base + timedelta(hours=1))["verifier"]["decided"] == 2

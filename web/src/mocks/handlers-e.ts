@@ -125,6 +125,8 @@ export const handlersE = [
         decided: db.reviewItems.filter((i) => i.reason === "audit" && i.state === "done").length,
         refuted: 0,
       },
+      // проверяющая модель: в образцах она проходила вчера и решила 12 пунктов
+      verifier: { last_at: new Date(Date.now() - 86_400_000).toISOString(), decided: 12 },
     });
   }),
   http.get("/api/v1/base", () =>

@@ -319,3 +319,51 @@
   margin: 0 var(--s-md) var(--s-xs);
   font-size: var(--t-meta);
 }
+
+/* вкладки «Ждут вас» / «Разбирает модель» и пояснения к решению */
+.rtabs {
+  display: flex;
+  gap: var(--s-2xs);
+  margin: 0 0 var(--s-xs);
+  border-bottom: 1px solid var(--separator);
+}
+.rtab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-xs);
+  margin-bottom: -1px;
+  padding: var(--s-xs) var(--s-sm);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-label);
+  cursor: pointer;
+}
+.rtab[aria-selected="true"] {
+  border-bottom-color: var(--foreground);
+  color: var(--foreground);
+  font-weight: 500;
+}
+.rtab:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.review__intro {
+  margin: 0 0 var(--s-sm);
+  font-size: var(--t-meta);
+  text-wrap: pretty;
+}
+.decide__after {
+  flex-basis: 100%;
+  display: grid;
+  gap: var(--s-3xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--t-meta);
+}
+.review__item .decide {
+  flex-wrap: wrap;
+}

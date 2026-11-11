@@ -1151,6 +1151,12 @@ export interface components {
             verdicts?: Record<string, never>;
             /** @description Аудит по автору пакета: decided, refuted */
             audit?: Record<string, never>;
+            /** @description Проверяющая модель (llm_judge): последнее решение и сколько решено за окно */
+            verifier?: {
+                /** Format: date-time */
+                last_at?: string | null;
+                decided?: number;
+            };
         };
         Submitted: {
             changeset_id: string;
