@@ -88,3 +88,10 @@ test("нет записи — 404 словами", async () => {
   await renderWithApp(<RecordPage recordRef="atm:нет" view="human" />, "/atom/atm:нет");
   expect(await screen.findByRole("alert")).toHaveTextContent("Записи atm:нет нет");
 });
+
+test("у имени свойства — подсказка: что это и откуда берётся", async () => {
+  const user = userEvent.setup();
+  await renderWithApp(<RecordPage recordRef={A3} view="human" />, `/atom/${A3}`);
+  await user.hover(await screen.findByRole("button", { name: "Вид" }));
+  expect(await screen.findByRole("tooltip")).toHaveTextContent(/^Вид записи: факт, параметр/);
+});
