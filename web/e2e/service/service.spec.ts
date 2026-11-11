@@ -71,29 +71,32 @@ test("содержание записи на службе: формула с о�
   expect(problems).toEqual([]);
 });
 
-test("быстрая запись по N: «Отменить» — ничего нет; без отмены — запись в «Изменениях»", async ({ page }) => {
+test("запись по N: полный редактор, «Отменить» — ничего нет; без отмены — запись в «Изменениях»", async ({
+  page,
+}) => {
   const problems = watch(page);
-  await page.goto("./records");
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  const dlg = page.getByRole("dialog", { name: "Новая запись" });
-
-  await page.keyboard.press("n");
-  await dlg.getByRole("textbox", { name: "Текст записи" }).fill("Отменённая мысль о мачте");
-  await page.keyboard.press("Enter");
+  const write = async (title: string) => {
+    await page.goto("./records");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.keyboard.press("n");
+    await expect(page).toHaveURL(/\/new/);
+    await page.getByRole("textbox", { name: "Заголовок" }).fill(title);
+    await page.getByRole("main").getByRole("button", { name: "Записать" }).click();
+  };
+  await write("Отменённая мысль о мачте");
   await page.getByRole("button", { name: "Отменить" }).click();
   await page.waitForTimeout(WINDOW);
   const none = await page.request.get(`/api/v1/search?q=${encodeURIComponent("Отменённая мысль")}`);
   expect(((await none.json()) as { items: unknown[] }).items).toEqual([]);
 
-  await page.keyboard.press("n");
-  await dlg.getByRole("textbox", { name: "Текст записи" }).fill("Проверить растяжки мачты после ветра");
-  await page.keyboard.press("Enter");
+  await write("Проверить растяжки мачты после ветра");
   await expect(page.getByText(/^Записано/)).toBeVisible();
   await page.waitForTimeout(WINDOW);
   await page.goto("./changes");
   await expect(page.getByText("Проверить растяжки мачты после ветра").first()).toBeVisible();
   expect(problems).toEqual([]);
 });
+
 
 test("проверка: Y — решено в службе после окна; второй раз — «Уже решено»", async ({ page }) => {
   const problems = watch(page);
