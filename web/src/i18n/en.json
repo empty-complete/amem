@@ -41,7 +41,6 @@
     "more": "Show more",
     "loading_more": "Loading…"
   },
-<<<<<<< HEAD
   "filters": {
     "title": "Filters",
     "tag": "Tags",
@@ -56,13 +55,12 @@
     "object_ph": "+ Object",
     "reset": "Reset",
     "empty": "Nothing matches these filters."
-=======
+  },
   "side": {
     "title": "Source and neighbourhood",
     "width": "Panel width",
     "collapse": "Collapse the panel",
     "expand": "Expand the panel: source and neighbourhood"
->>>>>>> origin/main
   },
   "search": {
     "title": "Results for “{{q}}”",
