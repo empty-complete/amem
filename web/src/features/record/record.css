@@ -111,6 +111,17 @@ h1.title {
   font-size: var(--t-label);
   min-height: 28px;
 }
+.prop:has(.gist) {
+  align-items: start;
+}
+.prop:has(.gist) .k {
+  min-height: 32px;
+}
+.gist {
+  padding-block: var(--s-2xs);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
 .prop .v .num {
   font-variant-numeric: tabular-nums;
 }

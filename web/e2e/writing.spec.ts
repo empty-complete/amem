@@ -73,6 +73,31 @@ test("правка своей записи: заголовок → новая р
   await expect(page.getByText("ревизия 2")).toBeVisible();
 });
 
+test("правка: «Суть» — строка свойств; правая кнопка на выделении — меню оформления", async ({ page }) => {
+  await page.goto(`./atom/${N1}`);
+  await page.getByRole("button", { name: /^Править, (⌘|Ctrl\+)E$/ }).click();
+  await page.getByRole("textbox", { name: "Суть" }).fill("Растяжки проверять после каждого шторма");
+  const body = page.getByRole("textbox", { name: "Текст записи" });
+  await body.fill("проверить растяжки");
+  await body.press("ControlOrMeta+a");
+  await body.click({ button: "right" });
+  const menu = page.getByRole("menu", { name: "Оформление" });
+  await expect(menu.getByRole("menuitem")).toHaveCount(11);
+  await menu.getByRole("menuitem", { name: /^Жирный/ }).click();
+  await expect(menu).toBeHidden();
+  await expect(body).toHaveText("**проверить растяжки**");
+  await page
+    .getByRole("toolbar", { name: "Оформление" })
+    .getByRole("button", { name: "Заголовок, H1" })
+    .click();
+  await expect(body).toHaveText("# **проверить растяжки**");
+  await page.getByRole("main").getByRole("button", { name: "Записать" }).click();
+  await page.waitForTimeout(WINDOW);
+  const props = page.getByRole("definition").filter({ hasText: "Растяжки проверять" });
+  await expect(props).toBeVisible();
+  await expect(page.locator(".prose strong", { hasText: "проверить растяжки" })).toBeVisible();
+});
+
 test("история: сравнить прежнюю ревизию с текущей и вернуть её новой ревизией", async ({ page }) => {
   await page.goto(`./atom/${N1}`);
   await page.getByRole("button", { name: /^Править, (⌘|Ctrl\+)E$/ }).click();

@@ -247,7 +247,6 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
               <>
                 <Properties view={view} kindLabel={kindLabel(vocab.data, kind, lang)} />
                 {main && kind === "parameter" && <p className="bigvalue">{valueLine(main, lang)}</p>}
-                {summary && <p className="lede">{summary}</p>}
                 <RecordContent content={p.content as Content | undefined} />
                 {body ? (
                   <Body text={body} target={target} />

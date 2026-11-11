@@ -278,6 +278,26 @@ export function PropertyEditor({
   return (
     <fieldset className="props props--edit">
       <legend className="sr-only">{t("record.props")}</legend>
+      <div className="prop prop--gist">
+        <span className="k">
+          <Icon name="text" size={14} />
+          <span>{t("record.p_summary")}</span>
+        </span>
+        <span className="v">
+          <textarea
+            className="fld fld--gist"
+            aria-label={t("record.p_summary")}
+            placeholder={t("edit.summary_ph")}
+            rows={1}
+            value={draft.summary}
+            // суть — одна фраза: Enter не переносит строку (Ctrl+Enter по-прежнему записывает)
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) e.preventDefault();
+            }}
+            onChange={(e) => onChange({ ...draft, summary: e.target.value.replace(/\n+/g, " ") })}
+          />
+        </span>
+      </div>
       {template?.form.map((f) => {
         const v = draft.values[f.key];
         const err = issues[f.key];
