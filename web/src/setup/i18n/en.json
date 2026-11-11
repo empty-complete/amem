@@ -13,7 +13,8 @@
     "features": "Features",
     "agents": "Connect",
     "install": "Install",
-    "done": "Done"
+    "done": "Done",
+    "plugin": "Plugin"
   },
   "nav": {
     "back": "Back",
@@ -142,5 +143,17 @@
     },
     "retry": "Try again",
     "resume": "Resume"
+  },
+  "plugin": {
+    "title": "Connect the Claude app",
+    "lead": "You do this once yourself: Anthropic allows adding a plugin only in the app itself. Once uploaded, amemo appears in Cowork and in Claude Code on all your computers.",
+    "open": "Open the Claude app",
+    "openButton": "Open Claude",
+    "menu": "Customize → Plugins → Add → Upload plugin",
+    "path": "in the left menu",
+    "file": "Choose the file {{file}}",
+    "show": "Show the file",
+    "waiting": "Claude Code already works with amemo. Once the plugin arrives, the amemo app switches it to the plugin by itself — you can also do this step later.",
+    "synced": "The plugin is uploaded: amemo works in Cowork and in Claude Code."
   }
 }

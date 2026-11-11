@@ -125,8 +125,12 @@ def show(argv: list[str]) -> str:
 
 
 def amemo_command(env: Mapping[str, str]) -> tuple[list[str], str | None]:
-    """Как агенту запускать amemo: `amemo` из PATH полным путём (у агента PATH бывает другим), иначе текущий
-    интерпретатор с -m amemo.cli. Второе — объявление автовыбора."""
+    """Как агенту запускать amemo: запускатель приложения для Windows (AMEMO_LAUNCHER — `bin\\amemo.exe`, его задают
+    приложение и сам запускатель: путь не меняется с обновлением комплекта), иначе `amemo` из PATH полным путём (у
+    агента PATH бывает другим), иначе текущий интерпретатор с -m amemo.cli. Второе — объявление автовыбора."""
+    launcher = env.get("AMEMO_LAUNCHER", "").strip()
+    if launcher and Path(launcher).is_file():
+        return [str(Path(launcher).absolute())], None
     found = shutil.which("amemo", path=env.get("PATH"))
     if found:
         return [str(Path(found).absolute())], None
@@ -698,6 +702,53 @@ def _empty_folders(report: Report, env: Mapping[str, str]) -> list[Path]:
 
 def install(agent: str, env: Mapping[str, str], project: Path | None = None, *, dry_run: bool = False) -> Report:
     return apply(plan(agent, env, project, dry_run=dry_run), env)
+
+
+# --- плагин amemo из аккаунта claude.ai в Claude Code ---
+
+PLUGIN_ID = "amemo@synced"
+
+
+def synced_plugin(env: Mapping[str, str]) -> dict | None:
+    """Плагин amemo из аккаунта claude.ai (amemo/agents/cowork.py), который Claude Code этой машины загрузил и
+    включил: `claude plugin list --json`, id `amemo@synced`. Годится, только если его сервер MCP запускает команду,
+    которая есть на этой машине: плагин, собранный на другом компьютере, ведёт к чужому пути. Нет команды claude,
+    плагина или его команды — None."""
+    claude = _claude(env)
+    if not claude:
+        return None
+    try:
+        done = subprocess.run([claude, "plugin", "list", "--json"], env=dict(env), capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=CLAUDE_TIMEOUT, stdin=subprocess.DEVNULL)
+        items = json.loads(done.stdout) if done.returncode == 0 else []
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict) or item.get("id") != PLUGIN_ID or not item.get("enabled"):
+            continue
+        root = Path(str(item.get("installPath") or ""))
+        try:
+            server = json.loads((root / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"][SERVER]
+            manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+        if manifest.get("name") != "amemo" or not _runnable([str(server.get("command") or "")], env):
+            return None
+        return item
+    return None
+
+
+def prefer_plugin(env: Mapping[str, str], *, dry_run: bool = False) -> tuple[Report, bool]:
+    """`amemo install claude-code --unless-synced` (приложение для Windows, п. 10 спецификации): пока плагина amemo из
+    аккаунта в Claude Code нет — прямая установка, как install; когда он появился — прямая установка снимается, чтобы
+    сервер и хуки amemo не стояли дважды. Плагин потом убрали — следующий запуск ставит прямую снова. Второе —
+    загружен ли плагин."""
+    synced = synced_plugin(env) is not None
+    report = uninstall("claude-code", env, dry_run=dry_run) if synced else install("claude-code", env,
+                                                                                    dry_run=dry_run)
+    if synced:
+        report.notes.append("плагин amemo из аккаунта claude.ai загружен в Claude Code — прямая установка не нужна")
+    return report, synced
 
 
 def uninstall(agent: str, env: Mapping[str, str], project: Path | None = None, *, dry_run: bool = False) -> Report:

@@ -13,6 +13,8 @@
 //! - `--setup-unattended CHOICES.json` — установка без окна, по выбору мастера в файле (проверки CI); ход — строки
 //!   JSON в stdout, код выхода 0 — готово.
 //! - Размер и положение окна запоминаются; видимость — нет: окно показывает приложение.
+//! - Claude выбран в мастере — плагин amemo из аккаунта, когда он появится в Claude Code, заменяет прямую
+//!   установку там (`watch_claude`).
 //! - Обновление проверяется при запуске (`latest.json` последнего релиза); пока только сообщается в журнал,
 //!   установка — D7.
 
@@ -205,6 +207,22 @@ fn follow_status(app: AppHandle) {
     });
 }
 
+/// Claude выбран в мастере — раз в час (и при запуске): плагин amemo из аккаунта появился в Claude Code — прямая
+/// установка снимается; пропал — возвращается (`amemo install claude-code --unless-synced`).
+fn watch_claude(app: AppHandle) {
+    std::thread::spawn(move || loop {
+        let state = app.state::<App>();
+        if configured(&app) && state.paths.state().plugin.is_some() && state.service.status() == Status::Ready {
+            if let Err(e) = setup::reconcile_claude(&state.paths) {
+                log!("{e}");
+            }
+            std::thread::sleep(std::time::Duration::from_secs(3600));
+        } else {
+            std::thread::sleep(std::time::Duration::from_secs(30));
+        }
+    });
+}
+
 async fn check_update(app: AppHandle) {
     let updater = match app.updater() {
         Ok(updater) => updater,
@@ -292,6 +310,9 @@ fn main() {
             setup::setup_pick_folder,
             setup::setup_install,
             setup::setup_finish,
+            setup::setup_plugin,
+            setup::setup_open_claude,
+            setup::setup_show_file,
             app_start,
             app_resume,
         ])
@@ -306,6 +327,7 @@ fn main() {
             if configured(&handle) {
                 handle.state::<App>().service.start();
             }
+            watch_claude(handle.clone());
             if !background {
                 show_main(&handle);
             }

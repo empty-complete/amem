@@ -661,13 +661,17 @@ http_headers = { "X-Amemo-Agent" = "model:codex" }
 Plugins → Add → Upload plugin**. Добавить плагин в аккаунт из командной строки нельзя, а плагин, поставленный через
 `claude plugin install`, остаётся только на этой машине.
 
-- **Что внутри.** Сервер MCP `amemo` с полным путём к `amemo` этой машины (`mcp --agent model:cowork`,
-  `AMEMO_AS_MODEL=cowork`) и три навыка. Хуков нет: Cowork загружает хуки плагина и в облачных сессиях, где `amemo`
-  нет.
+- **Что внутри.** То же, что ставит `amemo install claude-code`: сервер MCP `amemo` с полным путём к `amemo` этой
+  машины (`mcp --agent model:cowork`, `AMEMO_AS_MODEL=cowork`), хуки `SessionStart`, `UserPromptSubmit` и
+  `PreCompact` в форме exec (`hooks/hooks.json`) и три навыка. С приложением amemo для Windows путь — его запускатель
+  `%LOCALAPPDATA%\amemo\bin\amemo.exe`, он не меняется с обновлениями. Хуки плагина Cowork загружает и в облачных
+  сессиях, где `amemo` нет.
 - **Где работает.** Локальный сервер MCP запускается в сессиях Cowork на вашем компьютере, в приложении Claude.
   Облачные сессии и чат на claude.ai локальных серверов не запускают и amemo не видят.
-- **И в Claude Code.** Плагин из аккаунта синхронизируется и в Claude Code. Там, где уже стоит
-  `amemo install claude-code`, сервер окажется дважды: оставьте один.
+- **И в Claude Code.** Плагин из аккаунта синхронизируется и в Claude Code (`amemo@synced` в
+  `claude plugin list`). `amemo install claude-code --unless-synced` ставит amemo в Claude Code напрямую, пока
+  плагина нет, а когда он появился — снимает прямую установку, чтобы сервер и хуки не стояли дважды; плагин пропал
+  — ставит снова. Приложение amemo для Windows делает это само.
 - **Обновление и удаление.** После переноса amemo снова выполните `amemo install cowork` и загрузите новый zip.
   `amemo uninstall cowork` удаляет только zip; сам плагин убирается в **Customize → Plugins**.
 

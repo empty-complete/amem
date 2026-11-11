@@ -616,3 +616,19 @@ li[data-state="done"] .wz__num-dot {
 .st__actions {
   margin-top: var(--s-lg);
 }
+
+/* шаг «плагин»: строки с действием справа, путь к zip переносится, состояние загрузки — под списком */
+.wz__row--action {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+}
+.wz__path-inline {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.wz__plugin-state {
+  max-width: 62ch;
+}
+.wz__plugin-state[data-state="done"] {
+  color: var(--success);
+}

@@ -266,6 +266,10 @@ pub fn amemo(runtime: &Path) -> Command {
     let mut command = Command::new(paths::python(runtime));
     command.args(["-I", "-X", "utf8", "-m", "amemo.cli"]);
     command.env("HF_HUB_OFFLINE", "1"); // модель смыслового поиска — из архива релиза, не с Hugging Face
+    // агенты и плагин получают постоянный путь запускателя, а не python этой версии комплекта
+    if let Some(launcher) = paths::launcher(runtime) {
+        command.env("AMEMO_LAUNCHER", launcher);
+    }
     no_window(&mut command);
     command
 }
@@ -301,17 +305,20 @@ fn run_setup(paths: &Paths, runtime: &Path, model: &Path, choices: &Choices, emi
     if !choices.ocr.is_empty() {
         command.arg("--ocr").arg(choices.ocr.join(","));
     }
-    let agents: Vec<&str> = choices
-        .agents
-        .iter()
-        .filter_map(|a| match a.as_str() {
-            "claude" => Some("claude-code"), // плагин приложения Claude — часть D6
-            "codex" => Some("codex"),
-            _ => None,
-        })
-        .collect();
+    // Claude: Claude Code — сразу прямо, приложение Claude (Cowork) — плагином, который человек загрузит сам
+    let mut agents: Vec<&str> = Vec::new();
+    for agent in &choices.agents {
+        match agent.as_str() {
+            "claude" => agents.extend(["claude-code", "cowork"]),
+            "codex" => agents.push("codex"),
+            _ => {}
+        }
+    }
     if !agents.is_empty() {
         command.arg("--agents").arg(agents.join(","));
+    }
+    if agents.contains(&"cowork") {
+        command.arg("--plugin-out").arg(plugin_path());
     }
     crate::log!("установка: {:?}", command);
     let log_path = paths.logs().join("setup.log");
@@ -380,6 +387,8 @@ pub async fn install(paths: &Paths, version: &str, choices: &Choices, emit: &Emi
         .map_err(|e| format!("amemo setup: {e}"))??;
     let mut state = paths.state();
     state.runtime = Some(version.to_string());
+    state.plugin =
+        choices.agents.iter().any(|a| a == "claude").then(|| plugin_path().to_string_lossy().into_owned());
     paths.save_state(&state).map_err(|e| format!("state.json: {e}"))?;
     let _ = fs::remove_dir_all(paths.downloads()); // ~0,4 ГБ загрузок больше не нужны
     crate::log!("установка {version}: готово");
@@ -449,4 +458,90 @@ pub async fn setup_finish(app: AppHandle, options: Finish) -> Result<(), String>
     state.paths.save_state(&saved).map_err(|e| format!("state.json: {e}"))?;
     crate::tray_refresh(&app);
     crate::open_service(&app, false).await
+}
+
+/// Куда мастер кладёт zip плагина для приложения Claude: «Загрузки» — туда первым делом смотрит выбор файла.
+pub fn plugin_path() -> PathBuf {
+    dirs::download_dir().unwrap_or_else(paths::home).join("amemo-plugin.zip")
+}
+
+/// Claude Code: прямая установка amemo, пока плагина из аккаунта нет, и её снятие, когда он появился
+/// (`amemo install claude-code --unless-synced`, спецификация п. 10). Ответ — загружен ли плагин.
+pub fn reconcile_claude(paths: &Paths) -> Result<bool, String> {
+    let runtime = paths.current().ok_or("комплект amemo не найден")?;
+    let output = amemo(&runtime)
+        .args(["install", "claude-code", "--unless-synced", "--json"])
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("amemo install claude-code: {e}"))?;
+    let reply: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_default();
+    if !output.status.success() {
+        let text = String::from_utf8_lossy(&output.stderr);
+        let detail = reply.get("detail").and_then(|d| d.as_str()).map(str::to_string);
+        return Err(format!("amemo install claude-code --unless-synced: {}", detail.unwrap_or_else(|| {
+            text.lines().filter(|l| !l.trim().is_empty()).last().unwrap_or("").to_string()
+        })));
+    }
+    let synced = reply.get("synced").and_then(|v| v.as_bool()).unwrap_or(false);
+    if reply.get("changed").and_then(|v| v.as_bool()).unwrap_or(false) {
+        crate::log!("Claude Code: {}", if synced { "плагин из аккаунта загружен — прямая установка снята" }
+                                       else { "прямая установка amemo поставлена" });
+    }
+    Ok(synced)
+}
+
+#[derive(Serialize)]
+pub struct PluginInfo {
+    path: String,
+    synced: bool,
+}
+
+/// Шаг мастера «плагин»: где лежит zip и загружен ли уже плагин в Claude Code (заодно — снятие прямой установки).
+#[tauri::command]
+pub async fn setup_plugin(app: AppHandle) -> Result<PluginInfo, String> {
+    let paths = app.state::<crate::App>().paths.clone();
+    let path = paths.state().plugin.unwrap_or_else(|| plugin_path().to_string_lossy().into_owned());
+    let synced = tauri::async_runtime::spawn_blocking(move || reconcile_claude(&paths))
+        .await
+        .map_err(|e| e.to_string())?
+        .unwrap_or_else(|e| {
+            crate::log!("{e}");
+            false
+        });
+    Ok(PluginInfo { path, synced })
+}
+
+/// Открыть приложение Claude: его exe в обычной установке, иначе ссылка claude:// (её регистрирует приложение).
+#[tauri::command]
+pub fn setup_open_claude() -> Result<(), String> {
+    let local = env::var_os("LOCALAPPDATA").map(PathBuf::from);
+    let exe = local.map(|l| l.join("AnthropicClaude").join("claude.exe")).filter(|p| p.is_file());
+    let mut command = match exe {
+        Some(exe) => Command::new(exe),
+        None => {
+            let mut c = Command::new("explorer.exe");
+            c.arg("claude://");
+            c
+        }
+    };
+    command.spawn().map(|_| ()).map_err(|e| format!("приложение Claude: {e}"))
+}
+
+/// Показать файл в Проводнике (выделенным); файла нет — его папку.
+#[tauri::command]
+pub fn setup_show_file(path: String) -> Result<(), String> {
+    let file = PathBuf::from(&path);
+    let mut command = Command::new("explorer.exe");
+    if file.is_file() {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.raw_arg(format!("/select,\"{}\"", file.display())); // explorer разбирает /select сам
+        }
+        #[cfg(not(windows))]
+        command.arg(&file);
+    } else {
+        command.arg(file.parent().unwrap_or(Path::new(".")));
+    }
+    command.spawn().map(|_| ()).map_err(|e| format!("{path}: {e}"))
 }

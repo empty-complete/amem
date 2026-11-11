@@ -668,13 +668,17 @@ http_headers = { "X-Amemo-Agent" = "model:codex" }
 Add → Upload plugin**. Claude can't add a plugin to your account from the command line, and a plugin installed with
 `claude plugin install` stays on that machine.
 
-- **What's inside.** The MCP server `amemo` with this machine's full path to `amemo` (`mcp --agent model:cowork`,
-  `AMEMO_AS_MODEL=cowork`) and the three skills. No hooks: Cowork loads plugin hooks in cloud sessions too, where
-  `amemo` doesn't exist.
+- **What's inside.** The same set as `amemo install claude-code`: the MCP server `amemo` with this machine's full
+  path to `amemo` (`mcp --agent model:cowork`, `AMEMO_AS_MODEL=cowork`), the hooks `SessionStart`,
+  `UserPromptSubmit` and `PreCompact` in exec form (`hooks/hooks.json`) and the three skills. With the amemo app for
+  Windows the path is its launcher `%LOCALAPPDATA%\amemo\bin\amemo.exe`, which does not change with updates.
+  Cowork loads plugin hooks in cloud sessions too, where `amemo` doesn't exist.
 - **Where it works.** The local MCP server runs in Cowork sessions on your computer in the Claude app. Cloud
   sessions and chat on claude.ai don't start local servers, so they don't see amemo.
-- **Claude Code too.** A plugin on your account also syncs into Claude Code. Where `amemo install claude-code` is
-  already there, you get the server twice: keep one.
+- **Claude Code too.** A plugin on your account also syncs into Claude Code (`amemo@synced` in
+  `claude plugin list`). `amemo install claude-code --unless-synced` installs amemo into Claude Code directly until
+  the plugin arrives, then removes the direct install so the server and hooks are not there twice — and puts it
+  back if the plugin goes away. The amemo app for Windows runs it by itself.
 - **Updates and removal.** Run `amemo install cowork` again after moving amemo, then upload the new zip.
   `amemo uninstall cowork` deletes only the zip; remove the plugin itself in **Customize → Plugins**.
 
