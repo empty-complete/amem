@@ -688,20 +688,28 @@ def card(conn: psycopg.Connection, ref, *, ancestors=None) -> dict:
 
 
 def graph(conn: psycopg.Connection, ref=None, *, depth=None, limit=None, project=None, rels=None,
-          status=None) -> dict:
+          status=None, tag=None, kind=None, folder=None) -> dict:
     """GraphResult. С ref — recipes.around_entity: кратчайшие пути от записи до depth шагов, не больше limit узлов
     (ближние раньше дальних). Без ref — recipes.overview: обзор базы по degree, project — атомы проекта и связанные
     с ними сущности. total — узлов без предела, truncated — total > limit; у узла degree и pending.
 
     project — только для обзора: с ref он проверяется, но окрестность не сужает (небо шлёт его и при выбранном
-    центре); depth без ref — так же."""
+    центре); depth без ref — так же. tag (все сразу), kind и folder — фильтры обзора (небо на главной), как у списка
+    записей; с ref они проверяются, но окрестность не сужают."""
     depth = _int(depth, "depth", low=1, high=3, default=1)
     limit = _int(limit, "limit", low=1, high=GRAPH_LIMIT_MAX, default=recipes.GRAPH_LIMIT)
     project = _ref(project, "project") if project not in (None, "") else None
     rels, statuses = _codes(rels, "rels"), _statuses(status)
+    tags = [tag] if tag is None or isinstance(tag, str) else list(tag) if isinstance(tag, (list, tuple)) else [tag]
+    for value in tags:
+        _str(value, "tag")
+    kinds, folder = _codes(kind, "kind"), _str(folder, "folder")
+    if folder not in (None, "", folders.NO_FOLDER):
+        folder = folders.check(folder)
     if ref is None or ref == "":
         # предел — в самом запросе: степень, порядок и обрезка считаются в базе
-        found = recipes.overview(conn, limit=limit, project=project, statuses=statuses, rels=rels)
+        found = recipes.overview(conn, limit=limit, project=project, statuses=statuses, rels=rels,
+                                 tags=[t for t in tags if t], kinds=kinds, folder=folder or None)
         start = None
     else:
         # предел — в самом обходе: граф глубины 3 не обходится целиком ради ближних узлов

@@ -185,3 +185,28 @@ test("небо светлое в светлой теме и тёмное в тё
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   expect(await lightness()).toBeLessThan(0.25);
 });
+
+test("небо главной сужается видом; выбор переживает возврат на главную", async ({ page }) => {
+  const count = () =>
+    page.evaluate(() => (window as unknown as { __amemoSky?: Handle }).__amemoSky?.count() ?? 0);
+  await page.goto("./");
+  await expect.poll(count).toBeGreaterThan(0);
+  const all = await count();
+  await page
+    .getByRole("group", { name: "Что показать на небе" })
+    .getByRole("combobox", { name: "Вид" })
+    .selectOption("parameter");
+  await expect(page).toHaveURL(/kind=parameter/);
+  await expect.poll(count).toBeLessThan(all);
+  const some = await count();
+  expect(some).toBeGreaterThan(0);
+  await page.goto("./records");
+  await page.goto("./");
+  await expect(page).toHaveURL(/kind=parameter/);
+  await expect.poll(count).toBe(some);
+  await page
+    .getByRole("group", { name: "Что показать на небе" })
+    .getByRole("button", { name: "Сбросить" })
+    .click();
+  await expect.poll(count).toBe(all);
+});

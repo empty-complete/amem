@@ -1767,6 +1767,11 @@ export interface operations {
                 project?: string;
                 rels?: string[];
                 status?: components["parameters"]["StatusFilter"];
+                /** @description Только обзор: записи со всеми этими тегами и связанные с ними объекты */
+                tag?: string[];
+                kind?: components["parameters"]["Kind"];
+                /** @description Только обзор: папка с вложенными; «-» — без папки */
+                folder?: string;
             };
             header?: never;
             path?: never;

@@ -237,13 +237,32 @@ export const q = {
     }),
   backups: () =>
     queryOptions({ queryKey: ["backups"], queryFn: async () => data(await api.GET("/backups")) }),
-  graph: (p: { ref?: string; depth: number; project?: string; limit?: number }) =>
+  /** Небо: окрестность записи (ref) или обзор базы; tag, kind, folder сужают только обзор. */
+  graph: (p: {
+    ref?: string;
+    depth: number;
+    project?: string;
+    limit?: number;
+    tag?: string[];
+    kind?: string;
+    folder?: string;
+  }) =>
     queryOptions({
       queryKey: ["graph", p],
       queryFn: async () =>
         data(
           await api.GET("/graph", {
-            params: { query: { ref: p.ref, depth: p.depth, project: p.project, limit: p.limit } },
+            params: {
+              query: {
+                ref: p.ref,
+                depth: p.depth,
+                project: p.project,
+                limit: p.limit,
+                ...(p.tag?.length ? { tag: p.tag } : {}),
+                ...(p.kind ? { kind: [p.kind] } : {}),
+                ...(p.folder ? { folder: p.folder } : {}),
+              },
+            },
           }),
         ),
       staleTime: 60_000,
