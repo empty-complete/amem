@@ -240,13 +240,18 @@ export default function PdfPage({
     const sheets = el.querySelectorAll<HTMLElement>("[data-page]");
     let at = 1;
     for (const s of sheets) if (s.offsetTop <= mid) at = Number(s.dataset.page);
+    // долистали до конца — последняя страница, даже если она не дошла до линии
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 2) at = sheets.length || at;
     setCurrent(at);
   };
 
   const onGoto = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter") return;
     const n = Number(goto);
-    if (Number.isInteger(n) && n >= 1 && n <= pages) toPage(n);
+    if (Number.isInteger(n) && n >= 1 && n <= pages) {
+      toPage(n);
+      setCurrent(n);
+    }
     setGoto("");
   };
 
