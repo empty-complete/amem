@@ -830,5 +830,17 @@
     "minimize": "Minimize",
     "maximize": "Maximize",
     "close": "Close"
+  },
+  "tree": {
+    "menu_one": "{{count}} note",
+    "menu_few": "{{count}} notes",
+    "menu_many": "{{count}} notes",
+    "menu_other": "{{count}} notes",
+    "share": "Share…",
+    "share_title": "Share notes",
+    "share_hint": "This builds a bundle: one file with the notes and their source documents. Send it, and the other person opens «Import» to get the same.",
+    "move": "Move to folder…",
+    "clear": "Clear selection",
+    "import": "Import"
   }
 }

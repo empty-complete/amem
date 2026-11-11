@@ -435,3 +435,14 @@ kbd {
   margin: 0;
   font-size: var(--t-section);
 }
+
+/* выбор заметок в дереве (Ctrl, Shift), как в Obsidian */
+.folders li[data-picked] > .frec {
+  background: var(--select);
+  color: var(--foreground);
+}
+.folders__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2xs);
+}

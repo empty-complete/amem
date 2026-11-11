@@ -3,21 +3,23 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { Link, useRouterState, useSearch } from "@tanstack/react-router";
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { type DropItem, useDrag, useDrop } from "react-aria";
+import { Dialog, Heading, Menu, MenuItem, Modal, ModalOverlay, Popover } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { ApiError } from "../../api/errors";
 import { folderApi } from "../../api/folders";
 import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
+import { ExportForm } from "../../features/bundles/ExportForm";
 import { recordPath } from "../../features/records/RecordList";
-import { useMoveRecord } from "../../features/write/move";
+import { MoveDialog } from "../../features/write/MoveDialog";
+import { useMoveRecord, useMoveRecords } from "../../features/write/move";
 import { ColumnGrip } from "../../ui/ColumnGrip";
 import { Icon, type IconName } from "../../ui/icons";
 import { applyTheme, readTheme, resolveTheme } from "../theme";
-import { useOpen } from "./folderTree";
+import { treePick, useOpen, useTreePick } from "./folderTree";
 import { menuStore, useMenuOpen } from "./menu";
 
 type Folder = components["schemas"]["Folder"];
-const TOP_ICON: Record<string, IconName> = { Архив: "archive" };
 export const RECORD_MIME = "application/x-amemo-ref";
 const toggleTheme = () => applyTheme(resolveTheme(readTheme()) === "dark" ? "light" : "dark");
 
@@ -68,8 +70,16 @@ const problemText = (e: unknown) => (e instanceof ApiError ? (e.detail ?? e.titl
 
 type Summary = components["schemas"]["RecordSummary"];
 
-/** Запись в дереве: щелчок открывает её в рабочей области; строку можно перетащить на другую папку. */
-function TreeRecord({ r, current }: { r: Summary; current: boolean }) {
+/** Ссылки заметок дерева сверху вниз — для Shift-диапазона. */
+const treeOrder = () =>
+  [...document.querySelectorAll<HTMLElement>("#folders [data-ref]")].map((el) => el.dataset.ref ?? "");
+
+/** Меню на выбранных заметках дерева — в точке правого щелчка (React Aria Menu у невидимой опоры). */
+let openTreeMenu: ((at: { x: number; y: number }) => void) | null = null;
+
+/** Запись в дереве: щелчок открывает её в рабочей области и выбирает; Ctrl/⌘ — добавить к выбору, Shift —
+ * диапазон, правая кнопка — меню выбранного; строку можно перетащить на другую папку. */
+function TreeRecord({ r, current, picked }: { r: Summary; current: boolean; picked: boolean }) {
   const { dragProps, isDragging } = useDrag({
     getItems: () => [{ [RECORD_MIME]: r.ref, "text/plain": r.label }],
     // щелчок и клавиши по строке — открыть запись, а не начать перетаскивание с клавиатуры (иначе следующий
@@ -77,12 +87,31 @@ function TreeRecord({ r, current }: { r: Summary; current: boolean }) {
     hasDragButton: true,
   });
   return (
-    <li {...dragProps} data-dragging={isDragging || undefined}>
+    <li
+      {...dragProps}
+      data-dragging={isDragging || undefined}
+      data-ref={r.ref}
+      data-picked={picked || undefined}
+    >
       <Link
         className="frec"
         {...recordPath(r.ref)}
         aria-current={current ? "page" : undefined}
         title={r.label}
+        onClick={(e) => {
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            treePick.toggle(r.ref);
+          } else if (e.shiftKey) {
+            e.preventDefault();
+            treePick.range(r.ref, treeOrder());
+          } else treePick.set([r.ref]);
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          if (!treePick.get().has(r.ref)) treePick.set([r.ref]);
+          openTreeMenu?.({ x: e.clientX, y: e.clientY });
+        }}
       >
         <Icon name="file" size={14} />
         <span>{r.label}</span>
@@ -96,13 +125,14 @@ function TreeRecords({ folder }: { folder: string | null }) {
   const { t } = useTranslation();
   const list = useInfiniteQuery(q.recordPages(folder, {}, folder === null || folder === "-"));
   const path = useRouterState({ select: (st) => st.location.pathname });
+  const picked = useTreePick();
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   if (list.isPending) return <p className="frecs__note">{t("region.loading")}</p>;
   if (!items.length) return <p className="frecs__note">{t("folders.empty")}</p>;
   return (
     <ul className="frecs">
       {items.map((r) => (
-        <TreeRecord key={r.ref} r={r} current={path.endsWith(`/${r.ref}`)} />
+        <TreeRecord key={r.ref} r={r} current={path.endsWith(`/${r.ref}`)} picked={picked.has(r.ref)} />
       ))}
       {list.hasNextPage && (
         <li>
@@ -118,6 +148,84 @@ function TreeRecords({ folder }: { folder: string | null }) {
         </li>
       )}
     </ul>
+  );
+}
+
+/** Меню выбранных заметок: поделиться (подборка с исходными файлами) и перенести в папку. */
+function TreeMenu() {
+  const { t } = useTranslation();
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  const [sharing, setSharing] = useState<string[] | null>(null);
+  const [moving, setMoving] = useState<string[] | null>(null);
+  const moveMany = useMoveRecords();
+  const picked = useTreePick();
+  useEffect(() => {
+    openTreeMenu = setAt;
+    return () => {
+      openTreeMenu = null;
+    };
+  }, []);
+  const count = picked.size;
+  return (
+    <>
+      <span ref={anchorRef} aria-hidden="true" className="ctx__anchor" style={{ left: at?.x, top: at?.y }} />
+      <Popover
+        triggerRef={anchorRef}
+        isOpen={!!at}
+        onOpenChange={(o) => !o && setAt(null)}
+        placement="bottom start"
+        offset={4}
+        className="palette ctxmenu"
+      >
+        <Menu
+          aria-label={t("tree.menu", { count })}
+          autoFocus="first"
+          className="palette__list"
+          onAction={(k) => {
+            const refs = [...treePick.get()];
+            setAt(null);
+            if (k === "share") setSharing(refs);
+            if (k === "move") setMoving(refs);
+            if (k === "clear") treePick.clear();
+          }}
+        >
+          <MenuItem id="share" textValue={t("tree.share")} className="palette__opt ctxmenu__opt">
+            <span className="palette__label">{t("tree.share")}</span>
+            <span className="palette__meta">{count}</span>
+          </MenuItem>
+          <MenuItem id="move" textValue={t("tree.move")} className="palette__opt ctxmenu__opt">
+            <span className="palette__label">{t("tree.move")}</span>
+          </MenuItem>
+          <MenuItem id="clear" textValue={t("tree.clear")} className="palette__opt ctxmenu__opt">
+            <span className="palette__label">{t("tree.clear")}</span>
+          </MenuItem>
+        </Menu>
+      </Popover>
+      <ModalOverlay
+        isOpen={sharing != null}
+        onOpenChange={(o) => !o && setSharing(null)}
+        isDismissable
+        className="modal-overlay"
+      >
+        <Modal className="modal modal--wide">
+          <Dialog className="modal__in" aria-label={t("tree.share_title")}>
+            <Heading slot="title">{t("tree.share_title")}</Heading>
+            <p className="muted">{t("tree.share_hint")}</p>
+            {sharing && <ExportForm refs={sharing} share />}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+      <MoveDialog
+        current={null}
+        open={moving != null}
+        onClose={() => setMoving(null)}
+        onMove={(to, name) => {
+          if (moving) moveMany(moving, to, t("folders.moved_many", { count: moving.length, to: name }));
+          treePick.clear();
+        }}
+      />
+    </>
   );
 }
 
@@ -220,7 +328,7 @@ function FolderItem({
         <TreeRow
           open={open}
           onToggle={toggle}
-          icon={TOP_ICON[f.path] ?? "folder"}
+          icon="folder"
           name={f.name}
           count={f.count}
           list={{ folder: f.path }}
@@ -381,12 +489,20 @@ export function Folders() {
           {unfiledOpen && <TreeRecords folder="-" />}
         </li>
       </ul>
-      {person && (
-        <button type="button" className="newf" onClick={() => setAdding(true)}>
-          <Icon name="plus" size={12} />
-          {t("folders.new")}
-        </button>
-      )}
+      <div className="folders__actions">
+        {person && (
+          <button type="button" className="newf" onClick={() => setAdding(true)}>
+            <Icon name="plus" size={12} />
+            {t("folders.new")}
+          </button>
+        )}
+        {/* импорт подборки, которую прислали: заметки вместе с исходными файлами */}
+        <Link className="newf" to="/bundles" search={{ tab: "import" } as never}>
+          <Icon name="inbox" size={12} />
+          {t("tree.import")}
+        </Link>
+      </div>
+      <TreeMenu />
       <ul className="sep show-s">
         <li>
           <Link to="/review">

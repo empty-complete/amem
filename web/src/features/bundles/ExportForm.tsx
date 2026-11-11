@@ -26,7 +26,7 @@ type Result = {
 
 /** Экспорт (разд. 5.10): отбор, «с файлами», «с пакетами и моими видами», готовый отбор «Антология».
  * refs — выбранные в списке записи: отбор — ровно они (поля отбора скрыты), статусы — любые. */
-export function ExportForm({ refs }: { refs?: string[] } = {}) {
+export function ExportForm({ refs, share = false }: { refs?: string[]; share?: boolean } = {}) {
   const { t, i18n } = useTranslation();
   const kinds = useQuery(q.vocab("kind"));
   const classes = useQuery(q.vocab("entity_class"));
@@ -44,7 +44,8 @@ export function ExportForm({ refs }: { refs?: string[] } = {}) {
     STATUSES.filter((s) => s !== "superseded" && s !== "deprecated"),
   );
   const [since, setSince] = useState("");
-  const [withFiles, setWithFiles] = useState(false);
+  // «Поделиться» — подборка, которую другой человек импортирует целиком: с исходными файлами
+  const [withFiles, setWithFiles] = useState(share);
   const [withPacks, setWithPacks] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);

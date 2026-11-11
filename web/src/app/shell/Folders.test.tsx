@@ -85,3 +85,26 @@ test("папка раскрывается в панели: внутри её з�
   for (const r of inside)
     expect(within(nav()).queryByRole("link", { name: r.label })).not.toBeInTheDocument();
 });
+
+test("заметки в дереве: Ctrl добавляет к выбору, правая кнопка — «Поделиться» с исходными файлами", async () => {
+  const user = userEvent.setup();
+  await renderWithApp(<Folders />);
+  const station = await within(nav()).findByRole("button", { name: /^Станция 2024/ });
+  await user.click(station);
+  const inside = db.records.filter((r) => r.folder === "Архив/Станция 2024");
+  const [a, b] = inside;
+  if (!a || !b) throw new Error("нет образцов");
+  const la = await within(nav()).findByRole("link", { name: a.label });
+  const lb = within(nav()).getByRole("link", { name: b.label });
+  await user.keyboard("{Control>}");
+  await user.click(la);
+  await user.click(lb);
+  await user.keyboard("{/Control}");
+  expect(la.closest("li")).toHaveAttribute("data-picked", "true");
+  expect(lb.closest("li")).toHaveAttribute("data-picked", "true");
+  await user.pointer({ keys: "[MouseRight]", target: lb });
+  await user.click(await screen.findByRole("menuitem", { name: /^Поделиться/ }));
+  const dlg = await screen.findByRole("dialog", { name: "Поделиться заметками" });
+  expect(within(dlg).getByText(/^Выбрано 2 записи/)).toBeInTheDocument();
+  expect(within(dlg).getByRole("checkbox", { name: /файл/i })).toBeChecked();
+});

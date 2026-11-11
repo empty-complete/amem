@@ -8,7 +8,7 @@ import "../write/write.css";
 import "./bundles.css";
 
 /** Подборки (разд. 5.10): экспорт с антологией и импорт по шагам. */
-export function BundlesPage() {
+export function BundlesPage({ tab = "export" }: { tab?: "export" | "import" } = {}) {
   const { t } = useTranslation();
   return (
     <section className="bundles" aria-labelledby="bundles-title">
@@ -16,7 +16,7 @@ export function BundlesPage() {
         <h1 id="bundles-title">{t("bundles.title")}</h1>
       </div>
       <p className="muted">{t("bundles.intro")}</p>
-      <Tabs defaultSelectedKey="export">
+      <Tabs defaultSelectedKey={tab}>
         <Tabs.ListContainer>
           <Tabs.List aria-label={t("bundles.title")}>
             <Tabs.Tab id="export">
