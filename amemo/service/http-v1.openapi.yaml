@@ -237,6 +237,9 @@ paths:
         - { name: project, in: query, schema: { type: string }, description: "Записи с payload.scope.project; сущность — если связана хотя бы с одной такой записью" }
         - { name: rels, in: query, schema: { type: array, items: { type: string } }, style: form, explode: true }
         - { $ref: "#/components/parameters/StatusFilter" }
+        - { name: tag, in: query, schema: { type: array, items: { type: string } }, style: form, explode: true, description: "Только обзор: записи со всеми этими тегами и связанные с ними объекты" }
+        - { $ref: "#/components/parameters/Kind" }
+        - { name: folder, in: query, schema: { type: string }, description: "Только обзор: папка с вложенными; «-» — без папки" }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GraphResult" } } } }
         default: { $ref: "#/components/responses/Problem" }

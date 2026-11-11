@@ -1,17 +1,27 @@
 import { ToggleButton, ToggleButtonGroup } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button as AriaButton, Dialog, DialogTrigger, Popover } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
+import type { components } from "../../api/schema";
 import { RegionState } from "../../ui/RegionState";
+import { TagFilter } from "../records/RecordFilters";
+import { kindLabel } from "../records/RecordList";
+import "../records/records.css";
 import type { Family, Filter } from "../sky/model";
 import { buildSky } from "../sky/model";
+import { hasScope, type SkyScope, savedScope, saveScope } from "../sky/prefs";
 import { Sky } from "../sky/Sky";
 import { StarCard } from "../sky/StarCard";
 import "./home.css";
 
 const FAM: Family[] = ["source", "work", "object"];
+
+type Folder = components["schemas"]["Folder"];
+const flatFolders = (fs: Folder[], depth = 0): { path: string; name: string; depth: number }[] =>
+  fs.flatMap((f) => [{ path: f.path, name: f.name, depth }, ...flatFolders(f.children, depth + 1)]);
 
 /** Главная (разд. 5.2): всё созвездие базы — вход; список записей остаётся под «Все записи». */
 export function HomeSky({
@@ -19,20 +29,43 @@ export function HomeSky({
   pending,
   center,
   project,
+  scope = {},
 }: {
   families?: string;
   pending: boolean;
   center?: string;
   project?: string;
+  /** Фильтры обзора из адреса: теги, вид, папка. */
+  scope?: SkyScope;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const base = useQuery(q.base());
   const [selected, setSelected] = useState<string | null>(null);
   const [summary, setSummary] = useState<{ records: number; objects: number; pending: number } | null>(null);
   const fams = useMemo(() => new Set((families?.split(",") ?? []) as Family[]), [families]);
   const filter: Filter = useMemo(() => ({ families: fams, pendingOnly: pending }), [fams, pending]);
-  const graph = useQuery(q.graph({ ref: center, depth: 2, project }));
+  const kinds = useQuery(q.vocab("kind"));
+  const classes = useQuery(q.vocab("entity_class"));
+  const tree = useQuery(q.folders());
+  // без фильтров в адресе — последний выбор на этом устройстве
+  const scoped = hasScope(scope);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: один раз при открытии главной
+  useEffect(() => {
+    const saved = savedScope();
+    if (!scoped && !center && hasScope(saved))
+      navigate({ to: "/", search: (s: object) => ({ ...s, ...saved }) as never, replace: true });
+  }, []);
+  const setScope = (next: SkyScope) => {
+    const clean: SkyScope = {
+      tag: next.tag?.length ? next.tag : undefined,
+      kind: next.kind || undefined,
+      folder: next.folder || undefined,
+    };
+    saveScope(clean);
+    navigate({ to: "/", search: (s: object) => ({ ...s, ...clean }) as never, replace: true });
+  };
+  const graph = useQuery(q.graph({ ref: center, depth: 2, project, ...(center ? {} : scope) }));
   const star = useMemo(() => {
     if (!selected || !graph.data) return null;
     return buildSky(graph.data).byId.get(selected) ?? null;
@@ -77,6 +110,7 @@ export function HomeSky({
         selected={selected}
         onSelect={setSelected}
         onSummary={onSummary}
+        scope={center ? undefined : scope}
       />
       <div className="home__head">
         <h1>{base.data?.name ?? "amemo"}</h1>
@@ -107,6 +141,69 @@ export function HomeSky({
           <button type="button" className="navlink" onClick={() => set({ center: undefined })}>
             {t("sky.all")}
           </button>
+        )}
+        {!center && (
+          // фильтры неба — во всплывающем окне у кнопки: строка поверх неба не закрывает звёзды
+          <DialogTrigger>
+            <AriaButton className="home__scopebtn navlink" aria-label={t("home.scope_open")}>
+              {t("home.scope_btn")}
+              {scoped && (
+                <span className="count">
+                  {(scope.tag?.length ?? 0) + (scope.kind ? 1 : 0) + (scope.folder ? 1 : 0)}
+                </span>
+              )}
+            </AriaButton>
+            <Popover className="palette home__scopepop" placement="bottom start">
+              <Dialog aria-label={t("home.scope")} className="home__scopedlg">
+                {/* biome-ignore lint/a11y/useSemanticElements: строка фильтров неба, не поля формы */}
+                <div className="home__scope filters recfilters" role="group" aria-label={t("home.scope")}>
+                  <TagFilter value={scope.tag ?? []} onChange={(tag) => setScope({ ...scope, tag })} />
+                  <select
+                    className="fld recfilters__sel"
+                    aria-label={t("filters.kind")}
+                    value={scope.kind ?? ""}
+                    onChange={(e) => setScope({ ...scope, kind: e.target.value })}
+                  >
+                    <option value="">{t("filters.kind_any")}</option>
+                    <optgroup label={t("filters.kinds")}>
+                      {kinds.data?.map((k) => (
+                        <option key={k.code} value={k.code}>
+                          {kindLabel(kinds.data, k.code, i18n.language)}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label={t("filters.classes")}>
+                      {classes.data?.map((k) => (
+                        <option key={k.code} value={k.code}>
+                          {kindLabel(classes.data, k.code, i18n.language)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                  <select
+                    className="fld recfilters__sel"
+                    aria-label={t("home.folder")}
+                    value={scope.folder ?? ""}
+                    onChange={(e) => setScope({ ...scope, folder: e.target.value })}
+                  >
+                    <option value="">{t("home.folder_any")}</option>
+                    {flatFolders(tree.data?.folders ?? []).map((f) => (
+                      <option key={f.path} value={f.path}>
+                        {"  ".repeat(f.depth)}
+                        {f.name}
+                      </option>
+                    ))}
+                    <option value="-">{t("folders.unfiled")}</option>
+                  </select>
+                  {scoped && (
+                    <button type="button" className="chipbtn" onClick={() => setScope({})}>
+                      {t("filters.reset")}
+                    </button>
+                  )}
+                </div>
+              </Dialog>
+            </Popover>
+          </DialogTrigger>
         )}
       </div>
       {star && (

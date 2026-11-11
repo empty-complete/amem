@@ -186,7 +186,8 @@ def get_graph(request: Request) -> JSONResponse:
     with _heavy(request) as conn:
         return JSONResponse(api.graph(conn, _q(request, "ref"), depth=_q(request, "depth"), limit=_q(request, "limit"),
                                       project=_q(request, "project"), rels=_many(request, "rels"),
-                                      status=_many(request, "status")))
+                                      status=_many(request, "status"), tag=_many(request, "tag"),
+                                      kind=_many(request, "kind"), folder=_q(request, "folder")))
 
 
 def get_changes(request: Request) -> JSONResponse:

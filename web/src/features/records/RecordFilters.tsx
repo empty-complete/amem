@@ -25,7 +25,7 @@ const STATUSES: Status[] = [
 export const hasFilter = (f: RecordFilter) =>
   !!(f.tag?.length || f.kind?.length || f.status?.length || f.about);
 
-function TagFilter({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+export function TagFilter({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
   const { t } = useTranslation();
   const [text, setText] = useState("");
   const query = useDebounced(text.trim().replace(/^#/, "").toLowerCase());

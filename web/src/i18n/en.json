@@ -127,7 +127,10 @@
     "language": "Language",
     "who": "Signed in as",
     "service": "Service",
-    "version": "amemo version"
+    "version": "amemo version",
+    "sky_label": "Sky label length",
+    "sky_label_hint": "A star label is at most this many characters; the full title is in the star card.",
+    "sky_label_n": "{{n}} characters"
   },
   "theme": {
     "system": "Match system",
@@ -429,7 +432,12 @@
     "keys": "/ search · N note · 1 2 3 depth · Esc clear",
     "empty": "The base is empty. Agents write to it over MCP or the CLI, and you can write the first note.",
     "write": "Write a note",
-    "all": "All records"
+    "all": "All records",
+    "scope": "What the sky shows",
+    "folder": "Folder",
+    "folder_any": "Any folder",
+    "scope_btn": "Narrow the sky",
+    "scope_open": "Narrow the sky: tags, kind, folder"
   },
   "write": {
     "saved": "Saved: {{what}}",

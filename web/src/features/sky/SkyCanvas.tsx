@@ -3,6 +3,7 @@ import ForceGraph from "force-graph";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import type { SkyColors } from "./colors";
 import { labelOrder, placeLabels, type Sky, type Star, visibleLabels } from "./model";
+import { clip, LABEL_DEFAULT } from "./prefs";
 
 type N = Star & { x?: number; y?: number; vx?: number; vy?: number; fx?: number; fy?: number };
 type L = { source: string | N; target: string | N; rel: string };
@@ -23,6 +24,8 @@ export interface SkyCanvasProps {
   onSelect: (id: string | null) => void;
   onOpen: (id: string) => void;
   onHover?: (id: string | null) => void;
+  /** Предел длины подписи, знаков (настройка); полное название — в карточке звезды. */
+  labelMax?: number;
 }
 
 const idOf = (x: string | N) => (typeof x === "string" ? x : x.id);
@@ -298,7 +301,7 @@ function drawLabels(ctx: CanvasRenderingContext2D, scale: number, p: SkyCanvasPr
   const items = order.flatMap((s) => {
     const n = nodes.get(s.id);
     if (!n || n.x == null || n.y == null || p.dim.has(s.id)) return [];
-    const text = s.label.length > 42 ? `${s.label.slice(0, 40)}…` : s.label;
+    const text = clip(s.label, p.labelMax ?? LABEL_DEFAULT);
     return [
       { id: s.id, text, x: n.x, y: n.y, r: n.r + 2 / scale, w: ctx.measureText(text).width + 2 * pad, h },
     ];
