@@ -46,6 +46,9 @@ VALUES = {"atom": ("content.values[]", "content.values[].qualifiers[]", "qualifi
 NAME = re.compile(r"@[a-z0-9_]+")
 UUID7 = re.compile(canon.UUID7)
 WHAT = {"atom": "атом", "entity": "сущность"}
+# название — предмет записи, а не утверждение целиком: длиннее — замечание «сведения» (статус не меняет, в очередь
+# не ставит), чтобы агент перенёс утверждение в текст
+LABEL_MAX = 80
 
 
 @dataclass
@@ -270,8 +273,18 @@ class _Level1:
                     self.resolve(ref, f"{label}: {where}", TARGET[prefix])
         self.field_rules(label, target, body, item.rules)
         self.hard_rules(label, target, body)
+        self.label_length(label, body)
         if target == "atom":
             self.basis_rules(label, body)
+
+    def label_length(self, label: str, body: dict) -> None:
+        names = body.get("label")
+        for slot, text in (names.items() if isinstance(names, dict) else []):
+            if isinstance(text, str) and len(text) > LABEL_MAX:
+                self.add("info", "label_long", f"{label}: label.{slot}",
+                         f"название — {len(text)} знаков, больше {LABEL_MAX}: в названии — предмет записи (что и по "
+                         "какому документу), утверждение с числами и формулами — в начало текста (body)",
+                         length=len(text), limit=LABEL_MAX)
 
     def selector_codes(self, label: str, where: str, selector) -> None:
         while isinstance(selector, dict):

@@ -253,6 +253,8 @@ enums:
         annotations: {label_ru: "сбой источника", label_en: "source error", definition_ru: "Сбой извлечения или сверки."}
       numbers_unchecked:
         annotations: {label_ru: "числа не сверены", label_en: "numbers unchecked", definition_ru: "Числа не с чем сверить: нет фрагментов."}
+      label_long:
+        annotations: {label_ru: "длинное название", label_en: "long label", definition_ru: "Название длиннее 80 знаков: утверждение — в текст, в названии — предмет."}
       edition_filled:
         annotations: {label_ru: "редакция подставлена", label_en: "edition filled", definition_ru: "Редакция подставлена по файлу."}
       unknown_property:

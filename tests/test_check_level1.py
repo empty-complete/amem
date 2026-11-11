@@ -477,3 +477,13 @@ def test_existing_links_count_for_required_link(memo_kb, direction):
     link_id = memo_kb.execute("SELECT id FROM link").fetchone()[0]
     records.retire_link(memo_kb, link_id, agent=HUMAN, reason="лишняя связь")
     assert run(memo_kb, Proposal("atom", note(), ids["@n"]))[1] == [("link_required", "violation", "@n")]
+
+
+def test_long_label_is_advice_not_a_warning(kb):
+    """Название длиннее 80 знаков — сведение label_long: статус и очередь оно не трогает, но в сводке ответа агенту
+    оно есть; 80 знаков — без замечания."""
+    long = "Кронштейн крепится к закладной анкером М10 с моментом затяжки 40 Н·м при толщине стенки 6 мм и выше"
+    _, issues, report = run(kb, atom("@a", label={"ru": long}), atom("@b", label={"ru": "К" * 80}))
+    assert issues == [("label_long", "info", "@a: label.ru")]
+    assert report.issues[0].details == {"length": len(long), "limit": 80}
+    assert "label_long — @a: label.ru" in report.summary()

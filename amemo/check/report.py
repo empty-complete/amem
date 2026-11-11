@@ -14,6 +14,8 @@ FORMAT = "amem.check/1"
 CODES = frozenset(c.value for c in model_v1.CheckCode)
 SEVERITIES = frozenset(s.value for s in model_v1.Severity)
 LEVELS = (1, 2, 3, 4)
+# сведения, которые агенту нужно увидеть в сводке ответа: статус они не меняют, но запись стоит поправить
+ADVICE = frozenset({"label_long"})
 
 
 @dataclass
@@ -55,7 +57,8 @@ class Report:
             return "Замечаний нет"
         count = {s: sum(i.severity == s for i in self.issues) for s in ("violation", "warning", "info")}
         head = f"Ошибок: {count['violation']}, предупреждений: {count['warning']}, сведений: {count['info']}"
-        lines = [f"- {i.severity} {i.code} — {i.where}: {i.message}" for i in self.issues if i.severity != "info"]
+        lines = [f"- {i.severity} {i.code} — {i.where}: {i.message}" for i in self.issues
+                 if i.severity != "info" or i.code in ADVICE]
         return "\n".join([head, *lines])
 
     def for_label(self, label: str) -> list[Issue]:

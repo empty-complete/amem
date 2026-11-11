@@ -47,6 +47,7 @@ PROJECT_ATOMS = 5               # атомов проекта в начале с
 PROMPT_HITS = 5                 # находок в подсказке к запросу
 CODE_CANDIDATES = 8             # кусков запроса, похожих на марку, не больше
 LABEL_MAX = 160
+SUMMARY_MAX = 200               # суть рядом с названием: короткое название говорит о предмете, суть — о сказанном
 FTS_QUERY_MAX = 500             # знаков запроса в полнотекстовый канал
 
 STATUSES = ("verified", "auto_verified", "needs_review", "draft")     # порядок показа: проверенное раньше
@@ -199,9 +200,23 @@ def _text(value) -> str | None:
     return value if len(value) <= LABEL_MAX else value[:LABEL_MAX - 1] + "…"
 
 
-def _line(ref: str, label, kind: str | None, status: str | None) -> str:
+def _line(ref: str, label, kind: str | None, status: str | None, summary=None) -> str:
     what = _safe("; ".join(part for part in (kind, STATUS_TEXT.get(status, status)) if part))
-    return f"- {ref} — «{_text(label) or ref}»" + (f" ({what})" if what else "")
+    name = _text(label) or ref
+    gist = _text(summary)
+    gist = gist if gist is None or len(gist) <= SUMMARY_MAX else gist[:SUMMARY_MAX - 1] + "…"
+    return (f"- {ref} — «{name}»" + (f" ({what})" if what else "")
+            + (f": {gist}" if gist and gist != name else ""))
+
+
+def _summaries(conn, refs: list[str]) -> dict[str, object]:
+    """summary_plain текущих ревизий атомов (ссылки atm:…); остальные ссылки — без сути."""
+    ids = [ref.split(":", 1)[1] for ref in refs if ref.startswith("atm:")]
+    if not ids:
+        return {}
+    rows = conn.execute("SELECT c.atom_id, r.payload->'summary_plain' FROM atom_current c "
+                        "JOIN atom_revision r ON r.id = c.id WHERE c.atom_id = ANY(%s::uuid[])", (ids,)).fetchall()
+    return {f"atm:{atom_id}": summary for atom_id, summary in rows}
 
 
 # --- SessionStart ---
@@ -256,7 +271,8 @@ def project_atoms(conn, ref: str, record_id: str, limit: int = PROJECT_ATOMS) ->
         "WITH cand AS (SELECT r.atom_id FROM atom_revision r WHERE r.payload->'scope'->>'project' = %(ref)s "
         "UNION SELECT r.atom_id FROM atom_about f JOIN atom_revision r ON r.id = f.revision_id "
         "WHERE f.entity_id = %(id)s) "
-        "SELECT a.id, a.kind, a.status, c.payload->'label' FROM cand JOIN atom a ON a.id = cand.atom_id "
+        "SELECT a.id, a.kind, a.status, c.payload->'label', c.payload->'summary_plain' FROM cand "
+        "JOIN atom a ON a.id = cand.atom_id "
         "CROSS JOIN LATERAL (SELECT y.id, y.payload FROM atom_revision y WHERE y.atom_id = a.id "
         "AND y.review_state <> 'declined' ORDER BY (y.review_state = 'pending'), y.n DESC LIMIT 1) c "
         "WHERE a.status = ANY(%(statuses)s) AND (c.payload->'scope'->>'project' = %(ref)s OR EXISTS "
@@ -276,7 +292,8 @@ def session_start(conn, cwd) -> str:
         atoms = project_atoms(conn, ref, record_id)
         if atoms:
             lines += ["", f"{FRAME} проект {ref}:"]
-            lines += [_line(f"atm:{atom_id}", label, kind, status) for atom_id, kind, status, label in atoms]
+            lines += [_line(f"atm:{atom_id}", label, kind, status, summary)
+                      for atom_id, kind, status, label, summary in atoms]
     return "\n".join(lines)
 
 
@@ -337,10 +354,12 @@ def prompt_submit(conn, prompt) -> str:
     if not refs:
         return ""
     labels = lookup.labels(conn, refs)
+    gists = _summaries(conn, refs)
     lines = [FRAME]
     for ref in refs:
         info = labels.get(ref) or {}
-        lines.append(_line(ref, info.get("label"), info.get("kind") or info.get("entity_class"), info.get("status")))
+        lines.append(_line(ref, info.get("label"), info.get("kind") or info.get("entity_class"), info.get("status"),
+                           gists.get(ref)))
     lines.append("Запись целиком — amemo_get по ссылке; помогла — отметь amemo_helpful.")
     return "\n".join(lines)
 
