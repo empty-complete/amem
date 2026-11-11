@@ -10,6 +10,7 @@ const MB = 1024 ** 2;
  * - `fail=<шаг установки>` — шаг завершается ошибкой;
  * - `nonansi=1` — папка данных не открывается программами PostgreSQL (кириллица в английской Windows);
  * - `low=1` — места на томе меньше, чем нужно;
+ * - `synced=1` — плагин amemo уже загружен в аккаунт и виден в Claude Code;
  * - `start=1` — мастер уже пройден: экран запуска; `start=paused` — фон на паузе; `fail=start` — запуск
  *   завершается ошибкой (один раз), `freeze=start` — запуск не заканчивается (снимок);
  * - `fast=1` — без пауз (тесты). */
@@ -79,6 +80,11 @@ export function mockBridge(params: URLSearchParams): Bridge {
         onProgress({ stage, state: "done" });
       }
     },
+    async plugin() {
+      return { path: "C:\\Users\\anna\\Downloads\\amemo-plugin.zip", synced: params.get("synced") === "1" };
+    },
+    async openClaude() {},
+    async showFile() {},
     async finish() {
       await wait(300);
     },

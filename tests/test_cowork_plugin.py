@@ -39,7 +39,7 @@ def test_build_writes_a_plugin_zip_with_manifest_server_and_skills(home, env):
     path = home / cowork.FILENAME
     assert report.path == path and report.action == "создан" and path.exists()
     files = read_zip(path)
-    assert set(files) == {".claude-plugin/plugin.json", ".mcp.json",
+    assert set(files) == {".claude-plugin/plugin.json", ".mcp.json", "hooks/hooks.json",
                           *(f"skills/{name}/SKILL.md" for name in platforms.SKILLS)}
     manifest = json.loads(files[".claude-plugin/plugin.json"])
     assert manifest["name"] == "amemo" and manifest["version"] and manifest["license"] == "MIT"
@@ -50,7 +50,14 @@ def test_build_writes_a_plugin_zip_with_manifest_server_and_skills(home, env):
     assert server["env"] == {"AMEMO_AS_MODEL": "cowork"}
     for name in platforms.SKILLS:
         assert files[f"skills/{name}/SKILL.md"] == install.skill_text(name)
-    assert not any(name.startswith(("hooks/", "bin/")) for name in files)     # хуков и bin/ в плагине нет
+    # хуки — как у Claude Code: три события, форма exec (команда и аргументы без оболочки), их узнаёт установщик
+    hooks = json.loads(files["hooks/hooks.json"])["hooks"]
+    assert set(hooks) == set(install.ALL_EVENTS)
+    for event, groups in hooks.items():
+        assert groups == [{"hooks": [{"type": "command", "command": command[0],
+                                      "args": [*command[1:], "hook", event], "timeout": platforms.HOOK_TIMEOUT}]}]
+        assert install.is_our_hook(groups[0]["hooks"][0])
+    assert not any(name.startswith("bin/") for name in files)     # bin/ нельзя в плагине из настроек claude.ai
     assert any("Upload plugin" in note for note in report.notes)
 
 
@@ -112,3 +119,14 @@ def test_amemo_from_a_temporary_environment_is_refused(home, env, tmp_path):
         cowork.build(temp_env)
     assert not (home / cowork.FILENAME).exists()
     assert cowork.ephemeral(install.amemo_command(env)[0], env) is None
+
+
+def test_plugin_uses_the_launcher_of_the_windows_app(home, env, tmp_path):
+    launcher = tmp_path / "app" / "bin" / "amemo.exe"
+    launcher.parent.mkdir(parents=True)
+    launcher.write_text("")
+    cowork.build({**env, "AMEMO_LAUNCHER": str(launcher)})
+    files = read_zip(home / cowork.FILENAME)
+    assert json.loads(files[".mcp.json"])["mcpServers"]["amemo"]["command"] == str(launcher)
+    hooks = json.loads(files["hooks/hooks.json"])["hooks"]
+    assert {groups[0]["hooks"][0]["command"] for groups in hooks.values()} == {str(launcher)}

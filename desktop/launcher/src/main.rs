@@ -39,6 +39,7 @@ fn main() {
         .args(["-I", "-X", "utf8", "-m", "amemo.cli"])
         .args(env::args_os().skip(1))
         .env("HF_HUB_OFFLINE", "1") // модель смыслового поиска — из архива релиза (приложение), не с Hugging Face
+        .env("AMEMO_LAUNCHER", &exe) // `amemo install …` отсюда пишет агентам этот путь, а не python комплекта
         .status();
     match status {
         Ok(status) => exit(status.code().unwrap_or(1)),
