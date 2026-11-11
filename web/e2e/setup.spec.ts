@@ -62,7 +62,7 @@ test("мастер от языка до «Готово»", async ({ page }) => {
   await expect(page.getByRole("checkbox", { name: "English" })).toBeChecked();
   await page.getByRole("checkbox", { name: "English" }).uncheck();
   await expect(page.getByRole("button", { name: "Next" })).toBeDisabled();
-  await page.getByRole("checkbox", { name: "German" }).check();
+  await page.getByRole("checkbox", { name: "Russian" }).check();
   await page.getByRole("button", { name: "Next" }).click();
 
   await expect(page.getByRole("heading", { name: "Connect agents" })).toBeVisible();
