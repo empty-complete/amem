@@ -338,8 +338,9 @@ jobs:
           $uninstaller = Start-Process "$env:APP_DIR\uninstall.exe" -ArgumentList "/S" -PassThru
           $uninstaller.WaitForExit()
           if ($uninstaller.ExitCode) { throw "удаление: код $($uninstaller.ExitCode)" }
-          # удалитель работает из своей копии: exe и запись в реестре пропадают не сразу
-          for ($i = 0; $i -lt 30 -and ((Test-Path $env:APP_EXE) -or (Test-Path $env:UNINSTALL_KEY)); $i++) { Start-Sleep 2 }
+          # удалитель работает из своей копии: exe, запись в реестре и папка (комплект удаляет хук после записи)
+          # пропадают не сразу
+          for ($i = 0; $i -lt 60 -and ((Test-Path $env:APP_EXE) -or (Test-Path $env:UNINSTALL_KEY) -or (Test-Path $env:APP_DIR)); $i++) { Start-Sleep 2 }
           if (Test-Path $env:APP_EXE) { throw "после удаления остался $env:APP_EXE" }
           if (Test-Path $env:UNINSTALL_KEY) { throw "после удаления осталась запись в Uninstall" }
           if (Test-Path $env:APP_DIR) { Get-ChildItem $env:APP_DIR -Recurse -Depth 1 | Format-Table FullName; throw "после удаления осталась $env:APP_DIR" }
