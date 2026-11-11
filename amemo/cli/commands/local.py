@@ -1,7 +1,7 @@
 """Своя установка amemo без Docker и без прав администратора: setup и pg (amemo/localpg.py).
 
 `amemo setup --pg-bin DIR [--data DIR] [--docs DIR] [--lang ru|en] [--port N] [--embed [--embed-models DIR]]
-[--ocr ЯЗЫКИ] [--agents claude-code,codex] [--no-auto-update] [--progress]` — всё, что делает установщик (спецификация приложения
+[--ocr ЯЗЫКИ] [--agents claude-code,codex,cowork] [--plugin-out FILE] [--no-auto-update] [--progress]` — всё, что делает установщик (спецификация приложения
 для Windows, D1), одной командой без вопросов:
 1. кластер PostgreSQL в <data>/pg (initdb: роль amemo со случайным паролем, UTF8, только localhost, первый свободный
    порт от 5436), если его ещё нет;
@@ -12,7 +12,8 @@
 5. --embed — смысловой поиск, как amemo embed enable (файлы модели из --embed-models или загрузка); --ocr — языки
    распознавания, как amemo ocr install; оба — действия человека: из окружения агента — отказ (код 2) до любых
    изменений;
-6. --agents — amemo install для каждого агента.
+6. --agents — amemo install для каждого агента; cowork — zip-плагин для приложения Claude (`--plugin-out`, по
+   умолчанию ~/amemo-plugin.zip), который человек загружает в аккаунт сам.
 
 --progress — ход по шагам для приложения amemo для Windows: строки JSON `{"stage": …, "state": …}` в stderr
 (шаги database, store, search, ocr, agents; состояния running, done, skipped), как у экрана установки мастера.
@@ -36,7 +37,7 @@ from ...portable import O_BINARY, home
 from ..errors import ENV, USAGE, CliError
 from . import add, group
 
-AGENTS = ("claude-code", "codex")
+AGENTS = ("claude-code", "codex", "cowork")
 OVERRIDES = ("AMEMO_DSN", "AMEMO_DATA", "AMEMO_STATE", "AMEMO_BACKUPS", "AMEMO_PG_DATA")
 
 
@@ -52,7 +53,9 @@ def register(sub, shared) -> None:
     p.add_argument("--embed-models", metavar="DIR", type=Path,
                    help="готовые файлы модели (раскладка кэша fastembed) вместо загрузки")
     p.add_argument("--ocr", metavar="ЯЗЫКИ", help="распознавать сканы: языки tesseract через запятую (только человек)")
-    p.add_argument("--agents", metavar="СПИСОК", help="подключить агентов: claude-code,codex")
+    p.add_argument("--agents", metavar="СПИСОК", help="подключить агентов: claude-code,codex,cowork")
+    p.add_argument("--plugin-out", metavar="FILE", type=Path,
+                   help="cowork: куда положить zip плагина (по умолчанию ~/amemo-plugin.zip)")
     p.add_argument("--no-auto-update", action="store_true",
                    help="auto_update = false: обновляет не служба, а программа установки")
     p.add_argument("--progress", action="store_true",
@@ -127,7 +130,7 @@ def _agents(raw: str | None) -> list[str]:
 
 def run_setup(ctx, args) -> int:
     from ... import localpg, settings as settings_
-    from ...agents import install
+    from ...agents import cowork, install
     from . import embed as embed_cmd, ocr as ocr_cmd
     from .setup import prepare
 
@@ -145,6 +148,8 @@ def run_setup(ctx, args) -> int:
         what = "смысловой поиск включает" if args.embed else "языки OCR ставит"
         raise api.Forbidden(f"{what} только человек (person:), а не {ctx.agent}: setup с --embed или --ocr "
                             f"запускает человек")
+    if args.plugin_out and "cowork" not in agents:
+        raise CliError("--plugin-out — только вместе с --agents cowork", exit=USAGE, code="bad_args")
     if args.embed_models and not args.embed:
         raise CliError("--embed-models — только вместе с --embed", exit=USAGE, code="bad_args")
     overridden = [var for var in OVERRIDES if ctx.env.get(var, "").strip()]
@@ -223,8 +228,13 @@ def run_setup(ctx, args) -> int:
     stage("agents", "running" if agents else "skipped")
     for name in agents:
         try:
+            if name == "cowork":
+                plugin = cowork.build(ctx.env, args.plugin_out)
+                result["agents"].append({"agent": name, "changed": plugin.action is not None,
+                                         "path": str(plugin.path), "warnings": plugin.warnings})
+                continue
             report = install.install(name, ctx.env)
-        except install.InstallError as e:
+        except (install.InstallError, install.AgentCommandError) as e:
             raise CliError(f"amemo install {name}: {e}", exit=ENV, code="install_failed") from None
         result["agents"].append({"agent": name, "changed": bool(report.changes or report.commands),
                                  "warnings": report.warnings})
@@ -240,6 +250,9 @@ def run_setup(ctx, args) -> int:
             got = [x["language"] for x in r["ocr"]["installed"]] + r["ocr"]["already"]
             lines.append(f"  распознавание сканов: {', '.join(got)}")
         for a in r["agents"]:
+            if a["agent"] == "cowork":
+                lines.append(f"  плагин для приложения Claude: {a['path']} — загрузите его: {cowork.UPLOAD}")
+                continue
             lines.append(f"  агент {a['agent']}: " + ("подключён" if a["changed"] else "уже был подключён"))
         lines.append("дальше: amemo serve — веб-интерфейс на http://127.0.0.1:8767/ui/; "
                      "после перезагрузки — amemo pg start")

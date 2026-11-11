@@ -5,7 +5,7 @@ import { expect, type Page, test } from "@playwright/test";
  * на обоих языках — в web/setup-shots (артефакт CI setup-shots), их смотрят глазами; проверки — по содержимому и
  * axe. */
 
-const STEPS = ["lang", "data", "docs", "features", "agents", "install", "done"] as const;
+const STEPS = ["lang", "data", "docs", "features", "agents", "install", "plugin", "done"] as const;
 
 async function open(page: Page, query: string, theme: "light" | "dark") {
   await page.addInitScript((t) => window.localStorage.setItem("amemo.theme", t), theme);
@@ -70,10 +70,29 @@ test("мастер от языка до «Готово»", async ({ page }) => {
   await expect(page.getByLabel(/Codex/)).not.toBeChecked();
   await page.getByRole("button", { name: "Install" }).click();
 
+  await expect(page.getByRole("heading", { name: "Connect the Claude app" })).toBeVisible();
+  await expect(page.getByText("Customize → Plugins → Add → Upload plugin")).toBeVisible();
+  await expect(page.getByText("Choose the file amemo-plugin.zip")).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("Claude Code already works with amemo");
+  await page.getByRole("button", { name: "Next" }).click();
+
   await expect(page.getByRole("heading", { name: "amemo is ready" })).toBeVisible();
   await expect(page.getByLabel("Desktop shortcut")).toBeChecked();
   await expect(page.getByLabel("Start when I sign in to Windows")).toBeChecked();
   await page.getByRole("button", { name: "Open amemo" }).click();
+});
+
+test("плагин: загруженный виден сразу; без Claude шага нет", async ({ page }) => {
+  await open(page, "step=plugin&synced=1&fast=1", "light");
+  await expect(page.getByRole("status")).toContainText("Плагин загружен");
+  await page.getByRole("button", { name: "Далее" }).click();
+  await expect(page.getByRole("heading", { name: "amemo готов" })).toBeVisible();
+
+  await open(page, "step=agents&fast=1", "light");
+  await page.getByLabel(/Приложение Claude/).uncheck();
+  await expect(page.getByRole("navigation").getByText("Плагин")).toHaveCount(0);
+  await page.getByRole("button", { name: "Установить" }).click();
+  await expect(page.getByRole("heading", { name: "amemo готов" })).toBeVisible();
 });
 
 test("папка с символами вне кодировки Windows: подсказка и запасной путь", async ({ page }) => {
@@ -97,7 +116,7 @@ test("ошибка установки: сообщение и «Повторит�
   await expect(page.getByRole("alert")).toContainText("pg_ctl start");
   await axe(page);
   await page.getByRole("button", { name: "Повторить" }).click();
-  await expect(page.getByRole("heading", { name: "amemo готов" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Подключите приложение Claude" })).toBeVisible();
 });
 
 test("карусель: следующий пример, пауза, подписи на языке мастера", async ({ page }) => {

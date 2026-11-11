@@ -1,11 +1,12 @@
 name: desktop
-# Приложение amemo для Windows (desktop/, Tauri 2; спецификация приложения для Windows, D3 и D5).
+# Приложение amemo для Windows (desktop/, Tauri 2; спецификация приложения для Windows, D3, D5 и D6).
 # - build: страницы мастера (web, setup.html), запускатель bin\amemo.exe (desktop/launcher), tauri build → установщик
 #   NSIS для текущего пользователя и подпись обновления.
 # - check: как у человека, без прав администратора — тихая установка; установка мастером без окна
 #   (--setup-unattended) из комплекта и модели этой ветки (runtime.yml), которые отдаёт свой сервер вместо страницы
-#   релиза, в папку данных с кириллицей; запуск в фоне — /health службы; запускатель; второй запуск не создаёт второй
-#   процесс; --quit останавливает службу и PostgreSQL; удаление.
+#   релиза, в папку данных с кириллицей, с Claude: плагин и Claude Code получают путь запускателя; запуск в фоне —
+#   /health службы, смысловой поиск, хук через запускатель; второй запуск не создаёт второй процесс; --quit
+#   останавливает службу и PostgreSQL; удаление.
 # release.yml подключит его как workflow_call (D8).
 #
 # Подпись обновлений: секрет TAURI_SIGNING_PRIVATE_KEY (и TAURI_SIGNING_PRIVATE_KEY_PASSWORD) — ключ владельца,
@@ -15,7 +16,8 @@ on:
   pull_request:
     paths: ["desktop/**", ".github/workflows/desktop.yml", "web/public/favicon.svg", "web/src/setup/**",
             "web/setup.html", "web/vite.setup.config.ts", "amemo/__init__.py", "amemo/cli/commands/local.py",
-            "amemo/localpg.py", "tools/release.py", "tools/runtime.py", ".github/workflows/runtime.yml"]
+            "amemo/localpg.py", "amemo/agents/**", "tools/release.py", "tools/runtime.py",
+            ".github/workflows/runtime.yml"]
   push:
     branches: [main]
     paths: ["desktop/**", ".github/workflows/desktop.yml", "web/src/setup/**"]
@@ -157,7 +159,9 @@ jobs:
           # кириллица вне кодовой страницы ANSI раннера (1252): мастер проверяет путь, amemo setup даёт PostgreSQL
           # короткие имена 8.3
           $data = "$env:USERPROFILE\Проверка приложения\amemo-data"
-          @{ lang = "ru"; dataDir = $data; docsDir = $null; ocr = @(); agents = @() } | ConvertTo-Json |
+          # Claude: Claude Code — прямо (команды claude на раннере нет — установщик правит файлы), приложение Claude —
+          # zip плагина в «Загрузках»
+          @{ lang = "ru"; dataDir = $data; docsDir = $null; ocr = @(); agents = @("claude") } | ConvertTo-Json |
             Set-Content -Encoding utf8NoBOM "$env:RUNNER_TEMP\choices.json"
           Remove-Item Env:PGPASSWORD, Env:PGUSER, Env:PGROOT, Env:PGBIN, Env:PGDATA -ErrorAction SilentlyContinue
           $env:AMEMO_RELEASE_BASE = "http://127.0.0.1:8790/"
@@ -172,11 +176,32 @@ jobs:
           if ($check.free -le 0) { throw "мастер не узнал свободное место: $($check | ConvertTo-Json)" }
           $done = @{}
           $lines | Where-Object { $_.stage } | ForEach-Object { $done[$_.stage] = $_.state }
-          $expected = @{ download = "done"; database = "done"; store = "done"; search = "done"; ocr = "skipped"; agents = "skipped" }
+          $expected = @{ download = "done"; database = "done"; store = "done"; search = "done"; ocr = "skipped"; agents = "done" }
           foreach ($stage in $expected.Keys) {
             if ($done[$stage] -ne $expected[$stage]) { throw "шаг ${stage}: $($done[$stage]), ожидалось $($expected[$stage])" }
           }
           if (Test-Path "$env:APP_DIR\downloads") { throw "загрузки не убраны после установки" }
+          # агентам — постоянный путь запускателя, а не python этой версии комплекта: в плагине и в Claude Code
+          $launcher = "$env:APP_DIR\bin\amemo.exe"
+          $zip = "$env:USERPROFILE\Downloads\amemo-plugin.zip"
+          if (-not (Test-Path $zip)) { throw "нет плагина $zip" }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead($zip)
+          $names = $archive.Entries.FullName
+          $read = { param($name) $r = [IO.StreamReader]::new($archive.GetEntry($name).Open()); $t = $r.ReadToEnd(); $r.Close(); $t | ConvertFrom-Json }
+          $server = (& $read ".mcp.json").mcpServers.amemo
+          $hooks = (& $read "hooks/hooks.json").hooks
+          $archive.Dispose()
+          Write-Output "плагин: $($names -join ', ')"
+          if ($server.command -ne $launcher) { throw "сервер MCP плагина: $($server.command), ожидался $launcher" }
+          foreach ($event in "SessionStart", "UserPromptSubmit", "PreCompact") {
+            $hook = $hooks.$event[0].hooks[0]
+            if ($hook.command -ne $launcher -or ($hook.args -join " ") -ne "hook $event") { throw "хук ${event} плагина: $($hook | ConvertTo-Json)" }
+          }
+          $settings = Get-Content "$env:USERPROFILE\.claude\settings.json" -Raw | ConvertFrom-Json
+          if ($settings.hooks.SessionStart[0].hooks[0].command -ne $launcher) { throw "хук Claude Code: $($settings.hooks.SessionStart | ConvertTo-Json -Depth 6)" }
+          $mcp = (Get-Content "$env:USERPROFILE\.claude.json" -Raw | ConvertFrom-Json).mcpServers.amemo
+          if ($mcp.command -ne $launcher) { throw "сервер MCP Claude Code: $($mcp.command), ожидался $launcher" }
           Write-Output "комплект: $(Get-Content "$env:APP_DIR\runtime\current")"
           # повторная установка («Повторить» в мастере) — с места: ничего не качается заново, setup переиспользует базу
           $again = Start-Process $env:APP_EXE -ArgumentList "--setup-unattended", "`"$env:RUNNER_TEMP\choices.json`"" `
@@ -204,6 +229,12 @@ jobs:
           $doctor = & $amemo doctor --json | ConvertFrom-Json
           $bad = $doctor.checks | Where-Object { $_.name -in "база", "миграции", "id базы", "хранилище" -and $_.status -ne "ok" }
           if ($bad) { throw "amemo doctor: $($bad | ConvertTo-Json)" }
+          $search = & $amemo search "проверка комплекта" --json | ConvertFrom-Json
+          if ($search.semantic -eq "unavailable") { throw "смысловой поиск выключен: $($search.channels | ConvertTo-Json)" }
+          # хук через запускатель — как его зовут Claude Code и плагин: ответ протокола хуков, код 0
+          $reply = '{"hook_event_name": "SessionStart", "source": "startup"}' | & $amemo hook SessionStart
+          if ($LASTEXITCODE) { throw "amemo hook SessionStart: код $LASTEXITCODE" }
+          Write-Output "хук SessionStart: $(($reply | Out-String).Length) символов ответа; поиск: $($search.semantic)"
           $second = Start-Process $env:APP_EXE -PassThru
           if (-not $second.WaitForExit(15000)) { throw "второй запуск не завершился: два экземпляра" }
           $name = [IO.Path]::GetFileNameWithoutExtension($env:APP_EXE)

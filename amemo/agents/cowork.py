@@ -4,23 +4,31 @@
 Командой или API этого не сделать, а плагин, поставленный из Claude Code (`claude plugin install`), остаётся на
 этой машине и в аккаунт не попадает. Поэтому установщик собирает zip и говорит, куда его загрузить.
 
-Что в плагине (https://claude.com/docs/plugins/build, …/platform-support; сверено 10.11.2026, FORMAT):
+Что в плагине (https://claude.com/docs/plugins/build, …/platform-support, https://code.claude.com/docs/en/plugins-
+reference; сверено 11.11.2026, FORMAT) — тот же набор, что ставит `amemo install claude-code`:
 - .claude-plugin/plugin.json — name, displayName, version, description, author, license, homepage;
 - .mcp.json — сервер MCP `amemo`: полный путь к команде amemo этой машины, `mcp --agent model:cowork` и
   AMEMO_AS_MODEL=cowork, как у Claude Code. Локальный сервер Cowork запускает только в сессии на этом компьютере
   (приложение Claude); в облачной сессии и в чате на claude.ai его нет — там amemo не виден;
-- skills/ИМЯ/SKILL.md — навыки ядра (те же, что ставит `amemo install claude-code`).
+- hooks/hooks.json — хуки SessionStart, UserPromptSubmit, PreCompact (`amemo hook СОБЫТИЕ`) в форме exec: команда и
+  аргументы без оболочки — одинаково в Windows и в других системах, пути с пробелами не нужно заключать в кавычки.
+  Хуки только читают базу, поэтому AMEMO_AS_MODEL им не нужна;
+- skills/ИМЯ/SKILL.md — навыки ядра.
 
-Хуков нет: Cowork загружает хуки плагина и в облачных сессиях, где команды amemo нет, — хук падал бы на каждом
-событии. Без хуков агент обращается к amemo через навыки и сервер MCP.
+Команда amemo — запускатель приложения для Windows (`%LOCALAPPDATA%\\amemo\\bin\\amemo.exe`, AMEMO_LAUNCHER) или
+amemo из PATH (install.amemo_command): у запускателя путь не меняется с обновлением, и плагин не устаревает.
+
+Облачные сессии Cowork тоже загружают хуки плагина, а команды amemo там нет. Как Cowork показывает такой отказ,
+документация не говорит — это проверяется вручную (спецификация приложения для Windows, п. 10).
 
 Zip собирается одинаково при одинаковом содержимом (порядок и время файлов фиксированы), пишется атомарно. Повторная
 сборка без изменений ничего не пишет. Чужой файл по тому же пути не перезаписывается. `amemo uninstall cowork`
 удаляет только свой zip; из аккаунта плагин убирает человек (Customize → Plugins).
 
 Плагин сохраняется в аккаунте и после загрузки синхронизируется в Claude Code на любой машине. Путь к amemo в нём —
-этой машины, поэтому загружать стоит с той машины, где идут сессии Cowork. На машинах, где amemo поставлен в Claude
-Code (`amemo install claude-code`), сервер amemo получается дважды: оставьте один.
+этой машины, поэтому загружать стоит с той машины, где идут сессии Cowork. Где amemo уже поставлен в Claude Code
+прямо (`amemo install claude-code`), сервер и хуки получались бы дважды: `amemo install claude-code --unless-synced`
+(его запускает приложение для Windows) снимает прямую установку, когда плагин загружен (install.prefer_plugin).
 """
 from __future__ import annotations
 
@@ -36,11 +44,12 @@ from typing import Mapping
 
 from .. import __version__
 from ..portable import home
-from .install import InstallError, amemo_command, mcp_entry, show, skill_text
+from .install import ALL_EVENTS, InstallError, amemo_command, hook_handler, mcp_entry, show, skill_text
 from .platforms import SERVER, SKILLS
 
-FORMAT = "claude-plugin/2026-11-10"
-DOCS = ("https://claude.com/docs/plugins/build", "https://claude.com/docs/plugins/platform-support")
+FORMAT = "claude-plugin/2026-11-11"
+DOCS = ("https://claude.com/docs/plugins/build", "https://claude.com/docs/plugins/platform-support",
+        "https://code.claude.com/docs/en/plugins-reference")
 NAME = "amemo"
 MODEL = "cowork"
 FILENAME = "amemo-plugin.zip"
@@ -77,7 +86,7 @@ class PluginReport:
 def manifest() -> dict:
     return {"name": NAME, "displayName": "amemo", "version": __version__,
             "description": "Shared memory with sourced claims: search, read and propose records in your amemo base "
-                           "through the local MCP server.",
+                           "through the local MCP server; hooks bring relevant records into each session.",
             "author": {"name": "amemo"}, "license": "MIT", "homepage": HOMEPAGE}
 
 
@@ -85,8 +94,10 @@ def plugin_files(command: list[str]) -> dict[str, str]:
     """Файлы плагина: путь в zip → текст."""
     entry = mcp_entry(command, MODEL)
     server = {"command": entry["command"], "args": entry["args"], "env": entry["env"]}
+    hooks = {event: [{"hooks": [hook_handler(command, MODEL, event, "exec")]}] for event in ALL_EVENTS}
     files = {".claude-plugin/plugin.json": _json(manifest()),
-             ".mcp.json": _json({"mcpServers": {SERVER: server}})}
+             ".mcp.json": _json({"mcpServers": {SERVER: server}}),
+             "hooks/hooks.json": _json({"hooks": hooks})}
     for name in SKILLS:
         files[f"skills/{name}/SKILL.md"] = skill_text(name)
     return files
@@ -185,8 +196,8 @@ def build(env: Mapping[str, str], out: Path | None = None, *, dry_run: bool = Fa
                      f"человек, из командной строки этого не сделать",
                      "сервер amemo работает в сессиях Cowork на этом компьютере (приложение Claude); в облачных "
                      "сессиях и в чате на claude.ai локального сервера нет",
-                     "плагин из аккаунта появится и в Claude Code; если там уже стоит amemo install claude-code, "
-                     "сервер amemo будет дважды — оставьте один"]
+                     "плагин из аккаунта появится и в Claude Code; прямую установку там (amemo install "
+                     "claude-code) снимает amemo install claude-code --unless-synced"]
     return report
 
 
