@@ -172,9 +172,11 @@ jobs:
             --url "https://github.com/$GH_REPO/releases/download/$TAG/$setup" --notes "amemo $VERSION" \
             --out updates/latest-pre.json
           ls -l assets updates
-      - name: Release with notes from the commits since the previous tag; pre-release for a/b/rc
+      - name: Release with notes from the commits since the previous tag, marked Latest
         run: |
-          pre="$(python -c "import sys; from packaging.version import Version; print('--prerelease' if Version(sys.argv[1]).is_prerelease else '')" "$VERSION")"
+          # Каждая версия — обычный релиз с меткой Latest, и альфа тоже: что это предварительная версия, видно по
+          # номеру (a/b/rc), и по нему же канал выбирают служба и приложение. Постоянный релиз updates остаётся
+          # pre-release, чтобы не перехватывать Latest.
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "релиз $TAG уже есть: дозагрузка файлов"
             gh release upload "$TAG" dist/* assets/* --clobber
@@ -188,7 +190,7 @@ jobs:
             recognised: **More info → Run anyway** (the installer is not code-signed yet).
           - **Linux, macOS, servers:** \`pipx install --force "amemo[web]==$VERSION"\`
           EOF
-          gh release create "$TAG" dist/* assets/* --verify-tag --title "amemo $VERSION" --generate-notes $pre \
+          gh release create "$TAG" dist/* assets/* --verify-tag --title "amemo $VERSION" --generate-notes --latest \
             --notes-file notes.md
       - name: Updater manifests and the permanent download link (release "updates")
         run: |
