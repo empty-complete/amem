@@ -58,6 +58,9 @@ export function RecordRow({
   // строку можно перетащить на папку слева (React Aria: мышь, касание, клавиатура и чтецы)
   const { dragProps, isDragging } = useDrag({
     getItems: () => [{ [RECORD_MIME]: r.ref, "text/plain": r.label }],
+    // щелчок и клавиши по строке — открыть запись, а не начать перетаскивание с клавиатуры (иначе следующий
+    // щелчок отменяет перетаскивание); мышью строку тянут как раньше, с клавиатуры — «Переместить в папку»
+    hasDragButton: true,
   });
   return (
     <li {...dragProps} data-dragging={isDragging || undefined} data-selected={selected || undefined}>
