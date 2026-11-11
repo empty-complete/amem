@@ -296,6 +296,8 @@ def test_records_list_filters_and_about(serve, world):
                                                                              ["ветер"])
     assert w0["about"] == [{"ref": world.sensor, "label": "Датчик ветра", "entity_class": "artifact"}]
     assert [i["ref"] for i in listed(folder="Проекты")["items"]] == [world.w0]
+    assert listed(folder="Проекты", nested="false")["total"] == 0          # w0 — во вложенной «Проекты/Ветер»
+    assert [i["ref"] for i in listed(folder="Проекты/Ветер", nested="false")["items"]] == [world.w0]
     assert listed(folder="-")["total"] == 4
     assert {i["ref"] for i in listed(kind="artifact")["items"]} == {world.station, world.sensor}
     assert {i["ref"] for i in listed(kind=["fact", "lesson"])["items"]} == {world.w0, world.gusts}
@@ -326,7 +328,7 @@ def test_records_list_pages_by_cursor(serve, world):
 
 
 @pytest.mark.parametrize("params", [{"limit": "0"}, {"limit": "201"}, {"status": "забыт"}, {"cursor": "не-курсор"},
-                                    {"about": "atm:w0_ii"}])
+                                    {"about": "atm:w0_ii"}, {"nested": "иногда"}])
 def test_records_list_bad_parameters(serve, world, params):
     problem(serve().get(f"{V1}/records", params=params), 400, "bad_request", "/records")
 

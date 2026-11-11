@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { auth, useAuthToken } from "../api/auth";
 import { q } from "../api/queries";
 import { changeLocale, type Locale } from "../app/i18n";
+import { useFolderDepth } from "../app/shell/folderTree";
 import { applyTheme, readTheme, type Theme } from "../app/theme";
 import { kindsStore } from "../features/kinds/store";
 import { UpdatesSection } from "../features/updates/UpdatesSection";
@@ -47,6 +48,7 @@ function Settings() {
   const [theme, setTheme] = useState<Theme>(readTheme());
   const session = useQuery(q.session());
   const token = useAuthToken();
+  const [depth, setDepth] = useFolderDepth();
   return (
     <section aria-labelledby="settings-title" style={{ display: "grid", gap: 24, maxWidth: 520 }}>
       <div className="page-head">
@@ -74,6 +76,19 @@ function Settings() {
         ]}
         onChange={(v) => changeLocale(v as Locale)}
       />
+      <div>
+        <Choice
+          label={t("settings.folder_depth")}
+          value={String(depth)}
+          options={[
+            ["1", t("settings.depth_1")],
+            ["2", t("settings.depth_2")],
+            ["3", t("settings.depth_3")],
+          ]}
+          onChange={(v) => setDepth(Number(v))}
+        />
+        <p className="muted">{t("settings.folder_depth_hint")}</p>
+      </div>
       {token && (
         <div>
           <Button variant="outline" onPress={() => auth.clear()}>

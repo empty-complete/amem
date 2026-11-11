@@ -151,7 +151,7 @@ def list_records(request: Request) -> JSONResponse:
         return JSONResponse(api.record_list(conn, folder=_q(request, "folder"), kind=_many(request, "kind"),
                                             status=_many(request, "status"), tag=_many(request, "tag"),
                                             about=_q(request, "about"), limit=_q(request, "limit"),
-                                            cursor=_q(request, "cursor")))
+                                            cursor=_q(request, "cursor"), nested=_q(request, "nested")))
 
 
 def get_record(request: Request) -> JSONResponse:

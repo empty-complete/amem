@@ -195,13 +195,15 @@ def _after(cursor) -> tuple[datetime, uuid.UUID] | None:
         raise RecordError(f"cursor {cursor!r}: не курсор списка записей — нужен next_cursor прошлой страницы") from e
 
 
-def _record_filters(t: Target, path: str | None, kinds, statuses) -> list[str]:
+def _record_filters(t: Target, path: str | None, kinds, statuses, nested: bool = True) -> list[str]:
     """Условия фильтра на строку записи rec (папка, вид или класс, статус) — им не нужна ревизия."""
     where = []
     if path == folders.NO_FOLDER:
         where.append("rec.folder IS NULL")
-    elif path:
+    elif path and nested:
         where.append("(rec.folder = %(folder)s OR starts_with(rec.folder, %(folder)s || '/'))")
+    elif path:
+        where.append("rec.folder = %(folder)s")
     if kinds:
         where.append(f"rec.{'kind' if t == 'atom' else 'entity_class'} = ANY(%(kinds)s::text[])")
     if statuses:
@@ -237,12 +239,13 @@ def _list_page(t: Target, where: list[str], after, lang: str | None = None) -> s
             f"ORDER BY r.recorded_at DESC, r.{t}_id DESC LIMIT %(take)s)")
 
 
-def _list_total(targets: list[Target], path, kinds, statuses, revision_where: dict[str, list[str]]) -> str:
+def _list_total(targets: list[Target], path, kinds, statuses, revision_where: dict[str, list[str]],
+                nested: bool = True) -> str:
     """Сколько записей под фильтром. Без фильтров по ревизии — по строкам записей (у каждой записи ровно одна
     показанная ревизия, и искать её не нужно), иначе — по показанным ревизиям."""
     counts = []
     for t in targets:
-        where = _record_filters(t, path, kinds, statuses)
+        where = _record_filters(t, path, kinds, statuses, nested)
         if revision_where[t]:
             join = f"JOIN {t} rec ON rec.id = r.{t}_id " if where else ""      # без фильтров записи — не нужна
             counts.append(f"(SELECT count(*) FROM {t}_revision r {join}"
@@ -269,12 +272,13 @@ def _object_ref(about: str) -> uuid.UUID | None:
 
 def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: Iterable[str] | None = None,
                  statuses: Iterable[str] | None = None, tag: str | Iterable[str] | None = None,
-                 about: str | None = None,
+                 about: str | None = None, nested: bool = True,
                  limit: int = 50, cursor: str | None = None, lang: str | None = None) -> dict:
     """Сводки записей для списка (панель папок, «Все записи»): новые сверху, страницами по курсору.
 
     Фильтры складываются (И):
-    - folder — папка вместе с вложенными; «-» — записи без папки; None или «» — все;
+    - folder — папка вместе с вложенными (nested=False — только сама папка: дерево в боковой панели);
+      «-» — записи без папки; None или «» — все;
     - kinds — коды вида атома или класса сущности (kind_or_class);
     - statuses — статусы; по умолчанию все, как в дереве папок: иначе счётчики папок и список разошлись бы;
     - tag — тег атома или несколько тегов (у записи должны быть все); about — сущность (ent: с UUID или ключом), о которой текущая ревизия атома, либо объект
@@ -295,6 +299,8 @@ def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: 
     folder, about (ссылки ent:), tags, recorded_at, agent."""
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= LIST_LIMIT:
         raise RecordError(f"limit {limit!r}: нужно целое число от 1 до {LIST_LIMIT}")
+    if not isinstance(nested, bool):
+        raise RecordError(f"nested {nested!r}: нужно true или false")
     kinds = _codes(kinds, "kinds")
     statuses = _codes(statuses, "statuses")
     lang = _lang(lang)
@@ -331,15 +337,15 @@ def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: 
         revision_where = {t: _revision_filters(t, tag, about_id, source_id) for t in TARGET.values()}
         # у сущностей нет ни тегов, ни about-сущности: с этими фильтрами — только атомы
         targets = ["atom"] if tag or about_id else list(TARGET.values())
-        pages = [_list_page(t, [*_record_filters(t, path, kinds, statuses), *revision_where[t]], after, lang)
-                 for t in targets]
+        pages = [_list_page(t, [*_record_filters(t, path, kinds, statuses, nested), *revision_where[t]], after,
+                            lang) for t in targets]
         # prepare=False: план — под значения фильтров. Подготовленный запрос PostgreSQL со временем исполняет общим
         # планом, а редкому тегу или маленькой папке нужен другой путь (индекс фильтра), чем частому (обход по времени)
         with conn.cursor(row_factory=dict_row) as cur:
             rows = cur.execute(f"SELECT * FROM ({' UNION ALL '.join(pages)}) p "
                                "ORDER BY p.recorded_at DESC, p.id DESC LIMIT %(take)s", params,
                                prepare=False).fetchall()
-        total = conn.execute(_list_total(targets, path, kinds, statuses, revision_where), params,
+        total = conn.execute(_list_total(targets, path, kinds, statuses, revision_where, nested), params,
                              prepare=False).fetchone()[0]
     more = len(rows) > limit
     page = rows[:limit]

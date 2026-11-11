@@ -16,6 +16,8 @@
     "sections": "Sections"
   },
   "folders": {
+    "as_list": "“{{name}}” as a list",
+    "empty": "Empty",
     "moved_many_one": "{{count}} record moved to “{{to}}”",
     "moved_many_other": "{{count}} records moved to “{{to}}”",
     "title": "Folders",
@@ -105,6 +107,11 @@
     "offline": "No connection to the amemo service. Check that it is running and retry."
   },
   "settings": {
+    "folder_depth": "Folder nesting",
+    "folder_depth_hint": "How many folder levels can be created. Nested folders that already exist are always shown.",
+    "depth_1": "One level",
+    "depth_2": "Two levels",
+    "depth_3": "Three levels",
     "title": "Settings",
     "theme": "Theme",
     "language": "Language",

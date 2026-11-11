@@ -1576,6 +1576,8 @@ export interface operations {
                 status?: components["parameters"]["StatusFilter"];
                 /** @description Теги; у записи должны быть все */
                 tag?: string[];
+                /** @description С папкой — и вложенные папки; false — только сама папка */
+                nested?: boolean;
                 /** @description Записи о сущности или объекте (ent:… или id объекта) */
                 about?: string;
                 limit?: number;

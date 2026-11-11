@@ -387,7 +387,7 @@ def folder_tree(conn: psycopg.Connection) -> dict:
 
 
 def record_list(conn: psycopg.Connection, *, folder=None, kind=None, status=None, tag=None, about=None, limit=None,
-                cursor=None) -> dict:
+                cursor=None, nested=None) -> dict:
     """RecordList: сводки записей под фильтром, страница по курсору; about — ent:… или объект (obj:<UUID>, UUID)."""
     for name, value in (("folder", folder), ("about", about), ("cursor", cursor)):
         _str(value, name)
@@ -396,6 +396,7 @@ def record_list(conn: psycopg.Connection, *, folder=None, kind=None, status=None
         _str(value, "tag")
     page = lookup.list_records(conn, folder=folder or None, kinds=_codes(kind, "kind"), statuses=_statuses(status),
                                tag=[t for t in tags if t] or None, about=about or None,
+                               nested=_bool(nested, "nested", default=True),
                                limit=_int(limit, "limit", low=1, high=lookup.LIST_LIMIT, default=50),
                                cursor=cursor or None, lang=lang.current())
     return {"items": _summaries(conn, page["items"]), "next_cursor": page["next_cursor"], "total": page["total"]}
