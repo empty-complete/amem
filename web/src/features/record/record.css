@@ -9,7 +9,7 @@
 }
 .recpage {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(340px, 38%, 540px);
+  grid-template-columns: minmax(0, 1fr) auto;
   height: 100%;
   min-height: 0;
 }
@@ -418,7 +418,95 @@ a.pill:hover {
   font-family: var(--mono);
 }
 
+/* правая панель: «Источник» и «Окрестность» вкладками; ширина — разделителем, панель сворачивается */
+.side {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  border-left: 1px solid var(--separator);
+  background: var(--surface-secondary);
+}
+.side__grip {
+  position: absolute;
+  inset-block: 0;
+  left: -4px;
+  z-index: 3;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.side__grip::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background-color var(--dur-micro) var(--ease);
+}
+.side__grip:hover::after,
+.side__grip:active::after {
+  background: var(--separator);
+}
+.side__grip:focus-visible {
+  outline: 0;
+}
+.side__grip:focus-visible::after {
+  background: var(--focus);
+}
+.side__tabs {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+.side__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-xs);
+  padding: var(--s-xs) var(--s-sm) 0 var(--s-md);
+}
+.side__bar > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.side__panel {
+  min-height: 0;
+  overflow: hidden;
+}
+.side .srcpanel {
+  border-left: 0;
+  background: transparent;
+}
+.side__panel--sky {
+  padding: var(--s-sm) var(--s-md) var(--s-md);
+}
+.side--collapsed {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  width: 44px;
+  padding-top: var(--s-sm);
+}
+
 @media (max-width: 64rem) {
+  .side {
+    width: auto !important;
+    height: auto;
+    border-top: 1px solid var(--separator);
+    border-left: 0;
+  }
+  .side__grip {
+    display: none;
+  }
+  .side__panel--sky {
+    height: 360px;
+  }
+  .side--collapsed {
+    width: auto;
+    padding: var(--s-xs);
+  }
   .main:has(.recpage) {
     overflow: auto;
   }

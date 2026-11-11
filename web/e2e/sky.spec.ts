@@ -95,11 +95,44 @@ test("глубина 1 уменьшает окрестность; большая
   await expect(page.getByText("Показано 300 звёзд из 420", { exact: false })).toBeVisible();
 });
 
-test("запись: виджет «Окрестность» с небом от записи", async ({ page }) => {
+test("запись: «Окрестность» — вкладка правой панели, небо видно без прокрутки", async ({
+  page,
+  isMobile,
+}) => {
   await page.goto(`./atom/${A3}`);
-  const w = page.getByRole("region", { name: "Окрестность" });
-  await w.scrollIntoViewIfNeeded();
-  await expect(w.getByRole("application", { name: /^Небо: 8 звёзд/ })).toBeVisible();
+  const tab = page.getByRole("tab", { name: "Окрестность" });
+  // на узком экране панель стоит под записью
+  if (isMobile) await tab.scrollIntoViewIfNeeded();
+  await tab.click();
+  const w = page.getByRole("tabpanel", { name: "Окрестность" });
+  const sky = w.getByRole("application", { name: /^Небо: 8 звёзд/ });
+  if (isMobile) await sky.scrollIntoViewIfNeeded();
+  await expect(sky).toBeInViewport();
+});
+
+test("правая панель: ширина стрелками, свёрнутость и вкладка переживают перезагрузку", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "на узком экране панель стоит под записью, ширина не меняется");
+  await page.goto(`./atom/${A3}`);
+  const grip = page.getByRole("separator", { name: "Ширина панели" });
+  const before = Number(await grip.getAttribute("aria-valuenow"));
+  await grip.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(grip).toHaveAttribute("aria-valuenow", String(before + 24));
+  await page.getByRole("tab", { name: "Окрестность" }).click();
+  await page.reload();
+  await expect(page.getByRole("tab", { name: "Окрестность" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("separator", { name: "Ширина панели" })).toHaveAttribute(
+    "aria-valuenow",
+    String(before + 24),
+  );
+  await page.getByRole("button", { name: "Свернуть панель" }).click();
+  await page.reload();
+  await expect(page.getByRole("tab", { name: "Окрестность" })).toHaveCount(0);
+  await page.getByRole("button", { name: /^Развернуть панель/ }).click();
+  await expect(page.getByRole("tab", { name: "Окрестность" })).toBeVisible();
 });
 
 test("новая запись загорается звездой", async ({ page }) => {
