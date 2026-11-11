@@ -7,6 +7,7 @@ import links from "./fixtures/links-a3.json";
 import sheet from "./fixtures/sheet-v2.json";
 import similar from "./fixtures/similar-a3.json";
 import textManual from "./fixtures/text-manual.json";
+import { filterSummaries } from "./handlers";
 
 export const problem = (status: number, title: string, detail?: string) =>
   HttpResponse.json(
@@ -56,10 +57,11 @@ function summaries(about: string) {
 /** Обработчики чтения (часть B): запись, история, связи, похожие, карточка, объекты, изменения. */
 export const handlersB = (pdf: () => Promise<ArrayBuffer>) => [
   http.get("/api/v1/records", async ({ request }) => {
-    const about = new URL(request.url).searchParams.get("about");
+    const url = new URL(request.url);
+    const about = url.searchParams.get("about");
     if (!about) return; // дальше — обработчик части A
     await delay(80);
-    const items = summaries(about);
+    const items = filterSummaries(summaries(about), url);
     return HttpResponse.json({ items, total: items.length, next_cursor: null });
   }),
   http.get("/api/v1/records/:ref", async ({ params, request }) => {

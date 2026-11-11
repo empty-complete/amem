@@ -427,3 +427,13 @@ def test_object_search_by_name_path_and_url(kb, store, tmp_path):
 def test_object_search_bad_arguments(kb, kw):
     with pytest.raises(RecordError):
         lookup.object_search(kb, "", **kw)
+
+
+def test_list_records_by_several_tags(kb):
+    """Несколько тегов — записи, у которых есть все; повтор и пустой тег не мешают."""
+    both, wind = commit(kb, atom("Порыв в снегопад", tags=["ветер", "снег"]), atom("Ветер", tags=["ветер"])).revisions
+    assert [i["ref"] for i in lookup.list_records(kb, tag=["ветер", "снег"])["items"]] == [ref_of(both)]
+    assert lookup.list_records(kb, tag=["ветер", "", "ветер"])["total"] == 2
+    assert lookup.list_records(kb, tag=[])["total"] == 2
+    with pytest.raises(RecordError):
+        lookup.list_records(kb, tag=["ветер", 1])

@@ -1546,7 +1546,8 @@ export interface operations {
                 folder?: string;
                 kind?: components["parameters"]["Kind"];
                 status?: components["parameters"]["StatusFilter"];
-                tag?: string;
+                /** @description Теги; у записи должны быть все */
+                tag?: string[];
                 /** @description Записи о сущности или объекте (ent:… или id объекта) */
                 about?: string;
                 limit?: number;
