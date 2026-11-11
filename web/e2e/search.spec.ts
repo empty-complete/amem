@@ -32,3 +32,18 @@ test("ошибка службы: что сломалось и «Повторит
   await expect(page.getByRole("alert")).toContainText("База не отвечает");
   await expect(page.getByRole("button", { name: "Повторить" })).toBeVisible();
 });
+
+test("фильтр списка записей живёт в адресе: перезагрузка оставляет тот же набор", async ({ page }) => {
+  await page.goto("./records");
+  const count = page.locator(".page-head .count");
+  const all = await count.textContent();
+  await page.getByRole("combobox", { name: "Статус" }).selectOption("verified");
+  await expect(page).toHaveURL(/status=/);
+  await expect(count).not.toHaveText(all ?? "");
+  const filtered = await count.textContent();
+  await page.reload();
+  await expect(page.getByRole("combobox", { name: "Статус" })).toHaveValue("verified");
+  await expect(count).toHaveText(filtered ?? "");
+  await page.getByRole("button", { name: "Сбросить" }).click();
+  await expect(count).toHaveText(all ?? "");
+});

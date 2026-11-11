@@ -268,7 +268,8 @@ def _object_ref(about: str) -> uuid.UUID | None:
 
 
 def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: Iterable[str] | None = None,
-                 statuses: Iterable[str] | None = None, tag: str | None = None, about: str | None = None,
+                 statuses: Iterable[str] | None = None, tag: str | Iterable[str] | None = None,
+                 about: str | None = None,
                  limit: int = 50, cursor: str | None = None, lang: str | None = None) -> dict:
     """Сводки записей для списка (панель папок, «Все записи»): новые сверху, страницами по курсору.
 
@@ -276,7 +277,7 @@ def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: 
     - folder — папка вместе с вложенными; «-» — записи без папки; None или «» — все;
     - kinds — коды вида атома или класса сущности (kind_or_class);
     - statuses — статусы; по умолчанию все, как в дереве папок: иначе счётчики папок и список разошлись бы;
-    - tag — тег атома; about — сущность (ent: с UUID или ключом), о которой текущая ревизия атома, либо объект
+    - tag — тег атома или несколько тегов (у записи должны быть все); about — сущность (ent: с UUID или ключом), о которой текущая ревизия атома, либо объект
       (obj:<UUID> или голый UUID объекта): записи — атомы и сущности, у чьей текущей ревизии есть источник на него.
       У сущностей нет ни тегов, ни about-сущности: с этими фильтрами их в списке нет. Неизвестные сущность или
       объект — пустой список, не RecordNotFound.
@@ -300,12 +301,15 @@ def list_records(conn: psycopg.Connection, *, folder: str | None = None, kinds: 
     unknown = set(statuses or ()) - set(search._STATUSES)
     if unknown:
         raise RecordError(f"statuses: неизвестные статусы {', '.join(sorted(unknown))}")
-    if tag is not None and not isinstance(tag, str):
-        raise RecordError(f"tag {tag!r}: нужна строка")
-    tag = unicodedata.normalize("NFC", tag) if tag else None          # теги в теле ревизии — в NFC (canon)
+    tags = [tag] if isinstance(tag, str) or tag is None else list(tag)
+    if not all(t is None or isinstance(t, str) for t in tags):
+        raise RecordError(f"tag {tag!r}: нужна строка или список строк")
+    # теги в теле ревизии — в NFC (canon); пустые — без фильтра
+    tags = sorted({unicodedata.normalize("NFC", t) for t in tags if t})
+    tag = tags or None
     after = _after(cursor)
     path = folder if folder in (None, "", folders.NO_FOLDER) else folders.check(folder)
-    params = {"folder": path, "kinds": kinds, "statuses": statuses, "tag": Jsonb([tag]) if tag else None,
+    params = {"folder": path, "kinds": kinds, "statuses": statuses, "tag": Jsonb(tags) if tags else None,
               "take": limit + 1, "after_at": after[0] if after else None, "after_id": after[1] if after else None}
 
     # своя транзакция — REPEATABLE READ: страница и total из одного снимка; внутри чужой — её снимок

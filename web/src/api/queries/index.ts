@@ -1,9 +1,18 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { api, data } from "../client";
+import type { components } from "../schema";
 
 /** Фабрики запросов: компоненты не знают путей API, только эти функции. */
 /** Пунктов очереди в одном запросе — предел контракта (/review/items, limit до 500). */
 export const REVIEW_LIMIT = 500;
+
+/** Фильтр списка записей (адрес страницы /records). */
+export interface RecordFilter {
+  tag?: string[];
+  kind?: string[];
+  status?: components["schemas"]["Status"][];
+  about?: string;
+}
 
 export const q = {
   session: () =>
@@ -30,10 +39,11 @@ export const q = {
       queryKey: ["records", folder],
       queryFn: async () => data(await api.GET("/records", { params: { query: folder ? { folder } : {} } })),
     }),
-  /** Список записей страницами по cursor (предел контракта — 200): «Все записи» и папка доходят до конца. */
-  recordPages: (folder: string | null) =>
+  /** Список записей страницами по cursor (предел контракта — 200): «Все записи» и папка доходят до конца.
+   * Фильтры складываются (И): теги — все сразу, виды и статусы — любой из. */
+  recordPages: (folder: string | null, f: RecordFilter = {}) =>
     infiniteQueryOptions({
-      queryKey: ["records", folder, "pages"],
+      queryKey: ["records", folder, "pages", f],
       initialPageParam: null as string | null,
       queryFn: async ({ pageParam }) =>
         data(
@@ -41,6 +51,10 @@ export const q = {
             params: {
               query: {
                 ...(folder ? { folder } : {}),
+                ...(f.tag?.length ? { tag: f.tag } : {}),
+                ...(f.kind?.length ? { kind: f.kind } : {}),
+                ...(f.status?.length ? { status: f.status } : {}),
+                ...(f.about ? { about: f.about } : {}),
                 limit: 200,
                 ...(pageParam ? { cursor: pageParam } : {}),
               },

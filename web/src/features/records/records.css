@@ -140,3 +140,14 @@
   justify-content: center;
   padding: var(--s-md) 0;
 }
+
+/* строка фильтров списка: теги плашками, вид и статус, объект */
+.recfilters {
+  align-items: center;
+}
+.recfilters .fld {
+  width: auto;
+}
+.recfilters__sel {
+  max-width: 14rem;
+}

@@ -41,6 +41,21 @@
     "more": "Show more",
     "loading_more": "Loading…"
   },
+  "filters": {
+    "title": "Filters",
+    "tag": "Tags",
+    "tag_ph": "+ Tag",
+    "kind": "Kind",
+    "kind_any": "Any kind",
+    "kinds": "Records",
+    "classes": "Objects",
+    "status": "Status",
+    "status_any": "Any status",
+    "object": "Object",
+    "object_ph": "+ Object",
+    "reset": "Reset",
+    "empty": "Nothing matches these filters."
+  },
   "search": {
     "title": "Results for “{{q}}”",
     "prompt": "Type a query in the search field above.",

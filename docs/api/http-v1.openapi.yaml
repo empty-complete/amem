@@ -129,7 +129,7 @@ paths:
         - { name: folder, in: query, schema: { type: string }, description: "scope.folder или его начало; «-» — без папки; пусто — все" }
         - { $ref: "#/components/parameters/Kind" }
         - { $ref: "#/components/parameters/StatusFilter" }
-        - { name: tag, in: query, schema: { type: string } }
+        - { name: tag, in: query, schema: { type: array, items: { type: string } }, style: form, explode: true, description: "Теги; у записи должны быть все" }
         - { name: about, in: query, schema: { type: string }, description: "Записи о сущности или объекте (ent:… или id объекта)" }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
         - { name: cursor, in: query, schema: { type: string } }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const list = z.preprocess(
+export const list = z.preprocess(
   (v) => (v == null ? [] : Array.isArray(v) ? v.map(String) : [String(v)]),
   z.array(z.string()),
 );

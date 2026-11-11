@@ -302,6 +302,8 @@ def test_records_list_filters_and_about(serve, world):
     assert [i["ref"] for i in listed(status="verified")["items"]] == [world.w0]
     assert listed(status="", kind="")["total"] == 5            # пустые фильтры — без фильтра
     assert [i["ref"] for i in listed(tag="ветер")["items"]] == [world.w0]
+    assert [i["ref"] for i in listed(tag=["ветер", "ветер"])["items"]] == [world.w0]
+    assert listed(tag=["ветер", "снег"])["total"] == 0         # несколько тегов — нужны все
     assert {i["ref"] for i in listed(about=world.sensor)["items"]} == {world.w0, world.gusts}
     assert {i["ref"] for i in listed(about="ent:sensor")["items"]} == {world.w0, world.gusts}
     assert [i["ref"] for i in listed(about=f"obj:{oid(world.pdf)}")["items"]] == [world.w0]   # цитирует объект

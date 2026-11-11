@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import { useDrag } from "react-aria";
 import { useTranslation } from "react-i18next";
 import { errorText } from "../../api/errors";
-import { q } from "../../api/queries";
+import { q, type RecordFilter } from "../../api/queries";
 import type { components } from "../../api/schema";
 import { RECORD_MIME } from "../../app/shell/Folders";
 import { KindChip } from "../../ui/KindChip";
@@ -13,6 +13,7 @@ import { pickText } from "../../ui/lang";
 import { RegionState } from "../../ui/RegionState";
 import { RelativeTime } from "../../ui/RelativeTime";
 import { StatusText } from "../../ui/StatusText";
+import { hasFilter, RecordFilters } from "./RecordFilters";
 import "./records.css";
 
 type Summary = components["schemas"]["RecordSummary"];
@@ -67,9 +68,20 @@ export function RecordRow({ r, vocab, classes }: { r: Summary; vocab?: Vocab; cl
 }
 
 /** «Все записи» или содержимое папки; папка — scope.folder записи. Страницы догружаются при прокрутке к концу. */
-export function RecordList({ folder, title }: { folder: string | null; title: string }) {
+export function RecordList({
+  folder,
+  title,
+  filter = {},
+  onFilter,
+}: {
+  folder: string | null;
+  title: string;
+  filter?: RecordFilter;
+  /** Есть — над списком строка фильтров; значения хранит адрес страницы. */
+  onFilter?: (f: RecordFilter) => void;
+}) {
   const { t } = useTranslation();
-  const list = useInfiniteQuery(q.recordPages(folder));
+  const list = useInfiniteQuery(q.recordPages(folder, filter));
   const vocab = useQuery(q.vocab("kind"));
   const classes = useQuery(q.vocab("entity_class"));
   const end = useRef<HTMLDivElement>(null);
@@ -94,6 +106,7 @@ export function RecordList({ folder, title }: { folder: string | null; title: st
         <h1 id="records-title">{title}</h1>
         {list.data && <span className="count">{t("records.count", { count: total })}</span>}
       </div>
+      {onFilter && <RecordFilters value={filter} onChange={onFilter} />}
       {list.isPending ? (
         <RegionState state="loading" />
       ) : list.isError ? (
@@ -103,7 +116,7 @@ export function RecordList({ folder, title }: { folder: string | null; title: st
           retry={() => list.refetch()}
         />
       ) : items.length === 0 ? (
-        <RegionState state="empty" text={t("records.empty")} />
+        <RegionState state="empty" text={hasFilter(filter) ? t("filters.empty") : t("records.empty")} />
       ) : (
         <>
           <ul className="rows">

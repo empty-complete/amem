@@ -15,6 +15,24 @@ const problem = (status: number, title: string, detail?: string) =>
     { status, headers: { "content-type": "application/problem+json" } },
   );
 
+/** Фильтры /records, как у службы (И): папка с вложенными, «-» — без папки; статусы и виды — любой из;
+ * теги — все сразу. */
+export function filterSummaries<
+  T extends { folder?: string | null; status: string; kind_or_class: string; tags?: string[] },
+>(list: T[], url: URL): T[] {
+  const folder = url.searchParams.get("folder");
+  const status = url.searchParams.getAll("status").filter(Boolean);
+  const kind = url.searchParams.getAll("kind").filter(Boolean);
+  const tags = url.searchParams.getAll("tag").filter(Boolean);
+  let items = list;
+  if (folder === "-") items = items.filter((r) => !r.folder);
+  else if (folder) items = items.filter((r) => r.folder === folder || r.folder?.startsWith(`${folder}/`));
+  if (status.length) items = items.filter((r) => status.includes(r.status));
+  if (kind.length) items = items.filter((r) => kind.includes(r.kind_or_class));
+  if (tags.length) items = items.filter((r) => tags.every((t) => r.tags?.includes(t)));
+  return items;
+}
+
 /** Обработчики контракта v1 на образцах (метеостанция МС-1). Особые запросы: «ошибка» — 503, «без смысла» — смысловой канал выключен. */
 export const handlers = [
   http.get("/api/v1/session", () => HttpResponse.json(session)),
@@ -23,12 +41,7 @@ export const handlers = [
   http.get("/api/v1/records", async ({ request }) => {
     await delay(120);
     const url = new URL(request.url);
-    const folder = url.searchParams.get("folder");
-    const status = url.searchParams.getAll("status");
-    let items = db.records;
-    if (folder === "-") items = items.filter((r) => !r.folder);
-    else if (folder) items = items.filter((r) => r.folder === folder || r.folder?.startsWith(`${folder}/`));
-    if (status.length) items = items.filter((r) => status.includes(r.status));
+    const items = filterSummaries(db.records, url);
     // страницы, как у службы: limit (по умолчанию 50, до 200) и cursor — здесь смещение
     const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 200);
     const from = Number(url.searchParams.get("cursor") ?? 0);

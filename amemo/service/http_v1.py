@@ -149,7 +149,7 @@ def get_folders(request: Request) -> JSONResponse:
 def list_records(request: Request) -> JSONResponse:
     with connection(request) as conn:
         return JSONResponse(api.record_list(conn, folder=_q(request, "folder"), kind=_many(request, "kind"),
-                                            status=_many(request, "status"), tag=_q(request, "tag"),
+                                            status=_many(request, "status"), tag=_many(request, "tag"),
                                             about=_q(request, "about"), limit=_q(request, "limit"),
                                             cursor=_q(request, "cursor")))
 
