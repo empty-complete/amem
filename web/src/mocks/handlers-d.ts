@@ -244,6 +244,7 @@ function write(proposals: Proposal[], links: LinkP[]) {
     touchCard(p.payload, ref);
     return {
       label,
+      ref,
       target: p.target,
       record_id: ref,
       revision_id: newId("task"),

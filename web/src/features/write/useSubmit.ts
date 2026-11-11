@@ -1,5 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import { api } from "../../api/client";
+import { newNoteFolder } from "../../app/shell/folderTree";
 import { skyBus } from "../sky/bus";
 import type { Family } from "../sky/model";
 import type { LinkProposal, Proposal } from "./proposal";
@@ -29,8 +31,15 @@ export function useSubmit() {
           kind: meta.kind,
           about: meta.about,
           body: { proposals: body.proposals, links: body.links ?? [] },
-          onDone: (r) => {
+          onDone: async (r) => {
             skyBus.retract(id);
+            // новые записи — в папку из настроек («куда класть новые записи»), как в Obsidian; правки не трогаем
+            const folder = newNoteFolder();
+            const made = ((r?.records ?? []) as { ref?: string; created?: boolean }[])
+              .filter((x) => x.created && x.ref)
+              .map((x) => x.ref as string);
+            if (folder && made.length)
+              await api.POST("/records/move", { body: { refs: made, folder } }).catch(() => undefined);
             for (const k of [
               "records",
               "records-about",

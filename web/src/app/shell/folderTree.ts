@@ -2,6 +2,7 @@
 import { useSyncExternalStore } from "react";
 
 const OPEN = "amemo.folders.open";
+const NEW_IN = "amemo.folders.new";
 const DEPTH = "amemo.folders.depth";
 /** По умолчанию — один уровень: папку внутри папки не создают (уже созданные показываются как есть). */
 export const DEPTH_DEFAULT = 1;
@@ -24,6 +25,7 @@ const write = (key: string, v: unknown) => {
 
 let open = new Set<string>(read<string[]>(OPEN, []));
 let depth = read<number>(DEPTH, DEPTH_DEFAULT);
+let newIn = read<string>(NEW_IN, "");
 const subs = new Set<() => void>();
 const emit = () => {
   for (const f of subs) f();
@@ -58,4 +60,17 @@ export function useFolderDepth(): [number, (n: number) => void] {
       emit();
     },
   ];
+}
+
+/** Куда класть новые записи этого интерфейса, как в Obsidian: «» — корень (без папки), иначе путь папки. */
+export const newNoteFolder = () => newIn;
+
+export function setNewNoteFolder(path: string) {
+  newIn = path;
+  write(NEW_IN, path);
+  emit();
+}
+
+export function useNewNoteFolder(): [string, (path: string) => void] {
+  return [useSyncExternalStore(subscribe, () => newIn), setNewNoteFolder];
 }
