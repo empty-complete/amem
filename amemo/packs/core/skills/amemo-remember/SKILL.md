@@ -30,7 +30,8 @@ description: Record 1–3 durable findings of a finished task into the amemo kno
      в строке, `$$…$$` отдельной строкой;
    - `codes` — только марки и обозначения для точного поиска (`m10`, `dn50`, номер пункта, норматив); не значения
      с единицами и не обычные слова;
-   - `tags` — сфера и предметная тема; не вид записи и не объект — объект ставится в `about`;
+   - `tags` — только сфера знания из тех, что завёл человек (`amemo_vocab tag`); тему говорит вид записи,
+     объект ставится в `about`;
    - даты, итерации, редакции — в `valid_from`, `valid_to` и свойства, не в название.
    Одно утверждение — один атом; несколько — несколько атомов со связями или список в тексте.
 3. Источник обязателен: `sources` — `path` документа, место (`selectors`: страница, лист, раздел) и дословная
@@ -66,7 +67,8 @@ technique that proved itself; an open question that cannot be closed now.
      `$$…$$` on their own line;
    - `codes` — only designations for exact search (`m10`, `dn50`, clause number, standard); not values with units
      and not ordinary words;
-   - `tags` — the sphere and the subject topic; not the record kind and not an object — objects go to `about`;
+   - `tags` — only a sphere of knowledge from those a person set up (`amemo_vocab tag`); the kind says the topic,
+     objects go to `about`;
    - dates, iterations, editions — in `valid_from`, `valid_to` and properties, not in the label.
    One claim — one atom; several — several linked atoms or a list in the body.
 3. A source is required: `sources` with the document `path`, the place (`selectors`: page, sheet, section) and a
