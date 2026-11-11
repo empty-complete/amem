@@ -41,6 +41,12 @@
     "more": "Show more",
     "loading_more": "Loading…"
   },
+  "side": {
+    "title": "Source and neighbourhood",
+    "width": "Panel width",
+    "collapse": "Collapse the panel",
+    "expand": "Expand the panel: source and neighbourhood"
+  },
   "search": {
     "title": "Results for “{{q}}”",
     "prompt": "Type a query in the search field above.",

@@ -14,8 +14,6 @@ import { RegionState } from "../../ui/RegionState";
 import { StatusText } from "../../ui/StatusText";
 import { useCopy } from "../../ui/useCopy";
 import { kindLabel, recordPath } from "../records/RecordList";
-import { Sky } from "../sky/Sky";
-import { SourcePanel } from "../source/SourcePanel";
 import { draftKey, loadDraft } from "../write/drafts";
 import { MoveDialog } from "../write/MoveDialog";
 import { type Draft, type FieldIssues, fromPayload } from "../write/proposal";
@@ -25,6 +23,7 @@ import { Body, type WikiTarget } from "./Body";
 import { type Content, RecordContent } from "./Content";
 import { recordToDocument } from "./doc";
 import { type Payload, Properties, valueLine } from "./Properties";
+import { SidePanel } from "./SidePanel";
 import { HistoryWidget, LinksWidget, SimilarWidget, SourcesWidget } from "./Widgets";
 import "./record.css";
 
@@ -256,10 +255,6 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
                 <div className="widgets">
                   <SourcesWidget sources={view.sources} active={active} onActive={setActive} />
                   <LinksWidget recordRef={view.ref} />
-                  <section className="widget" aria-label={t("sky.widget")}>
-                    <h2>{t("sky.widget")}</h2>
-                    <Sky centerRef={view.ref} height={340} />
-                  </section>
                   <HistoryWidget recordRef={view.ref} view={view} />
                   <SimilarWidget recordRef={view.ref} />
                 </div>
@@ -283,7 +278,13 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
           <code className="ref">{view.ref}</code>
         </footer>
       </article>
-      <SourcePanel sources={view.sources} basis={p.basis} active={active} onActive={setActive} />
+      <SidePanel
+        recordRef={view.ref}
+        sources={view.sources}
+        basis={p.basis}
+        active={active}
+        onActive={setActive}
+      />
     </div>
   );
 }
