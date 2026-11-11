@@ -39,8 +39,16 @@
   pointer-events: none;
 }
 .home__filters,
+.home__scope,
 .home__head .navlink {
   pointer-events: auto;
+}
+/* строка фильтров неба: теги, вид, папка — поверх неба, на той же подложке, что и семьи */
+.home__scope {
+  margin: 0;
+  padding: var(--s-3xs) var(--s-xs);
+  border-radius: var(--r-panel);
+  background: color-mix(in oklab, var(--sky) 70%, transparent);
 }
 .home__head h1 {
   margin: 0;
