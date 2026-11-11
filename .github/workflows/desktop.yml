@@ -223,7 +223,8 @@ jobs:
           $uninstaller = Start-Process "$env:APP_DIR\uninstall.exe" -ArgumentList "/S" -PassThru
           $uninstaller.WaitForExit()
           if ($uninstaller.ExitCode) { throw "удаление: код $($uninstaller.ExitCode)" }
-          for ($i = 0; $i -lt 30 -and (Test-Path $env:APP_EXE); $i++) { Start-Sleep 2 }    # удалитель работает из копии
+          # удалитель работает из своей копии: exe и запись в реестре пропадают не сразу
+          for ($i = 0; $i -lt 30 -and ((Test-Path $env:APP_EXE) -or (Test-Path $env:UNINSTALL_KEY)); $i++) { Start-Sleep 2 }
           if (Test-Path $env:APP_EXE) { throw "после удаления остался $env:APP_EXE" }
           if (Test-Path $env:UNINSTALL_KEY) { throw "после удаления осталась запись в Uninstall" }
           Get-ChildItem $env:APP_DIR -ErrorAction SilentlyContinue | Format-Table Name   # комплект и журналы — D7/D8
