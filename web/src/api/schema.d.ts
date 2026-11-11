@@ -162,6 +162,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/records/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** folders.move списком: записи refs — в папку folder (null — без папки) одной транзакцией, все или ни одной; права — как у переноса одной записи; refs — не больше 2000 */
+        post: operations["moveRecords"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/records/{ref}/folder": {
         parameters: {
             query?: never;
@@ -1308,6 +1325,17 @@ export interface components {
             /** @description Словами: что произошло и что делать */
             message: string;
         };
+        RecordsMoved: {
+            moved: {
+                ref: string;
+                /** @description Прежняя папка — для отмены */
+                from: string | null;
+                to: string | null;
+                moved: boolean;
+            }[];
+            /** @description Сколько записей переехало */
+            count: number;
+        };
         Selection: {
             tags?: string[];
             project?: string | null;
@@ -1639,6 +1667,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LinkView"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    moveRecords: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    refs: string[];
+                    folder: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordsMoved"];
                 };
             };
             default: components["responses"]["Problem"];

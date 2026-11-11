@@ -14,6 +14,33 @@ export interface RecordFilter {
   about?: string;
 }
 
+/** Параметры /records для папки и фильтра; пустые не передаются. */
+export function recordQuery(folder: string | null, f: RecordFilter) {
+  return {
+    ...(folder ? { folder } : {}),
+    ...(f.tag?.length ? { tag: f.tag } : {}),
+    ...(f.kind?.length ? { kind: f.kind } : {}),
+    ...(f.status?.length ? { status: f.status } : {}),
+    ...(f.about ? { about: f.about } : {}),
+  };
+}
+
+/** Все ссылки под фильтром — по страницам у службы («Выбрать все отобранные», а не только загруженные). */
+export async function allRecordRefs(folder: string | null, f: RecordFilter) {
+  const refs: string[] = [];
+  let cursor: string | null = null;
+  do {
+    const page: components["schemas"]["RecordList"] = data(
+      await api.GET("/records", {
+        params: { query: { ...recordQuery(folder, f), limit: 200, ...(cursor ? { cursor } : {}) } },
+      }),
+    );
+    refs.push(...page.items.map((r) => r.ref));
+    cursor = page.next_cursor ?? null;
+  } while (cursor);
+  return refs;
+}
+
 export const q = {
   session: () =>
     queryOptions({
@@ -49,15 +76,7 @@ export const q = {
         data(
           await api.GET("/records", {
             params: {
-              query: {
-                ...(folder ? { folder } : {}),
-                ...(f.tag?.length ? { tag: f.tag } : {}),
-                ...(f.kind?.length ? { kind: f.kind } : {}),
-                ...(f.status?.length ? { status: f.status } : {}),
-                ...(f.about ? { about: f.about } : {}),
-                limit: 200,
-                ...(pageParam ? { cursor: pageParam } : {}),
-              },
+              query: { ...recordQuery(folder, f), limit: 200, ...(pageParam ? { cursor: pageParam } : {}) },
             },
           }),
         ),

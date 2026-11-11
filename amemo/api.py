@@ -1054,6 +1054,24 @@ def record_folder(conn: psycopg.Connection, ref, folder, *, agent: str) -> dict:
     return _summaries(conn, [lookup.summary(conn, moved["ref"], lang=lang.current())])[0]
 
 
+MOVE_LIMIT = 2000                   # записей в одном переносе списком
+
+
+def records_folder(conn: psycopg.Connection, refs, folder, *, agent: str) -> dict:
+    """Перенос списком (выбор в списке записей): все записи refs — в папку folder (None — без папки) одной
+    транзакцией. Права — как у record_folder. Ответ: moved — по записи {ref, from, to, moved}, count — сколько
+    переехало; from нужен отмене: вернуть каждую запись в её прежнюю папку."""
+    if not isinstance(refs, list) or not refs or len(refs) > MOVE_LIMIT:
+        raise BadRequest(f"refs: нужен непустой список ссылок, не больше {MOVE_LIMIT}")
+    refs, folder = [_ref(r) for r in refs], _str(folder, "folder")
+    if folder is not None and not (isinstance(agent, str) and agent.startswith("person:")) \
+            and not folders.exists(conn, folder):
+        raise folders.FolderError(f"папки {folders.check(folder)!r} нет: модель переносит записи только в "
+                                  f"существующие папки, новую создаёт человек", code="not_found")
+    moved = folders.move_many(conn, refs, folder, agent=agent)
+    return {"moved": moved, "count": sum(1 for m in moved if m["moved"])}
+
+
 # --- очередь проверки ---
 
 REVIEW_LIMIT = 500                  # пунктов в ответе списка, не больше

@@ -180,6 +180,30 @@ def move(conn: psycopg.Connection, ref: str, folder: str | None, *, agent: str) 
     return {"ref": f"{records.PREFIX[target]}:{record_id}", "from": before, "to": path, "moved": before != path}
 
 
+def move_many(conn: psycopg.Connection, refs: list[str], folder: str | None, *, agent: str) -> list[dict]:
+    """Переложить записи в папку одной транзакцией (выбор в списке): как move для каждой, но разом — все или
+    ни одной. Повторы ссылок не мешают; ответ — по записи на ссылку, в порядке refs, с прежней папкой (отмена)."""
+    records._require_autocommit(conn)
+    path = check(folder) if folder is not None else None
+    resolved = [records.resolve(conn, ref) for ref in refs]          # нет записи — RecordNotFound
+    unique = sorted(set(resolved), key=lambda pair: pair[1])          # по id, как в commit: без тупиков
+    with conn.transaction():
+        records._ensure_agent(conn, agent)
+        _lock_folders(conn, exclusive=False)
+        last = records._lock_many(conn, unique)
+        at = max(_now(), last) if last else _now()
+        if path is not None:
+            _register(conn, [path], agent, at)
+        before = {}
+        for target, record_id in unique:
+            before[record_id] = conn.execute(f"SELECT folder FROM {target} WHERE id = %s",
+                                             (record_id,)).fetchone()[0]
+            if before[record_id] != path:
+                _log(conn, target, record_id, before[record_id], path, agent, at)
+    return [{"ref": f"{records.PREFIX[target]}:{record_id}", "from": before[record_id], "to": path,
+             "moved": before[record_id] != path} for target, record_id in dict.fromkeys(resolved)]
+
+
 def create(conn: psycopg.Connection, path: str, *, agent: str) -> dict:
     """Папка в реестре (с родителями). Уже есть — FolderError с кодом exists."""
     records._require_autocommit(conn)

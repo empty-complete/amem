@@ -47,3 +47,35 @@ test("фильтр списка записей живёт в адресе: пе�
   await page.getByRole("button", { name: "Сбросить" }).click();
   await expect(count).toHaveText(all ?? "");
 });
+
+test("все отобранные — в папку одним запросом, одна строка «Отменить»; те же — в подборку", async ({
+  page,
+}) => {
+  await page.goto("./records?folder=-");
+  await page.getByRole("combobox", { name: "Статус" }).selectOption("verified");
+  const count = page.locator(".page-head .count");
+  await expect(count).toHaveText(/\d/);
+  const n = Number((await count.textContent())?.match(/\d+/)?.[0]);
+  await page
+    .getByRole("checkbox", { name: /^Выбрать «/ })
+    .first()
+    .check();
+  const bar = page.getByRole("toolbar", { name: "Выбранные записи" });
+  if (n > 1) await bar.getByRole("button", { name: `Выбрать все отобранные: ${n}` }).click();
+  await bar.getByRole("button", { name: "Выгрузить подборкой" }).click();
+  const dlg = page.getByRole("dialog", { name: "Выгрузить подборкой" });
+  await expect(dlg.getByText(new RegExp(`^Выбран[оа] ${n} запис`))).toBeVisible();
+  await page.keyboard.press("Escape");
+  const moves: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().endsWith("/records/move")) moves.push(r.postData() ?? "");
+  });
+  await bar.getByRole("button", { name: "Перенести в папку" }).click();
+  await page.getByRole("radio", { name: "Архив" }).check({ force: true });
+  await page.getByRole("dialog").getByRole("button", { name: "Переместить в папку" }).click();
+  await expect(page.getByRole("button", { name: "Отменить" })).toHaveCount(1);
+  await expect(page.getByRole("main").getByRole("checkbox", { name: /^Выбрать «/ })).toHaveCount(0);
+  await expect.poll(() => moves.length).toBe(1);
+  await page.getByRole("button", { name: "Отменить" }).click();
+  await expect(count).toHaveText(new RegExp(`^${n} `));
+});

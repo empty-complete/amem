@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
 import { useMoveRecord } from "./move";
+import "./write.css";
 
 type Folder = components["schemas"]["Folder"];
 const flat = (fs: Folder[], depth = 0): { path: string; name: string; depth: number }[] =>
@@ -17,11 +18,14 @@ export function MoveDialog({
   current,
   open,
   onClose,
+  onMove,
 }: {
-  recordRef: string;
+  recordRef?: string;
   current: string | null;
   open: boolean;
   onClose: () => void;
+  /** Свой перенос (выбранные записи списком); без него — перенос одной записи recordRef. */
+  onMove?: (folder: string | null, name: string) => void;
 }) {
   const { t } = useTranslation();
   const tree = useQuery({ ...q.folders(), enabled: open });
@@ -51,11 +55,12 @@ export function MoveDialog({
           <div className="editor__foot">
             <Button
               className="pillbtn"
-              isDisabled={to === (current ?? "-")}
+              isDisabled={!onMove && to === (current ?? "-")}
               onPress={() => {
                 const name =
                   to === "-" ? t("folders.unfiled") : (items.find((x) => x.path === to)?.name ?? to);
-                move(recordRef, to === "-" ? null : to, t("folders.moved", { to: name }));
+                if (onMove) onMove(to === "-" ? null : to, name);
+                else if (recordRef) move(recordRef, to === "-" ? null : to, t("folders.moved", { to: name }));
                 onClose();
               }}
             >

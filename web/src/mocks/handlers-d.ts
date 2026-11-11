@@ -522,6 +522,24 @@ export const handlersD = [
     db.save();
     return new HttpResponse(null, { status: 204 });
   }),
+  // перенос списком: все или ни одной; ответ — прежние папки для отмены
+  http.post("/api/v1/records/move", async ({ request }) => {
+    const { refs, folder } = (await request.json()) as { refs: string[]; folder: string | null };
+    const found = [...new Set(refs)].map((ref) => db.records.find((x) => x.ref === ref));
+    const missing = refs.find((_, i) => !found[i]);
+    if (found.some((r) => !r)) return problem(404, `Записи ${missing ?? ""} нет`);
+    writeLog.push("move");
+    const moved = (found as (typeof db.records)[number][]).map((r) => {
+      const from = r.folder ?? null;
+      r.folder = folder;
+      const v = db.views[r.ref];
+      if (v) v.folder = folder;
+      return { ref: r.ref, from, to: folder, moved: from !== folder };
+    });
+    if (folder && !db.folders.includes(folder)) db.folders.push(folder);
+    db.save();
+    return HttpResponse.json({ moved, count: moved.filter((m) => m.moved).length });
+  }),
   http.patch("/api/v1/records/:ref/folder", async ({ params, request }) => {
     const { folder } = (await request.json()) as { folder: string | null };
     const r = db.records.find((x) => x.ref === params.ref);

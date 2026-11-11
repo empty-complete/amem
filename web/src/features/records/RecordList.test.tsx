@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import type { RecordFilter } from "../../api/queries";
@@ -79,4 +79,38 @@ test("строка фильтров: тег Enter-ом, статус из спи
   expect(await screen.findByText("Под эти фильтры ничего не подходит.")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Сбросить" }));
   expect(await screen.findByText(new RegExp(`^${total} запис`))).toBeInTheDocument();
+});
+
+test("выбор: флажок и Shift — диапазон; «Выбрать все отобранные» и перенос списком одним запросом", async () => {
+  const user = userEvent.setup();
+  const total = db.records.length;
+  await renderWithApp(<FilterHarness />);
+  const rows = await screen.findAllByRole("checkbox", { name: /^Выбрать «/ });
+  await user.click(rows[0] as HTMLElement);
+  await user.keyboard("{Shift>}");
+  await user.click(rows[3] as HTMLElement);
+  await user.keyboard("{/Shift}");
+  const bar = screen.getByRole("toolbar", { name: "Выбранные записи" });
+  expect(within(bar).getByText("Выбрано 4 записи")).toBeInTheDocument();
+  await user.click(within(bar).getByRole("button", { name: `Выбрать все отобранные: ${total}` }));
+  expect(within(bar).getByText(`Выбраны все отобранные: ${total}`)).toBeInTheDocument();
+  await user.click(within(bar).getByRole("button", { name: "Перенести в папку" }));
+  const dlg = await screen.findByRole("dialog");
+  await user.click(within(dlg).getByRole("radio", { name: "Архив" }));
+  await user.click(within(dlg).getByRole("button", { name: /^Перенести|^Переместить/ }));
+  await waitFor(() => expect(db.records.every((r) => r.folder === "Архив")).toBe(true));
+  expect(screen.queryByRole("toolbar", { name: "Выбранные записи" })).not.toBeInTheDocument();
+});
+
+test("Ctrl-щелчок по строке выбирает её, а не открывает запись", async () => {
+  const user = userEvent.setup();
+  const first = db.records[0];
+  if (!first) throw new Error("нет образцов");
+  await renderWithApp(<FilterHarness />);
+  const link = (await screen.findByText(first.label)).closest("a") as HTMLElement;
+  await user.keyboard("{Control>}");
+  await user.click(link);
+  await user.keyboard("{/Control}");
+  expect(screen.getByRole("checkbox", { name: `Выбрать «${first.label}»` })).toBeChecked();
+  expect(screen.getByText("Выбрана 1 запись")).toBeInTheDocument();
 });

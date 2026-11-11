@@ -80,3 +80,8 @@
 .steps li[data-done] {
   color: var(--success);
 }
+
+.bpicked {
+  margin: 0;
+  font-weight: 500;
+}

@@ -16,6 +16,8 @@
     "sections": "Sections"
   },
   "folders": {
+    "moved_many_one": "{{count}} record moved to “{{to}}”",
+    "moved_many_other": "{{count}} records moved to “{{to}}”",
     "title": "Folders",
     "all": "All records",
     "tags": "Tags",
@@ -55,6 +57,18 @@
     "object_ph": "+ Object",
     "reset": "Reset",
     "empty": "Nothing matches these filters."
+  },
+  "select": {
+    "bar": "Selected records",
+    "one": "Select “{{what}}”",
+    "count_one": "{{count}} record selected",
+    "count_other": "{{count}} records selected",
+    "all": "Select all matching: {{count}}",
+    "all_on": "All matching selected: {{count}}",
+    "move": "Move to folder",
+    "export": "Export as a bundle",
+    "clear": "Clear selection",
+    "hint": "Ctrl or ⌘ selects a record, Shift a range"
   },
   "search": {
     "title": "Results for “{{q}}”",
@@ -630,6 +644,9 @@
     "to_review": "Open the queue"
   },
   "bundles": {
+    "picked_one": "{{count}} record selected: the bundle holds it.",
+    "picked_other": "{{count}} records selected: the bundle holds them.",
+    "dialog": "Export as a bundle",
     "title": "Bundles",
     "intro": "A bundle is part of the base in one zip: records, links, sources and, optionally, files and your kinds. It merges into another base without overwriting anything.",
     "tab_export": "Export",
