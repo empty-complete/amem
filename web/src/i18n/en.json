@@ -285,6 +285,11 @@
     "task_set": "Task set: an agent will pick it up over MCP",
     "task_open": "Task is with the agents",
     "original_colors": "Original colours",
+    "page_of": "Page {{n}} of {{total}}",
+    "goto_page": "Go to page",
+    "goto_ph": "#",
+    "full": "Full screen",
+    "full_exit": "Exit full screen",
     "docx": "Document",
     "this_record": "this record"
   },
