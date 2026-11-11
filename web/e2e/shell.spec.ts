@@ -18,7 +18,8 @@ test("папки и «Все записи»", async ({ page, isMobile }) => {
   await nav.getByRole("button", { name: /^Станция 2024/ }).click();
   await nav.getByRole("link", { name: /Корпус МС-1 из алюминия/ }).click();
   await expect(page).toHaveURL(/\/(atom|entity)\//);
-  await expect(page.getByRole("heading", { level: 1, name: /Корпус МС-1 из алюминия/ })).toBeVisible();
+  // в центре — запись, а не список папки
+  await expect(page.locator(".page-head")).toHaveCount(0);
   if (isMobile) {
     await expect(nav).toBeHidden();
     await menu.click();
