@@ -16,3 +16,11 @@ export const REASON_ICON: Record<Reason, IconName> = {
 };
 
 export const REASONS = Object.keys(REASON_ICON) as Reason[];
+
+/** Что решает только человек: всё, кроме смысловой проверки — её разбирает проверяющая модель (amemo-verify);
+ * человек может решить и её. Как в службе: review.MODEL_REASONS = {semantic}. */
+export const MODEL_REASONS: readonly Reason[] = ["semantic"];
+export const forPerson = (r: string) => !MODEL_REASONS.includes(r as Reason);
+
+/** Решение о правке (новая ревизия), а не о самой записи: подтверждение делает правку текущей. */
+export const aboutEdit = (r: string) => r === "edit" || r === "imported";
