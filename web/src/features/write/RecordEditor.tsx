@@ -1,7 +1,7 @@
 import { Button } from "@heroui/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
+import { Dialog, Heading, Menu, MenuItem, Modal, ModalOverlay, Popover } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { api, data } from "../../api/client";
 import { q } from "../../api/queries";
@@ -38,16 +38,63 @@ export interface RecordEditorProps {
   extraLinks?: { src: string; dst: string; rel: string }[];
 }
 
+/** Команды оформления: панель над текстом и меню по правой кнопке — один список. */
 const TOOLS: { key: string; label: string; text: string; run: (e: BodyEditorApi) => void }[] = [
+  { key: "h1", label: "edit.t_h1", text: "H1", run: (e) => e.heading(1) },
+  { key: "h2", label: "edit.t_h2", text: "H2", run: (e) => e.heading(2) },
+  { key: "h3", label: "edit.t_h3", text: "H3", run: (e) => e.heading(3) },
   { key: "b", label: "edit.t_bold", text: "B", run: (e) => e.wrap("**") },
   { key: "i", label: "edit.t_italic", text: "I", run: (e) => e.wrap("*") },
   { key: "code", label: "edit.t_code", text: "</>", run: (e) => e.wrap("`") },
-  { key: "h2", label: "edit.t_h2", text: "H2", run: (e) => e.line("## ") },
   { key: "quote", label: "edit.t_quote", text: "❝", run: (e) => e.line("> ") },
   { key: "list", label: "edit.t_list", text: "•", run: (e) => e.line("- ") },
+  { key: "olist", label: "edit.t_olist", text: "1.", run: (e) => e.line("1. ") },
   { key: "link", label: "edit.t_link", text: "[[ ]]", run: (e) => e.wrap("[[", "]]") },
   { key: "math", label: "edit.t_math", text: "∑", run: (e) => e.wrap("$") },
 ];
+
+/** Меню оформления в точке щелчка: React Aria Menu (стрелки, Enter, Esc) у невидимой опоры. */
+function FormatMenu({
+  at,
+  onClose,
+  onPick,
+}: {
+  at: { x: number; y: number } | null;
+  onClose: () => void;
+  onPick: (key: string) => void;
+}) {
+  const { t } = useTranslation();
+  const anchor = useRef<HTMLSpanElement>(null);
+  return (
+    <>
+      <span ref={anchor} aria-hidden="true" className="ctx__anchor" style={{ left: at?.x, top: at?.y }} />
+      <Popover
+        triggerRef={anchor}
+        isOpen={!!at}
+        onOpenChange={(o) => !o && onClose()}
+        placement="bottom start"
+        offset={4}
+        className="palette ctxmenu"
+      >
+        <Menu
+          aria-label={t("edit.toolbar")}
+          autoFocus="first"
+          className="palette__list"
+          onAction={(k) => onPick(String(k))}
+        >
+          {TOOLS.map((x) => (
+            <MenuItem key={x.key} id={x.key} textValue={t(x.label)} className="palette__opt ctxmenu__opt">
+              <span className="palette__label">{t(x.label)}</span>
+              <span className="palette__meta" aria-hidden="true">
+                {x.text}
+              </span>
+            </MenuItem>
+          ))}
+        </Menu>
+      </Popover>
+    </>
+  );
+}
 
 /** Правка записи (разд. 5.4) — тот же экран, что чтение: заголовок, вид, свойства, тело, источники. */
 export function RecordEditor(p: RecordEditorProps) {
@@ -63,6 +110,7 @@ export function RecordEditor(p: RecordEditorProps) {
   const issues = p.issues ?? null;
   const [asking, setAsking] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const dirty = useRef(false);
   const editor = useRef<BodyEditorApi>(null);
   const submit = useSubmit();
@@ -265,14 +313,6 @@ export function RecordEditor(p: RecordEditorProps) {
             issues={issues?.fields ?? {}}
             onChange={change}
           />
-          <textarea
-            className="fld lede--edit"
-            aria-label={t("edit.summary")}
-            placeholder={t("edit.summary_ph")}
-            rows={2}
-            value={d.summary}
-            onChange={(e) => change({ ...d, summary: e.target.value })}
-          />
           {tpl?.body === "none" ? (
             <p className="muted">{t("edit.no_body")}</p>
           ) : (
@@ -301,8 +341,19 @@ export function RecordEditor(p: RecordEditorProps) {
                   placeholder={tpl?.body === "required" ? t("edit.body_required") : t("edit.body_ph")}
                   suggest={suggest}
                   onSubmit={save}
+                  onMenu={setMenu}
                 />
               </Suspense>
+              <FormatMenu
+                at={menu}
+                onClose={() => setMenu(null)}
+                onPick={(k) => {
+                  setMenu(null);
+                  const tool = TOOLS.find((x) => x.key === k);
+                  // после закрытия меню: фокус и выделение возвращаются в текст
+                  requestAnimationFrame(() => editor.current && tool?.run(editor.current));
+                }}
+              />
               {issues?.body && (
                 <p className="fielderr" role="alert">
                   {issues.body}

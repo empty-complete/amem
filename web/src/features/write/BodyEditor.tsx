@@ -1,4 +1,5 @@
-// Редактор тела: CodeMirror 6 с подсветкой Markdown, панелью и клавишами; подсказки [[ @ #. Лениво.
+// Редактор тела: CodeMirror 6 с подсветкой Markdown, панелью, меню по правой кнопке и клавишами; подсказки [[ @ #.
+// Лениво.
 import { autocompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
@@ -10,6 +11,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 export interface BodyEditorApi {
   wrap: (before: string, after?: string) => void;
   line: (prefix: string) => void;
+  heading: (level: number) => void;
   focus: () => void;
 }
 
@@ -35,11 +37,41 @@ function wrap(view: EditorView, before: string, after = before) {
   return true;
 }
 
+/** Строки, которых касается выделение. */
+function lines(view: EditorView) {
+  const out = new Map<number, { from: number; text: string }>();
+  for (const r of view.state.selection.ranges) {
+    const a = view.state.doc.lineAt(r.from).number;
+    const b = view.state.doc.lineAt(r.to).number;
+    for (let n = a; n <= b; n++) {
+      const l = view.state.doc.line(n);
+      out.set(n, { from: l.from, text: l.text });
+    }
+  }
+  return [...out.values()];
+}
+
+/** Приставка строк (цитата, список): у всех выделенных строк есть — снять, иначе поставить. */
 function line(view: EditorView, prefix: string) {
-  const l = view.state.doc.lineAt(view.state.selection.main.head);
-  const has = l.text.startsWith(prefix);
+  const ls = lines(view);
+  const all = ls.every((l) => l.text.startsWith(prefix));
   view.dispatch({
-    changes: has ? { from: l.from, to: l.from + prefix.length } : { from: l.from, insert: prefix },
+    changes: ls.map((l) =>
+      all ? { from: l.from, to: l.from + prefix.length } : { from: l.from, insert: prefix },
+    ),
+  });
+  view.focus();
+  return true;
+}
+
+/** Заголовок уровня 1–3: прежний знак заголовка заменяется; тот же уровень — снимается. */
+function heading(view: EditorView, level: number) {
+  const mark = `${"#".repeat(level)} `;
+  view.dispatch({
+    changes: lines(view).map((l) => {
+      const old = l.text.match(/^#{1,6} /)?.[0] ?? "";
+      return { from: l.from, to: l.from + old.length, insert: old === mark ? "" : mark };
+    }),
   });
   view.focus();
   return true;
@@ -54,6 +86,8 @@ const BodyEditor = forwardRef<
     placeholder: string;
     suggest: Suggest;
     onSubmit?: () => void;
+    /** Правая кнопка на выделении — меню оформления в точке щелчка; без выделения — меню браузера. */
+    onMenu?: (at: { x: number; y: number }) => void;
   }
 >(function BodyEditor(p, ref) {
   const box = useRef<HTMLDivElement>(null);
@@ -105,6 +139,14 @@ const BodyEditor = forwardRef<
             ...defaultKeymap,
             ...historyKeymap,
           ]),
+          EditorView.domEventHandlers({
+            contextmenu: (e, v) => {
+              if (!live.current.onMenu || v.state.selection.main.empty) return false;
+              e.preventDefault();
+              live.current.onMenu({ x: e.clientX, y: e.clientY });
+              return true;
+            },
+          }),
           EditorView.contentAttributes.of({ "aria-label": p.label, "aria-multiline": "true" }),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) live.current.onChange(u.state.doc.toString());
@@ -125,6 +167,7 @@ const BodyEditor = forwardRef<
   useImperativeHandle(ref, () => ({
     wrap: (b, a) => view.current && wrap(view.current, b, a),
     line: (prefix) => view.current && line(view.current, prefix),
+    heading: (level) => view.current && heading(view.current, level),
     focus: () => view.current?.focus(),
   }));
 

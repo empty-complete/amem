@@ -123,6 +123,7 @@ const paths = {
     </>
   ),
   ruler: <path d="m2.4 10.6 8.2-8.2 3 3-8.2 8.2Zm2.6-2.6 1.4 1.4M7 6l1.4 1.4M9 4l1.4 1.4" />,
+  text: <path d="M3 4.5h10M3 8h10M3 11.5h6" />,
   shield: <path d="M8 2 3 4v4c0 3 2.2 5 5 6 2.8-1 5-3 5-6V4Z" />,
 } as const;
 

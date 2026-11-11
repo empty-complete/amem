@@ -156,9 +156,20 @@ textarea.fld {
   line-height: 1.5;
   resize: vertical;
 }
-.lede--edit {
+/* «Суть» — строка свойств: поле растёт по тексту, без рамки, пока не в фокусе */
+.prop--gist {
+  align-items: start;
+}
+.prop--gist .k {
+  min-height: 32px;
+}
+.fld.fld--gist {
   width: 100%;
-  font-size: var(--t-body);
+  min-height: 28px;
+  padding: var(--s-3xs) var(--s-xs);
+  field-sizing: content;
+  resize: none;
+  line-height: 1.5;
 }
 .refs,
 .qty {
@@ -247,6 +258,23 @@ textarea.fld {
 }
 .tb:focus-visible {
   outline: 2px solid var(--focus);
+}
+/* меню оформления по правой кнопке: опора — точка щелчка */
+.ctx__anchor {
+  position: fixed;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.ctxmenu {
+  width: 16rem;
+}
+.ctxmenu .ctxmenu__opt {
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 32px;
+}
+.ctxmenu__opt .palette__meta {
+  font-family: var(--mono);
 }
 .cm.cm--edit .cm-content {
   min-height: 12rem;

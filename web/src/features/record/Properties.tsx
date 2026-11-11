@@ -56,6 +56,8 @@ export function Properties({ view, kindLabel }: { view: View; kindLabel: string 
   const p = view.payload as unknown as Payload;
   const kind = p.kind ?? p.entity_class ?? "";
   const family = useFamily();
+  // «Суть» — свойство, как в Obsidian: строка над остальными, не отдельный абзац
+  const summary = pickText(p.summary_plain ?? p.description, lang);
   // значение параметра стоит крупно над текстом — в свойствах только остальные
   const values = (p.content?.values ?? []).slice(kind === "parameter" ? 1 : 0);
   return (
@@ -65,6 +67,11 @@ export function Properties({ view, kindLabel }: { view: View; kindLabel: string 
           {kindLabel}
         </span>
       </Row>
+      {summary && (
+        <Row icon="text" name={t("record.p_summary")}>
+          <span className="gist">{summary}</span>
+        </Row>
+      )}
       {!!view.about?.length && (
         <Row icon="link" name={t("record.p_about")}>
           {view.about.map((a) => (
