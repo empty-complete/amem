@@ -102,10 +102,11 @@ def test_native_paths_for_postgresql_on_windows(monkeypatch, tmp_path):
 def test_set_config_value_replaces_one_line(tmp_path):
     path = tmp_path / "amemo.toml"
     local.write_config(path, {"dsn": "postgresql://x", "pg_bin": "/old/bin", "lang": "ru"})
-    local.set_config_value(path, "pg_bin", "C:\\amemo\\runtime\\0.2.0\\pgsql\\bin")
+    new = tmp_path / "runtime" / "0.2.0" / "pgsql" / "bin"
+    local.set_config_value(path, "pg_bin", new)
     local.set_config_value(path, "port", 8770)
     found = settings.load({"AMEMO_CONFIG": str(path), "HOME": str(tmp_path)})
-    assert str(found.pg_bin) == "C:\\amemo\\runtime\\0.2.0\\pgsql\\bin" and found.lang == "ru"
+    assert found.pg_bin == new and found.lang == "ru" and found.port == 8770
     assert path.read_text(encoding="utf-8").count("pg_bin =") == 1 and "port = " in path.read_text(encoding="utf-8")
 
 
