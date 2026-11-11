@@ -259,6 +259,53 @@ textarea.fld {
 .tb:focus-visible {
   outline: 2px solid var(--focus);
 }
+/* живой предпросмотр: разметка скрыта вне строки с курсором, вид — как у прочитанного текста (.prose) */
+.cm--edit .cm-lp-h {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.cm--edit .cm-lp-h * {
+  text-decoration: none;
+}
+.cm--edit .cm-lp-h1 {
+  font-size: 1.5em;
+}
+.cm--edit .cm-lp-h2 {
+  font-size: 1.3em;
+}
+.cm--edit .cm-lp-h3 {
+  font-size: 1.15em;
+}
+.cm--edit .cm-lp-quote {
+  border-left: 3px solid var(--separator);
+  padding-left: var(--s-sm);
+  color: var(--ink-2);
+}
+.cm--edit .cm-lp-code {
+  padding: 0 0.2em;
+  border-radius: 4px;
+  background: var(--surface-secondary);
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+.cm--edit .cm-lp-wiki {
+  color: var(--foreground);
+  text-decoration: underline;
+  text-decoration-color: var(--fam-object);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.15em;
+}
+.cm--edit .cm-lp-link,
+.cm--edit .cm-lp-link * {
+  color: var(--link);
+}
+.cm--edit .cm-lp-bullet {
+  color: var(--muted);
+}
+.cm--edit .cm-lp-math {
+  font-family: var(--mono);
+}
+
 /* меню оформления по правой кнопке: опора — точка щелчка */
 .ctx__anchor {
   position: fixed;
