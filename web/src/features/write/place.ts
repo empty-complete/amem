@@ -13,12 +13,28 @@ const sub = (fn: () => void) => {
   return () => subs.delete(fn);
 };
 
+/** Новая заметка — сразу в редакторе на всю страницу, как Ctrl+N в Obsidian; «о чём» — объект места. */
+let navigateNew: ((about: string | null) => void) | null = null;
+let currentPlace: string | null = null;
+
 export const placeStore = {
+  /** Оболочка регистрирует переход на /new; место (объект страницы или звезду) — useWritePlace. */
+  bindNew(fn: ((about: string | null) => void) | null) {
+    navigateNew = fn;
+  },
+  setPlace(ref: string | null) {
+    currentPlace = ref;
+  },
   setStar(s: { ref: string; label: string } | null) {
     star = s;
     emit();
   },
   openQuick(open = true) {
+    // окно в углу больше не открывается: новая заметка — в полном редакторе
+    if (open && navigateNew) {
+      navigateNew(currentPlace?.startsWith("ent:") ? currentPlace : null);
+      return;
+    }
     quickOpen = open;
     emit();
   },

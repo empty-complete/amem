@@ -1,12 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { useRef } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
 import { CommandField } from "../../features/palette/CommandField";
 import { UpdateBadge } from "../../features/updates/UpdateBadge";
-import { placeStore, useQuickOpen } from "../../features/write/place";
-import { QuickWrite } from "../../features/write/QuickWrite";
+import { placeStore, useWritePlace } from "../../features/write/place";
 import { Icon } from "../../ui/icons";
 import { useHotkeys } from "../keys";
 import { applyTheme, readTheme, resolveTheme } from "../theme";
@@ -18,7 +17,14 @@ export function TopBar() {
   const input = useRef<HTMLInputElement>(null);
   const base = useQuery(q.base());
   const writeBtn = useRef<HTMLButtonElement>(null);
-  const quickOpen = useQuickOpen();
+  const navigate = useNavigate();
+  const place = useWritePlace();
+  // «Записать» и N — новая заметка в полном редакторе; о чём — объект страницы или выбранная звезда
+  useEffect(() => {
+    placeStore.bindNew((about) => navigate({ to: "/new", search: { about: about ?? undefined } as never }));
+    return () => placeStore.bindNew(null);
+  }, [navigate]);
+  useEffect(() => placeStore.setPlace(place.ref), [place.ref]);
   const menuOpen = useMenuOpen();
   useHotkeys({ focusSearch: () => input.current?.focus() });
 
@@ -56,13 +62,11 @@ export function TopBar() {
           type="button"
           className="navlink navbtn"
           title={`${t("nav.write")}, N`}
-          aria-expanded={quickOpen}
-          onClick={() => placeStore.openQuick(!quickOpen)}
+          onClick={() => placeStore.openQuick(true)}
         >
           <Icon name="plus" />
           <span className="hide-s">{t("nav.write")}</span>
         </button>
-        <QuickWrite trigger={writeBtn} />
         <button type="button" className="iconbtn hide-s" aria-label={t("nav.theme")} onClick={toggleTheme}>
           <Icon name="theme" />
         </button>

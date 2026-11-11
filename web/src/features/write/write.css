@@ -49,7 +49,11 @@
   gap: var(--s-sm);
 }
 .title--edit {
+  display: block;
   width: 100%;
+  field-sizing: content;
+  resize: none;
+  overflow: hidden;
   margin: 0;
   padding: var(--s-2xs) 0;
   border: 0;
@@ -59,6 +63,7 @@
   font: inherit;
   font-size: var(--t-title);
   font-weight: 600;
+  line-height: 1.25;
   letter-spacing: -0.015em;
 }
 .title--edit:focus-visible {
@@ -593,4 +598,22 @@ textarea.fld {
 .pick__preview:has(.pdf) {
   height: 52dvh;
   overflow: hidden;
+}
+
+/* правка — та же поверхность, что чтение: текст без рамки и подложки, как заметка в Obsidian */
+.editor .cm.cm--edit,
+.editor .cm.cm--edit .cm-editor {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.editor .cm.cm--edit .cm-content {
+  padding-inline: 0;
+}
+.editor .cm.cm--edit {
+  border-radius: 0;
+  font-size: var(--t-body);
+}
+.editor .cm.cm--edit .cm-editor.cm-focused {
+  outline: 0;
 }

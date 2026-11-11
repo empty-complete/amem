@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
 
 const E3 = "ent:0193b7c2-5e1a-7d40-9f2e-000000000003";
 const N1 = "atm:0193b7c2-5e1a-7d40-9f2e-00000000001e";
@@ -17,29 +17,18 @@ async function setEditorText(editor: Locator, text: string) {
   await editor.page().keyboard.insertText(text);
 }
 
-const skyCount = (page: Page) =>
-  page.evaluate(
-    () => (window as unknown as { __amemoSky?: { count: () => number } }).__amemoSky?.count() ?? 0,
-  );
-
-test("N на странице объекта: вопрос из текста, звезда загорается, после окна — в «Заметках и решениях»", async ({
+test("N на странице объекта — новая заметка в полном редакторе, «О чём» — этот объект", async ({
   page,
   isMobile,
 }) => {
   test.skip(isMobile, "клавиатура — на компьютере");
   await page.goto(`./entity/${E3}`);
   await expect(page.getByRole("heading", { level: 1, name: "Датчик влажности В-2" })).toBeVisible();
-  await expect.poll(() => skyCount(page), { timeout: 10_000 }).toBeGreaterThan(0);
-  const before = await skyCount(page);
   await page.locator("main h1").click();
   await page.keyboard.press("n");
-  const dlg = page.getByRole("dialog", { name: "Новая запись" });
-  await expect(dlg).toContainText("О чём: Датчик влажности В-2");
-  await dlg.getByRole("textbox", { name: "Текст записи" }).fill("Нужен ли козырёк над В-2?");
-  await expect(dlg.getByRole("button", { name: /Вид: Вопрос/ })).toBeVisible();
-  await page.keyboard.press("Enter");
-  await expect(page.getByText("Записано: вопрос")).toBeVisible();
-  await expect.poll(() => skyCount(page)).toBe(before + 1);
+  await expect(page).toHaveURL(/\/new\?about=/);
+  await page.getByRole("textbox", { name: "Заголовок" }).fill("Нужен ли козырёк над В-2?");
+  await page.getByRole("main").getByRole("button", { name: "Записать" }).click();
   await page.waitForTimeout(WINDOW);
   await expect(
     page
@@ -98,11 +87,8 @@ test("правка: «Суть» — строка свойств; правая �
   await menu.getByRole("menuitem", { name: /^Жирный/ }).click();
   await expect(menu).toBeHidden();
   await expect(body).toHaveText("**проверить растяжки**");
-  await page
-    .getByRole("toolbar", { name: "Оформление" })
-    .getByRole("button", { name: "Заголовок, H1" })
-    .click();
-  await expect(body).toHaveText("# **проверить растяжки**");
+  // панели кнопок нет, как в Obsidian: оформление — меню по правой кнопке и клавиши
+  await expect(page.getByRole("toolbar", { name: "Оформление" })).toHaveCount(0);
   await page.getByRole("main").getByRole("button", { name: "Записать" }).click();
   await page.waitForTimeout(WINDOW);
   const props = page.getByRole("definition").filter({ hasText: "Растяжки проверять" });

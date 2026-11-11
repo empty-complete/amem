@@ -248,13 +248,21 @@ export function RecordEditor(p: RecordEditorProps) {
           {issues.other.join(" ")}
         </p>
       ) : null}
-      <input
+      {/* заголовок переносится, как при чтении; Enter — к тексту, а не новая строка */}
+      <textarea
         className="title title--edit"
+        rows={1}
         aria-label={t("edit.title")}
         placeholder={t("edit.title_ph")}
         value={d.label}
         aria-invalid={issues?.label ? true : undefined}
-        onChange={(e) => change({ ...d, label: e.target.value })}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) {
+            e.preventDefault();
+            editor.current?.focus();
+          }
+        }}
+        onChange={(e) => change({ ...d, label: e.target.value.replace(/\n+/g, " ") })}
       />
       {issues?.label && (
         <p className="fielderr" role="alert">
@@ -317,22 +325,6 @@ export function RecordEditor(p: RecordEditorProps) {
             <p className="muted">{t("edit.no_body")}</p>
           ) : (
             <div className="bodyedit">
-              <div className="toolbar" role="toolbar" aria-label={t("edit.toolbar")}>
-                {TOOLS.map((x) => (
-                  <button
-                    key={x.key}
-                    type="button"
-                    className="tb"
-                    aria-label={t(x.label)}
-                    title={t(x.label)}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => editor.current && x.run(editor.current)}
-                  >
-                    {/* значок — для глаз; имя кнопки — из подписи (иначе «1.» не совпадает с именем) */}
-                    <span aria-hidden="true">{x.text}</span>
-                  </button>
-                ))}
-              </div>
               <Suspense fallback={<RegionState state="loading" />}>
                 <BodyEditor
                   ref={editor}
