@@ -269,7 +269,9 @@
     "zoom_fit": "Fit width",
     "task_set": "Task set: an agent will pick it up over MCP",
     "task_open": "Task is with the agents",
-    "original_colors": "Original colours"
+    "original_colors": "Original colours",
+    "docx": "Document",
+    "this_record": "this record"
   },
   "card": {
     "tab_card": "Card",

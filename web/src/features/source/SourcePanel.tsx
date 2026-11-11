@@ -1,16 +1,20 @@
 import { ToggleButton, ToggleButtonGroup } from "@heroui/react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { TFunction } from "i18next";
 import { lazy, Suspense, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { contentUrl } from "../../api/queries";
+import { contentUrl, q } from "../../api/queries";
 import type { components } from "../../api/schema";
 import { FileLink } from "../../ui/FileLink";
 import { Icon, type IconName } from "../../ui/icons";
 import { RegionState } from "../../ui/RegionState";
+import { SheetPreview } from "./SheetPreview";
 import { TextFragment } from "./TextFragment";
 import "./source.css";
 
+const DocxView = lazy(() => import("./DocxView"));
+const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const PdfPage = lazy(() => import("./PdfPage"));
 
 type Source = components["schemas"]["SourceView"];
@@ -89,10 +93,31 @@ function Viewer({ s }: { s: Source }) {
       </Suspense>
     );
   }
-  if (sel(s, "range") || sel(s, "sheet")) {
-    return <p className="muted">{t("source.no_preview")}</p>;
+  if (sel(s, "range") || sel(s, "sheet")) return <SheetSource s={s} />;
+  const text = <TextFragment id={s.object} version={s.object_version} page={page} quotes={quotes} />;
+  if (s.media_type === DOCX) {
+    return (
+      <Suspense fallback={<RegionState state="loading" />}>
+        <DocxView url={contentUrl(s.object, s.object_version)} quotes={quotes} fallback={text} />
+      </Suspense>
+    );
   }
-  return <TextFragment id={s.object} version={s.object_version} page={page} quotes={quotes} />;
+  return text;
+}
+
+/** Лист или диапазон таблицы: тот же просмотр, что на странице объекта; процитированные ячейки подсвечены. */
+function SheetSource({ s }: { s: Source }) {
+  const { t } = useTranslation();
+  const o = useQuery(q.object(s.object));
+  const sheet = String(sel(s, "sheet")?.value ?? "");
+  const range = String(sel(s, "range")?.value ?? "");
+  if (o.isPending) return <RegionState state="loading" />;
+  const sheets = o.data?.sheets ?? [];
+  if (!sheets.length) return <p className="muted">{t("source.no_preview")}</p>;
+  const cited = [{ sheet: sheet || (sheets[0] ?? ""), range, label: t("source.this_record") }].filter(
+    (c) => c.range,
+  );
+  return <SheetPreview id={s.object} version={s.object_version} sheets={sheets} cited={cited} />;
 }
 
 /** Панель источника справа от записи: что за файл, где цитата, нашлась ли — и сама страница. */
