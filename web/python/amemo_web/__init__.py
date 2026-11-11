@@ -2,7 +2,7 @@
 from importlib import resources
 from pathlib import Path
 
-__version__ = "0.1.0a1"
+__version__ = "0.1.0a2"
 
 
 def static_dir() -> Path:
