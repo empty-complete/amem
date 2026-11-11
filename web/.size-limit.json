@@ -17,7 +17,9 @@
       "!python/amemo_web/dist/assets/float-tooltip-*.js",
       "!python/amemo_web/dist/assets/codemirror-*.js",
       "!python/amemo_web/dist/assets/BodyEditor-*.js",
-      "!python/amemo_web/dist/assets/KindDrawer-*.js"
+      "!python/amemo_web/dist/assets/KindDrawer-*.js",
+      "!python/amemo_web/dist/assets/docx-*.js",
+      "!python/amemo_web/dist/assets/DocxView-*.js"
     ],
     "limit": "475 kB",
     "gzip": true
@@ -32,6 +34,12 @@
     "name": "Лениво: воркер pdf.js (отдельный поток)",
     "path": "python/amemo_web/dist/assets/pdf.worker.min-*.mjs",
     "limit": "450 kB",
+    "gzip": true
+  },
+  {
+    "name": "Лениво: DOCX (docx-preview, jszip; источник DOCX)",
+    "path": ["python/amemo_web/dist/assets/docx-*.js", "python/amemo_web/dist/assets/DocxView-*.js"],
+    "limit": "120 kB",
     "gzip": true
   },
   {

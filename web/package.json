@@ -41,6 +41,7 @@
     "@tanstack/react-router": "^1.170.46",
     "@tanstack/react-virtual": "^3.14.26",
     "3d-force-graph": "^1.80.2",
+    "docx-preview": "0.4.1",
     "dompurify": "^3.4.17",
     "force-graph": "^1.52.0",
     "i18next": "^26.7.2",
