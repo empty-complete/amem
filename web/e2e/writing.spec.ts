@@ -98,6 +98,21 @@ test("правка: «Суть» — строка свойств; правая �
   await expect(page.locator(".prose strong", { hasText: "проверить растяжки" })).toBeVisible();
 });
 
+test("живой предпросмотр: разметка скрыта вне строки с курсором", async ({ page }) => {
+  await page.goto(`./atom/${N1}`);
+  await page.getByRole("button", { name: /^Править, (⌘|Ctrl\+)E$/ }).click();
+  const body = page.getByRole("textbox", { name: "Текст записи" });
+  await body.fill("## Растяжки\n\n**жирный** и [[Мачта]]");
+  await page.getByRole("textbox", { name: "Заголовок" }).click();
+  await expect(body).toContainText("жирный и Мачта");
+  await expect(body).not.toContainText("**");
+  await expect(body).not.toContainText("## ");
+  await body.getByText("жирный").click();
+  await expect(body).toContainText("**жирный** и [[Мачта]]");
+  await expect(body).toContainText("Растяжки");
+  await expect(body).not.toContainText("## ");
+});
+
 test("история: сравнить прежнюю ревизию с текущей и вернуть её новой ревизией", async ({ page }) => {
   await page.goto(`./atom/${N1}`);
   await page.getByRole("button", { name: /^Править, (⌘|Ctrl\+)E$/ }).click();
