@@ -383,7 +383,7 @@
     "t_h3": "Subheading, H3",
     "t_quote": "Quote",
     "t_list": "List",
-    "t_olist": "Numbered list",
+    "t_olist": "Numbered list, 1.",
     "t_link": "Link to a record, {{mod}}K",
     "t_math": "Formula",
     "body": "Record text",
