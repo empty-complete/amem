@@ -1,12 +1,18 @@
 name: release
-# amemo и amemo-web на PyPI. Выпуск — метка vX.Y.Z… на коммите из main (git tag v0.1.0a1 && git push origin v0.1.0a1).
-# На pull request с правками поставки — та же сборка и проверки, без загрузки.
+# amemo и amemo-web на PyPI, приложение для Windows и релиз на GitHub. Выпуск — метка vX.Y.Z… на коммите из main
+# (git tag v0.1.0a2 && git push origin v0.1.0a2). На pull request с правками поставки — та же сборка колёс и
+# проверки, без загрузки; приложение на pull request проверяет desktop.yml.
+#
+# Релиз (спецификация приложения для Windows, п. 12): колёса; amemo-setup-<версия>-windows-x64.exe с .sig для
+# updater; комплект amemo-runtime-<версия>-windows-x64.zip и модель смыслового поиска — их качает мастер; .sha256 для
+# всех. Манифесты updater — в постоянном релизе updates: latest-pre.json — всегда, latest.json — у стабильной версии;
+# там же amemo-setup-windows-x64.exe — постоянная ссылка «Скачать» из README.
 on:
   push:
     tags: ["v*"]
   pull_request:
     paths: ["pyproject.toml", "amemo/__init__.py", "web/python/**", "README.md", "tools/release.py",
-            ".github/workflows/release.yml"]
+            ".github/workflows/release.yml", ".github/workflows/desktop.yml"]
   workflow_dispatch:
 
 permissions:
@@ -110,10 +116,20 @@ jobs:
           amemo --version | grep -Fx "amemo $VERSION"
           pipx runpip amemo show amemo-web | grep -Fx "Version: $VERSION"
 
+  # приложение для Windows этой версии: установщик (ключ подписи обновлений владельца), комплект, модель; тихая
+  # установка, мастер без окна, фон, удаление — как на pull request (desktop.yml, release: true)
+  desktop:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: build
+    uses: ./.github/workflows/desktop.yml
+    with:
+      release: true
+    secrets: inherit
+
   # релиз на GitHub — по нему службы узнают о новой версии (спецификация обновлений, U1). Создаётся последним:
   # к этому моменту версия на PyPI уже есть и ставится, так что служба не увидит релиз, который нечем поставить.
   github-release:
-    needs: [build, verify]
+    needs: [build, verify, desktop]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -123,18 +139,72 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-windows-x64
+          path: desktop-out
+      - uses: actions/download-artifact@v4
+        with:
+          name: runtime-windows-x64
+          path: runtime-out
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Windows files — installer, runtime, model, checksums, updater manifest
+        run: |
+          pip install -q packaging
+          app="$(python tools/release.py semver "$VERSION")"
+          mkdir -p assets
+          setup="amemo-setup-$VERSION-windows-x64.exe"
+          cp "desktop-out/amemo_${app}_x64-setup.exe" "assets/$setup"
+          cp "desktop-out/amemo_${app}_x64-setup.exe.sig" "assets/$setup.sig"
+          cp runtime-out/amemo-runtime-*.zip runtime-out/amemo-model-*.zip assets/
+          ls assets/amemo-runtime-"$VERSION"-windows-x64.zip       # комплект этой версии — его качает мастер
+          (cd assets && for f in "$setup" amemo-runtime-*.zip amemo-model-*.zip; do sha256sum "$f" > "$f.sha256"; done)
+          mkdir -p updates
+          cp "assets/$setup" updates/amemo-setup-windows-x64.exe
+          python tools/release.py latest --setup "assets/$setup" --version "$VERSION" \
+            --url "https://github.com/$GH_REPO/releases/download/$TAG/$setup" --notes "amemo $VERSION" \
+            --out updates/latest-pre.json
+          ls -l assets updates
       - name: Release with notes from the commits since the previous tag; pre-release for a/b/rc
         run: |
-          pre="$(pip install -q packaging && python -c "import sys; from packaging.version import Version; print('--prerelease' if Version(sys.argv[1]).is_prerelease else '')" "$VERSION")"
+          pre="$(python -c "import sys; from packaging.version import Version; print('--prerelease' if Version(sys.argv[1]).is_prerelease else '')" "$VERSION")"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "релиз $TAG уже есть"; exit 0
+            echo "релиз $TAG уже есть: дозагрузка файлов"
+            gh release upload "$TAG" dist/* assets/* --clobber
+            exit 0
           fi
-          gh release create "$TAG" dist/* --verify-tag --title "amemo $VERSION" --generate-notes $pre \
-            --notes "pipx install --force \"amemo[web]==$VERSION\""
+          cat > notes.md <<EOF
+          ## Download
+
+          - **Windows:** [amemo-setup-$VERSION-windows-x64.exe](https://github.com/$GH_REPO/releases/download/$TAG/amemo-setup-$VERSION-windows-x64.exe)
+            — installs for the current user, no administrator rights. Windows SmartScreen may say the app is not
+            recognised: **More info → Run anyway** (the installer is not code-signed yet).
+          - **Linux, macOS, servers:** \`pipx install --force "amemo[web]==$VERSION"\`
+          EOF
+          gh release create "$TAG" dist/* assets/* --verify-tag --title "amemo $VERSION" --generate-notes $pre \
+            --notes-file notes.md
+      - name: Updater manifests and the permanent download link (release "updates")
+        run: |
+          stable="$(python -c "import sys; from packaging.version import Version; print('' if Version(sys.argv[1]).is_prerelease else '1')" "$VERSION")"
+          if ! gh release view updates >/dev/null 2>&1; then
+            gh release create updates --prerelease --target main --title "amemo updates" \
+              --notes "Update manifests of the amemo app for Windows (latest.json — stable, latest-pre.json — pre-releases) and the latest installer. Downloads are on the release pages."
+          fi
+          has_stable="$(gh release view updates --json assets -q '.assets[].name' | grep -cx latest.json || true)"
+          files=(updates/latest-pre.json)
+          if [ -n "$stable" ]; then
+            cp updates/latest-pre.json updates/latest.json
+            files+=(updates/latest.json)
+          fi
+          # постоянная ссылка «Скачать» — на стабильную версию, а пока стабильных нет — на последнюю предварительную
+          if [ -n "$stable" ] || [ "$has_stable" = 0 ]; then
+            files+=(updates/amemo-setup-windows-x64.exe)
+          fi
+          gh release upload updates "${files[@]}" --clobber

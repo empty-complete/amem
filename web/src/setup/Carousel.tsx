@@ -3,20 +3,44 @@ import { useTranslation } from "react-i18next";
 import type { Lang } from "./bridge";
 
 /** Сюжеты README (docs/assets/readme/<язык>/demo-*.gif): новый сюжет там же попадает и в README, и сюда — если его
- * имя есть в SCENES и подпись в carousel.<имя>. */
+ * имя есть в SCENES и подпись в carousel.<имя>. В сборке приложения — их пережатые WebP (tools/carousel.py,
+ * media/<язык>/demo-*.webp, `__CAROUSEL__` — web/vite.setup.config.ts): ветка с GIF отбрасывается при сборке, и в
+ * установщик GIF не попадают. */
 const SCENES = ["sky", "write", "source", "review", "card"] as const;
-const FILES = import.meta.glob("../../../docs/assets/readme/*/demo-*.gif", {
-  query: "?url",
-  import: "default",
-  eager: true,
-}) as Record<string, string>;
+type Loader = () => Promise<string>;
+const FILES: Record<string, Loader> =
+  __CAROUSEL__ === "webp"
+    ? (import.meta.glob("./media/*/demo-*.webp", { query: "?url", import: "default" }) as Record<
+        string,
+        Loader
+      >)
+    : (import.meta.glob("../../../docs/assets/readme/*/demo-*.gif", {
+        query: "?url",
+        import: "default",
+      }) as Record<string, Loader>);
 const PERIOD = 7000; // мс на сюжет
 
-function scenes(lang: Lang) {
-  return SCENES.flatMap((name) => {
-    const url = FILES[`../../../docs/assets/readme/${lang}/demo-${name}.gif`];
-    return url ? [{ name, url }] : [];
-  });
+function loader(lang: Lang, name: string): Loader | undefined {
+  return __CAROUSEL__ === "webp"
+    ? FILES[`./media/${lang}/demo-${name}.webp`]
+    : FILES[`../../../docs/assets/readme/${lang}/demo-${name}.gif`];
+}
+
+/** Адреса анимаций языка — по мере загрузки модулей. */
+function useScenes(lang: Lang) {
+  const [list, setList] = useState<{ name: string; url: string }[]>([]);
+  useEffect(() => {
+    let live = true;
+    const found = SCENES.flatMap((name) => {
+      const load = loader(lang, name);
+      return load ? [load().then((url) => ({ name, url }))] : [];
+    });
+    void Promise.all(found).then((all) => live && setList(all));
+    return () => {
+      live = false;
+    };
+  }, [lang]);
+  return list;
 }
 
 function reducedMotion() {
@@ -27,7 +51,7 @@ function reducedMotion() {
  * при «уменьшить движение» (тогда сюжеты меняет только человек). */
 export function Carousel({ lang }: { lang: Lang }) {
   const { t } = useTranslation();
-  const list = scenes(lang);
+  const list = useScenes(lang);
   const [at, setAt] = useState(0);
   const [paused, setPaused] = useState(reducedMotion);
   const [hover, setHover] = useState(false);
