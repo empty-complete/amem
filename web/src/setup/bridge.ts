@@ -5,8 +5,9 @@
 
 export type Lang = "ru" | "en";
 
-/** Языки распознавания сканов, которые предлагает мастер (коды tesseract). */
-export const OCR_LANGS = ["rus", "eng", "ukr", "deu", "fra", "spa"] as const;
+/** Языки распознавания сканов, которые предлагает мастер (коды tesseract). Документы — только на русском и
+ * английском (решение 11.11.2026): другие языки не предлагаются и не скачиваются. */
+export const OCR_LANGS = ["rus", "eng"] as const;
 export type OcrLang = (typeof OCR_LANGS)[number];
 
 export type AgentId = "claude" | "codex";

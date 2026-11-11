@@ -55,11 +55,7 @@
     "ocrLangs": "Scan languages",
     "langs": {
       "rus": "Russian",
-      "eng": "English",
-      "ukr": "Ukrainian",
-      "deu": "German",
-      "fra": "French",
-      "spa": "Spanish"
+      "eng": "English"
     }
   },
   "agents": {
