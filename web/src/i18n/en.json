@@ -211,7 +211,19 @@
     "compare_now": "Compare with current",
     "restore": "Restore this revision",
     "restored": "restore of revision {{n}}",
-    "same_as_now": "Same as the current one"
+    "same_as_now": "Same as the current one",
+    "hint": {
+      "kind": "The record kind: fact, parameter, decision, question, lesson or note. Set when recording; the fields depend on it.",
+      "summary": "One sentence on the main point. The agent reads it first; search uses it too.",
+      "about": "The objects the record is about: an instrument, a node, a project. The record shows on their pages.",
+      "values": "The record's quantities with units: value, tolerance, range. Hover a quantity name for its description from the property vocabulary.",
+      "codes": "Designations from documents: grades, numbers, ciphers. Exact search uses them.",
+      "when": "From when and until when the claim holds about the world, not the time it was recorded.",
+      "tags": "Labels for filters and bundles. Click a tag for all records with it.",
+      "basis": "What the claim rests on when it is not a quote from a source: the author's word, a method default or an assumption.",
+      "by": "Who recorded the current revision: a person or a model. For a model, its confidence.",
+      "qualifier": "A property of this record's own, added while editing or in the kind settings."
+    }
   },
   "source": {
     "panel": "Source",

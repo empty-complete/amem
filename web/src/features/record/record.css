@@ -618,3 +618,37 @@ a.pill:hover {
   outline-offset: 2px;
   border-radius: 2px;
 }
+
+/* подсказка у имени свойства: подпись остаётся подписью, пунктир говорит, что есть пояснение */
+.hint {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in oklab, currentColor 45%, transparent);
+  text-underline-offset: 0.2em;
+  cursor: help;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hint[data-focus-visible] {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.tip {
+  max-width: 22rem;
+  padding: var(--s-xs) var(--s-sm);
+  border-radius: 8px;
+  background: var(--overlay);
+  color: var(--overlay-foreground);
+  box-shadow: var(--overlay-shadow);
+  font-size: var(--t-meta);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
