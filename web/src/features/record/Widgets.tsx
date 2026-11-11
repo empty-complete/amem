@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { errorText } from "../../api/errors";
 import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
-import { agentName, formatDate, formatTime } from "../../ui/format";
+import { formatDate, formatTime } from "../../ui/format";
 import { KindChip } from "../../ui/KindChip";
 import { type LangString, pickText } from "../../ui/lang";
 import { RegionState } from "../../ui/RegionState";
@@ -177,8 +177,7 @@ export function HistoryList({ recordRef, view }: { recordRef: string; view?: Vie
           <time dateTime={e.at}>
             {formatDate(e.at, i18n.language)}, {formatTime(e.at, i18n.language)}
           </time>
-          <span>{eventText(e, t)}</span>
-          <span className="muted">{agentName(e.agent, i18n.language)}</span>
+          <span>{eventText(e, t, i18n.language, session.data?.agent)}</span>
           {view && e.type === "revision" && e.revision != null && e.revision !== view.revision && (
             <span className="hist__acts">
               <button

@@ -30,6 +30,12 @@ pub struct State {
     /// аккаунта появится в Claude Code, и снимает прямую установку (`amemo install claude-code --unless-synced`)
     #[serde(default)]
     pub plugin: Option<String>,
+    /// версия комплекта, переход на которую откатился (upgrade.rs): не пробовать её снова при каждом запуске
+    #[serde(default)]
+    pub skipped_runtime: Option<String>,
+    /// обновления выключены (значок: «Обновлять автоматически»)
+    #[serde(default)]
+    pub no_auto_update: bool,
 }
 
 impl Paths {

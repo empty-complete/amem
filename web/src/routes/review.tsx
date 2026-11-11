@@ -8,6 +8,7 @@ export const reviewSearch = z.object({
   group: z.enum(["source"]).optional().catch(undefined),
   object: z.string().optional().catch(undefined),
   about: z.string().optional().catch(undefined),
+  who: z.enum(["model"]).optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/review")({
@@ -21,6 +22,7 @@ export const Route = createFileRoute("/review")({
         group={s.group}
         object={s.object}
         about={s.about}
+        who={s.who}
       />
     );
   },

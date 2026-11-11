@@ -19,6 +19,7 @@
     "allow-setup-open-claude",
     "allow-setup-show-file",
     "allow-app-start",
-    "allow-app-resume"
+    "allow-app-resume",
+    "allow-app-status"
   ]
 }

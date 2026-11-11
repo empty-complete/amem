@@ -1227,6 +1227,12 @@ components:
         records: { type: object, description: "atoms и entities по статусам" }
         verdicts: { type: object, description: "Итоги сверки источников текущих ревизий; unchecked — не сверялся" }
         audit: { type: object, description: "Аудит по автору пакета: decided, refuted" }
+        verifier:
+          type: object
+          description: "Проверяющая модель (llm_judge): последнее решение и сколько решено за окно"
+          properties:
+            last_at: { type: [string, "null"], format: date-time }
+            decided: { type: integer }
 
     Submitted:
       type: object

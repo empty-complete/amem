@@ -88,5 +88,39 @@ test("уже решено — строка «Уже решено: …»", async 
 test("пустая очередь — словами", async () => {
   for (const i of db.reviewItems) i.state = "done";
   await page();
-  expect(await screen.findByText(/Очередь пуста/)).toBeInTheDocument();
+  expect(await screen.findByText(/^Вас ничего не ждёт/)).toBeInTheDocument();
+});
+
+test("вкладка «Разбирает модель»: смысловая проверка и последний проход проверяющего", async () => {
+  const first = db.reviewItems[0];
+  if (!first) throw new Error("нет образцов");
+  db.reviewItems.push({ ...first, id: ID(0x70), reason: "semantic", label: "Смысл для модели" });
+  await renderWithApp(<ReviewPage state="open" who="model" />, "/review?who=model");
+  expect(await screen.findByRole("tab", { name: /^Разбирает модель/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(
+    await screen.findByText(/^Смысловую проверку разбирает проверяющая модель\. Последний проход/),
+  ).toBeInTheDocument();
+  const list = await screen.findByRole("listbox", { name: "Очередь проверки" });
+  expect(within(list).getAllByRole("option")).toHaveLength(1);
+  expect(within(list).getByText("Смысл для модели")).toBeInTheDocument();
+});
+
+test("вкладки: «Ждут вас» — решает человек, «Разбирает модель» — смысловая проверка; у кнопок — что будет", async () => {
+  const first = db.reviewItems[0];
+  if (!first) throw new Error("нет образцов");
+  db.reviewItems.push({ ...first, id: ID(0x70), reason: "semantic", label: "Смысл для модели" });
+  await page(EDIT);
+  const you = await screen.findByRole("tab", { name: /^Ждут вас/ });
+  expect(you).toHaveAttribute("aria-selected", "true");
+  const list = await screen.findByRole("listbox", { name: "Очередь проверки" });
+  expect(within(list).queryByText("Смысл для модели")).not.toBeInTheDocument();
+  expect(screen.getByText(/^Здесь то, что решает только человек/)).toBeInTheDocument();
+  expect(screen.getByText("Подтвердить — правка станет текущей версией записи.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Отклонить, N" })).toHaveAccessibleDescription(
+    "Отклонить — правка не примется, останется прежняя версия.",
+  );
+  expect(screen.getByRole("tab", { name: /^Разбирает модель/ })).toHaveAttribute("aria-selected", "false");
 });

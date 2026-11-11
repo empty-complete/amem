@@ -131,14 +131,21 @@ test("карусель: следующий пример, пауза, подпи�
   await expect(carousel.getByRole("button", { name: "Play" })).toBeVisible();
 });
 
-const START = { starting: "freeze=start", failed: "fail=start&fast=1", paused: "fast=1" } as const;
+const START = {
+  starting: "freeze=start",
+  updating: "freeze=start",
+  failed: "fail=start&fast=1",
+  paused: "fast=1",
+} as const;
 
 for (const lang of ["ru", "en"] as const) {
   for (const theme of ["light", "dark"] as const) {
     test(`снимки экрана запуска: ${lang}, ${theme}`, async ({ page }, info) => {
       for (const [state, query] of Object.entries(START)) {
-        await open(page, `lang=${lang}&start=${state === "paused" ? "paused" : "1"}&${query}`, theme);
-        if (state !== "starting") await expect(page.getByRole("button")).toBeVisible();
+        const start = state === "paused" || state === "updating" ? state : "1";
+        await open(page, `lang=${lang}&start=${start}&${query}`, theme);
+        if (state === "updating") await expect(page.locator("h1")).toContainText("0.1.0a2");
+        if (state === "failed" || state === "paused") await expect(page.getByRole("button")).toBeVisible();
         await axe(page);
         const shot = await page.screenshot({ path: `setup-shots/${lang}-${theme}-start-${state}.png` });
         await info.attach(`${lang}-${theme}-start-${state}`, { body: shot, contentType: "image/png" });

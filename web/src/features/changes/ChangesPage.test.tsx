@@ -2,14 +2,19 @@ import { screen, within } from "@testing-library/react";
 import { renderWithApp } from "../../test/render";
 import { ChangesPage } from "./ChangesPage";
 
-test("лента по дням: сегодня сверху, события словами, кто записал", async () => {
+test("лента по дням: сегодня сверху; каждая строка называет, кто и что сделал", async () => {
   await renderWithApp(<ChangesPage who="all" since="ever" />, "/changes");
   const today = await screen.findByRole("region", { name: "Сегодня" });
-  expect(within(today).getByText("новая ревизия")).toBeInTheDocument();
-  expect(within(today).getByText("связь добавлена · см. также")).toBeInTheDocument();
-  expect(within(today).getAllByText("anna").length).toBeGreaterThan(0);
-  expect(screen.getByRole("region", { name: "Вчера" })).toBeInTheDocument();
-  expect(screen.getByText("статус: Ждёт проверки")).toBeInTheDocument();
+  // свои действия — «Вы …» (сессия в образцах — anna)
+  expect(within(today).getByText("Вы записали ревизию 2")).toBeInTheDocument();
+  expect(within(today).getByText("Вы добавили связь «см. также»")).toBeInTheDocument();
+  expect(within(today).getByText("Вы приняли правку")).toBeInTheDocument();
+  const yesterday = screen.getByRole("region", { name: "Вчера" });
+  expect(within(yesterday).getByText("Записал: extractor (модель)")).toBeInTheDocument();
+  expect(
+    within(yesterday).getByText("Статус «Ждёт проверки» поставил: checker (модель)"),
+  ).toBeInTheDocument();
+  expect(within(yesterday).getByText("Связь снял: linker (модель)")).toBeInTheDocument();
 });
 
 test("фильтр «Агенты» — только модели", async () => {

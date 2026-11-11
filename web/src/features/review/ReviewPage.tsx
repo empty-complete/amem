@@ -9,7 +9,7 @@ import { RegionState } from "../../ui/RegionState";
 import { arrange, facets, filterItems, type Grouping, nextAfter } from "./groups";
 import { QueueList } from "./QueueList";
 import { ReviewItemPane } from "./ReviewItem";
-import { REASONS } from "./reasons";
+import { aboutEdit, forPerson, REASONS } from "./reasons";
 import { type Outcome, useDecision, usePendingDecisions } from "./useDecision";
 import "../record/record.css";
 import "../write/write.css";
@@ -27,6 +27,7 @@ export function ReviewPage({
   group,
   object,
   about,
+  who,
 }: {
   itemId?: string;
   reason?: string;
@@ -34,8 +35,10 @@ export function ReviewPage({
   group?: "source";
   object?: string;
   about?: string;
+  /** Вкладка: без значения — «Ждут вас» (решает человек), model — «Разбирает модель» (смысловая проверка). */
+  who?: "model";
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const list = useQuery(q.reviewItems({ state, reason }));
   const pending = usePendingDecisions();
@@ -47,7 +50,14 @@ export function ReviewPage({
   const loaded = list.data ?? [];
   // ровно предел — значит, пункты есть и дальше: честная строка вместо молча обрезанной очереди
   const capped = loaded.length >= REVIEW_LIMIT;
-  const all = useMemo(() => loaded.filter((i) => !pending.has(i.id)), [loaded, pending]);
+  const live = useMemo(() => loaded.filter((i) => !pending.has(i.id)), [loaded, pending]);
+  const mine = useMemo(() => live.filter((i) => forPerson(i.reason)), [live]);
+  const all = useMemo(
+    () => (who === "model" ? live.filter((i) => !forPerson(i.reason)) : mine),
+    [live, mine, who],
+  );
+  const stats = useQuery({ ...q.reviewStats(7), enabled: state === "open" });
+  const verifier = stats.data?.verifier;
   const facet = useMemo(() => facets(all, names), [all, names]);
   const items = useMemo(() => filterItems(all, { object, about }), [all, object, about]);
   const { ordered, rows } = useMemo(() => {
@@ -62,11 +72,11 @@ export function ReviewPage({
         ? navigate({
             to: "/review/$itemId",
             params: { itemId: id },
-            search: { reason, state, group, object, about } as never,
+            search: { reason, state, group, object, about, who } as never,
             replace,
           })
-        : navigate({ to: "/review", search: { reason, state, group, object, about } as never, replace }),
-    [navigate, reason, state, group, object, about],
+        : navigate({ to: "/review", search: { reason, state, group, object, about, who } as never, replace }),
+    [navigate, reason, state, group, object, about, who],
   );
   const onAlready = useCallback((who: string) => setAlready(t("review.already", { who })), [t]);
   const decide = useDecision(onAlready);
@@ -125,7 +135,7 @@ export function ReviewPage({
   });
 
   const search = (patch: Record<string, string | undefined>) =>
-    navigate({ to: "/review", search: { reason, state, group, object, about, ...patch } as never });
+    navigate({ to: "/review", search: { reason, state, group, object, about, who, ...patch } as never });
   const more = (
     <div className="rfilters rfilters--more">
       <select
@@ -180,7 +190,7 @@ export function ReviewPage({
         onChange={(e) =>
           navigate({
             to: "/review",
-            search: { reason: e.target.value || undefined, state, group, object, about } as never,
+            search: { reason: e.target.value || undefined, state, group, object, about, who } as never,
           })
         }
       >
@@ -198,7 +208,7 @@ export function ReviewPage({
         selectedKeys={new Set([state])}
         onSelectionChange={(k) => {
           const s2 = [...k][0] === "done" ? "done" : undefined;
-          navigate({ to: "/review", search: { reason, state: s2, group, object, about } as never });
+          navigate({ to: "/review", search: { reason, state: s2, group, object, about, who } as never });
         }}
         aria-label={t("review.state")}
       >
@@ -219,6 +229,45 @@ export function ReviewPage({
           {t("review.title")}
           {list.data && <span className="count">{items.length}</span>}
         </h1>
+        {state === "open" && (
+          <>
+            <div className="rtabs" role="tablist" aria-label={t("review.tabs")}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={who !== "model"}
+                className="rtab"
+                onClick={() => navigate({ to: "/review", search: { state: undefined } as never })}
+              >
+                {t("review.tab_you")}
+                <span className="count">{mine.length}</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={who === "model"}
+                className="rtab"
+                onClick={() => navigate({ to: "/review", search: { who: "model" } as never })}
+              >
+                {t("review.tab_model")}
+                <span className="count">{live.length - mine.length}</span>
+              </button>
+            </div>
+            <p className="muted review__intro">
+              {who === "model"
+                ? verifier?.last_at
+                  ? t("review.model_last", {
+                      when: new Date(verifier.last_at).toLocaleString(i18n.language, {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      }),
+                      count: verifier.decided ?? 0,
+                    })
+                  : t("review.model_never")
+                : t("review.intro")}
+            </p>
+          </>
+        )}
         {filters}
         {more}
         {capped && <p className="muted review__cap">{t("review.first_n", { n: REVIEW_LIMIT })}</p>}
@@ -231,7 +280,16 @@ export function ReviewPage({
             retry={() => list.refetch()}
           />
         ) : ordered.length === 0 ? (
-          <RegionState state="empty" text={state === "done" ? t("review.empty_done") : t("review.empty")} />
+          <RegionState
+            state="empty"
+            text={
+              state === "done"
+                ? t("review.empty_done")
+                : who === "model"
+                  ? t("review.empty_model")
+                  : t("review.empty_you")
+            }
+          />
         ) : (
           <QueueList rows={rows} grouping={grouping} selected={itemId ?? null} onSelect={(id) => go(id)} />
         )}
@@ -257,19 +315,40 @@ export function ReviewPage({
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                 />
-                <Button variant="ghost" onPress={skip} aria-label={t("review.skip_k")}>
+                <Button
+                  variant="ghost"
+                  onPress={skip}
+                  aria-label={t("review.skip_k")}
+                  aria-describedby="after-skip"
+                >
                   {t("review.skip")}
                 </Button>
-                <Button variant="outline" onPress={() => act("refuted")} aria-label={t("review.refute_k")}>
+                <Button
+                  variant="outline"
+                  onPress={() => act("refuted")}
+                  aria-label={t("review.refute_k")}
+                  aria-describedby="after-refute"
+                >
                   {t("review.refute")}
                 </Button>
                 <Button
                   className="pillbtn"
                   onPress={() => act("confirmed")}
                   aria-label={t("review.confirm_k")}
+                  aria-describedby="after-confirm"
                 >
                   {t("review.confirm")}
                 </Button>
+                {/* что будет после каждой кнопки — словами, под кнопками */}
+                <ul className="decide__after muted">
+                  <li id="after-confirm">
+                    {aboutEdit(current.reason) ? t("review.after_confirm_edit") : t("review.after_confirm")}
+                  </li>
+                  <li id="after-refute">
+                    {aboutEdit(current.reason) ? t("review.after_refute_edit") : t("review.after_refute")}
+                  </li>
+                  <li id="after-skip">{t("review.after_skip")}</li>
+                </ul>
               </fieldset>
             )}
           </>

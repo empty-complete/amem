@@ -15,6 +15,7 @@ export const Route = createFileRoute("/review_/$itemId")({
         group={s.group}
         object={s.object}
         about={s.about}
+        who={s.who}
       />
     );
   },
