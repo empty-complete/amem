@@ -160,6 +160,15 @@
     "file": "Choose the file {{file}}",
     "show": "Show the file",
     "waiting": "Claude Code already works with amemo. Once the plugin arrives, the amemo app switches it to the plugin by itself — you can also do this step later.",
-    "synced": "The plugin is uploaded: amemo works in Cowork and in Claude Code."
+    "synced": "The plugin is uploaded: amemo works in Cowork and in Claude Code.",
+    "howto": {
+      "label": "Where to click in the Claude app",
+      "0": "On the left — Customize.",
+      "1": "The Plugins tab.",
+      "2": "The + Add button.",
+      "3": "Upload plugin — add a plugin from a file.",
+      "4": "Choose {{file}} in Downloads and click Open.",
+      "go": "Step {{n}}"
+    }
   }
 }
