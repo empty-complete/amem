@@ -18,7 +18,7 @@ test("составные единицы UCUM словами", () => {
   expect(unitLabel("m2.K/W")).toBe("м²·К/Вт");
   expect(unitLabel("W/(m2.K)")).toBe("Вт/(м²·К)");
   expect(unitLabel("W/(m2.K)", "en")).toBe("W/(m²·K)");
-  expect(unitLabel("zz.q")).toBe("zz.q");           // незнакомое — как есть
+  expect(unitLabel("zz.q")).toBe("zz.q"); // незнакомое — как есть
 });
 
 test("размер и агент", () => {
