@@ -2,6 +2,7 @@ import { ToggleButton, ToggleButtonGroup } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button as AriaButton, Dialog, DialogTrigger, Popover } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
@@ -142,52 +143,67 @@ export function HomeSky({
           </button>
         )}
         {!center && (
-          // biome-ignore lint/a11y/useSemanticElements: строка фильтров неба, не поля формы
-          <div className="home__scope filters recfilters" role="group" aria-label={t("home.scope")}>
-            <TagFilter value={scope.tag ?? []} onChange={(tag) => setScope({ ...scope, tag })} />
-            <select
-              className="fld recfilters__sel"
-              aria-label={t("filters.kind")}
-              value={scope.kind ?? ""}
-              onChange={(e) => setScope({ ...scope, kind: e.target.value })}
-            >
-              <option value="">{t("filters.kind_any")}</option>
-              <optgroup label={t("filters.kinds")}>
-                {kinds.data?.map((k) => (
-                  <option key={k.code} value={k.code}>
-                    {kindLabel(kinds.data, k.code, i18n.language)}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label={t("filters.classes")}>
-                {classes.data?.map((k) => (
-                  <option key={k.code} value={k.code}>
-                    {kindLabel(classes.data, k.code, i18n.language)}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
-            <select
-              className="fld recfilters__sel"
-              aria-label={t("home.folder")}
-              value={scope.folder ?? ""}
-              onChange={(e) => setScope({ ...scope, folder: e.target.value })}
-            >
-              <option value="">{t("home.folder_any")}</option>
-              {flatFolders(tree.data?.folders ?? []).map((f) => (
-                <option key={f.path} value={f.path}>
-                  {"  ".repeat(f.depth)}
-                  {f.name}
-                </option>
-              ))}
-              <option value="-">{t("folders.unfiled")}</option>
-            </select>
-            {scoped && (
-              <button type="button" className="chipbtn" onClick={() => setScope({})}>
-                {t("filters.reset")}
-              </button>
-            )}
-          </div>
+          // фильтры неба — во всплывающем окне у кнопки: строка поверх неба не закрывает звёзды
+          <DialogTrigger>
+            <AriaButton className="home__scopebtn navlink" aria-label={t("home.scope_open")}>
+              {t("home.scope_btn")}
+              {scoped && (
+                <span className="count">
+                  {(scope.tag?.length ?? 0) + (scope.kind ? 1 : 0) + (scope.folder ? 1 : 0)}
+                </span>
+              )}
+            </AriaButton>
+            <Popover className="palette home__scopepop" placement="bottom start">
+              <Dialog aria-label={t("home.scope")} className="home__scopedlg">
+                {/* biome-ignore lint/a11y/useSemanticElements: строка фильтров неба, не поля формы */}
+                <div className="home__scope filters recfilters" role="group" aria-label={t("home.scope")}>
+                  <TagFilter value={scope.tag ?? []} onChange={(tag) => setScope({ ...scope, tag })} />
+                  <select
+                    className="fld recfilters__sel"
+                    aria-label={t("filters.kind")}
+                    value={scope.kind ?? ""}
+                    onChange={(e) => setScope({ ...scope, kind: e.target.value })}
+                  >
+                    <option value="">{t("filters.kind_any")}</option>
+                    <optgroup label={t("filters.kinds")}>
+                      {kinds.data?.map((k) => (
+                        <option key={k.code} value={k.code}>
+                          {kindLabel(kinds.data, k.code, i18n.language)}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label={t("filters.classes")}>
+                      {classes.data?.map((k) => (
+                        <option key={k.code} value={k.code}>
+                          {kindLabel(classes.data, k.code, i18n.language)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                  <select
+                    className="fld recfilters__sel"
+                    aria-label={t("home.folder")}
+                    value={scope.folder ?? ""}
+                    onChange={(e) => setScope({ ...scope, folder: e.target.value })}
+                  >
+                    <option value="">{t("home.folder_any")}</option>
+                    {flatFolders(tree.data?.folders ?? []).map((f) => (
+                      <option key={f.path} value={f.path}>
+                        {"  ".repeat(f.depth)}
+                        {f.name}
+                      </option>
+                    ))}
+                    <option value="-">{t("folders.unfiled")}</option>
+                  </select>
+                  {scoped && (
+                    <button type="button" className="chipbtn" onClick={() => setScope({})}>
+                      {t("filters.reset")}
+                    </button>
+                  )}
+                </div>
+              </Dialog>
+            </Popover>
+          </DialogTrigger>
         )}
       </div>
       {star && (

@@ -39,16 +39,29 @@
   pointer-events: none;
 }
 .home__filters,
-.home__scope,
+.home__scopebtn,
 .home__head .navlink {
   pointer-events: auto;
 }
-/* строка фильтров неба: теги, вид, папка — поверх неба, на той же подложке, что и семьи */
+/* фильтры неба: кнопка в шапке, теги, вид и папка — во всплывающем окне */
+.home__scopebtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2xs);
+  border: 0;
+  background: color-mix(in oklab, var(--sky) 70%, transparent);
+  color: var(--sky-ink);
+  cursor: pointer;
+}
+.home__scopepop {
+  width: min(28rem, calc(100vw - 2 * var(--s-md)));
+}
+.home__scopedlg {
+  outline: none;
+}
 .home__scope {
   margin: 0;
-  padding: var(--s-3xs) var(--s-xs);
-  border-radius: var(--r-panel);
-  background: color-mix(in oklab, var(--sky) 70%, transparent);
+  padding: var(--s-xs);
 }
 .home__head h1 {
   margin: 0;
