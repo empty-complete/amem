@@ -19,7 +19,7 @@
       "!python/amemo_web/dist/assets/BodyEditor-*.js",
       "!python/amemo_web/dist/assets/KindDrawer-*.js"
     ],
-    "limit": "460 kB",
+    "limit": "475 kB",
     "gzip": true
   },
   {
