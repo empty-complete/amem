@@ -12,9 +12,12 @@ test("объект: путь, итог словами, все состояния
   expect(screen.getByRole("navigation", { name: "О чём" })).toHaveTextContent(
     "Метеоплощадка / Метеостанция МС-1",
   );
-  const line = "Известно 2 из 7. 1 расхождение, 1 открытый вопрос, нет обязательного: рабочая температура.";
+  const line = "Известно 2 из 7. 1 расхождение, 1 открытый вопрос, нет 1 обязательного поля.";
   expect(screen.getByRole("img", { name: line })).toBeInTheDocument();
   expect(screen.getByText(line)).toBeInTheDocument();
+  // какие поля — по запросу, свёрнутым списком
+  expect(screen.getByText("Какие поля не заполнены")).toBeInTheDocument();
+  expect(screen.getAllByText("рабочая температура", { exact: false }).length).toBeGreaterThan(0);
   const measure = await screen.findByRole("region", { name: "Измерение" });
   expect(within(measure).getByText("0…100 %")).toBeInTheDocument();
   expect(within(measure).getByText("Не применяется")).toBeInTheDocument();

@@ -23,10 +23,31 @@ const UNITS: Record<string, { ru: string; en: string }> = {
   "1": { ru: "", en: "" },
 };
 
+// составные единицы UCUM («m2.K/W», «W/(m2.K)», «kN/m2»): по атомам — словарь, степени — надстрочные цифры
+const ATOM: Record<string, { ru: string; en: string }> = {
+  m: { ru: "м", en: "m" }, mm: { ru: "мм", en: "mm" }, cm: { ru: "см", en: "cm" }, km: { ru: "км", en: "km" },
+  K: { ru: "К", en: "K" }, Cel: { ru: "°C", en: "°C" }, W: { ru: "Вт", en: "W" }, kW: { ru: "кВт", en: "kW" },
+  N: { ru: "Н", en: "N" }, kN: { ru: "кН", en: "kN" }, Pa: { ru: "Па", en: "Pa" }, kPa: { ru: "кПа", en: "kPa" },
+  MPa: { ru: "МПа", en: "MPa" }, kg: { ru: "кг", en: "kg" }, g: { ru: "г", en: "g" }, s: { ru: "с", en: "s" },
+  h: { ru: "ч", en: "h" }, J: { ru: "Дж", en: "J" }, kJ: { ru: "кДж", en: "kJ" }, d: { ru: "сут", en: "d" },
+};
+const SUP: Record<string, string> = { "2": "²", "3": "³", "4": "⁴", "-1": "⁻¹", "-2": "⁻²" };
+
+function compound(code: string, en: boolean): string | null {
+  let unknown = false;
+  const out = code.replace(/([A-Za-z]+)(-?\d)?/g, (_, a: string, p?: string) => {
+    const u = ATOM[a];
+    if (!u) unknown = true;
+    return (u ? (en ? u.en : u.ru) : a) + (p ? (SUP[p] ?? p) : "");
+  });
+  return unknown ? null : out.replace(/\./g, "·");
+}
+
 export function unitLabel(code: string | null | undefined, lang = "ru") {
   if (!code) return "";
   const u = UNITS[code];
-  return u ? (lang.startsWith("en") ? u.en : u.ru) : code;
+  if (u) return lang.startsWith("en") ? u.en : u.ru;
+  return compound(code, lang.startsWith("en")) ?? code;
 }
 
 const num = (n: number, lang: string) =>

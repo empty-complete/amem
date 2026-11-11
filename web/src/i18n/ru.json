@@ -340,7 +340,12 @@
     "ask_whom": "спросить: {{who}}",
     "when": "нужно, {{when}}",
     "rule": "Правило шаблона {{rule}}",
-    "unsaved": "не записано"
+    "unsaved": "не записано",
+    "blockers_n_one": "нет {{count}} обязательного поля",
+    "blockers_n_few": "нет {{count}} обязательных полей",
+    "blockers_n_many": "нет {{count}} обязательных полей",
+    "blockers_n_other": "нет {{count}} обязательного поля",
+    "blockers_show": "Какие поля не заполнены"
   },
   "changes": {
     "title": "Изменения",
