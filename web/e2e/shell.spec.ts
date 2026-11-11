@@ -65,5 +65,3 @@ test("язык меняется в настройках и переживает 
   await page.reload();
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
 });
-
-

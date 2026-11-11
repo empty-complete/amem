@@ -85,4 +85,3 @@ test("папка раскрывается в панели: внутри её з�
   for (const r of inside)
     expect(within(nav()).queryByRole("link", { name: r.label })).not.toBeInTheDocument();
 });
-

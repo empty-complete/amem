@@ -359,200 +359,196 @@ export function KindDrawer({ page = false }: { page?: boolean } = {}) {
 
   const content = (
     <>
-
-          
-          {!d ? (
-            <div className="drawer__body">
-              <p className="muted">{t("kinds.intro")}</p>
-              <ul className="kinds">
-                {mine.map((x) => (
-                  <li key={x.code}>
-                    <button type="button" className="cite" onClick={() => startEdit(x)}>
-                      <span className="cite__main">
-                        <span>{pickText(x.label, i18n.language)}</span>
-                        <span className="muted">{t("kinds.records", { count: x.records ?? 0 })}</span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <Button className="pillbtn" onPress={startNew}>
-                <Icon name="plus" />
-                {t("kinds.new")}
-              </Button>
-            </div>
-          ) : (
-            <div className="drawer__body">
-              <label className="fl">
-                {t("kinds.name")}
-                <input
-                  className="fld"
-                  value={pickText(d.label, i18n.language)}
-                  aria-invalid={labelIssue ? true : undefined}
-                  onChange={(e) => {
-                    setD({ ...d, label: withText(d.label, e.target.value, i18n.language) });
-                    if (!codeTouched) setCode(slug(e.target.value));
-                  }}
-                />
-              </label>
-              {labelIssue && (
-                <p className="fielderr" role="alert">
-                  {labelIssue}
-                </p>
-              )}
-              <label className="fl">
-                {t("kinds.code")}
-                <input
-                  className="fld"
-                  value={code ?? ""}
-                  onChange={(e) => {
-                    setCodeTouched(true);
-                    setCode(e.target.value.replace(/[^a-z0-9_]/g, ""));
-                  }}
-                />
-              </label>
-              <fieldset className="fl fl--row">
-                <legend>{t("kinds.family")}</legend>
-                {(["source", "work"] as const).map((fam) => (
-                  <label key={fam} className="chk">
-                    <input
-                      type="radio"
-                      name="family"
-                      checked={d.family === fam}
-                      onChange={() => setD({ ...d, family: fam })}
-                    />
-                    {t(`home.f_${fam}`)}
-                  </label>
-                ))}
-              </fieldset>
-
-              <h3>{t("kinds.props")}</h3>
-              {d.form.map((f, i) => (
-                <FieldRow
-                  // biome-ignore lint/suspicious/noArrayIndexKey: ключ свойства меняется при наборе имени — строка не должна пересоздаваться
-                  key={i}
-                  f={f}
-                  i={i}
-                  n={d.form.length}
-                  err={fieldIssue(issues, i)}
-                  onChange={(nf) => setForm(d.form.map((x, j) => (j === i ? nf : x)))}
-                  onMove={(dir) => {
-                    const a = [...d.form];
-                    const [x] = a.splice(i, 1);
-                    if (x) a.splice(i + dir, 0, x);
-                    setForm(a);
-                  }}
-                  onRemove={() => setForm(d.form.filter((_, j) => j !== i))}
-                />
-              ))}
-              <button
-                type="button"
-                className="addprop"
-                onClick={() => setForm([...d.form, blankField(d.form.length + 1)])}
-              >
-                <Icon name="plus" size={14} />
-                {t("kinds.add_prop")}
-              </button>
-
-              <fieldset className="fl fl--row">
-                <legend>{t("kinds.body")}</legend>
-                {(["wanted", "required", "none"] as const).map((b) => (
-                  <label key={b} className="chk">
-                    <input
-                      type="radio"
-                      name="body"
-                      checked={d.body === b}
-                      onChange={() => setD({ ...d, body: b })}
-                    />
-                    {t(`kinds.body_${b}`)}
-                  </label>
-                ))}
-              </fieldset>
-              <fieldset className="fl fl--row">
-                <legend>{t("kinds.widgets")}</legend>
-                {WIDGETS.map((w) => (
-                  <label key={w} className="chk">
-                    <input
-                      type="checkbox"
-                      checked={d.widgets.includes(w)}
-                      onChange={(e) =>
-                        setD({
-                          ...d,
-                          widgets: e.target.checked ? [...d.widgets, w] : d.widgets.filter((x) => x !== w),
-                        })
-                      }
-                    />
-                    {t(`kinds.w_${w}`)}
-                  </label>
-                ))}
-              </fieldset>
-
-              <section className="kinds__preview" aria-label={t("kinds.preview")}>
-                <h3>{t("kinds.preview")}</h3>
-                <PropertyEditor
-                  template={preview}
-                  draft={emptyDraft(code ?? "preview")}
-                  labels={{}}
-                  issues={{}}
-                  onChange={() => {}}
-                />
-              </section>
-
-              {msg && (
-                <p className="muted" role="status">
-                  {msg}
-                </p>
-              )}
-              <div className="editor__foot">
-                <Button className="pillbtn" isDisabled={!code} onPress={save}>
-                  {t("kinds.save")}
-                </Button>
-                <Button variant="ghost" onPress={() => setD(null)}>
-                  {t("kinds.back")}
-                </Button>
-                {mine.some((m) => m.code === code) && (
-                  <Button variant="ghost" className="danger" onPress={remove}>
-                    {t("kinds.delete")}
-                  </Button>
-                )}
-              </div>
-            </div>
+      {!d ? (
+        <div className="drawer__body">
+          <p className="muted">{t("kinds.intro")}</p>
+          <ul className="kinds">
+            {mine.map((x) => (
+              <li key={x.code}>
+                <button type="button" className="cite" onClick={() => startEdit(x)}>
+                  <span className="cite__main">
+                    <span>{pickText(x.label, i18n.language)}</span>
+                    <span className="muted">{t("kinds.records", { count: x.records ?? 0 })}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <Button className="pillbtn" onPress={startNew}>
+            <Icon name="plus" />
+            {t("kinds.new")}
+          </Button>
+        </div>
+      ) : (
+        <div className="drawer__body">
+          <label className="fl">
+            {t("kinds.name")}
+            <input
+              className="fld"
+              value={pickText(d.label, i18n.language)}
+              aria-invalid={labelIssue ? true : undefined}
+              onChange={(e) => {
+                setD({ ...d, label: withText(d.label, e.target.value, i18n.language) });
+                if (!codeTouched) setCode(slug(e.target.value));
+              }}
+            />
+          </label>
+          {labelIssue && (
+            <p className="fielderr" role="alert">
+              {labelIssue}
+            </p>
           )}
+          <label className="fl">
+            {t("kinds.code")}
+            <input
+              className="fld"
+              value={code ?? ""}
+              onChange={(e) => {
+                setCodeTouched(true);
+                setCode(e.target.value.replace(/[^a-z0-9_]/g, ""));
+              }}
+            />
+          </label>
+          <fieldset className="fl fl--row">
+            <legend>{t("kinds.family")}</legend>
+            {(["source", "work"] as const).map((fam) => (
+              <label key={fam} className="chk">
+                <input
+                  type="radio"
+                  name="family"
+                  checked={d.family === fam}
+                  onChange={() => setD({ ...d, family: fam })}
+                />
+                {t(`home.f_${fam}`)}
+              </label>
+            ))}
+          </fieldset>
+
+          <h3>{t("kinds.props")}</h3>
+          {d.form.map((f, i) => (
+            <FieldRow
+              // biome-ignore lint/suspicious/noArrayIndexKey: ключ свойства меняется при наборе имени — строка не должна пересоздаваться
+              key={i}
+              f={f}
+              i={i}
+              n={d.form.length}
+              err={fieldIssue(issues, i)}
+              onChange={(nf) => setForm(d.form.map((x, j) => (j === i ? nf : x)))}
+              onMove={(dir) => {
+                const a = [...d.form];
+                const [x] = a.splice(i, 1);
+                if (x) a.splice(i + dir, 0, x);
+                setForm(a);
+              }}
+              onRemove={() => setForm(d.form.filter((_, j) => j !== i))}
+            />
+          ))}
+          <button
+            type="button"
+            className="addprop"
+            onClick={() => setForm([...d.form, blankField(d.form.length + 1)])}
+          >
+            <Icon name="plus" size={14} />
+            {t("kinds.add_prop")}
+          </button>
+
+          <fieldset className="fl fl--row">
+            <legend>{t("kinds.body")}</legend>
+            {(["wanted", "required", "none"] as const).map((b) => (
+              <label key={b} className="chk">
+                <input
+                  type="radio"
+                  name="body"
+                  checked={d.body === b}
+                  onChange={() => setD({ ...d, body: b })}
+                />
+                {t(`kinds.body_${b}`)}
+              </label>
+            ))}
+          </fieldset>
+          <fieldset className="fl fl--row">
+            <legend>{t("kinds.widgets")}</legend>
+            {WIDGETS.map((w) => (
+              <label key={w} className="chk">
+                <input
+                  type="checkbox"
+                  checked={d.widgets.includes(w)}
+                  onChange={(e) =>
+                    setD({
+                      ...d,
+                      widgets: e.target.checked ? [...d.widgets, w] : d.widgets.filter((x) => x !== w),
+                    })
+                  }
+                />
+                {t(`kinds.w_${w}`)}
+              </label>
+            ))}
+          </fieldset>
+
+          <section className="kinds__preview" aria-label={t("kinds.preview")}>
+            <h3>{t("kinds.preview")}</h3>
+            <PropertyEditor
+              template={preview}
+              draft={emptyDraft(code ?? "preview")}
+              labels={{}}
+              issues={{}}
+              onChange={() => {}}
+            />
+          </section>
+
+          {msg && (
+            <p className="muted" role="status">
+              {msg}
+            </p>
+          )}
+          <div className="editor__foot">
+            <Button className="pillbtn" isDisabled={!code} onPress={save}>
+              {t("kinds.save")}
+            </Button>
+            <Button variant="ghost" onPress={() => setD(null)}>
+              {t("kinds.back")}
+            </Button>
+            {mine.some((m) => m.code === code) && (
+              <Button variant="ghost" className="danger" onPress={remove}>
+                {t("kinds.delete")}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 
-  return (
-    page ? (
-      <section className="kindspage" aria-labelledby="kinds-title">
-        <div className="page-head">
-          <h1 id="kinds-title">{t("kinds.title")}</h1>
-        </div>
-        {content}
-      </section>
-    ) : (
-      <ModalOverlay
-        isOpen={open}
-        onOpenChange={(o) => !o && kindsStore.close()}
-        isDismissable
-        className="modal-overlay drawer-overlay"
-      >
-        <Modal className="drawer">
-          <Dialog className="drawer__in" aria-label={t("kinds.title")}>
-            <header className="drawer__head">
-              <Heading slot="title">{t("kinds.title")}</Heading>
-              <button
-                type="button"
-                className="iconbtn"
-                aria-label={t("sky.close")}
-                onClick={() => kindsStore.close()}
-              >
-                <Icon name="cross" />
-              </button>
-            </header>
-            {content}
-          </Dialog>
-        </Modal>
-      </ModalOverlay>
-    )
+  return page ? (
+    <section className="kindspage" aria-labelledby="kinds-title">
+      <div className="page-head">
+        <h1 id="kinds-title">{t("kinds.title")}</h1>
+      </div>
+      {content}
+    </section>
+  ) : (
+    <ModalOverlay
+      isOpen={open}
+      onOpenChange={(o) => !o && kindsStore.close()}
+      isDismissable
+      className="modal-overlay drawer-overlay"
+    >
+      <Modal className="drawer">
+        <Dialog className="drawer__in" aria-label={t("kinds.title")}>
+          <header className="drawer__head">
+            <Heading slot="title">{t("kinds.title")}</Heading>
+            <button
+              type="button"
+              className="iconbtn"
+              aria-label={t("sky.close")}
+              onClick={() => kindsStore.close()}
+            >
+              <Icon name="cross" />
+            </button>
+          </header>
+          {content}
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
   );
 }
