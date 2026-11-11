@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   shots:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04          # шрифты снимков постоянны; у образа 26.04 apt (amd64v3) падал на DNS
     strategy:
       fail-fast: false
       matrix:
