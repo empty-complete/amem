@@ -16,6 +16,7 @@ from amemo import cli
 from amemo.agents import install, platforms
 
 ROOT = Path(__file__).resolve().parent.parent
+posix_stub = pytest.mark.skipif(sys.platform == "win32", reason="заглушка claude — скрипт с #!")
 
 STUB = """#!{python}
 import json, os, sys
@@ -23,6 +24,9 @@ from pathlib import Path
 args = sys.argv[1:]
 with open(os.environ["STUB_LOG"], "a", encoding="utf-8") as log:
     log.write(json.dumps(args) + "\\n")
+if args[:3] == ["plugin", "list", "--json"]:
+    print(os.environ.get("STUB_PLUGINS", "[]"))
+    sys.exit(0)
 path = Path(os.environ["HOME"]) / ".claude.json"
 data = json.loads(path.read_text()) if path.exists() else {{}}
 fail = os.environ.get("STUB_FAIL_ADD")
@@ -577,3 +581,60 @@ def test_windows_home_is_userprofile(monkeypatch, tmp_path):
     lay = platforms.layout("claude-code", {"USERPROFILE": str(profile), "HOME": str(tmp_path / "msys")})
     assert lay.mcp_json == profile / ".claude.json" and lay.hooks_json == profile / ".claude" / "settings.json"
     assert portable.home({"HOME": str(tmp_path)}) == tmp_path
+
+
+# --- запускатель приложения для Windows и плагин из аккаунта (спецификация приложения для Windows, D6) ---
+
+def test_launcher_of_the_windows_app_is_the_command_for_agents(env, tmp_path):
+    launcher = tmp_path / "app" / "bin" / "amemo.exe"
+    launcher.parent.mkdir(parents=True)
+    launcher.write_text("")
+    assert install.amemo_command({**env, "AMEMO_LAUNCHER": str(launcher)}) == ([str(launcher)], None)
+    command, _ = install.amemo_command({**env, "AMEMO_LAUNCHER": str(tmp_path / "missing.exe")})
+    assert command != [str(tmp_path / "missing.exe")]          # нет файла — обычный выбор
+
+
+def synced(tmp_path: Path, command: str, *, enabled: bool = True, name: str = "amemo") -> str:
+    """Ответ `claude plugin list --json` с плагином amemo@synced, чей сервер MCP запускает command."""
+    root = tmp_path / "synced" / name
+    (root / ".claude-plugin").mkdir(parents=True, exist_ok=True)
+    (root / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": name}), encoding="utf-8")
+    (root / ".mcp.json").write_text(json.dumps({"mcpServers": {"amemo": {"command": command, "args": ["mcp"]}}}),
+                                    encoding="utf-8")
+    return json.dumps([{"id": f"{name}@synced", "version": "0.1.0", "scope": "synced", "enabled": enabled,
+                        "installPath": str(root)}])
+
+
+@posix_stub
+def test_unless_synced_installs_until_the_plugin_arrives_then_removes_the_direct_install(home, env, claude,
+                                                                                         tmp_path):
+    report, found = install.prefer_plugin(env)
+    assert not found and "amemo" in read_json(home / ".claude.json")["mcpServers"]
+    assert (home / ".claude" / "settings.json").exists()
+
+    exe = tmp_path / "app" / "amemo"
+    exe.parent.mkdir()
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    report, found = install.prefer_plugin({**env, "STUB_PLUGINS": synced(tmp_path, str(exe))})
+    assert found and any("прямая установка не нужна" in note for note in report.notes)
+    assert "amemo" not in (read_json(home / ".claude.json").get("mcpServers") or {}) \
+        if (home / ".claude.json").exists() else True
+    assert not (home / ".claude" / "settings.json").exists()
+
+    # плагин выключили, он с другой машины (команды нет) или не amemo — прямая установка возвращается
+    for plugins in (synced(tmp_path, str(exe), enabled=False), synced(tmp_path, "/nowhere/amemo"),
+                    synced(tmp_path, str(exe), name="other")):
+        install.uninstall("claude-code", env)
+        report, found = install.prefer_plugin({**env, "STUB_PLUGINS": plugins})
+        assert not found and "amemo" in read_json(home / ".claude.json")["mcpServers"], plugins
+
+
+@posix_stub
+def test_unless_synced_cli(home, env, claude, capsys):
+    code = cli.main(["install", "claude-code", "--unless-synced", "--json"], env=env)
+    out = json.loads(capsys.readouterr().out)
+    assert code == 0 and out["synced"] is False and out["changed"] is True
+    code = cli.main(["install", "codex", "--unless-synced", "--json"], env=env)
+    captured = capsys.readouterr()
+    assert code == 2 and "--unless-synced" in captured.out + captured.err

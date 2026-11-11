@@ -134,6 +134,12 @@ def test_unknown_agent_is_refused(run, tmp_path):
     assert code == 2 and json.loads(out)["code"] == "bad_agents", err
 
 
+def test_plugin_out_needs_cowork(run, tmp_path):
+    code, out, err = run("setup", "--pg-bin", str(tmp_path / "nowhere"), "--plugin-out", str(tmp_path / "p.zip"),
+                         "--agents", "codex")
+    assert code == 2 and "--plugin-out" in out + err
+
+
 def test_missing_pg_programs(run, tmp_path):
     code, out, err = run("setup", "--pg-bin", str(tmp_path / "нет"), "--data", str(tmp_path / "d"), "--json")
     assert code == 1 and json.loads(out)["code"] == "pg_bin", err

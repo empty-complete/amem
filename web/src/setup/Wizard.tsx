@@ -10,6 +10,7 @@ import {
   type Lang,
   OCR_LANGS,
   type OcrLang,
+  type PluginInfo,
   type Progress,
   STAGES,
   type Stage,
@@ -18,7 +19,7 @@ import { Carousel } from "./Carousel";
 import { left, size } from "./format";
 import { setLang } from "./i18n";
 
-export const STEPS = ["lang", "data", "docs", "features", "agents", "install", "done"] as const;
+export const STEPS = ["lang", "data", "docs", "features", "agents", "install", "plugin", "done"] as const;
 export type Step = (typeof STEPS)[number];
 
 type InstallState = "idle" | "running" | "failed" | "done";
@@ -33,8 +34,8 @@ function startStep(bridge: Bridge): Step {
   return (STEPS as readonly string[]).includes(s ?? "") ? (s as Step) : "lang";
 }
 
-/** Мастер первого запуска (спецификация приложения для Windows, п. 4–5): язык → папка данных → документы →
- * возможности → подключение → установка → готово. Всё, что касается машины, — через мост (`bridge.ts`). */
+/** Мастер первого запуска (спецификация приложения для Windows, п. 4–5 и 10): язык → папка данных → документы →
+ * возможности → подключение → установка → плагин для приложения Claude (если выбран Claude) → готово. Всё, что касается машины, — через мост (`bridge.ts`). */
 export function Wizard({ bridge, defaults }: { bridge: Bridge; defaults: Defaults }) {
   const { t, i18n } = useTranslation();
   const [step, setStep] = useState<Step>(() => startStep(bridge));
@@ -53,6 +54,7 @@ export function Wizard({ bridge, defaults }: { bridge: Bridge; defaults: Default
   const [shortcut, setShortcut] = useState(true);
   const [autostart, setAutostart] = useState(true);
   const [opening, setOpening] = useState(false);
+  const [plugin, setPlugin] = useState<PluginInfo | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -88,12 +90,29 @@ export function Wizard({ bridge, defaults }: { bridge: Bridge; defaults: Default
     try {
       await bridge.install(choices(), (p) => setProgress((all) => ({ ...all, [p.stage]: p })));
       setInstallState("done");
-      setStep("done");
+      setStep(choices().agents.includes("claude") ? "plugin" : "done");
     } catch (e) {
       setInstallState("failed");
       setError(e instanceof Error ? e.message : String(e));
     }
   }, [bridge, choices]);
+
+  // шаг «плагин»: сразу и раз в 15 с — загружен ли плагин (тогда же приложение снимает прямую установку)
+  useEffect(() => {
+    if (step !== "plugin") return;
+    let live = true;
+    const poll = () =>
+      bridge.plugin().then(
+        (p) => live && setPlugin(p),
+        () => {},
+      );
+    void poll();
+    const timer = window.setInterval(poll, 15_000);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+    };
+  }, [bridge, step]);
 
   // установка начинается при входе на шаг (и в снимках, открытых сразу на нём)
   const started = useRef(false);
@@ -104,14 +123,16 @@ export function Wizard({ bridge, defaults }: { bridge: Bridge; defaults: Default
     }
   }, [step, run]);
 
-  const index = STEPS.indexOf(step);
+  // шаг «плагин» — только когда выбрано приложение Claude
+  const steps = STEPS.filter((s) => s !== "plugin" || agents.includes("claude"));
+  const index = steps.indexOf(step);
   const dataOk = !!check && check.ansiSafe && check.free >= check.need;
   const canNext =
     (step === "data" && dataOk) ||
     (step === "features" && (!ocrOn || ocr.length > 0)) ||
     !["data", "features"].includes(step);
-  const next = () => setStep(STEPS[index + 1] ?? step);
-  const back = () => setStep(STEPS[index - 1] ?? step);
+  const next = () => setStep(steps[index + 1] ?? step);
+  const back = () => setStep(steps[index - 1] ?? step);
 
   let body: ReactNode;
   if (step === "lang") {
@@ -320,6 +341,57 @@ export function Wizard({ bridge, defaults }: { bridge: Bridge; defaults: Default
         <Carousel lang={lang} />
       </div>
     );
+  } else if (step === "plugin") {
+    const file = plugin?.path.split(/[\\/]/).pop() ?? "amemo-plugin.zip";
+    body = (
+      <>
+        <ol className="wz__list wz__tips">
+          <li className="wz__row wz__row--action">
+            <span className="wz__num-dot" aria-hidden="true">
+              1
+            </span>
+            <p className="wz__tip">
+              <span className="wz__row-title">{t("plugin.open")}</span>
+            </p>
+            <Button variant="outline" onPress={() => void bridge.openClaude()}>
+              {t("plugin.openButton")}
+            </Button>
+          </li>
+          <li className="wz__row">
+            <span className="wz__num-dot" aria-hidden="true">
+              2
+            </span>
+            <p className="wz__tip">
+              <span className="wz__row-title">{t("plugin.menu")}</span>
+              <span className="wz__meta"> — {t("plugin.path")}</span>
+            </p>
+          </li>
+          <li className="wz__row wz__row--action">
+            <span className="wz__num-dot" aria-hidden="true">
+              3
+            </span>
+            <p className="wz__tip">
+              <span className="wz__row-title">{t("plugin.file", { file })}</span>
+              {plugin && <span className="wz__meta wz__path-inline"> — {plugin.path}</span>}
+            </p>
+            <Button
+              variant="outline"
+              isDisabled={!plugin}
+              onPress={() => plugin && void bridge.showFile(plugin.path)}
+            >
+              {t("plugin.show")}
+            </Button>
+          </li>
+        </ol>
+        <p
+          className="wz__meta wz__plugin-state"
+          role="status"
+          data-state={plugin?.synced ? "done" : "waiting"}
+        >
+          {plugin?.synced ? t("plugin.synced") : t("plugin.waiting")}
+        </p>
+      </>
+    );
   } else {
     body = (
       <>
@@ -361,6 +433,7 @@ export function Wizard({ bridge, defaults }: { bridge: Bridge; defaults: Default
     features: t("features.lead"),
     agents: t("agents.lead"),
     install: t("install.lead"),
+    plugin: t("plugin.lead"),
   };
   const title: Record<Step, string> = {
     lang: t("lang.title"),
@@ -369,6 +442,7 @@ export function Wizard({ bridge, defaults }: { bridge: Bridge; defaults: Default
     features: t("features.title"),
     agents: t("agents.title"),
     install: installState === "failed" ? t("install.failed") : t("install.title"),
+    plugin: t("plugin.title"),
     done: t("done.title"),
   };
 
@@ -383,7 +457,7 @@ export function Wizard({ bridge, defaults }: { bridge: Bridge; defaults: Default
             <span className="wz__ver">{defaults.version}</span>
           </div>
           <ol>
-            {STEPS.map((s, i) => (
+            {steps.map((s, i) => (
               <li
                 key={s}
                 aria-current={s === step ? "step" : undefined}
@@ -417,7 +491,7 @@ export function Wizard({ bridge, defaults }: { bridge: Bridge; defaults: Default
             )}
           </div>
           <footer className="wz__foot">
-            {index > 0 && step !== "install" && step !== "done" && (
+            {index > 0 && step !== "install" && step !== "plugin" && step !== "done" && (
               <Button variant="ghost" onPress={back}>
                 {t("nav.back")}
               </Button>
