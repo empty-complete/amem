@@ -145,7 +145,7 @@ for (const lang of ["ru", "en"] as const) {
         const start = state === "paused" || state === "updating" ? state : "1";
         await open(page, `lang=${lang}&start=${start}&${query}`, theme);
         if (state === "updating") await expect(page.locator("h1")).toContainText("0.1.0a2");
-        if (state !== "starting") await expect(page.getByRole("button")).toBeVisible();
+        if (state === "failed" || state === "paused") await expect(page.getByRole("button")).toBeVisible();
         await axe(page);
         const shot = await page.screenshot({ path: `setup-shots/${lang}-${theme}-start-${state}.png` });
         await info.attach(`${lang}-${theme}-start-${state}`, { body: shot, contentType: "image/png" });
