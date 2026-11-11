@@ -297,8 +297,12 @@ jobs:
           $before = & $amemo base --json | ConvertFrom-Json
           & $amemo pg stop
           $backups = @(Get-ChildItem "$env:USERPROFILE\Проверка приложения\amemo-data\backups" -Recurse -Filter *.json -ErrorAction SilentlyContinue).Count
-          $env:AMEMO_UPDATE_URL = "http://127.0.0.1:8790/latest.json"
-          $env:AMEMO_RELEASE_BASE = "http://127.0.0.1:8790/"
+          # установщик обновления запускает новую версию через nsis_tauri_utils::RunAsUser — окружение собирается
+          # заново из реестра, поэтому адреса своего сервера — переменными пользователя, а не только этого процесса
+          foreach ($pair in @(@("AMEMO_UPDATE_URL", "http://127.0.0.1:8790/latest.json"), @("AMEMO_RELEASE_BASE", "http://127.0.0.1:8790/"))) {
+            [Environment]::SetEnvironmentVariable($pair[0], $pair[1], "User")
+            Set-Item "Env:$($pair[0])" $pair[1]
+          }
           Start-Process $env:APP_EXE -ArgumentList "--background" | Out-Null
           $done = $false
           for ($i = 0; $i -lt 120 -and -not $done; $i++) {
@@ -311,6 +315,7 @@ jobs:
             if ($i % 6 -eq 0) { Write-Output "через $($i * 5) с: приложение $installed, комплект $current, state.runtime $($state.runtime), /health $healthy" }
             $done = $installed -eq $nextApp -and $current -eq $next -and $state.runtime -eq $next -and $healthy
           }
+          foreach ($name in "AMEMO_UPDATE_URL", "AMEMO_RELEASE_BASE") { [Environment]::SetEnvironmentVariable($name, $null, "User") }
           if (-not $done) { throw "обновление до $nextApp не завершилось за 10 минут" }
           $after = & $amemo base --json | ConvertFrom-Json
           if ($after.base_id -ne $before.base_id) { throw "после обновления другая база: $($after.base_id), была $($before.base_id)" }
