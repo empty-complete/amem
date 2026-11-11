@@ -61,7 +61,8 @@ mod sys {
 
     /// Основной язык интерфейса Windows (LANGID & 0x3ff).
     pub fn ui_language() -> u16 {
-        unsafe { GetUserDefaultUILanguage() } & 0x3ff
+        let id = unsafe { GetUserDefaultUILanguage() };
+        id & 0x3ff
     }
 }
 
