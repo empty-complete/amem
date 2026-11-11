@@ -462,6 +462,34 @@ def test_move_record_to_a_folder(start, kb, store, docs):
             "/records/{ref}/folder", "patch")
 
 
+def test_move_records_as_a_list(start, kb, store, docs):
+    """Перенос списком: все записи одной транзакцией; ответ — прежние папки для отмены; неизвестная — ни одной."""
+    result = written(kb, store, docs, fact(key="bracket"), fact(ref="@b", key="anchor", label="Анкер M10"),
+                     agent=PERSON)
+    a, b = ref_of(result, 0), ref_of(result, 1)
+    person = start(person=True)
+    contract.check(person.patch(f"{V1}/records/{a}/folder", json={"folder": "Архив"}), "/records/{ref}/folder",
+                   "patch")
+    body = contract.check(person.post(f"{V1}/records/move", json={"refs": [a, b, a], "folder": "Проекты/Анкеры"}),
+                          "/records/move", "post")
+    assert body["count"] == 2
+    assert [(m["ref"], m["from"], m["to"]) for m in body["moved"]] == [(a, "Архив", "Проекты/Анкеры"),
+                                                                        (b, None, "Проекты/Анкеры")]
+    again = contract.check(person.post(f"{V1}/records/move", json={"refs": [a], "folder": "Проекты/Анкеры"}),
+                           "/records/move", "post")
+    assert again["count"] == 0 and again["moved"][0]["moved"] is False
+    problem(person.post(f"{V1}/records/move", json={"refs": [b, "atm:no_such"], "folder": None}), 404, "not_found",
+            "/records/move", "post")
+    folders_now = {r["ref"]: r["folder"] for r in
+                   contract.check(person.get(f"{V1}/records"), "/records")["items"]}
+    assert folders_now[b] == "Проекты/Анкеры"                          # отказ — ни одна запись не переехала
+    for bad in ({"refs": [a]}, {"folder": None}, {"refs": [], "folder": None}, {"refs": "a", "folder": None}):
+        problem(person.post(f"{V1}/records/move", json=bad), 400, "bad_request", "/records/move", "post")
+    model = start()
+    problem(model.post(f"{V1}/records/move", json={"refs": [a], "folder": "Новая"}), 404, "folder_not_found",
+            "/records/move", "post")
+
+
 # --- очередь: список, пункт, статистика ---
 
 @pytest.fixture

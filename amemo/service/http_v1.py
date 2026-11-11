@@ -409,6 +409,14 @@ async def move_record(request: Request) -> JSONResponse:
         conn, request.path_params["ref"], body["folder"], agent=request.state.agent)))
 
 
+async def move_records(request: Request) -> JSONResponse:
+    body = await _body(request)
+    if "folder" not in body or "refs" not in body:
+        raise problems.Problem(400, "bad_request", "тело: нужны refs — список ссылок и folder — путь папки или null")
+    return JSONResponse(await _call(request, lambda conn: api.records_folder(
+        conn, body["refs"], body["folder"], agent=request.state.agent)))
+
+
 # --- подборки ---
 
 def _bundle_links(made: dict) -> dict:
@@ -722,6 +730,7 @@ ROUTES = [
     Route(f"{API}/folders/{{path:path}}", delete_folder, methods=["DELETE"]),
     Route(f"{API}/folders/{{path:path}}", rename_folder, methods=["PATCH"]),
     Route(f"{API}/records", list_records, methods=["GET"]),
+    Route(f"{API}/records/move", move_records, methods=["POST"]),
     Route(f"{API}/records/{{ref}}", get_record, methods=["GET"]),
     Route(f"{API}/records/{{ref}}/history", get_history, methods=["GET"]),
     Route(f"{API}/records/{{ref}}/links", get_links, methods=["GET"]),

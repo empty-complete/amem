@@ -151,3 +151,53 @@
 .recfilters__sel {
   max-width: 14rem;
 }
+
+/* выбор нескольких записей: флажок слева от строки, полоса действий над списком */
+.rows > li:has(.row__chk) {
+  position: relative;
+}
+.rows > li:has(.row__chk) .row {
+  padding-left: calc(var(--s-md) + 18px);
+}
+.row__chk {
+  position: absolute;
+  top: 50%;
+  left: var(--s-xs);
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  translate: 0 -50%;
+  accent-color: var(--press);
+  opacity: 0.35;
+}
+.rows > li:hover .row__chk,
+.row__chk:focus-visible,
+.row__chk:checked,
+.rows:has(.row__chk:checked) .row__chk {
+  opacity: 1;
+}
+.rows > li[data-selected] .row {
+  background: var(--surface-secondary);
+}
+.selbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-xs);
+  margin: 0 0 var(--s-sm);
+  padding: var(--s-xs) var(--s-sm);
+  border-radius: var(--r-panel);
+  background: var(--surface);
+  box-shadow: var(--overlay-shadow);
+}
+.selbar__n {
+  font-size: var(--t-label);
+  font-weight: 500;
+}
+.selbar .spacer {
+  flex: 1;
+}

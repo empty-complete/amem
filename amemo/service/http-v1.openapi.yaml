@@ -175,6 +175,25 @@ paths:
           content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/LinkView" } } } }
         default: { $ref: "#/components/responses/Problem" }
 
+  /records/move:
+    post:
+      tags: [write]
+      operationId: moveRecords
+      summary: "folders.move списком: записи refs — в папку folder (null — без папки) одной транзакцией, все или ни одной; права — как у переноса одной записи; refs — не больше 2000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refs, folder]
+              properties:
+                refs: { type: array, items: { type: string }, minItems: 1, maxItems: 2000 }
+                folder: { type: [string, "null"] }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RecordsMoved" } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
   /records/{ref}/folder:
     patch:
       tags: [write]
@@ -1344,6 +1363,22 @@ components:
         state: { type: string, enum: [idle, checking, available, installing, ready, restarting, failed] }
         checked_at: { type: [string, "null"], format: date-time, description: "Последняя проверка релизов; null — ещё не было" }
         message: { type: string, description: "Словами: что произошло и что делать" }
+
+    RecordsMoved:
+      type: object
+      required: [moved, count]
+      properties:
+        moved:
+          type: array
+          items:
+            type: object
+            required: [ref, from, to, moved]
+            properties:
+              ref: { type: string }
+              from: { type: [string, "null"], description: Прежняя папка — для отмены }
+              to: { type: [string, "null"] }
+              moved: { type: boolean }
+        count: { type: integer, description: Сколько записей переехало }
 
     Selection:
       type: object

@@ -9,6 +9,11 @@ import type { components } from "../../api/schema";
 import { FileLink } from "../../ui/FileLink";
 import { Icon } from "../../ui/icons";
 import { type LangString, pickText } from "../../ui/lang";
+// форма открывается и из списка записей (выгрузка выбранного) — стили свои, не только со страницы «Подборки»
+import "../kinds/kinds.css";
+import "../review/review.css";
+import "../write/write.css";
+import "./bundles.css";
 
 type Status = components["schemas"]["Status"];
 const STATUSES: Status[] = ["verified", "auto_verified", "needs_review", "draft", "deprecated", "superseded"];
@@ -19,8 +24,9 @@ type Result = {
   report: string | null;
 };
 
-/** Экспорт (разд. 5.10): отбор, «с файлами», «с пакетами и моими видами», готовый отбор «Антология». */
-export function ExportForm() {
+/** Экспорт (разд. 5.10): отбор, «с файлами», «с пакетами и моими видами», готовый отбор «Антология».
+ * refs — выбранные в списке записи: отбор — ровно они (поля отбора скрыты), статусы — любые. */
+export function ExportForm({ refs }: { refs?: string[] } = {}) {
   const { t, i18n } = useTranslation();
   const kinds = useQuery(q.vocab("kind"));
   const classes = useQuery(q.vocab("entity_class"));
@@ -52,17 +58,19 @@ export function ExportForm() {
     try {
       const r = await api.POST("/bundles/export", {
         body: {
-          selection: {
-            tags: tags
-              .split(/[,\s]+/)
-              .map((x) => x.replace(/^#/, "").trim())
-              .filter(Boolean),
-            project: project || null,
-            kinds: kindSel,
-            entity_classes: classSel,
-            statuses: anthology ? ["verified"] : statuses,
-            since: since ? new Date(since).toISOString() : null,
-          },
+          selection: refs
+            ? { refs, statuses: [...STATUSES, "rejected"] }
+            : {
+                tags: tags
+                  .split(/[,\s]+/)
+                  .map((x) => x.replace(/^#/, "").trim())
+                  .filter(Boolean),
+                project: project || null,
+                kinds: kindSel,
+                entity_classes: classSel,
+                statuses: anthology ? ["verified"] : statuses,
+                since: since ? new Date(since).toISOString() : null,
+              },
           with_files: withFiles,
           // антология пакеты не копирует (служба отвечает 400): у получателя нужны те же пакеты
           with_packs: withPacks && !anthology,
@@ -138,72 +146,76 @@ export function ExportForm() {
           />
         </label>
       )}
-      <fieldset className="bgroup">
-        <legend>{t("bundles.selection")}</legend>
-        <label className="fl">
-          {t("bundles.tags")}
-          <input
-            className="fld"
-            value={tags}
-            onChange={(e) => setTags(e.target.value)}
-            placeholder={t("bundles.tags_ph")}
-          />
-        </label>
-        <label className="fl">
-          {t("bundles.project")}
-          <select className="fld" value={project} onChange={(e) => setProject(e.target.value)}>
-            <option value="">{t("bundles.any_project")}</option>
-            {projects.data?.map((p) => (
-              <option key={p.ref} value={p.ref}>
-                {p.label}
-              </option>
+      {refs ? (
+        <p className="bpicked">{t("bundles.picked", { count: refs.length })}</p>
+      ) : (
+        <fieldset className="bgroup">
+          <legend>{t("bundles.selection")}</legend>
+          <label className="fl">
+            {t("bundles.tags")}
+            <input
+              className="fld"
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              placeholder={t("bundles.tags_ph")}
+            />
+          </label>
+          <label className="fl">
+            {t("bundles.project")}
+            <select className="fld" value={project} onChange={(e) => setProject(e.target.value)}>
+              <option value="">{t("bundles.any_project")}</option>
+              {projects.data?.map((p) => (
+                <option key={p.ref} value={p.ref}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <fieldset className="fl fl--row">
+            <legend>{t("bundles.kinds")}</legend>
+            {kinds.data?.map((k) => (
+              <label key={k.code} className="chk">
+                <input
+                  type="checkbox"
+                  checked={kindSel.includes(k.code)}
+                  onChange={() => setKindSel(toggle(kindSel, k.code))}
+                />
+                {lab(k.label)}
+              </label>
             ))}
-          </select>
-        </label>
-        <fieldset className="fl fl--row">
-          <legend>{t("bundles.kinds")}</legend>
-          {kinds.data?.map((k) => (
-            <label key={k.code} className="chk">
-              <input
-                type="checkbox"
-                checked={kindSel.includes(k.code)}
-                onChange={() => setKindSel(toggle(kindSel, k.code))}
-              />
-              {lab(k.label)}
-            </label>
-          ))}
+          </fieldset>
+          <fieldset className="fl fl--row">
+            <legend>{t("bundles.classes")}</legend>
+            {classes.data?.map((k) => (
+              <label key={k.code} className="chk">
+                <input
+                  type="checkbox"
+                  checked={classSel.includes(k.code)}
+                  onChange={() => setClassSel(toggle(classSel, k.code))}
+                />
+                {lab(k.label)}
+              </label>
+            ))}
+          </fieldset>
+          <fieldset className="fl fl--row" disabled={anthology}>
+            <legend>{t("bundles.statuses")}</legend>
+            {STATUSES.map((s) => (
+              <label key={s} className="chk">
+                <input
+                  type="checkbox"
+                  checked={anthology ? s === "verified" : statuses.includes(s)}
+                  onChange={() => setStatuses(toggle(statuses, s))}
+                />
+                {t(`status.${s}`)}
+              </label>
+            ))}
+          </fieldset>
+          <label className="fl">
+            {t("bundles.since")}
+            <input className="fld" type="date" value={since} onChange={(e) => setSince(e.target.value)} />
+          </label>
         </fieldset>
-        <fieldset className="fl fl--row">
-          <legend>{t("bundles.classes")}</legend>
-          {classes.data?.map((k) => (
-            <label key={k.code} className="chk">
-              <input
-                type="checkbox"
-                checked={classSel.includes(k.code)}
-                onChange={() => setClassSel(toggle(classSel, k.code))}
-              />
-              {lab(k.label)}
-            </label>
-          ))}
-        </fieldset>
-        <fieldset className="fl fl--row" disabled={anthology}>
-          <legend>{t("bundles.statuses")}</legend>
-          {STATUSES.map((s) => (
-            <label key={s} className="chk">
-              <input
-                type="checkbox"
-                checked={anthology ? s === "verified" : statuses.includes(s)}
-                onChange={() => setStatuses(toggle(statuses, s))}
-              />
-              {t(`status.${s}`)}
-            </label>
-          ))}
-        </fieldset>
-        <label className="fl">
-          {t("bundles.since")}
-          <input className="fld" type="date" value={since} onChange={(e) => setSince(e.target.value)} />
-        </label>
-      </fieldset>
+      )}
       <label className="chk">
         <input type="checkbox" checked={withFiles} onChange={(e) => setWithFiles(e.target.checked)} />
         {t("bundles.with_files")}
