@@ -30,7 +30,7 @@ def world(pg, monkeypatch, store, docs):
     ], links=[{"rel": "see_also", "src": "@n", "dst": "@m"}], agent=PERSON)
     assert r.state == "approved", r.report
     refs = {rec["label"]: f"{'atm' if rec['target'] == 'atom' else 'ent'}:{rec['record_id']}" for rec in r.records}
-    note = next(ref for label, ref in refs.items() if label.endswith("(n)"))
+    note = refs["@n"]                      # ключ ответа check.submit — @имя записи в пачке
     folders.move(pg, note, "Проекты/Кампус", agent=PERSON)
     return pg, refs, note
 
@@ -63,7 +63,7 @@ def test_notes_by_folders_with_sources_and_links(world, store, tmp_path):
     assert json.loads(files[notes_md.MANIFEST])["counts"]["notes"] == 2
 
 
-def test_same_names_and_unsafe_signs(world, store, tmp_path):
+def test_same_names_and_unsafe_signs():
     names = notes_md._Names()
     assert names.place("А", "Б", ".md") == "А/Б.md"
     assert names.place("А", "б", ".md") == "А/б (2).md"                 # без учёта регистра, как в Windows
