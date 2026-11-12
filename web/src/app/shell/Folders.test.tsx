@@ -126,9 +126,12 @@ test("заметки в дереве: Ctrl добавляет к выбору, �
 test("Shift выбирает диапазон от прошлой выбранной, без Ctrl — заменяет выбор", async () => {
   const user = userEvent.setup();
   await renderWithApp(<Folders />);
-  await user.click(await within(nav()).findByRole("button", { name: /^Станция 2024/ }));
-  const inside = db.records.filter((r) => r.folder === "Архив/Станция 2024");
-  const links = await Promise.all(inside.map((r) => within(nav()).findByRole("link", { name: r.label })));
+  const station = await within(nav()).findByRole("button", { name: /^Станция 2024/ });
+  await user.click(station);
+  // заметки, которые дерево показывает в папке (заменённые версии в нём не стоят)
+  const box = station.closest("li") as HTMLElement;
+  await waitFor(() => expect(box.querySelectorAll("li[data-ref]").length).toBeGreaterThan(1));
+  const links = [...box.querySelectorAll<HTMLElement>("li[data-ref] a")];
   const first = links[0];
   const last = links[links.length - 1];
   if (!first || !last || first === last) throw new Error("нет образцов");

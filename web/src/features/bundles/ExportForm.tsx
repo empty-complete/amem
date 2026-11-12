@@ -47,7 +47,10 @@ function ReportButton({ href }: { href: string }) {
     setErr(null);
     const r = await apiFetch(href).catch((e: Error) => e);
     if (r instanceof Error || !r.ok) return setErr(t("bundles.report_failed"));
-    setHtml(await r.text());
+    // скрипты отчёта и так не исполнялись (служба отдаёт его с CSP sandbox): убираем, чтобы рамка не ругалась
+    const doc = new DOMParser().parseFromString(await r.text(), "text/html");
+    for (const el of doc.querySelectorAll("script")) el.remove();
+    setHtml(`<!doctype html>${doc.documentElement.outerHTML}`);
   };
   return (
     <>
