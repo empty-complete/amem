@@ -340,8 +340,12 @@ def import_(conn: psycopg.Connection, store, docs, root: Path, *, agent: str, dr
             proposals.append(Proposal("atom", {k: v for k, v in p.items() if v is not None}, current["record_id"]))
             counts["changed"] += 1
         else:
+            # «простыми словами» обязательно у атома (шаблон has_label): из шапки, иначе первый абзац, иначе
+            # название — как делает и редактор интерфейса
+            first = re.split(r"\n\s*\n", note["body"], maxsplit=1)[0].strip() if note["body"] else ""
+            plain = str(meta.get("summary") or meta.get("description") or "").strip() or first[:240] or note["title"]
             payload = {"ref": f"@n{len(proposals)}", "kind": str(meta.get("kind") or "note"),
-                       "label": {lang: note["title"]}, "basis": "author"}
+                       "label": {lang: note["title"]}, "summary_plain": {lang: plain}, "basis": "author"}
             if note["body"]:
                 payload["body"] = {lang: note["body"]}
             if note["tags"]:
