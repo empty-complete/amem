@@ -196,8 +196,10 @@ def export(conn: psycopg.Connection, *, store, out: Path, selection: bundle.Sele
                         oid = bundle._ref_uuid(s["object"])
                         o = objects.get(oid) or {}
                         rel = file_of.get((oid, s["object_version"]))
-                        page = s.get("page")
-                        ref = (f"[[{rel}{f'#page={page}' if page and rel.lower().endswith('.pdf') else ''}]]"
+                        # страница — только у PDF: у текста, таблицы, документа «стр. 1» ничего не говорит
+                        name = (rel or o.get("original_name") or "").lower()
+                        page = s.get("page") if name.endswith(".pdf") else None
+                        ref = (f"[[{rel}{f'#page={page}' if page else ''}]]"
                                if rel else o.get("url") or o.get("original_name") or s["object"])
                         where = f", {head[5]} {page}" if page else ""
                         quote = f" — «{s['quote']}»" if s.get("quote") else ""
@@ -240,8 +242,13 @@ def is_notes(root: Path) -> bool:
 
 
 def _notes(root: Path):
+    """Заметки загрузки: .md вне служебных папок; у выгрузки amemo (есть MANIFEST) .md в «Источники/» — файлы
+    источников, а не заметки."""
+    sources = {d[1] for d in DIRS.values()} if (root / MANIFEST).is_file() else set()
     for f in sorted(root.rglob("*.md")):
         rel = f.relative_to(root)
+        if rel.parts[0] in sources:
+            continue
         if f.is_file() and not f.is_symlink() and not any(p in SKIP_DIRS or p.startswith(".") for p in rel.parts):
             yield f, rel
 
@@ -333,8 +340,12 @@ def import_(conn: psycopg.Connection, store, docs, root: Path, *, agent: str, dr
             proposals.append(Proposal("atom", {k: v for k, v in p.items() if v is not None}, current["record_id"]))
             counts["changed"] += 1
         else:
+            # «простыми словами» обязательно у атома (шаблон has_label): из шапки, иначе первый абзац, иначе
+            # название — как делает и редактор интерфейса
+            first = re.split(r"\n\s*\n", note["body"], maxsplit=1)[0].strip() if note["body"] else ""
+            plain = str(meta.get("summary") or meta.get("description") or "").strip() or first[:240] or note["title"]
             payload = {"ref": f"@n{len(proposals)}", "kind": str(meta.get("kind") or "note"),
-                       "label": {lang: note["title"]}, "basis": "author"}
+                       "label": {lang: note["title"]}, "summary_plain": {lang: plain}, "basis": "author"}
             if note["body"]:
                 payload["body"] = {lang: note["body"]}
             if note["tags"]:
