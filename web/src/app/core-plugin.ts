@@ -1,12 +1,24 @@
 import { api, data } from "../api/client";
+import { NeighbourhoodWidget, SourceWidget } from "../features/record/side";
 import { settingsWindow } from "../features/settings/store";
 import { MOD } from "../ui/platform";
 import type { Plugin } from "./plugin";
 
-/** Ядро amemo — первый плагин оболочки: источник данных записей и команды; виджеты добавляются по частям B–F. */
+/** Ядро amemo — первый плагин оболочки: источник данных записей, команды и виджеты правой панели записи. */
 export const corePlugin: Plugin = {
   id: "amemo",
   title: { ru: "Ядро amemo", en: "amemo core" },
+  widgets: [
+    { id: "source", title: { ru: "Источник", en: "Source" }, slots: ["side"], component: SourceWidget },
+    {
+      id: "sky.record",
+      title: { ru: "Окрестность", en: "Neighbourhood" },
+      slots: ["side"],
+      component: NeighbourhoodWidget,
+      toggle: "sky.record",
+      panelClass: "side__panel--sky",
+    },
+  ],
   dataSources: [
     {
       id: "amemo.records",

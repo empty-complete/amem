@@ -55,3 +55,6 @@ export function setCorePlugin(id: CorePlugin, on: boolean) {
 
 /** Включён ли плагин ядра (по умолчанию — да). */
 export const useCorePlugin = (id: CorePlugin) => useSyncExternalStore(subscribe, () => !off.has(id));
+
+/** Выключенные плагины ядра — для мест, где виджеты отбираются по своему переключателю (Widget.toggle). */
+export const useCoreOff = () => useSyncExternalStore(subscribe, () => off as ReadonlySet<string>);

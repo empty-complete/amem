@@ -10,12 +10,17 @@ export interface WidgetProps {
   params?: Record<string, string>;
 }
 
-/** Виджет: часть экрана с объявленным контрактом (разд. 7.2 спецификации). */
+/** Виджет: часть экрана с объявленным контрактом (разд. 7.2 спецификации). Место side — вкладка правой панели
+ * записи: плагин добавляет свою вкладку, не трогая оболочку. */
 export interface Widget {
   id: string;
   title: Text;
   slots: Slot[];
   component: ComponentType<WidgetProps>;
+  /** Переключатель «Плагины ядра» в настройках: выключен — виджета нет; без него виджет всегда на месте. */
+  toggle?: string;
+  /** Класс панели виджета в своём месте (например, граф — на всю высоту без отступов). */
+  panelClass?: string;
 }
 
 export interface CommandContext {
