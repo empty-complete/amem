@@ -120,7 +120,7 @@ test("заметки в дереве: Ctrl добавляет к выбору, �
   await user.click(await screen.findByRole("menuitem", { name: /^Поделиться/ }));
   const dlg = await screen.findByRole("dialog", { name: "Поделиться заметками" });
   expect(within(dlg).getByText(/^В подборке 2 записи/)).toBeInTheDocument();
-  expect(within(dlg).getByRole("checkbox", { name: /файл/i })).toBeChecked();
+  expect(within(dlg).getByRole("checkbox", { name: /^Приложить исходные документы/ })).toBeChecked();
 });
 
 test("Shift выбирает диапазон от прошлой выбранной, без Ctrl — заменяет выбор", async () => {
