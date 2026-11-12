@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { MoveDialog } from "../../features/write/MoveDialog";
@@ -26,28 +26,39 @@ function MoveHarness({ recordRef }: { recordRef: string }) {
 
 const nav = () => screen.getByRole("navigation", { name: "Папки" });
 
-test("новая папка на месте; такая уже есть — словами", async () => {
+/** Правая кнопка по пустому месту панели — меню корня. */
+const rootMenu = () => {
+  const area = nav().querySelector(".ftree");
+  if (!area) throw new Error("нет дерева");
+  fireEvent.contextMenu(area);
+};
+
+test("новая папка — правой кнопкой по пустому месту; такая уже есть — словами", async () => {
   const user = userEvent.setup();
   await renderWithApp(<Folders />);
-  await user.click(await screen.findByRole("button", { name: "Папка" }));
+  await within(nav()).findByRole("button", { name: /^Архив/ });
+  rootMenu();
+  await user.click(await screen.findByRole("menuitem", { name: "Новая папка" }));
   await user.type(screen.getByRole("textbox", { name: "Имя новой папки" }), "Обходы{Enter}");
   expect(await within(nav()).findByRole("button", { name: /^Обходы/ })).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Папка" }));
+  rootMenu();
+  await user.click(await screen.findByRole("menuitem", { name: "Новая папка" }));
   await user.type(screen.getByRole("textbox", { name: "Имя новой папки" }), "Архив{Enter}");
   expect(await screen.findByRole("alert")).toHaveTextContent("Такая папка уже есть");
 });
 
-test("переименование переносит записи; непустую не удалить", async () => {
+test("переименование переносит записи; непустую не удалить — правой кнопкой по папке", async () => {
   const user = userEvent.setup();
   await renderWithApp(<Folders />);
-  await user.click(await screen.findByRole("button", { name: "Папка «Архив»: действия" }));
+  const archive = await within(nav()).findByRole("button", { name: /^Архив/ });
+  await user.pointer({ keys: "[MouseRight]", target: archive });
   await user.click(await screen.findByRole("menuitem", { name: "Переименовать" }));
   const input = screen.getByRole("textbox", { name: "Переименовать" });
   await user.clear(input);
   await user.type(input, "Старое{Enter}");
-  expect(await within(nav()).findByRole("button", { name: /^Старое/ })).toBeInTheDocument();
+  const old = await within(nav()).findByRole("button", { name: /^Старое/ });
   expect(db.records.filter((r) => r.folder?.startsWith("Старое")).length).toBe(2);
-  await user.click(screen.getByRole("button", { name: "Папка «Старое»: действия" }));
+  await user.pointer({ keys: "[MouseRight]", target: old });
   await user.click(await screen.findByRole("menuitem", { name: "Удалить" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("В папке есть записи");
 });
@@ -63,11 +74,18 @@ test("«Переместить в папку» уходит сразу; «Отм
   await waitFor(() => expect(db.records.find((r) => r.ref === ref)?.folder).toBeNull());
 });
 
-test("папка раскрывается в панели: внутри её записи, без вложенных; значок справа — списком", async () => {
+test("папка раскрывается в панели: внутри её записи и вложенные; записи без папки — в корне под папками", async () => {
   const user = userEvent.setup();
   await renderWithApp(<Folders />);
   const inside = db.records.filter((r) => r.folder === "Архив/Станция 2024");
   expect(inside.length).toBeGreaterThan(0);
+  // без папки — сразу в корне, без раздела «Без папки» и без «Показать ещё»
+  const loose = db.records.filter((r) => !r.folder);
+  expect(loose.length).toBeGreaterThan(0);
+  for (const r of loose.slice(0, 3))
+    expect(await within(nav()).findByRole("link", { name: r.label })).toBeInTheDocument();
+  expect(within(nav()).queryByRole("button", { name: /^Без папки/ })).not.toBeInTheDocument();
+  expect(within(nav()).queryByRole("button", { name: "Показать ещё" })).not.toBeInTheDocument();
   // в самой «Архив» записей нет — они во вложенной папке
   await user.click(await within(nav()).findByRole("button", { name: /^Архив/ }));
   expect(await within(nav()).findByText("Пусто")).toBeInTheDocument();
@@ -77,10 +95,6 @@ test("папка раскрывается в панели: внутри её з�
   expect(station).toHaveAttribute("aria-expanded", "true");
   for (const r of inside)
     expect(await within(nav()).findByRole("link", { name: r.label })).toBeInTheDocument();
-  expect(within(nav()).getByRole("link", { name: "«Станция 2024» списком" })).toHaveAttribute(
-    "href",
-    expect.stringContaining("folder="),
-  );
   await user.click(station);
   for (const r of inside)
     expect(within(nav()).queryByRole("link", { name: r.label })).not.toBeInTheDocument();
@@ -107,4 +121,31 @@ test("заметки в дереве: Ctrl добавляет к выбору, �
   const dlg = await screen.findByRole("dialog", { name: "Поделиться заметками" });
   expect(within(dlg).getByText(/^Выбрано 2 записи/)).toBeInTheDocument();
   expect(within(dlg).getByRole("checkbox", { name: /файл/i })).toBeChecked();
+});
+
+test("Shift выбирает диапазон от прошлой выбранной, без Ctrl — заменяет выбор", async () => {
+  const user = userEvent.setup();
+  await renderWithApp(<Folders />);
+  const station = await within(nav()).findByRole("button", { name: /^Станция 2024/ });
+  // раскрытость папок живёт на устройстве и переходит из теста в тест: раскрываем, только если свёрнута
+  if (station.getAttribute("aria-expanded") !== "true") await user.click(station);
+  // заметки, которые дерево показывает в папке (заменённые версии в нём не стоят)
+  const box = station.closest("li") as HTMLElement;
+  await waitFor(() => expect(box.querySelectorAll("li[data-ref]").length).toBeGreaterThan(1));
+  const labels = [...box.querySelectorAll<HTMLElement>("li[data-ref] a")].map((a) => a.textContent ?? "");
+  const first = labels[0];
+  const last = labels[labels.length - 1];
+  if (!first || !last || first === last) throw new Error("нет образцов");
+  // после щелчка роутер перерисовывает дерево — ссылку ищем заново по имени
+  const link = (name: string) => within(nav()).getByRole("link", { name });
+  await user.click(link(first));
+  await user.keyboard("{Shift>}");
+  await user.click(link(last));
+  await user.keyboard("{/Shift}");
+  expect(nav().querySelectorAll("li[data-picked]")).toHaveLength(labels.length);
+  // новый Shift-щелчок без Ctrl — новый диапазон вместо прежнего
+  await user.keyboard("{Shift>}");
+  await user.click(link(first));
+  await user.keyboard("{/Shift}");
+  expect(nav().querySelectorAll("li[data-picked]")).toHaveLength(1);
 });

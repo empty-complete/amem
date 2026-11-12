@@ -8,9 +8,11 @@ export const Route = createFileRoute("/new")({
     kind: z.string().optional().catch(undefined),
     related: z.string().optional().catch(undefined),
     issue: z.string().optional().catch(undefined),
+    // папка новой записи из меню дерева: путь или «-» — корень; без него — из настроек
+    folder: z.string().optional().catch(undefined),
   }),
   component: function NewRoute() {
     const s = Route.useSearch();
-    return <NewRecord about={s.about} kind={s.kind} related={s.related} issue={s.issue} />;
+    return <NewRecord about={s.about} kind={s.kind} related={s.related} issue={s.issue} folder={s.folder} />;
   },
 });

@@ -4,12 +4,14 @@ import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { ApiError, errorText } from "../../api/errors";
 import { q } from "../../api/queries";
+import { ColumnGrip } from "../../ui/ColumnGrip";
 import { formatValue, unitLabel } from "../../ui/format";
 import { KindChip } from "../../ui/KindChip";
 import { type LangString, langString, pickText } from "../../ui/lang";
 import { RegionState } from "../../ui/RegionState";
 import { HistoryList } from "../record/Widgets";
 import { kindLabel, RecordRow, recordPath } from "../records/RecordList";
+import { useCorePlugin } from "../settings/store";
 import { Sky } from "../sky/Sky";
 import { useSubmit } from "../write/useSubmit";
 import { CardTable, ExtraValues, type Fill, usePropertyName } from "./CardTable";
@@ -80,6 +82,7 @@ function Atoms({ entityRef }: { entityRef: string }) {
 /** Страница объекта (разд. 5.5): путь по part_of, полнота карточки профиля, состояния полей; атомы и история. */
 export function CardPage({ entityRef }: { entityRef: string }) {
   const { t, i18n } = useTranslation();
+  const graph = useCorePlugin("sky.entity");
   const rec = useQuery(q.record(entityRef));
   const card = useQuery(q.card(entityRef));
   const classes = useQuery(q.vocab("entity_class"));
@@ -177,7 +180,7 @@ export function CardPage({ entityRef }: { entityRef: string }) {
   const desc = payload?.description ? pickText(payload.description, i18n.language) : "";
 
   return (
-    <div className="entitypage">
+    <div className="entitypage" data-graph={graph || undefined}>
       <article className="entity" aria-labelledby="ent-title">
         <div className="note__bar">
           {ancestors.length > 0 && (
@@ -245,9 +248,23 @@ export function CardPage({ entityRef }: { entityRef: string }) {
           </Tabs.Panel>
         </Tabs>
       </article>
-      <aside className="entity__side" aria-label={t("sky.widget")}>
-        <Sky centerRef={entityRef} height="var(--entity-sky-h)" />
-      </aside>
+      {/* граф — плагин ядра: выключен в настройках — колонки нет, карточка на всю ширину */}
+      {graph && (
+        <>
+          <ColumnGrip
+            name="--entity-side-w"
+            label={t("side.width")}
+            min={280}
+            max={900}
+            initial={420}
+            side="left"
+            className="entitygrip"
+          />
+          <aside className="entity__side" aria-label={t("sky.widget")}>
+            <Sky centerRef={entityRef} height="var(--entity-sky-h)" />
+          </aside>
+        </>
+      )}
     </div>
   );
 }

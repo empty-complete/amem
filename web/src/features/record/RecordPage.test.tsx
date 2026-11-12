@@ -99,3 +99,31 @@ test("источник — диапазон листа: панель показ�
   expect(await within(panel).findByRole("tab", { name: "В-2" })).toBeInTheDocument();
   expect(within(panel).queryByText(/превью нет/)).not.toBeInTheDocument();
 });
+
+test("правая панель: вкладки — виджеты места side; плагин добавляет свою, выключенный плагин ядра пропадает", async () => {
+  const { registry } = await import("../../app/registry-instance");
+  const { setCorePlugin } = await import("../settings/store");
+  if (!registry.plugins.has("test.side"))
+    registry.register({
+      id: "test.side",
+      widgets: [
+        {
+          id: "test.side.notes",
+          title: { ru: "Пометки", en: "Notes" },
+          slots: ["side"],
+          component: ({ recordRef }) => <p>пометки к {recordRef}</p>,
+        },
+      ],
+    });
+  setCorePlugin("sky.record", false);
+  try {
+    const user = userEvent.setup();
+    await renderWithApp(<RecordPage recordRef={A3} view="human" />, `/atom/${A3}`);
+    const tabs = await screen.findByRole("tablist", { name: "Источник и окрестность" });
+    expect(within(tabs).queryByRole("tab", { name: "Окрестность" })).not.toBeInTheDocument();
+    await user.click(within(tabs).getByRole("tab", { name: "Пометки" }));
+    expect(await screen.findByText(`пометки к ${A3}`)).toBeInTheDocument();
+  } finally {
+    setCorePlugin("sky.record", true);
+  }
+});

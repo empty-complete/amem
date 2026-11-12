@@ -1,14 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-test("антология: собрать, ссылки на zip и HTML-отчёт", async ({ page }) => {
+test("антология: собрать, HTML-отчёт в окне приложения", async ({ page }) => {
   await page.goto("./bundles");
   await page.getByRole("checkbox", { name: /Антология: проверенное и предпочтительное/ }).check();
   await page.getByRole("textbox", { name: "Заголовок отчёта" }).fill("Датчики");
   await page.getByRole("button", { name: "Собрать подборку" }).click();
   await expect(page.getByRole("heading", { name: /Подборка собрана/ })).toBeVisible();
-  const report = await page.getByRole("link", { name: "Открыть отчёт" }).getAttribute("href");
-  const html = await page.evaluate(async (u) => (await fetch(u as string)).text(), report);
-  expect(html).toContain("<h1>Датчики</h1>");
+  await page.getByRole("button", { name: "Открыть отчёт" }).click();
+  const frame = page.getByRole("dialog", { name: "Отчёт подборки" }).frameLocator("iframe");
+  await expect(frame.getByRole("heading", { level: 1, name: "Датчики" })).toBeVisible();
 });
 
 test("импорт: проверка → пробный импорт → влить; пункты импорта — в проверке", async ({ page }) => {

@@ -124,6 +124,48 @@ export async function openAuthed(url: string, opts: { download?: boolean } = {})
   return true;
 }
 
+type Writable = WritableStream<Uint8Array> & {
+  write: (b: Blob) => Promise<void>;
+  close: () => Promise<void>;
+};
+type SavePicker = (o: { suggestedName?: string }) => Promise<{ createWritable: () => Promise<Writable> }>;
+
+const download = (href: string, name: string) => {
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = name;
+  a.click();
+};
+
+/** Сохранить файл API туда, куда выберет человек: окно «Сохранить как» (File System Access — Chromium и WebView2
+ * приложения), иначе — обычная загрузка в «Загрузки». name — имя по умолчанию; без него — из ответа службы.
+ * Отмена окна — не ошибка. */
+export async function saveFile(url: string, name?: string): Promise<void> {
+  const pick = (window as unknown as { showSaveFilePicker?: SavePicker }).showSaveFilePicker;
+  if (!pick && !token) return download(url, name ?? "");
+  const choose = async (suggestedName: string) => {
+    try {
+      return await pick?.call(window, { suggestedName });
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return "cancel" as const;
+      return undefined; // окно недоступно (например, истекло действие человека) — обычная загрузка
+    }
+  };
+  // окно выбора — сразу по щелчку: браузер открывает его только в ответ на действие человека
+  const early = name ? await choose(name) : undefined;
+  if (early === "cancel") return;
+  const r = await globalThis.fetch(url, { headers: authHeaders(), credentials: "same-origin" });
+  if (r.status === 401) return auth.require();
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  const fileName = name ?? nameFrom(r.headers.get("content-disposition")) ?? "amemo-file";
+  const handle = early ?? (await choose(fileName));
+  if (handle === "cancel") return;
+  if (handle && r.body) return r.body.pipeTo(await handle.createWritable());
+  const href = URL.createObjectURL(await r.blob());
+  download(href, fileName);
+  setTimeout(() => URL.revokeObjectURL(href), 60_000);
+}
+
 /** Имя файла из Content-Disposition: filename* (UTF-8) важнее простого filename. */
 export function nameFrom(cd: string | null): string | undefined {
   if (!cd) return undefined;

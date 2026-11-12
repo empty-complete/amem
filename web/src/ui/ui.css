@@ -83,7 +83,7 @@
 .colgrip {
   position: absolute;
   top: 0;
-  right: -4px;
+  right: -6px;
   bottom: 0;
   z-index: 5;
   width: 8px;
@@ -113,6 +113,10 @@
   .colgrip {
     display: none;
   }
+}
+.colgrip[data-side="left"] {
+  right: auto;
+  left: -6px;
 }
 
 /* список-плашка в строке фильтров (PillSelect) */

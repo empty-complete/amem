@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("папки и «Все записи»", async ({ page, isMobile }) => {
+test("папки: запись из дерева, папка списком из меню", async ({ page, isMobile }) => {
   await page.goto("./records");
   await expect(page.getByRole("heading", { level: 1, name: "Все записи" })).toBeVisible();
   await expect(page.getByRole("link", { name: /Диапазон температуры Т-1/ })).toBeVisible();
@@ -24,8 +24,9 @@ test("папки и «Все записи»", async ({ page, isMobile }) => {
     await expect(nav).toBeHidden();
     await menu.click();
   }
-  // широкий список — по значку справа от папки
-  await nav.getByRole("link", { name: "«Архив» списком" }).click();
+  // широкий список — правой кнопкой по папке, «Открыть списком»
+  await nav.getByRole("button", { name: /^Архив/ }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Открыть списком" }).click();
   await expect(page).toHaveURL(/folder=/);
   await expect(page.getByRole("heading", { level: 1, name: "Архив" })).toBeVisible();
   await expect(page.getByRole("main").getByRole("link", { name: /Корпус МС-1 из алюминия/ })).toBeVisible();
@@ -64,4 +65,24 @@ test("язык меняется в настройках и переживает 
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+});
+
+test("окно настроек: Ctrl+, разделы и поиск; небо на главной выключается как плагин ядра", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "клавиши — на компьютере");
+  await page.goto("./");
+  await page.keyboard.press("Control+Comma");
+  const win = page.getByRole("dialog", { name: "Настройки" });
+  await expect(win.getByRole("button", { name: "Общие" })).toHaveAttribute("aria-current", "page");
+  await win.getByRole("searchbox", { name: "Поиск по настройкам" }).fill("папк");
+  await expect(win.getByRole("textbox", { name: "Куда класть новые записи" })).toBeVisible();
+  await win.getByRole("searchbox", { name: "Поиск по настройкам" }).fill("");
+  await win.getByRole("button", { name: "Плагины ядра" }).click();
+  await win.getByRole("switch", { name: "Небо на главной" }).uncheck();
+  await win.getByRole("button", { name: "Закрыть" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Все записи" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 1, name: "Все записи" })).toBeVisible();
 });

@@ -18,7 +18,6 @@
     "forward": "Forward"
   },
   "folders": {
-    "as_list": "“{{name}}” as a list",
     "empty": "Empty",
     "moved_many_one": "{{count}} record moved to “{{to}}”",
     "moved_many_few": "{{count}} records moved to “{{to}}”",
@@ -28,17 +27,22 @@
     "all": "All records",
     "tags": "Tags",
     "unfiled": "No folder",
-    "new": "Folder",
+    "new": "New folder",
     "moved": "Moved to “{{to}}”",
     "rename": "Rename",
     "delete": "Delete",
-    "new_inside": "Folder inside",
+    "new_inside": "New folder inside",
     "new_name": "New folder name",
     "menu": "Folder “{{name}}”: actions",
     "move_to": "Move to folder",
     "move_title": "Move to",
     "drag": "Drag onto a folder on the left",
-    "width": "Folder panel width"
+    "width": "Folder panel width",
+    "new_note": "New note",
+    "open_list": "Open as list",
+    "all_list": "All records as list",
+    "collapse": "Collapse all folders",
+    "root_menu": "Folder panel: actions"
   },
   "records": {
     "empty": "Nothing here yet. Agents write to the base over MCP, and you can write the first note.",
@@ -137,7 +141,31 @@
     "new_in": "Where new records go",
     "new_in_root": "Empty — the root",
     "new_in_hint": "A folder path, as in Obsidian, e.g. “Inbox” or “Projects/Campus”. Empty means the root. A missing folder appears with the first note. Agents' records go to the root.",
-    "base_unnamed": "unnamed"
+    "base_unnamed": "unnamed",
+    "s_general": "General",
+    "s_appearance": "Appearance",
+    "s_files": "Files and links",
+    "s_hotkeys": "Hotkeys",
+    "s_core": "Core plugins",
+    "s_about": "About the service",
+    "sections": "Settings sections",
+    "search": "Search settings",
+    "nothing": "No such setting",
+    "open": "Settings",
+    "key_edit": "Read ⇄ edit a record",
+    "key_save": "Save",
+    "key_search": "Search",
+    "key_collapse": "Collapse all folders",
+    "core": {
+      "sky.home": "Sky on the home page",
+      "sky.record": "Neighbourhood on a record",
+      "sky.entity": "Graph on the object page"
+    },
+    "core_hint": {
+      "sky.home": "Off — the home page opens the list of all records.",
+      "sky.record": "The Neighbourhood tab in the record's right panel.",
+      "sky.entity": "The graph column on the object page."
+    }
   },
   "theme": {
     "system": "Match system",
@@ -529,7 +557,8 @@
     "t_hr": "Divider",
     "k_save": "save",
     "k_source": "source",
-    "k_leave": "leave"
+    "k_leave": "leave",
+    "new_where": "Where the new note goes"
   },
   "quick": {
     "title": "New record",
@@ -819,7 +848,9 @@
     "step1": "1. File",
     "step2": "2. Inspect",
     "step3": "3. Dry run",
-    "step4": "4. Merge"
+    "step4": "4. Merge",
+    "report_failed": "The report did not open — build the bundle again",
+    "report_title": "Bundle report"
   },
   "content": {
     "formula": "Formula",
