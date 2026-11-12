@@ -554,7 +554,8 @@
     "t_hr": "Divider",
     "k_save": "save",
     "k_source": "source",
-    "k_leave": "leave"
+    "k_leave": "leave",
+    "new_where": "Where the new note goes"
   },
   "quick": {
     "title": "New record",
