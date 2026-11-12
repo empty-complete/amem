@@ -127,7 +127,8 @@ test("Shift выбирает диапазон от прошлой выбранн
   const user = userEvent.setup();
   await renderWithApp(<Folders />);
   const station = await within(nav()).findByRole("button", { name: /^Станция 2024/ });
-  await user.click(station);
+  // раскрытость папок живёт на устройстве и переходит из теста в тест: раскрываем, только если свёрнута
+  if (station.getAttribute("aria-expanded") !== "true") await user.click(station);
   // заметки, которые дерево показывает в папке (заменённые версии в нём не стоят)
   const box = station.closest("li") as HTMLElement;
   await waitFor(() => expect(box.querySelectorAll("li[data-ref]").length).toBeGreaterThan(1));
