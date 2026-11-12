@@ -1,13 +1,11 @@
 import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
-import { useTranslation } from "react-i18next";
 import { Folders } from "../app/shell/Folders";
 import { SignIn } from "../app/shell/SignIn";
 import { TopBar } from "../app/shell/TopBar";
 import { useKindsOpen } from "../features/kinds/store";
 import { ReloadBanner } from "../features/updates/ReloadBanner";
 import { UndoToasts } from "../features/write/UndoToast";
-import { ColumnGrip } from "../ui/ColumnGrip";
 import "../app/shell/shell.css";
 
 const KindDrawer = lazy(() =>
@@ -24,21 +22,6 @@ function KindsLazy() {
   ) : null;
 }
 
-/** Край панели папок: тянется мышью или стрелками, ширина запоминается. */
-function FoldersGrip() {
-  const { t } = useTranslation();
-  return (
-    <ColumnGrip
-      name="--folders-w"
-      label={t("folders.width")}
-      min={180}
-      max={520}
-      initial={248}
-      className="foldersgrip"
-    />
-  );
-}
-
 export const Route = createRootRoute({
   component: () => (
     <div className="shell">
@@ -46,7 +29,6 @@ export const Route = createRootRoute({
       <ReloadBanner />
       <div className="body">
         <Folders />
-        <FoldersGrip />
         <main className="main" id="main">
           <div className="main__in">
             <Outlet />

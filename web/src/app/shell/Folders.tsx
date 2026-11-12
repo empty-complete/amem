@@ -29,6 +29,7 @@ import { ExportForm } from "../../features/bundles/ExportForm";
 import { recordPath } from "../../features/records/RecordList";
 import { MoveDialog } from "../../features/write/MoveDialog";
 import { useMoveRecord, useMoveRecords } from "../../features/write/move";
+import { ColumnGrip } from "../../ui/ColumnGrip";
 import { Icon } from "../../ui/icons";
 import { applyTheme, readTheme, resolveTheme } from "../theme";
 import { collapseAll, treePick, useOpen, useTreePick } from "./folderTree";
@@ -511,6 +512,16 @@ export function Folders() {
         : t("folders.root_menu");
   return (
     <nav id="folders" className="folders" aria-label={t("folders.title")} data-open={menuOpen || undefined}>
+      {/* край панели — внутри панели (ориентир страницы), но держится за сетку .body: у .folders нет position,
+          поэтому прокрутка панели его не двигает и не обрезает, а курсор не попадает на полосу прокрутки */}
+      <ColumnGrip
+        name="--folders-w"
+        label={t("folders.width")}
+        min={180}
+        max={520}
+        initial={248}
+        className="foldersgrip"
+      />
       {/* дерево, как в Obsidian: папки, под ними — записи без папки; правая кнопка по пустому месту — новая
           заметка, папка, импорт; перетаскивание сюда — в корень */}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: правая кнопка по пустому месту — сокращение мышью; с клавиатуры то же — клавишей меню (Shift+F10) */}

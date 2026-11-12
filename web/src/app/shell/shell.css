@@ -165,7 +165,7 @@ kbd {
   min-height: 0;
 }
 /* край панели папок — поверх сетки, а не внутри прокрутки: курсор не попадает на полосу прокрутки */
-.body > .colgrip.foldersgrip {
+.folders > .colgrip.foldersgrip {
   right: auto;
   left: calc(var(--folders-w, 248px) - 4px);
 }
@@ -181,8 +181,8 @@ kbd {
   padding: var(--s-lg) var(--s-xl) var(--s-xl);
 }
 
+/* без position: край панели (.foldersgrip) отсчитывается от .body и не прокручивается вместе с панелью */
 .folders {
-  position: relative;
   overflow: auto;
   padding: var(--s-md) var(--s-sm);
   border-right: 1px solid var(--separator);

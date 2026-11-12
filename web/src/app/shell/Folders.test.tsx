@@ -123,24 +123,24 @@ test("заметки в дереве: Ctrl добавляет к выбору, �
   expect(within(dlg).getByRole("checkbox", { name: /файл/i })).toBeChecked();
 });
 
-test("Shift выбирает диапазон от открытой заметки, Ctrl+Shift добавляет", async () => {
+test("Shift выбирает диапазон от прошлой выбранной, без Ctrl — заменяет выбор", async () => {
   const user = userEvent.setup();
   await renderWithApp(<Folders />);
-  const loose = db.records.filter((r) => !r.folder);
-  const links = await Promise.all(
-    loose.slice(0, 4).map((r) => within(nav()).findByRole("link", { name: r.label })),
-  );
-  const order = [...nav().querySelectorAll<HTMLElement>(".frecs--root [data-ref]")].map(
-    (el) => el.dataset.ref,
-  );
-  const [a, , c] = links;
-  if (!a || !c) throw new Error("нет образцов");
-  const ia = order.indexOf(a.closest("li")?.dataset.ref);
-  const ic = order.indexOf(c.closest("li")?.dataset.ref);
-  await user.click(a);
+  await user.click(await within(nav()).findByRole("button", { name: /^Станция 2024/ }));
+  const inside = db.records.filter((r) => r.folder === "Архив/Станция 2024");
+  const links = await Promise.all(inside.map((r) => within(nav()).findByRole("link", { name: r.label })));
+  const first = links[0];
+  const last = links[links.length - 1];
+  if (!first || !last || first === last) throw new Error("нет образцов");
+  await user.click(first);
   await user.keyboard("{Shift>}");
-  await user.click(c);
+  await user.click(last);
   await user.keyboard("{/Shift}");
   const picked = [...nav().querySelectorAll<HTMLElement>("li[data-picked]")].map((el) => el.dataset.ref);
-  expect(picked).toEqual(order.slice(Math.min(ia, ic), Math.max(ia, ic) + 1));
+  expect(picked).toHaveLength(links.length);
+  // новый Shift-щелчок без Ctrl — новый диапазон вместо прежнего
+  await user.keyboard("{Shift>}");
+  await user.click(first);
+  await user.keyboard("{/Shift}");
+  expect(nav().querySelectorAll("li[data-picked]")).toHaveLength(1);
 });
