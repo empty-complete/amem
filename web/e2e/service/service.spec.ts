@@ -11,6 +11,8 @@ function watch(page: Page) {
     if (m.type() !== "error") return;
     const where = m.location().url;
     if (/favicon/.test(where)) return;
+    // рамка отчёта изолирована (sandbox без скриптов): браузер пишет это, когда сам Playwright пытается в неё войти
+    if (/^Blocked script execution in 'about:srcdoc'/.test(m.text())) return;
     problems.push(`${m.text()} @ ${where}`);
   });
   page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
