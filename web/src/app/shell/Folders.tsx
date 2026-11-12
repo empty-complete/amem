@@ -27,10 +27,12 @@ import { q } from "../../api/queries";
 import type { components } from "../../api/schema";
 import { ExportForm } from "../../features/bundles/ExportForm";
 import { recordPath } from "../../features/records/RecordList";
+import { settingsWindow } from "../../features/settings/store";
 import { MoveDialog } from "../../features/write/MoveDialog";
 import { useMoveRecord, useMoveRecords } from "../../features/write/move";
 import { ColumnGrip } from "../../ui/ColumnGrip";
 import { Icon } from "../../ui/icons";
+import { MOD } from "../../ui/platform";
 import { applyTheme, readTheme, resolveTheme } from "../theme";
 import { collapseAll, treePick, useOpen, useTreePick } from "./folderTree";
 import { menuStore, useMenuOpen } from "./menu";
@@ -555,12 +557,22 @@ export function Folders() {
         </ul>
         <TreeRecords folder="-" onMenu={setMenu} />
       </div>
+      {/* низ панели, как в Obsidian: импорт и настройки (окно с разделами) */}
       <div className="folders__actions">
-        {/* импорт подборки, которую прислали: заметки вместе с исходными файлами */}
         <Link className="newf" to="/bundles" search={{ tab: "import" } as never}>
           <Icon name="inbox" size={12} />
           {t("tree.import")}
         </Link>
+        <button
+          type="button"
+          className="newf folders__settings"
+          aria-label={t("settings.open")}
+          title={`${t("settings.open")}, ${MOD}+,`}
+          onClick={() => settingsWindow.open()}
+        >
+          <Icon name="user" size={12} />
+          {t("settings.open")}
+        </button>
       </div>
       <PointMenu
         at={menu?.at ?? null}
@@ -604,10 +616,10 @@ export function Folders() {
           </Link>
         </li>
         <li>
-          <Link to="/settings">
+          <button type="button" className="frow-btn" onClick={() => settingsWindow.open()}>
             <Icon name="user" />
             <span>{t("nav.settings")}</span>
-          </Link>
+          </button>
         </li>
         <li>
           <button type="button" className="frow-btn" onClick={toggleTheme}>
