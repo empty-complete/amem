@@ -81,7 +81,7 @@ export function SearchResults({ params }: { params: SearchParams }) {
                         </span>
                       </span>
                     </span>
-                    <span className="side">
+                    <span className="row__side">
                       <StatusText status={h.status} />
                     </span>
                   </Link>

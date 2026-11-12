@@ -1,7 +1,9 @@
 import { Button } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 import { useTranslation } from "react-i18next";
+import { apiFetch } from "../../api/auth";
 import { api } from "../../api/client";
 import type { ApiError } from "../../api/errors";
 import { q } from "../../api/queries";
@@ -23,6 +25,67 @@ type Result = {
   download: string;
   report: string | null;
 };
+
+/** Имя zip по умолчанию — как у службы (api._filename): заголовок без опасных знаков, иначе amemo-<id>. */
+const zipName = (title: string, id: string) => {
+  const name = title
+    .normalize("NFC")
+    .replace(/[^\p{L}\p{N} \-_.()]/gu, "_")
+    .replace(/\s+/g, " ")
+    .replace(/_+/g, "_")
+    .replace(/^[ ._]+|[ ._]+$/g, "");
+  return `${name || `amemo-${id}`}.zip`;
+};
+
+/** Отчёт подборки — в окне приложения, а не в новом окне (в приложении его нет): HTML службы без скриптов,
+ * в изолированной рамке. */
+function ReportButton({ href }: { href: string }) {
+  const { t } = useTranslation();
+  const [html, setHtml] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const open = async () => {
+    setErr(null);
+    const r = await apiFetch(href).catch((e: Error) => e);
+    if (r instanceof Error || !r.ok) return setErr(t("bundles.report_failed"));
+    setHtml(await r.text());
+  };
+  return (
+    <>
+      <Button variant="ghost" onPress={() => void open()}>
+        <Icon name="external" />
+        {t("bundles.report")}
+      </Button>
+      {err && (
+        <span className="fielderr" role="alert">
+          {err}
+        </span>
+      )}
+      <ModalOverlay
+        isOpen={html != null}
+        onOpenChange={(o) => !o && setHtml(null)}
+        isDismissable
+        className="modal-overlay"
+      >
+        <Modal className="modal modal--wide">
+          <Dialog className="modal__in report" aria-label={t("bundles.report_title")}>
+            <Heading slot="title">{t("bundles.report_title")}</Heading>
+            <iframe
+              className="report__frame"
+              title={t("bundles.report_title")}
+              sandbox=""
+              srcDoc={html ?? ""}
+            />
+            <div className="editor__foot">
+              <Button slot="close" variant="ghost" onPress={() => setHtml(null)}>
+                {t("window.close")}
+              </Button>
+            </div>
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+    </>
+  );
+}
 
 /** Экспорт (разд. 5.10): отбор, «с файлами», «с пакетами и моими видами», готовый отбор «Антология».
  * refs — выбранные в списке записи: отбор — ровно они (поля отбора скрыты), статусы — любые. */
@@ -104,15 +167,10 @@ export function ExportForm({ refs, share = false }: { refs?: string[]; share?: b
           })}
         </p>
         <div className="editor__foot">
-          <FileLink className="pillbtn" href={res.download} download>
+          <FileLink className="pillbtn" href={res.download} download={zipName(title, res.id)}>
             {t("bundles.download")}
           </FileLink>
-          {res.report && (
-            <FileLink className="navlink" href={res.report} target="_blank" rel="noreferrer">
-              <Icon name="external" />
-              {t("bundles.report")}
-            </FileLink>
-          )}
+          {res.report && <ReportButton href={res.report} />}
           <Button variant="ghost" onPress={() => setRes(null)}>
             {t("bundles.again")}
           </Button>

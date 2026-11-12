@@ -36,6 +36,8 @@ export interface RecordEditorProps {
   onRejected?: (d: Draft, issues: FieldIssues) => void;
   /** Связи, которые добавить к новой записи (например, «Записать своё рядом» → see_also). */
   extraLinks?: { src: string; dst: string; rel: string }[];
+  /** Папка новой записи («» — корень); без неё — из настроек. */
+  folder?: string;
 }
 
 /** Команды оформления: панель над текстом и меню по правой кнопке — один список. */
@@ -204,6 +206,7 @@ export function RecordEditor(p: RecordEditorProps) {
         kind: d.kind,
         about,
         family: tpl?.family === "source" ? "source" : "work",
+        folder: p.folder,
         onDone: () => dropDraft(p.draftKey),
         onIssues: (list, message) => {
           const f = issuesToFields(list, tpl);

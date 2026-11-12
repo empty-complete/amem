@@ -16,7 +16,6 @@
     "sections": "Sections"
   },
   "folders": {
-    "as_list": "“{{name}}” as a list",
     "empty": "Empty",
     "moved_many_one": "{{count}} record moved to “{{to}}”",
     "moved_many_few": "{{count}} records moved to “{{to}}”",
@@ -26,17 +25,22 @@
     "all": "All records",
     "tags": "Tags",
     "unfiled": "No folder",
-    "new": "Folder",
+    "new": "New folder",
     "moved": "Moved to “{{to}}”",
     "rename": "Rename",
     "delete": "Delete",
-    "new_inside": "Folder inside",
+    "new_inside": "New folder inside",
     "new_name": "New folder name",
     "menu": "Folder “{{name}}”: actions",
     "move_to": "Move to folder",
     "move_title": "Move to",
     "drag": "Drag onto a folder on the left",
-    "width": "Folder panel width"
+    "width": "Folder panel width",
+    "new_note": "New note",
+    "open_list": "Open as list",
+    "all_list": "All records as list",
+    "collapse": "Collapse all folders",
+    "root_menu": "Folder panel: actions"
   },
   "records": {
     "empty": "Nothing here yet. Agents write to the base over MCP, and you can write the first note.",
@@ -789,7 +793,9 @@
     "step1": "1. File",
     "step2": "2. Inspect",
     "step3": "3. Dry run",
-    "step4": "4. Merge"
+    "step4": "4. Merge",
+    "report_failed": "The report did not open — build the bundle again",
+    "report_title": "Bundle report"
   },
   "content": {
     "formula": "Formula",
