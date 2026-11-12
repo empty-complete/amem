@@ -852,7 +852,13 @@
     "notes_counts": "Markdown notes: {{notes}}. Exported from amemo: {{with_id}} — they update the same records, the rest become new notes.",
     "notes_skipped": "Exported objects skipped: {{n}} — edit them in amemo.",
     "report_failed": "The report did not open — build the bundle again",
-    "report_title": "Bundle report"
+    "report_title": "Bundle report",
+    "format": "Format",
+    "format_markdown": "Markdown notes",
+    "format_markdown_hint": "Folders and .md files, as in Obsidian; source files keep their names. Notes can be uploaded back.",
+    "format_bundle": "amemo bundle",
+    "format_bundle_hint": "For another amemo base: records with their review history, links and kinds — imported whole.",
+    "md_counts": "{{notes}} notes · {{objects}} objects · {{files}} files"
   },
   "content": {
     "formula": "Formula",

@@ -852,7 +852,13 @@
     "notes_counts": "Заметки Markdown: {{notes}}. Выгружены из amemo: {{with_id}} — обновят те же записи, остальные станут новыми заметками.",
     "notes_skipped": "Объекты выгрузки пропущены: {{n}} — их правят в amemo.",
     "report_failed": "Отчёт не открылся — соберите подборку ещё раз",
-    "report_title": "Отчёт подборки"
+    "report_title": "Отчёт подборки",
+    "format": "Формат",
+    "format_markdown": "Заметки Markdown",
+    "format_markdown_hint": "Папки и .md-файлы, как в Obsidian; файлы источников — под своими именами. Заметки можно загрузить обратно.",
+    "format_bundle": "Подборка amemo",
+    "format_bundle_hint": "Для другой базы amemo: записи с историей проверки, связи и виды — импортом целиком.",
+    "md_counts": "{{notes}} заметок · {{objects}} объектов · {{files}} файлов"
   },
   "content": {
     "formula": "Формула",
