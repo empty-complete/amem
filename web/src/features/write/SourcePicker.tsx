@@ -1,21 +1,24 @@
 import { Button } from "@heroui/react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useRef, useState } from "react";
 import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "../../api/auth";
 import { ApiError } from "../../api/errors";
-import { contentUrl, q } from "../../api/queries";
+import { contentUrl, type ObjectType, q } from "../../api/queries";
 import type { components } from "../../api/schema";
 import { AuthedImg } from "../../ui/FileLink";
 import { Icon } from "../../ui/icons";
 import { RegionState } from "../../ui/RegionState";
+import { MarkdownView, SelectQuote, SlidesView } from "../source/FileViews";
+import { fileKind, useSheetNames } from "../source/kind";
 import { SheetPreview } from "../source/SheetPreview";
 import { fileType } from "../source/SourcePanel";
 import { TextFragment } from "../source/TextFragment";
 import type { DraftSource } from "./proposal";
 
 const PdfPage = lazy(() => import("../source/PdfPage"));
+const DocxView = lazy(() => import("../source/DocxView"));
 type Obj = components["schemas"]["ObjectView"];
 
 /** Загрузка файла: служба кладёт его в папку документов; тот же файл — тот же объект (200). */
@@ -96,7 +99,10 @@ export function SourcePicker({
   const [page, setPage] = useState(1);
   const [quote, setQuote] = useState("");
   const [place, setPlace] = useState<{ type: string; value: string }[]>([]);
-  const list = useQuery({ ...q.objects(text), enabled: open && !obj });
+  const [type, setType] = useState<ObjectType | undefined>(undefined);
+  const list = useInfiniteQuery({ ...q.objectPages(text, type), enabled: open && !obj });
+  const found = list.data?.pages.flatMap((p) => p.items) ?? [];
+  const [slide, setSlide] = useState(1);
   const fileInput = useRef<HTMLInputElement>(null);
   const last = obj?.versions[obj.versions.length - 1];
   const reset = () => {
@@ -104,12 +110,19 @@ export function SourcePicker({
     setQuote("");
     setPlace([]);
     setPage(1);
+    setSlide(1);
     setErr(null);
   };
+  const kind = obj ? fileKind(obj) : null;
+  const sheets = useSheetNames(obj?.id ?? "", kind === "sheet" ? last?.n : undefined, obj?.sheets);
   const done = () => {
     if (!obj || !last) return;
-    const pdf = obj.media_type === "application/pdf";
-    const selectors = pdf ? [{ type: "page", value: String(page) }] : place;
+    const selectors =
+      kind === "pdf"
+        ? [{ type: "page", value: String(page) }]
+        : kind === "slides"
+          ? [{ type: "slide", value: String(slide) }]
+          : place;
     onPick({
       object: obj.id,
       object_name: obj.original_name,
@@ -121,15 +134,6 @@ export function SourcePicker({
     reset();
     onClose();
   };
-  const kind = !obj
-    ? null
-    : obj.media_type === "application/pdf"
-      ? "pdf"
-      : obj.sheets?.length
-        ? "sheet"
-        : obj.media_type?.startsWith("image/")
-          ? "image"
-          : "text";
 
   return (
     <ModalOverlay
@@ -184,11 +188,27 @@ export function SourcePicker({
                   }}
                 />
               </div>
+              {/* biome-ignore lint/a11y/useSemanticElements: строка выбора рода файла, не поля формы */}
+              <div className="rfilters" role="group" aria-label={t("pick.types")}>
+                {([undefined, "pdf", "sheet", "doc", "slides", "image"] as const).map((k) => (
+                  <button
+                    key={k ?? "all"}
+                    type="button"
+                    className="chipbtn"
+                    aria-pressed={type === k}
+                    onClick={() => setType(k)}
+                  >
+                    {t(`pick.t_${k ?? "all"}`)}
+                  </button>
+                ))}
+              </div>
               {list.isPending ? (
                 <RegionState state="loading" />
+              ) : !found.length ? (
+                <p className="muted">{t("pick.nothing")}</p>
               ) : (
                 <ul className="pick__list">
-                  {list.data?.items.map((o) => (
+                  {found.map((o) => (
                     <li key={o.id}>
                       <button type="button" className="cite" onClick={() => setObj(o)}>
                         <span className="ft" aria-hidden="true">
@@ -201,6 +221,17 @@ export function SourcePicker({
                       </button>
                     </li>
                   ))}
+                  {list.hasNextPage && (
+                    <li className="rows__more">
+                      <Button
+                        variant="ghost"
+                        isDisabled={list.isFetchingNextPage}
+                        onPress={() => void list.fetchNextPage()}
+                      >
+                        {list.isFetchingNextPage ? t("records.loading_more") : t("records.more")}
+                      </Button>
+                    </li>
+                  )}
                 </ul>
               )}
             </>
@@ -242,13 +273,14 @@ export function SourcePicker({
                   </Suspense>
                 </>
               )}
-              {kind === "sheet" && last && (
+              {kind === "sheet" && last && sheets.pending && <RegionState state="loading" />}
+              {kind === "sheet" && last && !sheets.pending && (
                 <>
                   <p className="muted">{t("pick.range_hint")}</p>
                   <SheetPreview
                     id={obj.id}
                     version={last.n}
-                    sheets={obj.sheets ?? []}
+                    sheets={sheets.names}
                     cited={[]}
                     onPick={(sheet, range) =>
                       setPlace([
@@ -267,7 +299,7 @@ export function SourcePicker({
                         setPlace([
                           {
                             type: "sheet",
-                            value: place.find((p) => p.type === "sheet")?.value ?? obj.sheets?.[0] ?? "",
+                            value: place.find((p) => p.type === "sheet")?.value ?? sheets.names[0] ?? "",
                           },
                           { type: "range", value: e.target.value.toUpperCase() },
                         ])
@@ -302,7 +334,50 @@ export function SourcePicker({
                   </div>
                 </>
               )}
-              {(kind === "pdf" || kind === "text") && (
+              {kind === "docx" && last && (
+                <>
+                  <p className="muted">{t("pick.select_hint")}</p>
+                  <div className="pick__preview">
+                    <SelectQuote onQuote={setQuote}>
+                      <Suspense fallback={<RegionState state="loading" />}>
+                        <DocxView
+                          url={contentUrl(obj.id, last.n)}
+                          quotes={quote ? [quote] : []}
+                          fallback={
+                            <TextFragment id={obj.id} version={last.n} quotes={quote ? [quote] : []} />
+                          }
+                        />
+                      </Suspense>
+                    </SelectQuote>
+                  </div>
+                </>
+              )}
+              {kind === "md" && last && (
+                <>
+                  <p className="muted">{t("pick.select_hint")}</p>
+                  <div className="pick__preview">
+                    <SelectQuote onQuote={setQuote}>
+                      <MarkdownView id={obj.id} version={last.n} quotes={quote ? [quote] : []} />
+                    </SelectQuote>
+                  </div>
+                </>
+              )}
+              {kind === "slides" && last && (
+                <>
+                  <p className="muted">{t("pick.select_hint")}</p>
+                  <div className="pick__preview">
+                    <SlidesView
+                      id={obj.id}
+                      version={last.n}
+                      slide={slide}
+                      onSlide={setSlide}
+                      quotes={quote ? [quote] : []}
+                      onSelectText={setQuote}
+                    />
+                  </div>
+                </>
+              )}
+              {kind !== "sheet" && kind !== "image" && (
                 <label className="pick__quote">
                   {t("pick.quote")}
                   <textarea

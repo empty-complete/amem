@@ -1,4 +1,4 @@
-"""Текст xlsx и docx: страницы, числа как в ячейке, защита от DOCTYPE и больших файлов (без базы)."""
+"""Текст xlsx, docx и pptx: страницы, числа как в ячейке, защита от DOCTYPE и больших файлов (без базы)."""
 import datetime
 import zipfile
 
@@ -184,3 +184,46 @@ def test_xlsx_cell_and_text_limits(tmp_path, monkeypatch):
     monkeypatch.undo()
     monkeypatch.setattr(extract, "MAX_TEXT_CHARS", 3)
     assert extract.xlsx_pages(path) is None
+
+
+def make_pptx(path, slides, order=None):
+    """Минимальный pptx: slides — список слайдов, слайд — список абзацев (строка или список прогонов, «\\n» — a:br);
+    order — порядок показа по номерам частей slideN.xml (по умолчанию как есть)."""
+    ns = ('xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+          'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" '
+          'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"')
+
+    def para(x):
+        runs = x if isinstance(x, list) else [x]
+        return "<a:p>" + "".join("<a:br/>" if r == "\n" else f"<a:r><a:t>{r}</a:t></a:r>" for r in runs) + "</a:p>"
+
+    order = order or list(range(1, len(slides) + 1))
+    with zipfile.ZipFile(path, "w") as zf:
+        ids = "".join(f'<p:sldId id="{255 + i}" r:id="rId{n}"/>' for i, n in enumerate(order, 1))
+        zf.writestr("ppt/presentation.xml", f"<p:presentation {ns}><p:sldIdLst>{ids}</p:sldIdLst></p:presentation>")
+        rels = "".join(f'<Relationship Id="rId{n}" Target="slides/slide{n}.xml"/>' for n in order)
+        zf.writestr("ppt/_rels/presentation.xml.rels",
+                    f'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{rels}'
+                    "</Relationships>")
+        for n, paras in enumerate(slides, 1):
+            body = "".join(para(x) for x in paras)
+            zf.writestr(f"ppt/slides/slide{n}.xml",
+                        f"<p:sld {ns}><p:cSld><p:spTree><p:sp><p:txBody>{body}</p:txBody></p:sp>"
+                        "</p:spTree></p:cSld></p:sld>")
+    return path
+
+
+def test_pptx_slides_in_show_order(tmp_path):
+    f = make_pptx(tmp_path / "п.pptx", [["Первый", ["Нагрузка ", "0,3 кПа"]], ["Второй", ["строка", "\n", "ниже"]]],
+                  order=[2, 1])
+    assert extract.pptx_pages(f) == ["Второй\nстрока\nниже", "Первый\nНагрузка 0,3 кПа"]
+    assert extract_pages(f) == extract.pptx_pages(f)
+
+
+def test_pptx_nothing_to_read(tmp_path):
+    assert extract.pptx_pages(make_pptx(tmp_path / "пусто.pptx", [[], []])) is None
+    (tmp_path / "битая.pptx").write_bytes(b"PK\x03\x04 not a deck")
+    assert extract.pptx_pages(tmp_path / "битая.pptx") is None
+    with zipfile.ZipFile(tmp_path / "без.pptx", "w") as zf:
+        zf.writestr("ppt/presentation.xml", "<!DOCTYPE p [<!ENTITY e 'x'>]><p/>")
+    assert extract.pptx_pages(tmp_path / "без.pptx") is None

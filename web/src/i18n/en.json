@@ -298,7 +298,10 @@
     "full": "Full screen",
     "full_exit": "Exit full screen",
     "docx": "Document",
-    "this_record": "this record"
+    "this_record": "this record",
+    "slide": "slide {{n}}",
+    "slide_of": "Slide {{n}} of {{count}}",
+    "no_slides": "The slides have no text"
   },
   "card": {
     "tab_card": "Card",
@@ -557,7 +560,15 @@
     "quote": "Quote: verbatim, within one page",
     "done": "Done",
     "other": "Another file",
-    "take": "Use this"
+    "take": "Use this",
+    "types": "File type",
+    "t_all": "All",
+    "t_pdf": "PDF",
+    "t_sheet": "Spreadsheets",
+    "t_doc": "Documents",
+    "t_slides": "Slides",
+    "t_image": "Images",
+    "nothing": "Nothing found"
   },
   "kinds": {
     "title": "My kinds",

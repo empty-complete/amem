@@ -362,3 +362,19 @@ blockquote.quote {
   color: inherit;
   border-radius: 2px;
 }
+
+/* файл Markdown — отрисованным, на поверхности, как текст источника */
+.mdfile {
+  padding: var(--s-md);
+  background: var(--surface);
+  border-radius: var(--radius);
+}
+/* презентация — слайд карточкой, стрелки над ним */
+.slides {
+  display: grid;
+  gap: var(--s-xs);
+}
+.slides__card .textfrag {
+  min-height: 12rem;
+  box-shadow: var(--surface-shadow);
+}

@@ -13,7 +13,7 @@ by_locator  цитаты нет, страница найдена по локат
 unresolved  цитаты нет, локатор не помог
 not_found   цитата не найдена — новый атом не записывается
 no_file     путь похож на файл, но файла нет — новый атом не записывается
-no_text     у файла нет текста: скан без OCR, .doc, .pptx, повреждённый или слишком большой файл …
+no_text     у файла нет текста: скан без OCR, .doc, .ppt, повреждённый или слишком большой файл …
 external    источник — название, а не файл (письмо, сайт)
 error       сбой при чтении или сверке файла (ошибка PyMuPDF и т. п.) — фоновая сверка его больше не повторяет,
             заново — check-sources --all
@@ -135,6 +135,8 @@ def extract_text(file: Path) -> Extracted:
         return Extracted(extract.xlsx_pages(file))
     if suffix == ".docx":
         return Extracted(extract.docx_pages(file))
+    if suffix == ".pptx":
+        return Extracted(extract.pptx_pages(file))
     if suffix != ".pdf":
         return Extracted(None)
     import pymupdf
