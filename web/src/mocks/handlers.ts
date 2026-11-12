@@ -54,6 +54,26 @@ export const handlers = [
       next_cursor: next,
     });
   }),
+  // подсказки при наборе: часть названия без учёта регистра; пустой запрос — первые записи
+  http.get("/api/v1/suggest", ({ request }) => {
+    const url = new URL(request.url);
+    const text = (url.searchParams.get("q") ?? "")
+      .trim()
+      .replace(/^[@#[]+/, "")
+      .toLowerCase();
+    const target = url.searchParams.get("target");
+    const limit = Number(url.searchParams.get("limit") ?? 8);
+    const rows = db.records
+      .filter((r) => !target || r.target === target)
+      .filter((r) => !text || r.label.toLowerCase().includes(text))
+      .sort(
+        (a, b) =>
+          Number(b.label.toLowerCase().startsWith(text)) - Number(a.label.toLowerCase().startsWith(text)),
+      )
+      .slice(0, limit)
+      .map((r) => ({ ref: r.ref, target: r.target, kind_or_class: r.kind_or_class, label: r.label }));
+    return HttpResponse.json(rows);
+  }),
   http.get("/api/v1/search", async ({ request }) => {
     await delay(150);
     const url = new URL(request.url);

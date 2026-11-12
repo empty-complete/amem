@@ -83,8 +83,13 @@ test("правка: «Суть» — строка свойств; правая �
   await body.press("ControlOrMeta+a");
   await body.click({ button: "right" });
   const menu = page.getByRole("menu", { name: "Оформление" });
-  await expect(menu.getByRole("menuitem")).toHaveCount(11);
-  await menu.getByRole("menuitem", { name: /^Жирный/ }).click();
+  // как в Obsidian: «Добавить ссылку», «Формат ▸», «Абзац ▸», «Вставить ▸», буфер обмена
+  await expect(menu.getByRole("menuitem", { name: "Добавить ссылку" })).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Формат" }).hover();
+  await page
+    .getByRole("menu", { name: "Формат" })
+    .getByRole("menuitem", { name: /^Жирный/ })
+    .click();
   await expect(menu).toBeHidden();
   await expect(body).toHaveText("**проверить растяжки**");
   // панели кнопок нет, как в Obsidian: оформление — меню по правой кнопке и клавиши

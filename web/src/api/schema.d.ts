@@ -507,6 +507,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/suggest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Подсказки при наборе (@объект, [[запись, поле «О чём»): часть названия без учёта регистра; пустой q — последние изменённые */
+        get: operations["getSuggest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tags": {
         parameters: {
             query?: never;
@@ -1169,6 +1186,13 @@ export interface components {
             report: Record<string, never>;
             /** @description Предупреждения службы: private_removed — скрытое в <private> вырезано из поля; secret_like — строка поля похожа на секрет (запись не отклоняется, значения в предупреждении нет) */
             warnings?: components["schemas"]["CheckIssue"][];
+        };
+        SuggestItem: {
+            ref: string;
+            /** @enum {string} */
+            target: "atom" | "entity";
+            kind_or_class: string;
+            label: string;
         };
         TagCount: {
             tag: string;
@@ -2424,6 +2448,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VocabEntry"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSuggest: {
+        parameters: {
+            query?: {
+                q?: string;
+                target?: "atom" | "entity";
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuggestItem"][];
                 };
             };
             default: components["responses"]["Problem"];

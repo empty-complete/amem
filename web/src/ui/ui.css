@@ -118,3 +118,56 @@
   right: auto;
   left: -6px;
 }
+
+/* список-плашка в строке фильтров (PillSelect) */
+.pillsel {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--surface-secondary);
+  color: var(--ink-2);
+  font-size: var(--t-meta);
+  transition: background-color var(--dur-micro) var(--ease);
+}
+.pillsel:hover {
+  background: var(--surface-tertiary);
+}
+.pillsel[data-on] {
+  background: var(--select);
+  color: var(--foreground);
+  font-weight: 500;
+}
+.pillsel select {
+  appearance: none;
+  min-width: 0;
+  max-width: 12rem;
+  height: 100%;
+  padding: 0 calc(var(--s-sm) + 12px) 0 var(--s-sm);
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.pillsel select:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.pillsel option,
+.pillsel optgroup {
+  background: var(--surface);
+  color: var(--foreground);
+  font-weight: 400;
+}
+.pillsel__chev {
+  position: absolute;
+  right: var(--s-xs);
+  rotate: 90deg;
+  color: var(--muted);
+  pointer-events: none;
+}

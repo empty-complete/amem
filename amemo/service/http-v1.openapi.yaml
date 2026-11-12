@@ -593,6 +593,19 @@ paths:
           content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/VocabEntry" } } } }
         default: { $ref: "#/components/responses/Problem" }
 
+  /suggest:
+    get:
+      tags: [read]
+      operationId: getSuggest
+      summary: "Подсказки при наборе (@объект, [[запись, поле «О чём»): часть названия без учёта регистра; пустой q — последние изменённые"
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: target, in: query, schema: { type: string, enum: [atom, entity] } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 8 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/SuggestItem" } } } } }
+        default: { $ref: "#/components/responses/Problem" }
+
   /tags:
     get:
       tags: [read]
@@ -1247,6 +1260,16 @@ components:
         queued: { type: array, items: { type: object }, description: "Пункты очереди: id, reason, label (как CheckIssue.ref), ref, record_id" }
         report: { type: object, description: "Отчёт amem.check/1" }
         warnings: { type: array, items: { $ref: "#/components/schemas/CheckIssue" }, description: "Предупреждения службы: private_removed — скрытое в <private> вырезано из поля; secret_like — строка поля похожа на секрет (запись не отклоняется, значения в предупреждении нет)" }
+
+    SuggestItem:
+      type: object
+      required: [ref, target, kind_or_class, label]
+      additionalProperties: false
+      properties:
+        ref: { type: string }
+        target: { type: string, enum: [atom, entity] }
+        kind_or_class: { type: string }
+        label: { type: string }
 
     TagCount:
       type: object

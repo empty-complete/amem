@@ -1,12 +1,24 @@
 import { Button } from "@heroui/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Dialog, Heading, Menu, MenuItem, Modal, ModalOverlay, Popover } from "react-aria-components";
+import {
+  Dialog,
+  Heading,
+  Keyboard,
+  Menu,
+  MenuItem,
+  Modal,
+  ModalOverlay,
+  Popover,
+  Separator,
+  SubmenuTrigger,
+} from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { api, data } from "../../api/client";
 import { q } from "../../api/queries";
 import { Icon } from "../../ui/icons";
 import { langString, pickText } from "../../ui/lang";
+import { MOD } from "../../ui/platform";
 import { RegionState } from "../../ui/RegionState";
 import { documentToRecord, recordToDocument } from "../record/doc";
 import type { BodyEditorApi, Suggest } from "./BodyEditor";
@@ -40,33 +52,69 @@ export interface RecordEditorProps {
   folder?: string;
 }
 
-/** Команды оформления: панель над текстом и меню по правой кнопке — один список. */
-const TOOLS: { key: string; label: string; text: string; run: (e: BodyEditorApi) => void }[] = [
-  { key: "h1", label: "edit.t_h1", text: "H1", run: (e) => e.heading(1) },
-  { key: "h2", label: "edit.t_h2", text: "H2", run: (e) => e.heading(2) },
-  { key: "h3", label: "edit.t_h3", text: "H3", run: (e) => e.heading(3) },
-  { key: "b", label: "edit.t_bold", text: "B", run: (e) => e.wrap("**") },
-  { key: "i", label: "edit.t_italic", text: "I", run: (e) => e.wrap("*") },
-  { key: "code", label: "edit.t_code", text: "</>", run: (e) => e.wrap("`") },
-  { key: "quote", label: "edit.t_quote", text: "❝", run: (e) => e.line("> ") },
-  { key: "list", label: "edit.t_list", text: "•", run: (e) => e.line("- ") },
-  { key: "olist", label: "edit.t_olist", text: "1.", run: (e) => e.line("1. ") },
-  { key: "link", label: "edit.t_link", text: "[[ ]]", run: (e) => e.wrap("[[", "]]") },
-  { key: "math", label: "edit.t_math", text: "∑", run: (e) => e.wrap("$") },
-];
+type Cmd = { key: string; label: string; keys?: string; run: (e: BodyEditorApi) => void };
 
-/** Меню оформления в точке щелчка: React Aria Menu (стрелки, Enter, Esc) у невидимой опоры. */
+/** Команды меню по правой кнопке — как в Obsidian: ссылка, «Формат», «Абзац», «Вставить», буфер обмена. */
+const FORMAT: Cmd[] = [
+  { key: "b", label: "edit.t_bold", keys: "B", run: (e) => e.wrap("**") },
+  { key: "i", label: "edit.t_italic", keys: "I", run: (e) => e.wrap("*") },
+  { key: "s", label: "edit.t_strike", run: (e) => e.wrap("~~") },
+  { key: "hl", label: "edit.t_highlight", run: (e) => e.wrap("==") },
+  { key: "code", label: "edit.t_code", run: (e) => e.wrap("`") },
+  { key: "math", label: "edit.t_math", run: (e) => e.wrap("$") },
+];
+const PARAGRAPH: Cmd[] = [
+  { key: "h1", label: "edit.t_h1", run: (e) => e.heading(1) },
+  { key: "h2", label: "edit.t_h2", run: (e) => e.heading(2) },
+  { key: "h3", label: "edit.t_h3", run: (e) => e.heading(3) },
+  { key: "list", label: "edit.t_list", run: (e) => e.line("- ") },
+  { key: "olist", label: "edit.t_olist", run: (e) => e.line("1. ") },
+  { key: "task", label: "edit.t_task", run: (e) => e.line("- [ ] ") },
+  { key: "quote", label: "edit.t_quote", run: (e) => e.line("> ") },
+];
+const INSERT: Cmd[] = [
+  { key: "wiki", label: "edit.t_link", keys: "K", run: (e) => e.wrap("[[", "]]") },
+  { key: "mathblock", label: "edit.t_mathblock", run: (e) => e.insert("\n$$\n\n$$\n") },
+  { key: "table", label: "edit.t_table", run: (e) => e.insert("\n| | |\n|---|---|\n| | |\n") },
+  { key: "hr", label: "edit.t_hr", run: (e) => e.insert("\n---\n") },
+];
+const ALL = [...FORMAT, ...PARAGRAPH, ...INSERT];
+
+/** Меню в точке правого щелчка: React Aria Menu с подменю (стрелки, Enter, Esc) у невидимой опоры. */
 function FormatMenu({
   at,
+  hasSelection,
   onClose,
   onPick,
 }: {
   at: { x: number; y: number } | null;
+  hasSelection: boolean;
   onClose: () => void;
   onPick: (key: string) => void;
 }) {
   const { t } = useTranslation();
   const anchor = useRef<HTMLSpanElement>(null);
+  const item = (c: Cmd) => (
+    <MenuItem key={c.key} id={c.key} textValue={t(c.label)} className="palette__opt ctxmenu__opt">
+      <span className="palette__label">{t(c.label).replace(/, .*$/, "")}</span>
+      {c.keys && <Keyboard className="palette__meta">{`${MOD}${c.keys}`}</Keyboard>}
+    </MenuItem>
+  );
+  const sub = (id: string, label: string, list: Cmd[]) => (
+    <SubmenuTrigger>
+      <MenuItem id={id} textValue={label} className="palette__opt ctxmenu__opt">
+        <span className="palette__label">{label}</span>
+        <span className="palette__meta" aria-hidden="true">
+          ›
+        </span>
+      </MenuItem>
+      <Popover className="palette ctxmenu" offset={-4}>
+        <Menu aria-label={label} className="palette__list" onAction={(k) => onPick(String(k))}>
+          {list.map(item)}
+        </Menu>
+      </Popover>
+    </SubmenuTrigger>
+  );
   return (
     <>
       <span ref={anchor} aria-hidden="true" className="ctx__anchor" style={{ left: at?.x, top: at?.y }} />
@@ -82,20 +130,56 @@ function FormatMenu({
           aria-label={t("edit.toolbar")}
           autoFocus="first"
           className="palette__list"
+          disabledKeys={hasSelection ? [] : ["cut", "copy"]}
           onAction={(k) => onPick(String(k))}
         >
-          {TOOLS.map((x) => (
-            <MenuItem key={x.key} id={x.key} textValue={t(x.label)} className="palette__opt ctxmenu__opt">
-              <span className="palette__label">{t(x.label)}</span>
-              <span className="palette__meta" aria-hidden="true">
-                {x.text}
-              </span>
-            </MenuItem>
-          ))}
+          <MenuItem id="wiki" textValue={t("edit.m_link")} className="palette__opt ctxmenu__opt">
+            <span className="palette__label">{t("edit.m_link")}</span>
+            <Keyboard className="palette__meta">{`${MOD}K`}</Keyboard>
+          </MenuItem>
+          <Separator className="ctxmenu__sep" />
+          {sub("format", t("edit.m_format"), FORMAT)}
+          {sub("paragraph", t("edit.m_paragraph"), PARAGRAPH)}
+          {sub("insert", t("edit.m_insert"), INSERT)}
+          <Separator className="ctxmenu__sep" />
+          <MenuItem id="cut" textValue={t("edit.m_cut")} className="palette__opt ctxmenu__opt">
+            <span className="palette__label">{t("edit.m_cut")}</span>
+            <Keyboard className="palette__meta">{`${MOD}X`}</Keyboard>
+          </MenuItem>
+          <MenuItem id="copy" textValue={t("edit.m_copy")} className="palette__opt ctxmenu__opt">
+            <span className="palette__label">{t("edit.m_copy")}</span>
+            <Keyboard className="palette__meta">{`${MOD}C`}</Keyboard>
+          </MenuItem>
+          <MenuItem id="paste" textValue={t("edit.m_paste")} className="palette__opt ctxmenu__opt">
+            <span className="palette__label">{t("edit.m_paste")}</span>
+            <Keyboard className="palette__meta">{`${MOD}V`}</Keyboard>
+          </MenuItem>
+          <MenuItem id="all" textValue={t("edit.m_all")} className="palette__opt ctxmenu__opt">
+            <span className="palette__label">{t("edit.m_all")}</span>
+            <Keyboard className="palette__meta">{`${MOD}A`}</Keyboard>
+          </MenuItem>
         </Menu>
       </Popover>
     </>
   );
+}
+
+/** Команда меню над редактором: оформление, вставка, буфер обмена. */
+async function runMenu(key: string, e: BodyEditorApi) {
+  const cmd = ALL.find((c) => c.key === key);
+  if (cmd) return cmd.run(e);
+  if (key === "all") return e.selectAll();
+  if (key === "copy" || key === "cut") {
+    await navigator.clipboard?.writeText(e.selection()).catch(() => undefined);
+    if (key === "cut") e.insert("");
+    else e.focus();
+    return;
+  }
+  if (key === "paste") {
+    const text = await navigator.clipboard?.readText().catch(() => "");
+    if (text) e.insert(text);
+    else e.focus();
+  }
 }
 
 /** Правка записи (разд. 5.4) — тот же экран, что чтение: заголовок, вид, свойства, тело, источники. */
@@ -343,12 +427,12 @@ export function RecordEditor(p: RecordEditorProps) {
               </Suspense>
               <FormatMenu
                 at={menu}
+                hasSelection={!!menu && !!editor.current?.selection()}
                 onClose={() => setMenu(null)}
                 onPick={(k) => {
                   setMenu(null);
-                  const tool = TOOLS.find((x) => x.key === k);
                   // после закрытия меню: фокус и выделение возвращаются в текст
-                  requestAnimationFrame(() => editor.current && tool?.run(editor.current));
+                  requestAnimationFrame(() => editor.current && void runMenu(k, editor.current));
                 }}
               />
               {issues?.body && (
@@ -379,7 +463,10 @@ export function RecordEditor(p: RecordEditorProps) {
         <Button variant="ghost" onPress={cancel}>
           {t("edit.cancel")}
         </Button>
-        <span className="muted editor__keys">{t("edit.keys")}</span>
+        <span className="editor__keys">
+          <kbd>{MOD}Enter</kbd> {t("edit.k_save")} <kbd>{MOD}\\</kbd> {t("edit.k_source")} <kbd>Esc</kbd>{" "}
+          {t("edit.k_leave")}
+        </span>
       </div>
 
       <ModalOverlay isOpen={asking} onOpenChange={setAsking} isDismissable className="modal-overlay">

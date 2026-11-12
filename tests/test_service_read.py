@@ -747,3 +747,15 @@ def test_backups(serve, tmp_path):
     assert body == [{"name": "2026-11-05T08-00-00Z", "created_at": "2026-11-05T08:00:00+00:00", "size": 7},
                     {"name": "2026-11-06T08-00-00Z", "created_at": "2026-11-06T08:00:00+00:00", "size": 3}]
     assert str(tmp_path) not in json.dumps(body)                                  # пути наружу не отдаются
+
+
+def test_suggest_by_part_of_the_label(serve, world):
+    """Подсказки по части названия без учёта регистра; пустой запрос — последние; target сужает."""
+    client = serve()
+    hits = contract.check(client.get(f"{V1}/suggest", params={"q": "ВЕТР"}), "/suggest")
+    assert world.sensor in [h["ref"] for h in hits] and all("ветр" in h["label"].lower() for h in hits)
+    only = contract.check(client.get(f"{V1}/suggest", params={"q": "ветр", "target": "entity"}), "/suggest")
+    assert {h["target"] for h in only} == {"entity"}
+    assert len(contract.check(client.get(f"{V1}/suggest"), "/suggest")) == 5          # все пять записей мира
+    assert contract.check(client.get(f"{V1}/suggest", params={"q": "%"}), "/suggest") == []
+    problem(client.get(f"{V1}/suggest", params={"target": "x"}), 400, "bad_request", "/suggest")

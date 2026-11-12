@@ -179,12 +179,23 @@ export const q = {
       queryFn: async () => data(await api.GET("/templates", { params: { query: { target } } })),
       staleTime: 5 * 60_000,
     }),
+  /** Подсказки при наборе: часть названия без учёта регистра (/suggest), пустой текст — последние записи.
+   * Форма — как у выдачи поиска (items с ref, label, kind / entity_class), чтобы поля и окна не менялись. */
   pick: (target: "atom" | "entity", text: string) =>
     queryOptions({
       queryKey: ["pick", target, text],
-      queryFn: async () =>
-        data(await api.GET("/search", { params: { query: { q: text || "*", target, limit: 8 } } })),
-      staleTime: 30_000,
+      queryFn: async () => {
+        const list = data(await api.GET("/suggest", { params: { query: { q: text, target, limit: 8 } } }));
+        return {
+          items: list.map((x) => ({
+            ref: x.ref,
+            label: x.label,
+            kind: x.target === "atom" ? x.kind_or_class : undefined,
+            entity_class: x.target === "entity" ? x.kind_or_class : undefined,
+          })),
+        };
+      },
+      staleTime: 15_000,
     }),
   /** Теги на записях с частотой (подсказки # и поля тегов); text — начало тега. */
   tags: (text: string) =>

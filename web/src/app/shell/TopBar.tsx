@@ -42,6 +42,27 @@ export function TopBar() {
       >
         <Icon name={menuOpen ? "cross" : "menu"} />
       </button>
+      {/* назад и вперёд по истории, как в Obsidian: в приложении у окна нет кнопок браузера */}
+      <span className="bar__nav hide-s">
+        <button
+          type="button"
+          className="iconbtn"
+          aria-label={t("nav.back")}
+          title={t("nav.back")}
+          onClick={() => history.back()}
+        >
+          <Icon name="chev" style={{ rotate: "180deg" }} />
+        </button>
+        <button
+          type="button"
+          className="iconbtn"
+          aria-label={t("nav.forward")}
+          title={t("nav.forward")}
+          onClick={() => history.forward()}
+        >
+          <Icon name="chev" />
+        </button>
+      </span>
       <Link to="/" className="wordmark" aria-label={t("app.home")}>
         amemo
       </Link>
