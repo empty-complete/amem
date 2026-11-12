@@ -961,6 +961,33 @@ def tag_counts(conn: psycopg.Connection, *, q=None, limit=None) -> list[dict]:
     return [{"tag": t, "count": n} for t, n in rows]
 
 
+SUGGEST_LIMIT = 8
+
+
+def suggest(conn: psycopg.Connection, *, q=None, target=None, limit=None) -> list[dict]:
+    """Подсказки при наборе (@объект, [[запись, поле «О чём»): записи, в названии которых есть q — часть слова,
+    без учёта регистра; сначала названия, которые с q начинаются, затем недавние. Пустой q — последние изменённые.
+    target — atom или entity (по умолчанию оба). Отклонённые и выведенные из оборота не предлагаются."""
+    q = _str(q, "q")
+    target = _enum(target, "target", TARGETS) if target not in (None, "") else None
+    limit = _int(limit, "limit", low=1, high=50, default=SUGGEST_LIMIT)
+    text = unicodedata.normalize("NFC", (q or "").strip().lstrip("@#[")).lower()
+    esc = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    parts = []
+    for t, cls in (("atom", "kind"), ("entity", "entity_class")):
+        if target in (None, t):
+            parts.append(
+                f"SELECT '{records.PREFIX[t]}:' || r.id AS ref, '{t}' AS target, r.{cls} AS kind_or_class, "
+                f"coalesce(c.payload->'label'->>%(lang)s, c.payload->'label'->>'ru', c.payload->'label'->>'en') AS label, "
+                f"c.recorded_at AS at FROM {t} r JOIN {t}_current c ON c.{t}_id = r.id "
+                f"WHERE r.status NOT IN ('rejected', 'deprecated', 'superseded')")
+    rows = conn.execute(
+        f"SELECT ref, target, kind_or_class, label FROM ({' UNION ALL '.join(parts)}) x "
+        "WHERE lower(label) LIKE %(any)s ORDER BY lower(label) LIKE %(start)s DESC, at DESC, ref LIMIT %(limit)s",
+        {"lang": lang.current() or "ru", "any": f"%{esc}%", "start": f"{esc}%", "limit": limit}).fetchall()
+    return [{"ref": r, "target": t, "kind_or_class": k, "label": label or r} for r, t, k, label in rows]
+
+
 def templates(conn: psycopg.Connection, *, target=None) -> list[dict]:
     """TemplateView[] — форма каждого вида атома и класса сущности (amemo/forms.py); target — atom или entity."""
     return forms.views(conn, target=_enum(target, "target", TARGETS))

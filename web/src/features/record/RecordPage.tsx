@@ -81,8 +81,9 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
         setEditing((x) => !x);
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // захват: Ctrl+E переключает чтение и правку и тогда, когда фокус в тексте редактора
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [person]);
   const { copy, message } = useCopy(t("record.copy_failed"));
   const doc = useMemo(() => recordToDocument(p, view.about, view.sources as never, lang), [p, view, lang]);
