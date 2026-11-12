@@ -1,5 +1,5 @@
 import { Button, Dropdown, Label } from "@heroui/react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -33,29 +33,39 @@ const SourceView = lazy(() => import("./SourceView"));
 type View = components["schemas"]["RecordView"];
 export type RecordMode = "human" | "source" | "agent";
 
-/** Ссылки [[подписей]] текста по точному названию записи или объекта: подпись (в нижнем регистре) → ref. */
+/** Ссылки [[подписей]] текста по точному названию записи или объекта: подпись (в нижнем регистре) → ref. Один
+ * запрос на текст (подсказки службы по каждой подписи), без useQueries — он тяжёлый для основного куска. */
 function useWikiRefs(body: string): Record<string, string> {
+  const qc = useQueryClient();
   const labels = useMemo(
     () => [
       ...new Set([...body.matchAll(/\[\[([^\]\n|]+)/g)].map((m) => (m[1] ?? "").trim()).filter(Boolean)),
     ],
     [body],
   );
-  return useQueries({
-    queries: labels.flatMap((l) => [q.pick("atom", l), q.pick("entity", l)]),
-    combine: (rs) => {
+  const found = useQuery({
+    queryKey: ["wiki-refs", labels],
+    enabled: labels.length > 0,
+    staleTime: 15_000,
+    queryFn: async () => {
       const out: Record<string, string> = {};
-      labels.forEach((l, i) => {
+      for (const l of labels) {
         const key = l.toLowerCase();
-        for (const r of [rs[2 * i], rs[2 * i + 1]]) {
-          const hit = r?.data?.items.find((h) => (h.label ?? "").trim().toLowerCase() === key);
-          if (hit && !out[key]) out[key] = hit.ref;
+        for (const target of ["atom", "entity"] as const) {
+          const items = (await qc.fetchQuery(q.pick(target, l)).catch(() => ({ items: [] }))).items ?? [];
+          const hit = items.find((h) => (h.label ?? "").trim().toLowerCase() === key);
+          if (hit) {
+            out[key] = hit.ref;
+            break;
+          }
         }
-      });
+      }
       return out;
     },
   });
+  return found.data ?? EMPTY;
 }
+const EMPTY: Record<string, string> = {};
 
 function Crumbs({ view }: { view: View }) {
   const { t } = useTranslation();
