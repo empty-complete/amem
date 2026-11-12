@@ -117,7 +117,9 @@ test("вкладки: «Ждут вас» — решает человек, «Р�
   expect(you).toHaveAttribute("aria-selected", "true");
   const list = await screen.findByRole("listbox", { name: "Очередь проверки" });
   expect(within(list).queryByText("Смысл для модели")).not.toBeInTheDocument();
-  expect(screen.getByText(/^Здесь то, что решает только человек/)).toBeInTheDocument();
+  // длинного пояснения над очередью нет: вкладки и одна строка фильтров
+  expect(screen.queryByText(/^Здесь то, что решает только человек/)).not.toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Решённые" })).toHaveAttribute("aria-selected", "false");
   expect(screen.getByText("Подтвердить — правка станет текущей версией записи.")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Отклонить, N" })).toHaveAccessibleDescription(
     "Отклонить — правка не примется, останется прежняя версия.",

@@ -135,8 +135,8 @@
     "sky_label_hint": "A star label is at most this many characters; the full title is in the star card.",
     "sky_label_n": "{{n}} characters",
     "new_in": "Where new records go",
-    "new_in_root": "To the root, no folder",
-    "new_in_hint": "As in Obsidian: new records from this window land here. Agents' records go to the root. For example, make an «Inbox» folder and pick it.",
+    "new_in_root": "Empty — the root",
+    "new_in_hint": "A folder path, as in Obsidian, e.g. “Inbox” or “Projects/Campus”. Empty means the root. A missing folder appears with the first note. Agents' records go to the root.",
     "base_unnamed": "unnamed"
   },
   "theme": {
@@ -453,8 +453,7 @@
     "scope": "What the sky shows",
     "folder": "Folder",
     "folder_any": "Any folder",
-    "scope_btn": "Narrow the sky",
-    "scope_open": "Narrow the sky: tags, kind, folder"
+    "tag_any": "Any tag"
   },
   "write": {
     "saved": "Saved: {{what}}",
@@ -722,7 +721,8 @@
     "no_source": "No source",
     "entities": "Entities",
     "first_n": "Showing the first {{n}} items — narrow the queue by reason or document.",
-    "width": "Review list width"
+    "width": "Review list width",
+    "any_reason": "Any reason"
   },
   "basepage": {
     "title": "Base",
