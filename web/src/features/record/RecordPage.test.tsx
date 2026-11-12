@@ -45,8 +45,13 @@ test("[[ссылка]] в теле ведёт на запись из связе�
     },
     { timeout: 4000 },
   );
-  await userEvent.click(link);
-  expect(decodeURIComponent(router.state.location.pathname)).toMatch(/^\/atom\/atm:.*18$/);
+  expect(link).toBeTruthy();
+  // ссылки по названию подтягиваются отдельным запросом и перерисовывают текст: щёлкаем по ссылке после этого
+  await new Promise((r) => setTimeout(r, 150));
+  await userEvent.click(document.querySelector<HTMLAnchorElement>(".prose a.wiki") as HTMLAnchorElement);
+  await waitFor(() =>
+    expect(decodeURIComponent(router.state.location.pathname)).toMatch(/^\/atom\/atm:.*18$/),
+  );
 });
 
 test("несколько источников — переключатель меняет панель", async () => {

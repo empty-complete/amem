@@ -22,7 +22,7 @@
       "!python/amemo_web/dist/assets/DocxView-*.js",
       "!python/amemo_web/dist/assets/Settings*-*.js"
     ],
-    "limit": "475 kB",
+    "limit": "480 kB",
     "gzip": true
   },
   {

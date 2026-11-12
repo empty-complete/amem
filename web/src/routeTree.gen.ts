@@ -13,11 +13,11 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as BaseRouteImport } from './routes/base'
 import { Route as BundlesRouteImport } from './routes/bundles'
 import { Route as ChangesRouteImport } from './routes/changes'
+import { Route as KindsRouteImport } from './routes/kinds'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as RecordsRouteImport } from './routes/records'
 import { Route as ReviewRouteImport } from './routes/review'
 import { Route as SearchRouteImport } from './routes/search'
-import { Route as KindsRouteImport } from './routes/kinds'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as AtomRefRouteImport } from './routes/atom/$ref'
 import { Route as EntityRefRouteImport } from './routes/entity/$ref'
@@ -44,6 +44,11 @@ const ChangesRoute = ChangesRouteImport.update({
   path: '/changes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const KindsRoute = KindsRouteImport.update({
+  id: '/kinds',
+  path: '/kinds',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NewRoute = NewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -62,11 +67,6 @@ const ReviewRoute = ReviewRouteImport.update({
 const SearchRoute = SearchRouteImport.update({
   id: '/search',
   path: '/search',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const KindsRoute = KindsRouteImport.update({
-  id: '/kinds',
-  path: '/kinds',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -100,11 +100,11 @@ export interface FileRoutesByFullPath {
   '/base': typeof BaseRoute
   '/bundles': typeof BundlesRoute
   '/changes': typeof ChangesRoute
+  '/kinds': typeof KindsRoute
   '/new': typeof NewRoute
   '/records': typeof RecordsRoute
   '/review': typeof ReviewRoute
   '/search': typeof SearchRoute
-  '/kinds': typeof KindsRoute
   '/settings': typeof SettingsRoute
   '/atom/$ref': typeof AtomRefRoute
   '/entity/$ref': typeof EntityRefRoute
@@ -116,11 +116,11 @@ export interface FileRoutesByTo {
   '/base': typeof BaseRoute
   '/bundles': typeof BundlesRoute
   '/changes': typeof ChangesRoute
+  '/kinds': typeof KindsRoute
   '/new': typeof NewRoute
   '/records': typeof RecordsRoute
   '/review': typeof ReviewRoute
   '/search': typeof SearchRoute
-  '/kinds': typeof KindsRoute
   '/settings': typeof SettingsRoute
   '/atom/$ref': typeof AtomRefRoute
   '/entity/$ref': typeof EntityRefRoute
@@ -133,11 +133,11 @@ export interface FileRoutesById {
   '/base': typeof BaseRoute
   '/bundles': typeof BundlesRoute
   '/changes': typeof ChangesRoute
+  '/kinds': typeof KindsRoute
   '/new': typeof NewRoute
   '/records': typeof RecordsRoute
   '/review': typeof ReviewRoute
   '/search': typeof SearchRoute
-  '/kinds': typeof KindsRoute
   '/settings': typeof SettingsRoute
   '/atom/$ref': typeof AtomRefRoute
   '/entity/$ref': typeof EntityRefRoute
@@ -151,11 +151,11 @@ export interface FileRouteTypes {
     | '/base'
     | '/bundles'
     | '/changes'
+    | '/kinds'
     | '/new'
     | '/records'
     | '/review'
     | '/search'
-    | '/kinds'
     | '/settings'
     | '/atom/$ref'
     | '/entity/$ref'
@@ -167,11 +167,11 @@ export interface FileRouteTypes {
     | '/base'
     | '/bundles'
     | '/changes'
+    | '/kinds'
     | '/new'
     | '/records'
     | '/review'
     | '/search'
-    | '/kinds'
     | '/settings'
     | '/atom/$ref'
     | '/entity/$ref'
@@ -183,11 +183,11 @@ export interface FileRouteTypes {
     | '/base'
     | '/bundles'
     | '/changes'
+    | '/kinds'
     | '/new'
     | '/records'
     | '/review'
     | '/search'
-    | '/kinds'
     | '/settings'
     | '/atom/$ref'
     | '/entity/$ref'
@@ -200,11 +200,11 @@ export interface RootRouteChildren {
   BaseRoute: typeof BaseRoute
   BundlesRoute: typeof BundlesRoute
   ChangesRoute: typeof ChangesRoute
+  KindsRoute: typeof KindsRoute
   NewRoute: typeof NewRoute
   RecordsRoute: typeof RecordsRoute
   ReviewRoute: typeof ReviewRoute
   SearchRoute: typeof SearchRoute
-  KindsRoute: typeof KindsRoute
   SettingsRoute: typeof SettingsRoute
   AtomRefRoute: typeof AtomRefRoute
   EntityRefRoute: typeof EntityRefRoute
@@ -242,6 +242,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChangesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/kinds': {
+      id: '/kinds'
+      path: '/kinds'
+      fullPath: '/kinds'
+      preLoaderRoute: typeof KindsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/new': {
       id: '/new'
       path: '/new'
@@ -268,13 +275,6 @@ declare module '@tanstack/react-router' {
       path: '/search'
       fullPath: '/search'
       preLoaderRoute: typeof SearchRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/kinds': {
-      id: '/kinds'
-      path: '/kinds'
-      fullPath: '/kinds'
-      preLoaderRoute: typeof KindsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -320,11 +320,11 @@ const rootRouteChildren: RootRouteChildren = {
   BaseRoute: BaseRoute,
   BundlesRoute: BundlesRoute,
   ChangesRoute: ChangesRoute,
+  KindsRoute: KindsRoute,
   NewRoute: NewRoute,
   RecordsRoute: RecordsRoute,
   ReviewRoute: ReviewRoute,
   SearchRoute: SearchRoute,
-  KindsRoute: KindsRoute,
   SettingsRoute: SettingsRoute,
   AtomRefRoute: AtomRefRoute,
   EntityRefRoute: EntityRefRoute,
