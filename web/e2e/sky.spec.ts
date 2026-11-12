@@ -192,13 +192,11 @@ test("небо главной сужается видом; выбор переж
   await page.goto("./");
   await expect.poll(count).toBeGreaterThan(0);
   const all = await count();
-  // фильтры — во всплывающем окне у кнопки «Сузить небо»: поверх неба строки нет
-  await page.getByRole("button", { name: /^Сузить небо/ }).click();
+  // фильтры — строкой компактных списков под семьями
   await page
     .getByRole("group", { name: "Что показать на небе" })
     .getByRole("combobox", { name: "Вид" })
     .selectOption("parameter");
-  await page.keyboard.press("Escape");
   await expect(page).toHaveURL(/kind=parameter/);
   await expect.poll(count).toBeLessThan(all);
   const some = await count();
@@ -207,7 +205,6 @@ test("небо главной сужается видом; выбор переж
   await page.goto("./");
   await expect(page).toHaveURL(/kind=parameter/);
   await expect.poll(count).toBe(some);
-  await page.getByRole("button", { name: /^Сузить небо/ }).click();
   await page
     .getByRole("group", { name: "Что показать на небе" })
     .getByRole("button", { name: "Сбросить" })
