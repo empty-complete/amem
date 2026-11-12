@@ -6,7 +6,7 @@
     "gzip": true
   },
   {
-    "name": "JS: приложение без ленивых кусков (pdf.js, KaTeX, CodeMirror, небо, 3D, конструктор видов)",
+    "name": "JS: приложение без ленивых кусков (pdf.js, KaTeX, CodeMirror, небо, 3D, конструктор видов, настройки)",
     "path": [
       "python/amemo_web/dist/assets/*.js",
       "!python/amemo_web/dist/assets/PdfPage-*.js",
@@ -19,9 +19,16 @@
       "!python/amemo_web/dist/assets/BodyEditor-*.js",
       "!python/amemo_web/dist/assets/KindDrawer-*.js",
       "!python/amemo_web/dist/assets/docx-*.js",
-      "!python/amemo_web/dist/assets/DocxView-*.js"
+      "!python/amemo_web/dist/assets/DocxView-*.js",
+      "!python/amemo_web/dist/assets/Settings*-*.js"
     ],
     "limit": "475 kB",
+    "gzip": true
+  },
+  {
+    "name": "Лениво: настройки (окно и страница)",
+    "path": "python/amemo_web/dist/assets/Settings*-*.js",
+    "limit": "30 kB",
     "gzip": true
   },
   {
@@ -38,13 +45,19 @@
   },
   {
     "name": "Лениво: DOCX (docx-preview, jszip; источник DOCX)",
-    "path": ["python/amemo_web/dist/assets/docx-*.js", "python/amemo_web/dist/assets/DocxView-*.js"],
+    "path": [
+      "python/amemo_web/dist/assets/docx-*.js",
+      "python/amemo_web/dist/assets/DocxView-*.js"
+    ],
     "limit": "120 kB",
     "gzip": true
   },
   {
     "name": "Лениво: KaTeX (формулы)",
-    "path": ["python/amemo_web/dist/assets/katex-*.js", "python/amemo_web/dist/assets/katex-*.css"],
+    "path": [
+      "python/amemo_web/dist/assets/katex-*.js",
+      "python/amemo_web/dist/assets/katex-*.css"
+    ],
     "limit": "90 kB",
     "gzip": true
   },
@@ -75,7 +88,10 @@
   },
   {
     "name": "CSS приложения (HeroUI — только используемые компоненты)",
-    "path": ["python/amemo_web/dist/assets/*.css", "!python/amemo_web/dist/assets/katex-*.css"],
+    "path": [
+      "python/amemo_web/dist/assets/*.css",
+      "!python/amemo_web/dist/assets/katex-*.css"
+    ],
     "limit": "40 kB",
     "gzip": true
   }
