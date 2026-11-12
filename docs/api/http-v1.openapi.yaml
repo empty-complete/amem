@@ -265,6 +265,10 @@ paths:
       summary: Поиск объектов хранилища по имени и пути — для «+ Источник»
       parameters:
         - { name: q, in: query, schema: { type: string } }
+        - name: type
+          in: query
+          description: "Только файлы одного рода: pdf, sheet (таблицы), doc (документы и текст), slides (презентации), image"
+          schema: { type: string, enum: [pdf, sheet, doc, slides, image] }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
         - { name: cursor, in: query, schema: { type: string } }
       responses:

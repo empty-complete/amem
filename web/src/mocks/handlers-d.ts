@@ -411,12 +411,23 @@ export const handlersD = [
   ),
 
   http.get("/api/v1/objects", ({ request }) => {
-    const q = (new URL(request.url).searchParams.get("q") ?? "").toLowerCase();
+    const params = new URL(request.url).searchParams;
+    const q = (params.get("q") ?? "").toLowerCase();
+    // род файла — по расширению имени, как у службы (lookup.FILE_TYPES)
+    const EXT: Record<string, string[]> = {
+      pdf: ["pdf"],
+      sheet: ["xlsx", "xlsm", "xls", "ods", "csv"],
+      doc: ["docx", "doc", "odt", "rtf", "md", "txt"],
+      slides: ["pptx", "ppt", "odp"],
+      image: ["png", "jpg", "jpeg", "gif", "webp", "tif", "tiff", "bmp"],
+    };
+    const type = params.get("type");
     const items = Object.values(db.objects).filter(
       (o) =>
-        !q ||
-        o.original_name.toLowerCase().includes(q) ||
-        o.logical_paths.some((p) => p.toLowerCase().includes(q)),
+        (!q ||
+          o.original_name.toLowerCase().includes(q) ||
+          o.logical_paths.some((p) => p.toLowerCase().includes(q))) &&
+        (!type || (EXT[type] ?? []).includes(o.original_name.toLowerCase().split(".").pop() ?? "")),
     );
     return HttpResponse.json({ items, next_cursor: null });
   }),

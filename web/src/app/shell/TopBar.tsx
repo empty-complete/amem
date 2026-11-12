@@ -92,9 +92,6 @@ export function TopBar() {
           <Icon name="theme" />
         </button>
         <UpdateBadge />
-        <Link to="/settings" className="iconbtn hide-s" aria-label={t("nav.settings")}>
-          <Icon name="user" />
-        </Link>
       </nav>
       <WindowControls />
     </header>

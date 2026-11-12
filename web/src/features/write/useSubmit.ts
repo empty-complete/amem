@@ -19,6 +19,8 @@ export function useSubmit() {
         kind: string;
         about: string[];
         family?: Family;
+        /** Папка новой записи («» — корень); без неё — «куда класть новые записи» из настроек. */
+        folder?: string;
         onDone?: Pending["onDone"];
         onIssues?: Pending["onIssues"];
       },
@@ -34,7 +36,7 @@ export function useSubmit() {
           onDone: async (r) => {
             skyBus.retract(id);
             // новые записи — в папку из настроек («куда класть новые записи»), как в Obsidian; правки не трогаем
-            const folder = newNoteFolder();
+            const folder = meta.folder ?? newNoteFolder();
             const made = ((r?.records ?? []) as { ref?: string; created?: boolean }[])
               .filter((x) => x.created && x.ref)
               .map((x) => x.ref as string);

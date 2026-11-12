@@ -4,6 +4,7 @@ import { Folders } from "../app/shell/Folders";
 import { SignIn } from "../app/shell/SignIn";
 import { TopBar } from "../app/shell/TopBar";
 import { useKindsOpen } from "../features/kinds/store";
+import { useSettingsWindow } from "../features/settings/store";
 import { ReloadBanner } from "../features/updates/ReloadBanner";
 import { UndoToasts } from "../features/write/UndoToast";
 import "../app/shell/shell.css";
@@ -11,6 +12,18 @@ import "../app/shell/shell.css";
 const KindDrawer = lazy(() =>
   import("../features/kinds/KindDrawer").then((m) => ({ default: m.KindDrawer })),
 );
+
+const SettingsWindow = lazy(() => import("../features/settings/SettingsWindow"));
+
+/** Окно настроек грузится, только когда его открыли. */
+function SettingsLazy() {
+  const open = useSettingsWindow();
+  return open != null ? (
+    <Suspense fallback={null}>
+      <SettingsWindow />
+    </Suspense>
+  ) : null;
+}
 
 /** Конструктор видов грузится, только когда его открыли. */
 function KindsLazy() {
@@ -37,6 +50,7 @@ export const Route = createRootRoute({
       </div>
       <UndoToasts />
       <KindsLazy />
+      <SettingsLazy />
       <SignIn />
     </div>
   ),

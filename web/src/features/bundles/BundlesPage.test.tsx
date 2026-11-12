@@ -17,10 +17,12 @@ test("антология: статусы зафиксированы на «пр�
     "href",
     expect.stringMatching(/\/download$/),
   );
-  expect(screen.getByRole("link", { name: "Открыть отчёт" })).toHaveAttribute(
-    "href",
-    expect.stringMatching(/\/report$/),
-  );
+  // отчёт — в окне приложения (в настольном приложении нового окна нет), HTML в изолированной рамке
+  await user.click(screen.getByRole("button", { name: "Открыть отчёт" }));
+  const dlg = await screen.findByRole("dialog", { name: "Отчёт подборки" });
+  const frame = dlg.querySelector("iframe");
+  expect(frame?.getAttribute("sandbox")).toBe("");
+  expect(frame?.getAttribute("srcdoc")).toContain("Датчики");
 });
 
 test("пустой отбор — словами", async () => {

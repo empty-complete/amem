@@ -105,11 +105,28 @@
   font-size: var(--t-label);
   font-weight: 500;
 }
+/* строка пункта — фиксированной высоты (список виртуальный): всё в одну строку, длинное — многоточием */
+.qrow > * {
+  min-width: 0;
+}
 .qrow__meta {
   display: flex;
   gap: var(--s-sm);
+  min-width: 0;
+  overflow: hidden;
   color: var(--ink-2);
   font-size: var(--t-meta);
+  white-space: nowrap;
+}
+.qrow__meta > * {
+  flex: none;
+}
+.qrow__meta > .qrow__doc,
+.qrow__meta > span:nth-child(2) {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .qrow__reason {
   display: inline-flex;

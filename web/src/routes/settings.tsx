@@ -1,95 +1,19 @@
-import { Button } from "@heroui/react";
-import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { auth, useAuthToken } from "../api/auth";
-import { q } from "../api/queries";
-import type { components } from "../api/schema";
-import { changeLocale, type Locale } from "../app/i18n";
-import { useNewNoteFolder } from "../app/shell/folderTree";
-import { UpdatesSection } from "../features/updates/UpdatesSection";
-import { agentName } from "../ui/format";
+import { SettingsView } from "../features/settings/SettingsView";
 import "../features/records/records.css";
-import "../features/settings/settings.css";
 
 export const Route = createFileRoute("/settings")({ component: Settings });
 
-type Folder = components["schemas"]["Folder"];
-const flat = (fs: Folder[], depth = 0): { path: string; name: string; depth: number }[] =>
-  fs.flatMap((f) => [{ path: f.path, name: f.name, depth }, ...flat(f.children, depth + 1)]);
-
-/** Настройки — только то, что меняют: язык, куда класть новые записи, обновления; о службе — справкой.
- * Тема — кнопкой в шапке; вложенность папок не ограничена. */
+/** Страница настроек — те же разделы, что в окне настроек (ссылки на /settings не ломаются). */
 function Settings() {
-  const { t, i18n } = useTranslation();
-  const session = useQuery(q.session());
-  const token = useAuthToken();
-  const [newIn, setNewIn] = useNewNoteFolder();
-  const tree = useQuery(q.folders());
+  const { t } = useTranslation();
   return (
     <section className="settings" aria-labelledby="settings-title">
       <div className="page-head">
         <h1 id="settings-title">{t("settings.title")}</h1>
       </div>
-
-      <div className="settings__group">
-        <label className="settings__row">
-          <span>{t("settings.language")}</span>
-          <select
-            className="fld"
-            value={i18n.language.startsWith("en") ? "en" : "ru"}
-            onChange={(e) => changeLocale(e.target.value as Locale)}
-          >
-            <option value="ru">{t("lang.ru")}</option>
-            <option value="en">{t("lang.en")}</option>
-          </select>
-        </label>
-        <label className="settings__row">
-          <span>
-            {t("settings.new_in")}
-            <small className="muted">{t("settings.new_in_hint")}</small>
-          </span>
-          <select className="fld" value={newIn} onChange={(e) => setNewIn(e.target.value)}>
-            <option value="">{t("settings.new_in_root")}</option>
-            {flat(tree.data?.folders ?? []).map((f) => (
-              <option key={f.path} value={f.path}>
-                {"  ".repeat(f.depth)}
-                {f.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="settings__row">
-          <span>
-            {t("kinds.title")}
-            <small className="muted">{t("kinds.intro")}</small>
-          </span>
-          <Link className="navlink" to="/kinds">
-            {t("edit.kind_configure")}
-          </Link>
-        </div>
-      </div>
-
-      <UpdatesSection />
-
-      {session.data && (
-        <dl className="settings__about">
-          <dt>{t("settings.who")}</dt>
-          <dd>{agentName(session.data.agent, i18n.language)}</dd>
-          <dt>{t("settings.service")}</dt>
-          <dd>{session.data.base_name || t("settings.base_unnamed")}</dd>
-          <dt>{t("settings.version")}</dt>
-          <dd>{session.data.amem_version}</dd>
-        </dl>
-      )}
-      {token && (
-        <div>
-          <Button variant="outline" onPress={() => auth.clear()}>
-            {t("signin.leave")}
-          </Button>
-          <p className="muted">{t("signin.leave_hint")}</p>
-        </div>
-      )}
+      <SettingsView />
     </section>
   );
 }

@@ -107,7 +107,7 @@ export function RecordRow({
             {r.folder && <span>{r.folder}</span>}
           </span>
         </span>
-        <span className="side">
+        <span className="row__side">
           <StatusText status={r.status} />
           <RelativeTime at={r.recorded_at} />
         </span>

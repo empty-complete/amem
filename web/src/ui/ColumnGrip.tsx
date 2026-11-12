@@ -18,6 +18,8 @@ export function ColumnGrip({
   min,
   max,
   initial,
+  side = "right",
+  className,
 }: {
   /** CSS-переменная ширины, например --folders-w; ключ хранения — amemo.col<name>. */
   name: string;
@@ -25,6 +27,9 @@ export function ColumnGrip({
   min: number;
   max: number;
   initial: number;
+  /** На каком краю колонки стоит ручка: right — колонка слева (панель папок), left — колонка справа (граф). */
+  side?: "left" | "right";
+  className?: string;
 }) {
   const key = `amemo.col${name}`;
   const [width, setWidth] = useState(() => read(key) ?? initial);
@@ -41,11 +46,11 @@ export function ColumnGrip({
   const clamp = (w: number) => Math.round(Math.min(max, Math.max(min, w)));
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     const grip = e.currentTarget;
-    const left = grip.parentElement?.getBoundingClientRect().left ?? 0;
+    const box = grip.parentElement?.getBoundingClientRect();
     grip.setPointerCapture(e.pointerId);
     let last = width;
     const move = (ev: globalThis.PointerEvent) => {
-      last = clamp(ev.clientX - left);
+      last = clamp(side === "right" ? ev.clientX - (box?.left ?? 0) : (box?.right ?? 0) - ev.clientX);
       setWidth(last);
     };
     const up = () => {
@@ -58,7 +63,9 @@ export function ColumnGrip({
   };
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     const step = e.shiftKey ? 64 : 16;
-    const to = e.key === "ArrowRight" ? width + step : e.key === "ArrowLeft" ? width - step : null;
+    const grow = side === "right" ? "ArrowRight" : "ArrowLeft";
+    const shrink = side === "right" ? "ArrowLeft" : "ArrowRight";
+    const to = e.key === grow ? width + step : e.key === shrink ? width - step : null;
     if (to == null) return;
     e.preventDefault();
     const w = clamp(to);
@@ -68,7 +75,8 @@ export function ColumnGrip({
   return (
     // biome-ignore lint/a11y/useSemanticElements: разделитель с изменяемым значением — role=separator, а не <hr>
     <div
-      className="colgrip"
+      className={className ? `colgrip ${className}` : "colgrip"}
+      data-side={side}
       role="separator"
       aria-orientation="vertical"
       aria-label={label}

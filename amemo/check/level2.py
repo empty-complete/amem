@@ -92,7 +92,7 @@ def place(selectors: list[dict] | None, quote: str | None) -> Place:
     for top in selectors or []:
         for s in _chain(top):
             kind, val = s.get("type"), str(s.get("value") or "")
-            if kind == "page":
+            if kind in ("page", "slide"):                 # слайд презентации — её страница (extract.pptx_pages)
                 if (p := sources.as_page(val)) is not None:
                     page = page or p
                 elif (m := RANGE.match(val)) and 0 < int(m[1]) <= int(m[2]) < int(m[1]) + MAX_RANGE:

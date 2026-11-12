@@ -678,7 +678,7 @@ async def upload_object(request: Request) -> JSONResponse:
 def list_objects(request: Request) -> JSONResponse:
     with connection(request) as conn:
         return JSONResponse(api.object_search(conn, q=_q(request, "q"), limit=_q(request, "limit"),
-                                              cursor=_q(request, "cursor")))
+                                              cursor=_q(request, "cursor"), file_type=_q(request, "type")))
 
 
 async def import_bundle(request: Request) -> JSONResponse:

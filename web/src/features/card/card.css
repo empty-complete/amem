@@ -7,8 +7,9 @@
   overflow: hidden;
 }
 .entitypage {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(360px, 36%, 480px);
+  grid-template-columns: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
 }
@@ -23,6 +24,14 @@
   width: 100%;
   max-width: 760px;
   margin-inline: auto;
+}
+.entitypage[data-graph] {
+  grid-template-columns: minmax(0, 1fr) var(--entity-side-w, 420px);
+}
+/* край графа — у сетки, а не внутри прокрутки панели: тянется на всю высоту */
+.entitypage > .colgrip.entitygrip {
+  left: auto;
+  right: calc(var(--entity-side-w, 420px) - 4px);
 }
 .entity__side {
   --entity-sky-h: 440px;

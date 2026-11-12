@@ -56,3 +56,13 @@ test("таблица: протяжка по ячейкам — лист и ди�
 });
 
 // загрузку файла (multipart) проверяет e2e в браузере: в jsdom/undici MSW обрывает поток FormData
+
+test("род файла: «PDF» оставляет в списке только PDF", async () => {
+  const user = userEvent.setup();
+  await renderWithApp(<SourcePicker open onClose={() => {}} onPick={() => {}} />);
+  expect(await screen.findByRole("button", { name: /Наблюдения_ноябрь.xlsx/ })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "PDF" }));
+  expect(await screen.findByRole("button", { name: /Руководство_МС-1.pdf/ })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Наблюдения_ноябрь.xlsx/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "PDF" })).toHaveAttribute("aria-pressed", "true");
+});
