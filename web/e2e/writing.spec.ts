@@ -291,8 +291,10 @@ test("подсказки в тексте: @ — объект в «О чём», [
   // [[ — записи базы
   await page.keyboard.type(" и [[Погрешность влаж");
   await expect(list.getByRole("option", { name: /Погрешность влажности В-2/ })).toBeVisible();
-  await page.keyboard.press("Enter");
-  await expect(body).toContainText("[[Погрешность влажности В-2: ±2 %]]");
+  // щелчок, а не Enter: CodeMirror не принимает клавиши первые 75 мс после открытия списка
+  await list.getByRole("option", { name: /Погрешность влажности В-2/ }).click();
+  // разметка [[ ]] вне строки с курсором скрыта живым просмотром — сверяем подпись
+  await expect(body).toContainText("Погрешность влажности В-2: ±2 %");
   const sent = page.waitForRequest((r) => r.url().endsWith("/api/v1/submit") && r.method() === "POST");
   await page.getByRole("main").getByRole("button", { name: "Записать" }).click();
   const req = await sent;
