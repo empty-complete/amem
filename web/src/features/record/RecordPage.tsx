@@ -1,5 +1,5 @@
 import { Button, Dropdown, Label } from "@heroui/react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -18,6 +18,7 @@ import { draftKey, loadDraft } from "../write/drafts";
 import { MoveDialog } from "../write/MoveDialog";
 import { type Draft, type FieldIssues, fromPayload } from "../write/proposal";
 import { RecordEditor } from "../write/RecordEditor";
+import { usePending } from "../write/submitQueue";
 import { AgentView } from "./AgentView";
 import { Body, type WikiTarget } from "./Body";
 import { type Content, RecordContent } from "./Content";
@@ -31,6 +32,30 @@ const SourceView = lazy(() => import("./SourceView"));
 
 type View = components["schemas"]["RecordView"];
 export type RecordMode = "human" | "source" | "agent";
+
+/** Ссылки [[подписей]] текста по точному названию записи или объекта: подпись (в нижнем регистре) → ref. */
+function useWikiRefs(body: string): Record<string, string> {
+  const labels = useMemo(
+    () => [
+      ...new Set([...body.matchAll(/\[\[([^\]\n|]+)/g)].map((m) => (m[1] ?? "").trim()).filter(Boolean)),
+    ],
+    [body],
+  );
+  return useQueries({
+    queries: labels.flatMap((l) => [q.pick("atom", l), q.pick("entity", l)]),
+    combine: (rs) => {
+      const out: Record<string, string> = {};
+      labels.forEach((l, i) => {
+        const key = l.toLowerCase();
+        for (const r of [rs[2 * i], rs[2 * i + 1]]) {
+          const hit = r?.data?.items.find((h) => (h.label ?? "").trim().toLowerCase() === key);
+          if (hit && !out[key]) out[key] = hit.ref;
+        }
+      });
+      return out;
+    },
+  });
+}
 
 function Crumbs({ view }: { view: View }) {
   const { t } = useTranslation();
@@ -48,10 +73,18 @@ function Crumbs({ view }: { view: View }) {
   );
 }
 
-function Note({ view, mode }: { view: View; mode: RecordMode }) {
+function Note({ view: saved, mode }: { view: View; mode: RecordMode }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const navigate = useNavigate();
+  // правка в окне отмены уже видна на странице: иначе 6 с показывалась прежняя версия, и казалось, что
+  // «Записать» не сработало
+  const queue = usePending();
+  const uuid = saved.ref.replace(/^(atm|ent):/, "");
+  const queued = queue
+    .flatMap((x) => x.body.proposals)
+    .find((pr) => pr.record_id === uuid && pr.target === saved.target);
+  const view = queued ? { ...saved, payload: queued.payload as View["payload"] } : saved;
   const p = view.payload as unknown as Payload;
   const vocab = useQuery(q.vocab(view.target === "entity" ? "entity_class" : "kind"));
   const links = useQuery(q.links(view.ref));
@@ -91,13 +124,19 @@ function Note({ view, mode }: { view: View; mode: RecordMode }) {
   const label = pickText(p.label, lang);
   const main = p.content?.values?.[0];
 
+  // [[подпись]] ведёт на запись: из связей и «О чём», иначе — запись или объект с тем же названием в базе (как в
+  // Obsidian); не нашлось — поиск
+  const wiki = useWikiRefs(pickText(p.body, lang));
   const target = useCallback(
     (l: string): WikiTarget => {
+      const key = l.trim().toLowerCase();
       const hit =
-        links.data?.find((x) => x.other.label === l)?.other ?? view.about?.find((a) => a.label === l) ?? null;
-      return hit ? recordPath(hit.ref) : { to: "/search", search: { q: l } };
+        links.data?.find((x) => x.other.label.trim().toLowerCase() === key)?.other.ref ??
+        view.about?.find((a) => a.label.trim().toLowerCase() === key)?.ref ??
+        wiki[key];
+      return hit ? recordPath(hit) : { to: "/search", search: { q: l } };
     },
-    [links.data, view.about],
+    [links.data, view.about, wiki],
   );
   const setMode = (m: RecordMode) =>
     navigate({

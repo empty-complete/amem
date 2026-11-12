@@ -21,10 +21,15 @@ export interface BodyEditorApi {
   selectAll: () => void;
 }
 
+/** Подсказка-запись: ссылка и подпись; выбор вставляет [[подпись]] и сообщает ссылку (onPick). */
+export type Hit = { ref: string; label: string };
+
 export interface Suggest {
-  records: (q: string) => Promise<string[]>;
-  objects: (q: string) => Promise<string[]>;
+  records: (q: string) => Promise<Hit[]>;
+  objects: (q: string) => Promise<Hit[]>;
   tags: (q: string) => Promise<string[]>;
+  /** Выбрана подсказка: via «[[» — запись, «@» — объект (его кладут в «О чём»). */
+  onPick?: (hit: Hit, via: "[[" | "@") => void;
 }
 
 function wrap(view: EditorView, before: string, after = before) {
@@ -112,14 +117,29 @@ const BodyEditor = forwardRef<
       const at = ctx.matchBefore(/@[\p{L}\p{N}._-]*/u);
       const tag = ctx.matchBefore(/#[\p{L}\p{N}_-]*/u);
       const s = live.current.suggest;
-      const opts = (list: string[], wrapIt: (x: string) => string): Completion[] =>
-        list.map((l) => ({ label: l, apply: wrapIt(l) }));
+      // ссылка на запись: вставить [[подпись]] (закрывающие «]]», если они уже стоят, — заменить) и сообщить ссылку
+      const links = (list: Hit[], via: "[[" | "@"): Completion[] =>
+        list.map((h) => ({
+          label: h.label,
+          apply: (v, _c, from, to) => {
+            const tail = v.state.sliceDoc(to, to + 2) === "]]" ? to + 2 : to;
+            const insert = `[[${h.label}]]`;
+            v.dispatch({ changes: { from, to: tail, insert }, selection: { anchor: from + insert.length } });
+            live.current.suggest.onPick?.(h, via);
+          },
+        }));
+      // служба уже отобрала подсказки по набранному: свой фильтр CodeMirror сравнивал бы «@Камп» с подписью и
+      // прятал всё (filter: false); список пересобирается на каждом знаке
       if (wiki)
-        return { from: wiki.from, options: opts(await s.records(wiki.text.slice(2)), (l) => `[[${l}]]`) };
+        return { from: wiki.from, filter: false, options: links(await s.records(wiki.text.slice(2)), "[[") };
       if (at && (at.from === 0 || /\s/.test(ctx.state.sliceDoc(at.from - 1, at.from))))
-        return { from: at.from, options: opts(await s.objects(at.text.slice(1)), (l) => `[[${l}]]`) };
+        return { from: at.from, filter: false, options: links(await s.objects(at.text.slice(1)), "@") };
       if (tag && (tag.from === 0 || /\s/.test(ctx.state.sliceDoc(tag.from - 1, tag.from))))
-        return { from: tag.from, options: opts(await s.tags(tag.text.slice(1)), (l) => `#${l}`) };
+        return {
+          from: tag.from,
+          filter: false,
+          options: (await s.tags(tag.text.slice(1))).map((l) => ({ label: `#${l}`, apply: `#${l}` })),
+        };
       return null;
     };
     const v = new EditorView({

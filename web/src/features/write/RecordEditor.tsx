@@ -21,7 +21,7 @@ import { langString, pickText } from "../../ui/lang";
 import { MOD } from "../../ui/platform";
 import { RegionState } from "../../ui/RegionState";
 import { documentToRecord, recordToDocument } from "../record/doc";
-import type { BodyEditorApi, Suggest } from "./BodyEditor";
+import type { BodyEditorApi, Hit, Suggest } from "./BodyEditor";
 import { dropDraft, saveDraft } from "./drafts";
 import { PropertyEditor } from "./fields";
 import { KindPicker } from "./KindPicker";
@@ -212,9 +212,28 @@ export function RecordEditor(p: RecordEditorProps) {
     [p.draftKey],
   );
 
+  // подсказки @, # и [[: выбор запоминает, на какую запись ссылается [[подпись]] (связь при записи), а @объект
+  // ещё и кладёт в «О чём», если у вида есть такое поле
+  const aboutKey = tpl?.form.find((f) => f.path === "about")?.key;
+  const pickRef = useRef<(hit: Hit, via: "[[" | "@") => void>(() => {});
+  pickRef.current = (hit, via) => {
+    setLabels((prev) => ({ ...prev, [hit.ref]: hit.label }));
+    if (via === "@" && hit.ref.startsWith("ent:") && aboutKey) {
+      setD((prev) => {
+        const cur = (prev.values[aboutKey] as string[] | undefined) ?? [];
+        if (cur.includes(hit.ref)) return prev;
+        const next = { ...prev, values: { ...prev.values, [aboutKey]: [...cur, hit.ref] } };
+        saveDraft(p.draftKey, next);
+        return next;
+      });
+    }
+  };
   const suggest: Suggest = useMemo(() => {
     const pick = async (target: "atom" | "entity", s: string) =>
-      ((await qc.fetchQuery(q.pick(target, s))).items ?? []).map((h) => h.label ?? h.ref);
+      ((await qc.fetchQuery(q.pick(target, s))).items ?? []).map((h) => ({
+        ref: h.ref,
+        label: h.label ?? h.ref,
+      }));
     return {
       records: (s) => pick("atom", s),
       objects: (s) => pick("entity", s),
@@ -222,8 +241,29 @@ export function RecordEditor(p: RecordEditorProps) {
         (data(await api.GET("/vocab/{scheme}", { params: { path: { scheme: "tag" } } })) ?? [])
           .map((x) => x.code)
           .filter((c) => c.startsWith(s.toLowerCase())),
+      onPick: (hit, via) => pickRef.current(hit, via),
     };
   }, [qc]);
+
+  /** [[подписи]] текста без известной ссылки — по точному названию записи или объекта в базе (как в Obsidian). */
+  const resolveWiki = async (body: string, known: Record<string, string>) => {
+    const out = { ...known };
+    const have = new Set(Object.values(out).map((l) => l.toLowerCase()));
+    const want = [
+      ...new Set([...body.matchAll(/\[\[([^\]\n|]+)(?:\|[^\]\n]*)?\]\]/g)].map((m) => (m[1] ?? "").trim())),
+    ].filter((l) => l && !have.has(l.toLowerCase()));
+    for (const label of want) {
+      for (const target of ["atom", "entity"] as const) {
+        const items = (await qc.fetchQuery(q.pick(target, label)).catch(() => ({ items: [] }))).items ?? [];
+        const hit = items.find((h) => (h.label ?? "").trim().toLowerCase() === label.toLowerCase());
+        if (hit && hit.ref !== p.recordId) {
+          out[hit.ref] = hit.label ?? label;
+          break;
+        }
+      }
+    }
+    return out;
+  };
 
   const toSource = () => {
     setSourceText(
@@ -249,7 +289,7 @@ export function RecordEditor(p: RecordEditorProps) {
     setSourceErr(null);
     setSource(true);
   };
-  const fromSource = () => {
+  const fromSource = (): Draft | null => {
     try {
       const r = documentToRecord(sourceText);
       const extra = Object.entries(r.qualifiers).map(([property, value]) => ({
@@ -257,7 +297,7 @@ export function RecordEditor(p: RecordEditorProps) {
         label: d.extra.find((x) => x.property === property)?.label ?? property,
         value,
       }));
-      change({
+      const next: Draft = {
         ...d,
         kind: r.kind,
         label: r.label,
@@ -267,27 +307,35 @@ export function RecordEditor(p: RecordEditorProps) {
         values: { ...d.values, tags: r.tags },
         sources:
           r.quote && d.sources[0] ? [{ ...d.sources[0], quote: r.quote }, ...d.sources.slice(1)] : d.sources,
-      });
+      };
+      change(next);
       setSource(false);
+      return next;
     } catch (e) {
       setSourceErr(t("edit.source_bad", { error: (e as Error).message.split("\n")[0] }));
+      return null;
     }
   };
 
-  const save = () => {
-    if (source) {
-      fromSource();
-      return;
-    }
-    const resolve = (label: string) => Object.entries(labels).find(([, l]) => l === label)?.[0];
-    const { proposal, links } = toProposal(d, tpl, { recordId: p.recordId, base: p.base, resolve });
-    const about = ((d.values.about as string[]) ?? []).filter((r) => r.startsWith("ent:"));
+  const saving = useRef(false);
+  const save = async () => {
+    // из исходника записывается сразу, а не только переводится обратно в правку (раньше нужно было два нажатия)
+    const draft: Draft | null = source ? fromSource() : d;
+    if (!draft || saving.current) return;
+    saving.current = true;
+    const known = await resolveWiki(draft.body, labels).finally(() => {
+      saving.current = false;
+    });
+    const resolve = (label: string) =>
+      Object.entries(known).find(([, l]) => l.trim().toLowerCase() === label.trim().toLowerCase())?.[0];
+    const { proposal, links } = toProposal(draft, tpl, { recordId: p.recordId, base: p.base, resolve });
+    const about = ((draft.values.about as string[]) ?? []).filter((r) => r.startsWith("ent:"));
     submit(
       { proposals: [proposal], links: [...links, ...(p.extraLinks ?? [])] },
       {
-        label: d.label,
-        what: (pickText(tpl?.label, lang) || d.kind).toLowerCase(),
-        kind: d.kind,
+        label: draft.label,
+        what: (pickText(tpl?.label, lang) || draft.kind).toLowerCase(),
+        kind: draft.kind,
         about,
         family: tpl?.family === "source" ? "source" : "work",
         folder: p.folder,
@@ -295,7 +343,7 @@ export function RecordEditor(p: RecordEditorProps) {
         onIssues: (list, message) => {
           const f = issuesToFields(list, tpl);
           if (!list.length) f.other.push(message);
-          p.onRejected?.(d, f);
+          p.onRejected?.(draft, f);
         },
       },
     );
@@ -313,7 +361,7 @@ export function RecordEditor(p: RecordEditorProps) {
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key === "Enter") {
         e.preventDefault();
-        save();
+        void save();
       } else if (mod && e.code === "Backslash") {
         e.preventDefault();
         if (source) fromSource();

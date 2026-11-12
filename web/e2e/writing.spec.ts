@@ -271,3 +271,31 @@ test("конструктор видов на низком экране: длин
   await dlg.getByRole("button", { name: "Сохранить вид" }).click();
   await expect(dlg.getByText("Вид «Длинный обход» сохранён")).toBeVisible();
 });
+
+test("подсказки в тексте: @ — объект в «О чём», [[ — запись; ссылки уходят связями", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "набор с клавиатуры — на компьютере");
+  await page.goto("./new");
+  await page.getByRole("textbox", { name: "Заголовок" }).fill("Заметка со ссылками");
+  const body = page.getByRole("textbox", { name: "Текст записи" });
+  await body.click();
+  // @ — объекты базы: подсказка видна сразу и сужается по набранному
+  await page.keyboard.type("Смотри @Датчик вл");
+  const list = page.getByRole("listbox");
+  await expect(list.getByRole("option", { name: /Датчик влажности В-2/ })).toBeVisible();
+  await list.getByRole("option", { name: /Датчик влажности В-2/ }).click();
+  await expect(body).toContainText("[[Датчик влажности В-2]]");
+  await expect(page.locator(".props--edit")).toContainText("Датчик влажности В-2");
+  // [[ — записи базы
+  await page.keyboard.type(" и [[Погрешность");
+  await expect(list.getByRole("option", { name: /Погрешность влажности В-2/ })).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(body).toContainText("[[Погрешность влажности В-2: ±2 %]]");
+  const sent = page.waitForRequest((r) => r.url().endsWith("/api/v1/submit") && r.method() === "POST");
+  await page.getByRole("main").getByRole("button", { name: "Записать" }).click();
+  const req = await sent;
+  const links = (req.postDataJSON() as { links: { dst: string; rel: string }[] }).links;
+  expect(links.map((l) => l.rel).sort()).toEqual(["about", "see_also"]);
+});
