@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("антология: собрать, HTML-отчёт в окне приложения", async ({ page }) => {
   await page.goto("./bundles");
+  await page.getByRole("radio", { name: /^Подборка amemo/ }).check();
   await page.getByRole("checkbox", { name: /Антология: проверенное и предпочтительное/ }).check();
   await page.getByRole("textbox", { name: "Заголовок отчёта" }).fill("Датчики");
   await page.getByRole("button", { name: "Собрать подборку" }).click();

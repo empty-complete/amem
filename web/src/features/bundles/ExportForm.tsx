@@ -21,7 +21,7 @@ type Status = components["schemas"]["Status"];
 const STATUSES: Status[] = ["verified", "auto_verified", "needs_review", "draft", "deprecated", "superseded"];
 type Result = {
   id: string;
-  summary: { counts?: Record<string, number> };
+  summary: { format?: string; counts?: Record<string, number> };
   download: string;
   report: string | null;
 };
@@ -100,6 +100,9 @@ export function ExportForm({ refs, share = false }: { refs?: string[]; share?: b
     ...q.records(null),
     select: (d) => d.items.filter((r) => r.kind_or_class === "project"),
   });
+  // по умолчанию — заметки Markdown, как в Obsidian; подборка amemo — для другой базы amemo
+  const [format, setFormat] = useState<"markdown" | "bundle">("markdown");
+  const md = format === "markdown";
   const [anthology, setAnthology] = useState(false);
   const [title, setTitle] = useState("");
   const [tags, setTags] = useState("");
@@ -140,9 +143,11 @@ export function ExportForm({ refs, share = false }: { refs?: string[]; share?: b
               },
           with_files: withFiles,
           // антология пакеты не копирует (служба отвечает 400): у получателя нужны те же пакеты
-          with_packs: withPacks && !anthology,
-          anthology,
-          ...(anthology && title.trim() ? { title: title.trim() } : {}),
+          with_packs: withPacks && !anthology && !md,
+          anthology: anthology && !md,
+          format,
+          lang: i18n.language.startsWith("en") ? "en" : "ru",
+          ...(anthology && !md && title.trim() ? { title: title.trim() } : {}),
         },
       });
       if (r.data) setRes(r.data as Result);
@@ -162,12 +167,14 @@ export function ExportForm({ refs, share = false }: { refs?: string[]; share?: b
           <Icon name="check" /> {t("bundles.done")}
         </h2>
         <p>
-          {t("bundles.counts", {
-            atoms: c.atoms ?? 0,
-            entities: c.entities ?? 0,
-            links: c.links ?? 0,
-            objects: c.objects ?? 0,
-          })}
+          {res.summary.format === "amemo.notes-md/1"
+            ? t("bundles.md_counts", { notes: c.notes ?? 0, objects: c.objects ?? 0, files: c.files ?? 0 })
+            : t("bundles.counts", {
+                atoms: c.atoms ?? 0,
+                entities: c.entities ?? 0,
+                links: c.links ?? 0,
+                objects: c.objects ?? 0,
+              })}
         </p>
         <div className="editor__foot">
           <FileLink className="pillbtn" href={res.download} download={zipName(title, res.id)}>
@@ -190,14 +197,28 @@ export function ExportForm({ refs, share = false }: { refs?: string[]; share?: b
         void build();
       }}
     >
-      <label className="chk bpreset">
-        <input type="checkbox" checked={anthology} onChange={(e) => setAnthology(e.target.checked)} />
-        <span>
-          <strong>{t("bundles.anthology")}</strong>
-          <span className="muted">{t("bundles.anthology_hint")}</span>
-        </span>
-      </label>
-      {anthology && (
+      <fieldset className="fl bformat">
+        <legend>{t("bundles.format")}</legend>
+        {(["markdown", "bundle"] as const).map((f) => (
+          <label key={f} className="chk bpreset">
+            <input type="radio" name="bformat" checked={format === f} onChange={() => setFormat(f)} />
+            <span>
+              <strong>{t(`bundles.format_${f}`)}</strong>
+              <span className="muted">{t(`bundles.format_${f}_hint`)}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      {!md && (
+        <label className="chk bpreset">
+          <input type="checkbox" checked={anthology} onChange={(e) => setAnthology(e.target.checked)} />
+          <span>
+            <strong>{t("bundles.anthology")}</strong>
+            <span className="muted">{t("bundles.anthology_hint")}</span>
+          </span>
+        </label>
+      )}
+      {anthology && !md && (
         <label className="fl">
           {t("bundles.anthology_title")}
           <input
@@ -282,17 +303,19 @@ export function ExportForm({ refs, share = false }: { refs?: string[]; share?: b
         <input type="checkbox" checked={withFiles} onChange={(e) => setWithFiles(e.target.checked)} />
         {t("bundles.with_files")}
       </label>
-      <label className="chk">
-        <input
-          type="checkbox"
-          checked={withPacks && !anthology}
-          disabled={anthology}
-          aria-describedby={anthology ? "packs-note" : undefined}
-          onChange={(e) => setWithPacks(e.target.checked)}
-        />
-        {t("bundles.with_packs")}
-      </label>
-      {anthology && (
+      {!md && (
+        <label className="chk">
+          <input
+            type="checkbox"
+            checked={withPacks && !anthology}
+            disabled={anthology}
+            aria-describedby={anthology ? "packs-note" : undefined}
+            onChange={(e) => setWithPacks(e.target.checked)}
+          />
+          {t("bundles.with_packs")}
+        </label>
+      )}
+      {anthology && !md && (
         <p className="muted" id="packs-note">
           {t("bundles.with_packs_anthology")}
         </p>

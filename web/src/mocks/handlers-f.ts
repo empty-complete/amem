@@ -45,7 +45,10 @@ export const handlersF = (zip: () => Promise<ArrayBuffer>) => [
       with_packs?: boolean;
       anthology?: boolean;
       title?: string;
+      format?: "bundle" | "markdown";
     };
+    if (b.format === "markdown" && (b.anthology || b.with_packs))
+      return problem(400, "Неверный запрос", "format markdown: заметки — без антологии и без пакетов");
     if (b.anthology && b.with_packs)
       return problem(
         400,
@@ -63,9 +66,23 @@ export const handlersF = (zip: () => Promise<ArrayBuffer>) => [
       atoms,
       entities: rows.length - atoms,
     });
+    if (b.format === "markdown")
+      return HttpResponse.json({
+        id,
+        summary: {
+          format: "amemo.notes-md/1",
+          counts: { notes: atoms, objects: rows.length - atoms, files: b.with_files ? 2 : 0 },
+          with_files: !!b.with_files,
+          with_packs: false,
+          packs: [],
+        },
+        download: `/api/v1/bundles/${id}/download`,
+        report: null,
+      });
     return HttpResponse.json({
       id,
       summary: {
+        format: "amem.bundle/1",
         counts: {
           atoms,
           entities: rows.length - atoms,

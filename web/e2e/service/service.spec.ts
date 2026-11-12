@@ -200,6 +200,7 @@ test("папки: создать, перенести запись из меню,
 test("подборка: антология — zip и HTML-отчёт", async ({ page }) => {
   const problems = watch(page);
   await page.goto("./bundles");
+  await page.getByRole("radio", { name: /^Подборка amemo/ }).check();
   await page.getByRole("checkbox", { name: /Антология: проверенное и предпочтительное/ }).check();
   await page.getByRole("textbox", { name: "Заголовок отчёта" }).fill("Метеостанция");
   await page.getByRole("button", { name: "Собрать подборку" }).click();
