@@ -35,3 +35,31 @@ export function scrollWithin(el: HTMLElement | null) {
   const b = box.getBoundingClientRect();
   box.scrollTop += a.top - b.top - (b.height - a.height) / 2;
 }
+
+const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+
+/** Подсветить первое вхождение начала цитаты в одном текстовом узле (абзацы docx-preview и Markdown — узлы
+ * целиком); вернуть mark или null. */
+export function markQuote(root: HTMLElement, quote: string): HTMLElement | null {
+  const want = norm(quote).slice(0, 60);
+  if (!want) return null;
+  const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    const text = n.textContent ?? "";
+    const at = norm(text).indexOf(want);
+    if (at < 0) continue;
+    // позиция в исходном тексте: нормализация сжимает пробелы — ищем по словам с начала цитаты
+    const words = want.split(" ");
+    const re = new RegExp(words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+"), "i");
+    const m = text.match(re);
+    if (!m || m.index == null) continue;
+    const range = document.createRange();
+    range.setStart(n, m.index);
+    range.setEnd(n, m.index + m[0].length);
+    const mark = document.createElement("mark");
+    mark.className = "docx__quote";
+    range.surroundContents(mark);
+    return mark;
+  }
+  return null;
+}
