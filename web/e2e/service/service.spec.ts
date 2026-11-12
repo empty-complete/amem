@@ -84,7 +84,7 @@ test("запись по N: полный редактор, «Отменить» �
     await page.getByRole("main").getByRole("button", { name: "Записать" }).click();
   };
   await write("Отменённая мысль о мачте");
-  await page.getByRole("button", { name: "Отменить" }).click();
+  await page.getByRole("button", { name: "Отменить", exact: true }).click();
   await page.waitForTimeout(WINDOW);
   const none = await page.request.get(`/api/v1/search?q=${encodeURIComponent("Отменённая мысль")}`);
   expect(((await none.json()) as { items: unknown[] }).items).toEqual([]);
@@ -205,8 +205,9 @@ test("подборка: антология — zip и HTML-отчёт", async ({
   await page.getByRole("button", { name: "Собрать подборку" }).click();
   await expect(page.getByRole("heading", { name: /Подборка собрана/ })).toBeVisible();
   await page.getByRole("button", { name: "Открыть отчёт" }).click();
-  const frame = page.getByRole("dialog", { name: "Отчёт подборки" }).frameLocator("iframe");
-  await expect(frame.getByText("Метеостанция").first()).toBeVisible();
+  // рамка отчёта изолирована (sandbox без скриптов): содержимое сверяем по srcdoc, внутрь рамки не заходим
+  const frame = page.getByRole("dialog", { name: "Отчёт подборки" }).locator("iframe");
+  await expect(frame).toHaveAttribute("srcdoc", /Метеостанция/);
   const zip = await page
     .getByRole("link", { name: /zip|Скачать/ })
     .first()
