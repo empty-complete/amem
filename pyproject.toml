@@ -55,7 +55,7 @@ dev = ["pytest>=8", "ruff>=0.14", "linkml==1.12.1", "linkml-runtime==1.12.1", "j
        "httpx2>=2.0",                    # клиент starlette.testclient
        "openapi-spec-validator>=0.8.4"]  # тест: контракт HTTP v1 — верный OpenAPI 3.1 (его ставит и linkml)
 embed = ["fastembed>=0.9.1,<0.10"]
-web = ["amemo-web==0.1.0a4"]      # статика веб-UI, web/python; служба отдаёт по /ui. Версия — та же, что у amemo
+web = ["amemo-web==0.1.0a5"]      # статика веб-UI, web/python; служба отдаёт по /ui. Версия — та же, что у amemo
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
