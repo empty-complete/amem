@@ -132,19 +132,20 @@ test("Shift выбирает диапазон от прошлой выбранн
   // заметки, которые дерево показывает в папке (заменённые версии в нём не стоят)
   const box = station.closest("li") as HTMLElement;
   await waitFor(() => expect(box.querySelectorAll("li[data-ref]").length).toBeGreaterThan(1));
-  const links = [...box.querySelectorAll<HTMLElement>("li[data-ref] a")];
-  const first = links[0];
-  const last = links[links.length - 1];
+  const labels = [...box.querySelectorAll<HTMLElement>("li[data-ref] a")].map((a) => a.textContent ?? "");
+  const first = labels[0];
+  const last = labels[labels.length - 1];
   if (!first || !last || first === last) throw new Error("нет образцов");
-  await user.click(first);
+  // после щелчка роутер перерисовывает дерево — ссылку ищем заново по имени
+  const link = (name: string) => within(nav()).getByRole("link", { name });
+  await user.click(link(first));
   await user.keyboard("{Shift>}");
-  await user.click(last);
+  await user.click(link(last));
   await user.keyboard("{/Shift}");
-  const picked = [...nav().querySelectorAll<HTMLElement>("li[data-picked]")].map((el) => el.dataset.ref);
-  expect(picked).toHaveLength(links.length);
+  expect(nav().querySelectorAll("li[data-picked]")).toHaveLength(labels.length);
   // новый Shift-щелчок без Ctrl — новый диапазон вместо прежнего
   await user.keyboard("{Shift>}");
-  await user.click(first);
+  await user.click(link(first));
   await user.keyboard("{/Shift}");
   expect(nav().querySelectorAll("li[data-picked]")).toHaveLength(1);
 });
