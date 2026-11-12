@@ -215,7 +215,8 @@ def _current(conn, target: Target, ids: set[uuid.UUID]) -> dict[uuid.UUID, dict]
     t = target
     with conn.cursor(row_factory=dict_row) as cur:
         rows = cur.execute(
-            f"SELECT rec.id AS record_id, rec.key, rec.status, rec.{_CODE[t]} AS code, r.id, r.n, r.schema_version, "
+            f"SELECT rec.id AS record_id, rec.key, rec.status, rec.folder, rec.{_CODE[t]} AS code, r.id, r.n, "
+            f"r.schema_version, "
             f"r.content_hash, r.payload, r.review_state, r.recorded_at, cs.agent FROM {t}_current r "
             f"JOIN {t} rec ON rec.id = r.{t}_id JOIN changeset cs ON cs.id = r.changeset_id "
             f"WHERE rec.id = ANY(%s)", (list(ids),)).fetchall()
@@ -289,6 +290,8 @@ def _record_rows(conn, target: Target, current: dict[uuid.UUID, dict], with_hist
         row = current[record_id]
         item = {"id": str(record_id), "key": row["key"], _CODE[target]: row["code"], "status": row["status"],
                 "revision": _revision(row)}
+        if row.get("folder"):
+            item["folder"] = row["folder"]          # папка — метаданные, не часть ревизии: импорт ставит её новым
         if with_history:
             item["history"] = [_revision(h) for h in lookup.history(conn, target, record_id) if h["id"] != row["id"]]
         out.append(item)
@@ -685,6 +688,68 @@ def _read_jsonl(root: Path, name: str) -> list[dict]:
             raise BundleError(f"{name}: строка {i} — не объект JSON")
         rows.append(row)
     return rows
+
+
+def install_packs(conn, manifest: dict, root: Path, folder: Path) -> list[str]:
+    """Поставить недостающие пакеты видов, которые лежат в подборке (packs/<имя>, with_packs): копия — в
+    packs.installed_root(), затем db.load_vocab. Ставится пакет, которого нет в базе или который загружен другой
+    версией не из AMEMO_PACKS (явная настройка главнее); содержимое сверяется с digest манифеста, весь набор — с
+    правилами load_packs. Ответ — «имя версия» поставленных; нечего ставить — пустой список. Отказ — BundleError,
+    и прежние каталоги пакетов возвращаются на место."""
+    from . import db
+
+    have = {(n, v): d for n, v, d in conn.execute("SELECT name, version, digest FROM pack")}
+    explicit = {packs.manifest_name(Path(p)) for p in os.environ.get("AMEMO_PACKS", "").split(os.pathsep) if p}
+    todo: list[tuple[str, str, Path]] = []
+    for p in manifest["packs"]:
+        name, version, digest = p.get("name"), p.get("version"), p.get("digest")
+        if not isinstance(name, str) or name in ("core", mine.NAME) or have.get((name, version)) == digest:
+            continue
+        src = root / "packs" / name
+        if name in explicit or not (src / "pack.yaml").is_file() or not re.fullmatch(r"[a-z0-9_]+", name):
+            continue
+        try:
+            loaded = packs.load_pack(src)
+        except packs.PackError as e:
+            raise BundleError(f"{folder.name}: пакет {name} в подборке не загружается: {e}") from e
+        if (loaded.name, loaded.version, loaded.digest) != (name, version, digest):
+            raise BundleError(f"{folder.name}: пакет {name} в подборке не совпадает с манифестом (версия или digest)")
+        todo.append((name, version, src))
+    if not todo:
+        return []
+    target = packs.installed_root()
+    current = [d for d in packs.discover() if packs.manifest_name(d) not in {n for n, _, _ in todo}]
+    try:
+        packs.load_packs([*current, *(src for _, _, src in todo)])
+    except packs.PackError as e:
+        raise BundleError(f"{folder.name}: пакеты подборки не сочетаются с загруженными: {e}") from e
+    target.mkdir(parents=True, exist_ok=True)
+    moved: list[tuple[Path, Path | None]] = []
+    try:
+        for name, _, src in todo:
+            dst, old = target / name, None
+            tmp = target / f".{name}.{uuid7()}.part"
+            shutil.copytree(src, tmp)
+            if dst.exists():
+                old = target / f".{name}.{uuid7()}.old"
+                os.replace(dst, old)
+            os.replace(tmp, dst)
+            moved.append((dst, old))
+        db.load_vocab(conn)
+    except BaseException as e:
+        for dst, old in reversed(moved):
+            shutil.rmtree(dst, ignore_errors=True)
+            if old is not None:
+                os.replace(old, dst)
+        for part in target.glob(".*.part"):
+            shutil.rmtree(part, ignore_errors=True)
+        if isinstance(e, (OSError, packs.PackError)) or type(e).__name__ == "MigrationError":
+            raise BundleError(f"{folder.name}: пакеты подборки не поставлены: {_reason(e)}") from e
+        raise
+    for _, old in moved:
+        if old is not None:
+            shutil.rmtree(old, ignore_errors=True)
+    return [f"{name} {version}" for name, version, _ in todo]
 
 
 def _check_packs(conn, manifest: dict, root: Path, folder: Path) -> list[tuple]:
@@ -1223,7 +1288,17 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
         if damaged:
             raise BundleError(f"{folder.name}: повреждены части подборки: {', '.join(damaged)}", code=DAMAGED,
                               damaged=damaged)
-        kinds = _check_packs(conn, manifest, root, folder)
+        installed: list[str] = []
+        try:
+            kinds = _check_packs(conn, manifest, root, folder)
+        except BundleError as e:
+            # пакетов видов нет, но они лежат в подборке: человек ставит их сам, без AMEMO_PACKS и prepare
+            if e.code != "bundle_pack_missing" or not agent.startswith("person:"):
+                raise
+            installed = install_packs(conn, manifest, root, folder)
+            if not installed:
+                raise
+            kinds = _check_packs(conn, manifest, root, folder)
         own = conn.execute("SELECT value FROM meta WHERE key = 'base_id'").fetchone()
         if own is None:
             raise BundleError("у базы нет base_id — выполните prepare")
@@ -1235,7 +1310,7 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
         concepts = _read_jsonl(root, "concepts.jsonl")
         files = {f"sha256:{PurePosixPath(n).name}": root / n for n in manifest["parts"]
                  if n.startswith("objects/sha256/")}
-        warnings: list[str] = []
+        warnings: list[str] = [f"поставлены пакеты видов из подборки: {', '.join(installed)}"] if installed else []
         new_kinds, pack_collisions = mine.compare(conn, kinds) if kinds else ([], [])
         kinds = [k for k in kinds if k[0].code in new_kinds]
         collisions: list[str] = list(pack_collisions)
@@ -1308,8 +1383,24 @@ def import_(conn: psycopg.Connection, store, folder: Path, *, agent: str, trust:
             taken = isinstance(e, psycopg.errors.UniqueViolation)
             raise BundleError(f"подборка не записана: {e.diag.message_primary}",
                               code="bundle_key_collision" if taken else None) from e
+    _place(conn, recs, agent, warnings)
     return Imported(cs, counts, queued=queued, warnings=warnings, report=_report_json(report, names),
                     complete=not queued, kinds=new_kinds)
+
+
+def _place(conn, recs: list[_Rec], agent: str, warnings: list[str]) -> None:
+    """Новые записи — в папки, где они лежали в базе-источнике (поле folder строки подборки); уже бывшие записи
+    остаются, где их держит получатель. Неверный путь — предупреждение, запись — без папки."""
+    from . import folders
+
+    for rec in recs:
+        path = rec.row.get("folder")
+        if rec.action != "created" or not isinstance(path, str) or not path.strip():
+            continue
+        try:
+            folders.move(conn, rec.ref, path, agent=agent)
+        except (folders.FolderError, RecordError) as e:
+            warnings.append(f"{rec.ref}: папка {path!r} не поставлена: {e}")
 
 
 class _Trial(Exception):

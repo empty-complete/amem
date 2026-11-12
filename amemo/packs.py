@@ -1,7 +1,8 @@
 """Пакеты домена: словари и шаблоны ядра и расширений.
 
 Ядро — тоже пакет (amemo/packs/core). Другие пакеты — каталоги, перечисленные в настройке AMEMO_PACKS
-(через os.pathsep). Пакет — каталог: pack.yaml (name, version, title, description, license),
+(через os.pathsep), и пакеты, которые поставил импорт подборки (installed_root: AMEMO_PACKS_HOME или
+~/.local/share/amemo/packs, каталог на пакет; пакет с тем же именем из AMEMO_PACKS главнее). Пакет — каталог: pack.yaml (name, version, title, description, license),
 vocab/*.yaml (понятия в формате model_v1.Concept), templates/*.yaml (шаблоны model_v1.Template),
 skills/*.md (тексты для агентов — раздаёт установщик сервера, здесь не читаются).
 
@@ -429,10 +430,40 @@ def _check_broader(packs: list[Pack]) -> None:
                                 f"нет в словаре {c.scheme} загружаемых пакетов")
 
 
+def installed_root(env=None) -> Path:
+    """Каталог пакетов, которые поставил импорт подборки (bundle.install_packs): AMEMO_PACKS_HOME или
+    ~/.local/share/amemo/packs — рядом с хранилищем копий и языковыми данными OCR."""
+    from . import portable
+
+    env = os.environ if env is None else env
+    if env.get("AMEMO_PACKS_HOME", "").strip():
+        return Path(env["AMEMO_PACKS_HOME"].strip()).expanduser()
+    return portable.home(env) / ".local" / "share" / "amemo" / "packs"
+
+
+def manifest_name(path: Path) -> str | None:
+    """Имя пакета из pack.yaml без полной загрузки; нет файла или он кривой — None."""
+    try:
+        data = yaml.safe_load((Path(path) / "pack.yaml").read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return None
+    name = data.get("name") if isinstance(data, dict) else None
+    return name if isinstance(name, str) else None
+
+
 def discover() -> list[Path]:
-    """Ядро + каталоги из AMEMO_PACKS."""
+    """Ядро, каталоги из AMEMO_PACKS и поставленные импортом пакеты (installed_root), кроме тех, чьё имя уже
+    задали AMEMO_PACKS: явная настройка главнее."""
     extra = [Path(p) for p in os.environ.get("AMEMO_PACKS", "").split(os.pathsep) if p]
-    return [CORE_PACK, *extra]
+    taken = {"core", *(n for n in (manifest_name(p) for p in extra) if n)}
+    root = installed_root()
+    installed = []
+    if root.is_dir():
+        for d in sorted(root.iterdir()):
+            name = manifest_name(d) if d.is_dir() and not d.name.startswith(".") else None
+            if name and name == d.name and name not in taken:
+                installed.append(d)
+    return [CORE_PACK, *extra, *installed]
 
 
 def load_packs(paths: list[Path] | None = None) -> list[Pack]:

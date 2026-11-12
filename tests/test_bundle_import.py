@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from psycopg.pq import TransactionStatus
 
-from amemo import bundle, canon, check, db, lookup, objects, records, review
+from amemo import bundle, canon, check, db, folders, lookup, objects, packs, records, review
 from amemo.check import Proposal, level2
 from amemo.ocfl_store import ObjectStore, StoreError
 from check_support import atom, entity, source_md, value
@@ -140,17 +140,54 @@ def test_trust_keep_draft_gets_semantic_item(pg, pg2, monkeypatch, store, store2
     assert lookup.get(pg2, "atom", r.records[0]["record_id"])["status"] == "draft"
 
 
-def test_pack_missing_refuses_with_hint(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+def test_pack_missing_refuses_model_and_person_installs_bundled_packs(pg, pg2, monkeypatch, store, store2, docs,
+                                                                     tmp_path):
+    """Нет пакета подборки: модели — отказ с подсказкой; человек ставит пакеты из packs/ подборки сам (копия в
+    AMEMO_PACKS_HOME, база их знает и после prepare — перезапуска службы)."""
     _prepare(pg, monkeypatch)
     _seed(pg, store, docs)
     _export(pg, store, tmp_path / "b", with_files=False, with_packs=True)
     _prepare(pg2, monkeypatch, env=str(PACKS / "quantities"))        # без ontology
     with pytest.raises(bundle.BundleError, match="ontology 1.0.0") as e:
-        bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+        bundle.import_(pg2, store2, tmp_path / "b", agent="model:reader", dry_run=True)
     assert e.value.code == "bundle_pack_missing"
     assert "AMEMO_PACKS" in str(e.value) and "подборке b" in str(e.value) and "packs/ontology" in str(e.value)
     assert str(tmp_path) not in str(e.value)                 # полного пути на диске в сообщении нет
     assert _count(pg2, "atom") == 0 and _count(pg2, "object") == 0
+    got = bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert got.warnings[0] == "поставлены пакеты видов из подборки: ontology 1.0.0"
+    assert (packs.installed_root() / "ontology" / "pack.yaml").is_file()
+    assert _count(pg2, "atom") == 2
+    db.prepare(pg2)
+    assert ("ontology", "1.0.0") in pg2.execute("SELECT name, version FROM pack").fetchall()
+
+
+def test_pack_without_copy_in_bundle_still_refuses(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Подборка без packs/ (with_packs выключен): ставить нечего — прежний отказ и человеку."""
+    _prepare(pg, monkeypatch)
+    _seed(pg, store, docs)
+    _export(pg, store, tmp_path / "b", with_files=False, with_packs=False)
+    _prepare(pg2, monkeypatch, env=str(PACKS / "quantities"))
+    with pytest.raises(bundle.BundleError) as e:
+        bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER, dry_run=True)
+    assert e.value.code == "bundle_pack_missing"
+    assert not (packs.installed_root() / "ontology").exists()
+
+
+def test_folders_travel_with_new_records(pg, pg2, monkeypatch, store, store2, docs, tmp_path):
+    """Папка записи едет в подборке (поле folder строки) и ставится новой записи; бывшую запись импорт не двигает."""
+    _prepare(pg, monkeypatch); _prepare(pg2, monkeypatch)
+    refs = _seed(pg, store, docs)
+    folders.move(pg, f"atm:{refs['@n']}", "Проекты/Кампус", agent=PERSON)
+    _export(pg, store, tmp_path / "b")
+    rows = [json.loads(x) for x in (tmp_path / "b" / "atoms.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert {r["id"]: r.get("folder") for r in rows}[refs["@n"]] == "Проекты/Кампус"
+    bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    folder = lambda: pg2.execute("SELECT folder FROM atom WHERE id = %s", (refs["@n"],)).fetchone()[0]  # noqa: E731
+    assert folder() == "Проекты/Кампус"
+    folders.move(pg2, f"atm:{refs['@n']}", None, agent=OTHER)
+    bundle.import_(pg2, store2, tmp_path / "b", agent=OTHER)
+    assert folder() is None
 
 
 def test_key_collision_refuses(pg, pg2, monkeypatch, store, store2, docs, tmp_path):

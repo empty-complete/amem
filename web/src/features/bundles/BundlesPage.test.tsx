@@ -6,11 +6,11 @@ import { ExportForm } from "./ExportForm";
 test("антология: статусы зафиксированы на «проверено», после сборки — zip и отчёт", async () => {
   const user = userEvent.setup();
   await renderWithApp(<ExportForm />, "/bundles");
-  // антология — у подборки amemo; по умолчанию выгружаются заметки Markdown
-  await user.click(await screen.findByRole("radio", { name: /^Подборка amemo/ }));
-  await user.click(screen.getByRole("checkbox", { name: /Антология: проверенное и предпочтительное/ }));
+  // отчёт для чтения (антология) — под раскрывашкой «Отчёт для чтения»
+  await user.click(await screen.findByText("Отчёт для чтения"));
+  await user.click(screen.getByRole("checkbox", { name: /^Отчёт для чтения \(HTML\)/ }));
   expect(screen.getByRole("checkbox", { name: "Ждёт проверки" })).toBeDisabled();
-  await user.type(screen.getByRole("textbox", { name: "Заголовок отчёта" }), "Датчики");
+  await user.type(screen.getByRole("textbox", { name: "Название отчёта" }), "Датчики");
   await user.click(screen.getByRole("button", { name: "Собрать подборку" }));
   expect(await screen.findByRole("heading", { name: /Подборка собрана/ })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Скачать zip" })).toHaveAttribute(
@@ -33,11 +33,14 @@ test("пустой отбор — словами", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("Подборка пуста");
 });
 
-test("по умолчанию — заметки Markdown: без антологии и пакетов, итог — заметки и файлы", async () => {
+test("по умолчанию — подборка amemo с файлами; «Для Obsidian» — заметки .md, без отчёта", async () => {
   const user = userEvent.setup();
   await renderWithApp(<ExportForm />, "/bundles");
-  expect(await screen.findByRole("radio", { name: /^Заметки Markdown/ })).toBeChecked();
-  expect(screen.queryByRole("checkbox", { name: /Антология/ })).not.toBeInTheDocument();
+  expect(await screen.findByRole("checkbox", { name: /^Приложить исходные документы/ })).toBeChecked();
+  const obsidian = screen.getByRole("checkbox", { name: /^Для Obsidian/ });
+  expect(obsidian).not.toBeChecked();
+  await user.click(obsidian);
+  expect(screen.queryByText("Отчёт для чтения")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Собрать подборку" }));
   expect(await screen.findByText(/заметок · \d+ объектов · \d+ файлов/)).toBeInTheDocument();
 });
