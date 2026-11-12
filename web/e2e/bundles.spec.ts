@@ -2,9 +2,9 @@ import { expect, test } from "@playwright/test";
 
 test("антология: собрать, HTML-отчёт в окне приложения", async ({ page }) => {
   await page.goto("./bundles");
-  await page.getByRole("radio", { name: /^Подборка amemo/ }).check();
-  await page.getByRole("checkbox", { name: /Антология: проверенное и предпочтительное/ }).check();
-  await page.getByRole("textbox", { name: "Заголовок отчёта" }).fill("Датчики");
+  await page.getByText("Отчёт для чтения", { exact: true }).click();
+  await page.getByRole("checkbox", { name: /^Отчёт для чтения \(HTML\)/ }).check();
+  await page.getByRole("textbox", { name: "Название отчёта" }).fill("Датчики");
   await page.getByRole("button", { name: "Собрать подборку" }).click();
   await expect(page.getByRole("heading", { name: /Подборка собрана/ })).toBeVisible();
   await page.getByRole("button", { name: "Открыть отчёт" }).click();

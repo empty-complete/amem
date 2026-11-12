@@ -94,3 +94,14 @@
   border-radius: var(--r-field, 8px);
   background: #fff;
 }
+
+/* редкое — отчёт для чтения — под раскрывашкой, чтобы не путать с обычной подборкой */
+.bmore {
+  display: grid;
+  gap: var(--s-xs);
+}
+.bmore summary {
+  color: var(--muted);
+  font-size: var(--t-label);
+  cursor: pointer;
+}
