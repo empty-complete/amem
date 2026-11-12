@@ -64,7 +64,7 @@ test("все отобранные — в папку одним запросом,
   if (n > 1) await bar.getByRole("button", { name: `Выбрать все отобранные: ${n}` }).click();
   await bar.getByRole("button", { name: "Выгрузить подборкой" }).click();
   const dlg = page.getByRole("dialog", { name: "Выгрузить подборкой" });
-  await expect(dlg.getByText(new RegExp(`^Выбран[оа] ${n} запис`))).toBeVisible();
+  await expect(dlg.getByText(new RegExp(`^В подборке ${n} запис`))).toBeVisible();
   await page.keyboard.press("Escape");
   const moves: string[] = [];
   page.on("request", (r) => {
