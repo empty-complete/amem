@@ -73,6 +73,8 @@ test("окно настроек: Ctrl+, разделы и поиск; небо �
 }) => {
   test.skip(isMobile, "клавиши — на компьютере");
   await page.goto("./");
+  // клавиши оболочки — после первой отрисовки
+  await expect(page.getByRole("navigation", { name: "Папки" })).toBeVisible();
   await page.keyboard.press("Control+Comma");
   const win = page.getByRole("dialog", { name: "Настройки" });
   await expect(win.getByRole("button", { name: "Общие" })).toHaveAttribute("aria-current", "page");
