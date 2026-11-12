@@ -1853,6 +1853,8 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string;
+                /** @description Только файлы одного рода: pdf, sheet (таблицы), doc (документы и текст), slides (презентации), image */
+                type?: "pdf" | "sheet" | "doc" | "slides" | "image";
                 limit?: number;
                 cursor?: string;
             };

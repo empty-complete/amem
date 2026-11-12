@@ -867,10 +867,10 @@ def object_status(conn: psycopg.Connection, path) -> dict:
 OBJECT_SEARCH_LIMIT = 20               # объектов на страницу поиска по умолчанию (контракт: 1–100)
 
 
-def object_search(conn: psycopg.Connection, *, q=None, limit=None, cursor=None) -> dict:
+def object_search(conn: psycopg.Connection, *, q=None, limit=None, cursor=None, file_type=None) -> dict:
     """{items: ObjectView[], next_cursor}: объекты по части имени или пути без учёта регистра (lookup.object_search);
-    пустой q — последние объекты."""
-    page = lookup.object_search(conn, _str(q, "q"), cursor=_str(cursor, "cursor"),
+    пустой q — последние объекты; file_type — только файлы одного рода (lookup.FILE_TYPES)."""
+    page = lookup.object_search(conn, _str(q, "q"), cursor=_str(cursor, "cursor"), file_type=_str(file_type, "type"),
                                 limit=_int(limit, "limit", low=1, high=lookup.OBJECT_LIMIT,
                                            default=OBJECT_SEARCH_LIMIT))
     return {"items": [_object_card(conn, v) for v in page["items"]], "next_cursor": page["next_cursor"]}

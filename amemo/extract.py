@@ -1,9 +1,10 @@
-"""Текст xlsx и docx по страницам: лист книги или страница Word — одна «страница».
+"""Текст xlsx, docx и pptx по страницам: лист книги, страница Word или слайд — одна «страница».
 
 Модуль не знает о базе. None — текста нет: файл битый, зашифрован, пуст или превышает пределы
 (подрезанный текст дал бы ложное «цитата не найдена»)."""
 from __future__ import annotations
 
+import posixpath
 import re
 import zipfile
 from datetime import date, datetime, time
@@ -15,6 +16,10 @@ MAX_XML_BYTES = 64 * 2**20           # распакованный word/document.
 MAX_TEXT_CHARS = 50_000_000
 MAX_CELLS = 5_000_000                # обойдённых ячеек xlsx, пустые тоже
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+P = "{http://schemas.openxmlformats.org/presentationml/2006/main}"
+A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+REL = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 _MC_FALLBACK = "{http://schemas.openxmlformats.org/markup-compatibility/2006}Fallback"
 
 _SKIP = {W + t for t in ("del", "moveFrom", "delText", "instrText", "pPr", "rPr", "tblPr", "trPr", "tcPr", "sectPr")} | {_MC_FALLBACK}
@@ -219,5 +224,56 @@ def docx_pages(file: Path) -> list[str] | None:
         out = _Pages()
         _walk(root, out)
         return out.result()
+    except _BAD_FILE:
+        return None
+
+
+def _xml(zf: zipfile.ZipFile, name: str) -> ElementTree.Element:
+    """Часть пакета Office деревом: без DOCTYPE и не больше MAX_XML_BYTES (иначе ValueError)."""
+    data = _read_limited(zf, name)
+    if data is None:
+        raise ValueError(f"{name}: больше предела")
+    parser = ElementTree.XMLParser(target=_NoDoctype())
+    parser.feed(data)
+    return parser.close()
+
+
+def _slide_order(zf: zipfile.ZipFile) -> list[str]:
+    """Части слайдов в порядке показа: список sldIdLst в presentation.xml и его связи, а не имена slideN.xml."""
+    pres = _xml(zf, "ppt/presentation.xml")
+    rels = _xml(zf, "ppt/_rels/presentation.xml.rels")
+    target = {r.get("Id"): r.get("Target", "") for r in rels.iter(REL + "Relationship")}
+    order = []
+    for sid in pres.iter(P + "sldId"):
+        t = target.get(sid.get(R + "id"), "")
+        if t:
+            order.append(posixpath.normpath(t.lstrip("/") if t.startswith("/") else posixpath.join("ppt", t)))
+    return order
+
+
+def _paragraph(p: ElementTree.Element) -> str:
+    """Абзац DrawingML: текст прогонов и полей, разрыв строки — перевод строки."""
+    parts = []
+    for el in p.iter():
+        if el.tag == A + "t":
+            parts.append(el.text or "")
+        elif el.tag == A + "br":
+            parts.append("\n")
+    return "".join(parts).strip()
+
+
+def pptx_pages(file: Path) -> list[str] | None:
+    """Слайд — страница, в порядке показа (скрытые тоже: номер слайда их считает): текст фигур, групп и таблиц
+    по абзацам; заметки докладчика не входят. Нет слайдов или текста — None."""
+    try:
+        with zipfile.ZipFile(file) as zf:
+            pages, chars = [], 0
+            for name in _slide_order(zf):
+                text = "\n".join(line for line in (_paragraph(p) for p in _xml(zf, name).iter(A + "p")) if line)
+                chars += len(text)
+                if chars > MAX_TEXT_CHARS:
+                    raise ValueError("текст больше предела")
+                pages.append(text)
+        return pages if any(pages) else None
     except _BAD_FILE:
         return None

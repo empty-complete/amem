@@ -1,6 +1,6 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { api, data } from "../client";
-import type { components } from "../schema";
+import type { components, paths } from "../schema";
 
 /** Фабрики запросов: компоненты не знают путей API, только эти функции. */
 /** Пунктов очереди в одном запросе — предел контракта (/review/items, limit до 500). */
@@ -40,6 +40,9 @@ export async function allRecordRefs(folder: string | null, f: RecordFilter) {
   } while (cursor);
   return refs;
 }
+
+/** Род файла в поиске объектов (параметр type у /objects). */
+export type ObjectType = NonNullable<NonNullable<paths["/objects"]["get"]["parameters"]["query"]>["type"]>;
 
 export const q = {
   session: () =>
@@ -210,6 +213,21 @@ export const q = {
       queryKey: ["objects", text],
       queryFn: async () =>
         data(await api.GET("/objects", { params: { query: { q: text || undefined, limit: 20 } } })),
+    }),
+  /** Объекты для «+ Источник» страницами: часть имени и род файла (pdf, sheet, doc, slides, image). */
+  objectPages: (text: string, type?: ObjectType) =>
+    infiniteQueryOptions({
+      queryKey: ["objects", text, "pages", type ?? null],
+      initialPageParam: null as string | null,
+      queryFn: async ({ pageParam }) =>
+        data(
+          await api.GET("/objects", {
+            params: {
+              query: { q: text || undefined, type, limit: 30, ...(pageParam ? { cursor: pageParam } : {}) },
+            },
+          }),
+        ),
+      getNextPageParam: (last) => last.next_cursor ?? null,
     }),
   tasks: (object: string) =>
     queryOptions({

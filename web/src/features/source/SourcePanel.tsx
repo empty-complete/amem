@@ -9,12 +9,13 @@ import type { components } from "../../api/schema";
 import { FileLink } from "../../ui/FileLink";
 import { Icon, type IconName } from "../../ui/icons";
 import { RegionState } from "../../ui/RegionState";
+import { MarkdownView } from "./FileViews";
+import { fileKind, useSheetNames } from "./kind";
 import { SheetPreview } from "./SheetPreview";
 import { TextFragment } from "./TextFragment";
 import "./source.css";
 
 const DocxView = lazy(() => import("./DocxView"));
-const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const PdfPage = lazy(() => import("./PdfPage"));
 
 type Source = components["schemas"]["SourceView"];
@@ -56,6 +57,7 @@ export function placeText(selectors: unknown[] | undefined, t: TFunction) {
   const parts: string[] = [];
   for (const s of (selectors ?? []) as Selector[]) {
     if (s.type === "page") parts.push(t("source.page", { n: s.label ?? s.value }));
+    else if (s.type === "slide") parts.push(t("source.slide", { n: s.label ?? s.value }));
     else if (s.type === "sheet") parts.push(t("source.sheet", { name: s.value }));
     else if (s.type === "range") parts.push(String(s.value));
     else if (s.label || s.value) parts.push(String(s.label ?? s.value));
@@ -77,7 +79,9 @@ export function VerdictText({ verdict }: { verdict: Source["verdict"] | null | u
 
 function Viewer({ s }: { s: Source }) {
   const { t } = useTranslation();
-  const page = Number(sel(s, "page")?.value ?? 0) || undefined;
+  // слайд презентации — её страница (так же считает проверка службы)
+  const page = Number(sel(s, "page")?.value ?? sel(s, "slide")?.value ?? 0) || undefined;
+  const kind = fileKind(s);
   const quotes = useMemo(() => (s.quote ? [s.quote] : []), [s.quote]);
   if (s.object_kind === "web" || s.object_kind === "message" || s.verdict === "no_file") {
     return s.quote ? (
@@ -86,7 +90,7 @@ function Viewer({ s }: { s: Source }) {
       <p className="muted">{t("source.no_preview")}</p>
     );
   }
-  if (s.media_type === "application/pdf") {
+  if (kind === "pdf") {
     return (
       <Suspense fallback={<RegionState state="loading" />}>
         <PdfPage url={contentUrl(s.object, s.object_version)} page={page ?? 1} quotes={quotes} />
@@ -94,8 +98,9 @@ function Viewer({ s }: { s: Source }) {
     );
   }
   if (sel(s, "range") || sel(s, "sheet")) return <SheetSource s={s} />;
+  if (kind === "md") return <MarkdownView id={s.object} version={s.object_version} quotes={quotes} />;
   const text = <TextFragment id={s.object} version={s.object_version} page={page} quotes={quotes} />;
-  if (s.media_type === DOCX) {
+  if (kind === "docx") {
     return (
       <Suspense fallback={<RegionState state="loading" />}>
         <DocxView url={contentUrl(s.object, s.object_version)} quotes={quotes} fallback={text} />
@@ -109,10 +114,11 @@ function Viewer({ s }: { s: Source }) {
 function SheetSource({ s }: { s: Source }) {
   const { t } = useTranslation();
   const o = useQuery(q.object(s.object));
+  const names = useSheetNames(s.object, o.data ? s.object_version : undefined, o.data?.sheets);
   const sheet = String(sel(s, "sheet")?.value ?? "");
   const range = String(sel(s, "range")?.value ?? "");
-  if (o.isPending) return <RegionState state="loading" />;
-  const sheets = o.data?.sheets ?? [];
+  if (o.isPending || names.pending) return <RegionState state="loading" />;
+  const sheets = names.names;
   if (!sheets.length) return <p className="muted">{t("source.no_preview")}</p>;
   const cited = [{ sheet: sheet || (sheets[0] ?? ""), range, label: t("source.this_record") }].filter(
     (c) => c.range,

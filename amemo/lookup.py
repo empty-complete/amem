@@ -588,11 +588,30 @@ def _object_after(cursor) -> uuid.UUID | None:
         raise RecordError(f"cursor {cursor!r}: не курсор поиска объектов — нужен next_cursor прошлой страницы") from e
 
 
-def object_search(conn: psycopg.Connection, q: str | None = None, *, limit: int = 20, cursor=None) -> dict:
+# род файла для отбора в «+ Источник»: типы содержимого и расширения имени (тип не всегда определён при загрузке)
+FILE_TYPES = {
+    "pdf": (("application/pdf",), ("pdf",)),
+    "sheet": (("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+               "application/vnd.ms-excel.sheet.macroenabled.12", "application/vnd.ms-excel",
+               "application/vnd.oasis.opendocument.spreadsheet", "text/csv"), ("xlsx", "xlsm", "xls", "ods", "csv")),
+    "doc": (("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword",
+             "application/vnd.oasis.opendocument.text", "application/rtf", "text/rtf", "text/markdown", "text/plain"),
+            ("docx", "doc", "odt", "rtf", "md", "txt")),
+    "slides": (("application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                "application/vnd.ms-powerpoint", "application/vnd.oasis.opendocument.presentation"),
+               ("pptx", "ppt", "odp")),
+    "image": ((), ("png", "jpg", "jpeg", "gif", "webp", "tif", "tiff", "bmp")),
+}
+
+
+def object_search(conn: psycopg.Connection, q: str | None = None, *, limit: int = 20, cursor=None,
+                  file_type: str | None = None) -> dict:
     """Объекты по части имени файла, адреса страницы или пути в папке документов, без учёта регистра:
     {items: [object_view], next_cursor}. Пустой q — все объекты; порядок — от новых к старым (id — UUIDv7),
     курсор — id последнего объекта страницы. Регистр сравнивается по lower() базы (правила LC_CTYPE сервера);
-    запрос — в NFC, «\\» в нём — «/», как у путей объектов."""
+    запрос — в NFC, «\\» в нём — «/», как у путей объектов.
+    file_type — только файлы одного рода (FILE_TYPES: по типу содержимого или расширению имени); неизвестный —
+    RecordError."""
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= OBJECT_LIMIT:
         raise RecordError(f"limit {limit!r}: нужно целое от 1 до {OBJECT_LIMIT}")
     if q is not None and not isinstance(q, str):
@@ -608,8 +627,18 @@ def object_search(conn: psycopg.Connection, q: str | None = None, *, limit: int 
                      "AND strpos(lower(p.path), lower(%(q)s)) > 0))")
     if after is not None:
         where.append("o.id < %(after)s")
+    media, exts = [], ""
+    if file_type is not None:
+        if file_type not in FILE_TYPES:
+            raise RecordError(f"type {file_type!r}: нужно одно из {', '.join(FILE_TYPES)}")
+        media, ext = FILE_TYPES[file_type]
+        exts = r"\.(" + "|".join(ext) + ")$"
+        where.append("(lower(coalesce(o.media_type, '')) = ANY(%(media)s) "
+                     + ("OR lower(coalesce(o.media_type, '')) LIKE 'image/%%' " if file_type == "image" else "")
+                     + "OR lower(coalesce(o.original_name, '')) ~ %(exts)s)")
     rows = conn.execute(f"SELECT o.id FROM object o WHERE {' AND '.join(where) or 'TRUE'} "
-                        "ORDER BY o.id DESC LIMIT %(take)s", {"q": text, "after": after, "take": limit + 1}).fetchall()
+                        "ORDER BY o.id DESC LIMIT %(take)s",
+                        {"q": text, "after": after, "take": limit + 1, "media": list(media), "exts": exts}).fetchall()
     page = [r[0] for r in rows[:limit]]
     items = [view for view in (object_view(conn, oid) for oid in page) if view is not None]
     return {"items": items, "next_cursor": _object_cursor(page[-1]) if len(rows) > limit else None}

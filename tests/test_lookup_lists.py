@@ -422,6 +422,30 @@ def test_object_search_by_name_path_and_url(kb, store, tmp_path):
     assert [i["id"] for i in rest["items"]] == [str(a)] and rest["next_cursor"] is None
 
 
+def test_object_search_by_file_type(kb, store, tmp_path):
+    """Род файла — по типу содержимого или расширению имени: PDF находится и среди сотни таблиц."""
+    from amemo import objects
+
+    docs = tmp_path / "d"
+    docs.mkdir()
+    for name in ("Отчёт.pdf", "Нагрузки.xlsx", "Справка.docx", "Итоги.md", "Схема.pptx", "Фото.png"):
+        (docs / name).write_bytes(b"x" + name.encode())
+    made = {name.rsplit(".", 1)[1]: str(objects.ingest(kb, store, docs, name, agent=HUMAN).object_id)
+            for name in ("Отчёт.pdf", "Нагрузки.xlsx", "Справка.docx", "Итоги.md", "Схема.pptx", "Фото.png")}
+
+    def found(file_type, q=None):
+        return {i["id"] for i in lookup.object_search(kb, q, file_type=file_type)["items"]}
+
+    assert found("pdf") == {made["pdf"]}
+    assert found("sheet") == {made["xlsx"]}
+    assert found("doc") == {made["docx"], made["md"]}
+    assert found("slides") == {made["pptx"]}
+    assert found("image") == {made["png"]}
+    assert found("doc", "итоги") == {made["md"]}               # вместе с частью имени
+    with pytest.raises(RecordError):
+        lookup.object_search(kb, "", file_type="video")
+
+
 @pytest.mark.parametrize("kw", [{"limit": 0}, {"limit": 101}, {"limit": "5"}, {"limit": True}, {"cursor": "мусор"},
                                 {"cursor": lookup._cursor(datetime(2026, 1, 1).astimezone(), ids.uuid7())}])
 def test_object_search_bad_arguments(kb, kw):

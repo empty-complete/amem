@@ -17,11 +17,15 @@ import { useCopy } from "../../ui/useCopy";
 import { Body } from "../record/Body";
 import "../record/record.css";
 import { recordPath } from "../records/RecordList";
+import { MarkdownView, SlidesView } from "./FileViews";
+import { fileKind, useSheetNames } from "./kind";
 import { type CitedRange, SheetPreview } from "./SheetPreview";
 import { fileType, placeText, VerdictText } from "./SourcePanel";
+import { TextFragment } from "./TextFragment";
 import "./source.css";
 
 const PdfPage = lazy(() => import("./PdfPage"));
+const DocxView = lazy(() => import("./DocxView"));
 
 type Obj = components["schemas"]["ObjectView"];
 type Cite = components["schemas"]["ObjectCitation"];
@@ -141,6 +145,15 @@ function ObjectView_({ o }: { o: Obj }) {
   }, [cited]);
   const rest = unparsed(o, (n) => t("source.page", { n }));
   const name = o.original_name ?? o.url ?? o.id;
+  const kind = fileKind(o);
+  const sheets = useSheetNames(o.id, kind === "sheet" ? last?.n : undefined, o.sheets);
+  // первый процитированный слайд — с него начинается просмотр презентации
+  const [slide, setSlide] = useState(() => {
+    const first = (o.cited_by ?? [])
+      .flatMap((c) => (c.selectors as unknown as { type: string; value?: unknown }[] | undefined) ?? [])
+      .find((x) => x.type === "slide");
+    return Number(first?.value) || 1;
+  });
 
   return (
     <article className="note objpage" aria-labelledby="obj-title">
@@ -213,16 +226,36 @@ function ObjectView_({ o }: { o: Obj }) {
 
       <section className="widget" aria-label={t("source.preview")}>
         <h2>{t("source.preview")}</h2>
-        {last && o.media_type === "application/pdf" ? (
+        {last && kind === "pdf" ? (
           <Suspense fallback={<RegionState state="loading" />}>
             <div className="objpdf">
               <PdfPage url={contentUrl(o.id, last.n)} page={pageQuotes.page} quotes={pageQuotes.quotes} />
             </div>
           </Suspense>
-        ) : last && o.sheets?.length ? (
-          <SheetPreview id={o.id} version={last.n} sheets={o.sheets} cited={ranges} />
-        ) : last && o.media_type?.startsWith("image/") ? (
+        ) : last && kind === "sheet" ? (
+          sheets.pending ? (
+            <RegionState state="loading" />
+          ) : sheets.names.length ? (
+            <SheetPreview id={o.id} version={last.n} sheets={sheets.names} cited={ranges} />
+          ) : (
+            <p className="muted">{t("source.no_preview")}</p>
+          )
+        ) : last && kind === "image" ? (
           <AuthedImg className="objimg" src={contentUrl(o.id, last.n)} alt={name} />
+        ) : last && kind === "docx" ? (
+          <Suspense fallback={<RegionState state="loading" />}>
+            <DocxView
+              url={contentUrl(o.id, last.n)}
+              quotes={[]}
+              fallback={<TextFragment id={o.id} version={last.n} quotes={[]} />}
+            />
+          </Suspense>
+        ) : last && kind === "md" ? (
+          <MarkdownView id={o.id} version={last.n} quotes={[]} />
+        ) : last && kind === "slides" ? (
+          <SlidesView id={o.id} version={last.n} slide={slide} onSlide={setSlide} quotes={[]} />
+        ) : last && o.kind === "file" ? (
+          <TextFragment id={o.id} version={last.n} quotes={[]} />
         ) : (
           <p className="muted">{t("source.no_preview")}</p>
         )}
