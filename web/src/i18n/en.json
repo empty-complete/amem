@@ -141,7 +141,31 @@
     "new_in": "Where new records go",
     "new_in_root": "Empty — the root",
     "new_in_hint": "A folder path, as in Obsidian, e.g. “Inbox” or “Projects/Campus”. Empty means the root. A missing folder appears with the first note. Agents' records go to the root.",
-    "base_unnamed": "unnamed"
+    "base_unnamed": "unnamed",
+    "s_general": "General",
+    "s_appearance": "Appearance",
+    "s_files": "Files and links",
+    "s_hotkeys": "Hotkeys",
+    "s_core": "Core plugins",
+    "s_about": "About the service",
+    "sections": "Settings sections",
+    "search": "Search settings",
+    "nothing": "No such setting",
+    "open": "Settings",
+    "key_edit": "Read ⇄ edit a record",
+    "key_save": "Save",
+    "key_search": "Search",
+    "key_collapse": "Collapse all folders",
+    "core": {
+      "sky.home": "Sky on the home page",
+      "sky.record": "Neighbourhood on a record",
+      "sky.entity": "Graph on the object page"
+    },
+    "core_hint": {
+      "sky.home": "Off — the home page opens the list of all records.",
+      "sky.record": "The Neighbourhood tab in the record's right panel.",
+      "sky.entity": "The graph column on the object page."
+    }
   },
   "theme": {
     "system": "Match system",
@@ -302,7 +326,10 @@
     "full": "Full screen",
     "full_exit": "Exit full screen",
     "docx": "Document",
-    "this_record": "this record"
+    "this_record": "this record",
+    "slide": "slide {{n}}",
+    "slide_of": "Slide {{n}} of {{count}}",
+    "no_slides": "The slides have no text"
   },
   "card": {
     "tab_card": "Card",
@@ -530,7 +557,8 @@
     "t_hr": "Divider",
     "k_save": "save",
     "k_source": "source",
-    "k_leave": "leave"
+    "k_leave": "leave",
+    "new_where": "Where the new note goes"
   },
   "quick": {
     "title": "New record",
@@ -560,7 +588,15 @@
     "quote": "Quote: verbatim, within one page",
     "done": "Done",
     "other": "Another file",
-    "take": "Use this"
+    "take": "Use this",
+    "types": "File type",
+    "t_all": "All",
+    "t_pdf": "PDF",
+    "t_sheet": "Spreadsheets",
+    "t_doc": "Documents",
+    "t_slides": "Slides",
+    "t_image": "Images",
+    "nothing": "Nothing found"
   },
   "kinds": {
     "title": "My kinds",

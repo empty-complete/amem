@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { settingsWindow } from "../features/settings/store";
 import { placeStore } from "../features/write/place";
 import { collapseAll, treePick } from "./shell/folderTree";
 
@@ -21,8 +22,9 @@ export function useHotkeys(h: { focusSearch: () => void }) {
         return;
       }
       if (mod && e.code === "Comma") {
+        // настройки — окном поверх рабочей области, как в Obsidian
         e.preventDefault();
-        navigate({ to: "/settings" });
+        settingsWindow.open();
         return;
       }
       if (inField(document.activeElement) || mod || e.altKey) return;

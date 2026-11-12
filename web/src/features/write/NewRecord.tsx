@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { q } from "../../api/queries";
@@ -12,11 +12,38 @@ import type { FieldIssues } from "./proposal";
 /** Замечания проверки, пришедшие после окна отмены: человек уже ушёл со страницы — вернём его в /new с ними. */
 let rejected: { key: string; issues: FieldIssues } | null = null;
 
+import { newNoteFolder } from "../../app/shell/folderTree";
 import { emptyDraft, NEW_REF } from "./proposal";
 import { RecordEditor } from "./RecordEditor";
 import "../record/record.css";
 
 const peekIssues = (key: string) => (rejected?.key === key ? rejected.issues : null);
+
+/** Хлебные крошки новой заметки, как в Obsidian: папка, куда она ляжет, и «Новая заметка». */
+function NewCrumbs({ folder }: { folder: string }) {
+  const { t } = useTranslation();
+  const parts = folder ? folder.split("/") : [];
+  return (
+    <div className="note__bar">
+      <nav className="crumbs" aria-label={t("edit.new_where")}>
+        {parts.length ? (
+          parts.map((name, i) => (
+            <span key={parts.slice(0, i + 1).join("/")}>
+              {i > 0 && <span aria-hidden="true"> / </span>}
+              <Link to="/records" search={{ folder: parts.slice(0, i + 1).join("/") } as never}>
+                {name}
+              </Link>
+            </span>
+          ))
+        ) : (
+          <span className="muted">{t("folders.unfiled")}</span>
+        )}
+        <span aria-hidden="true"> / </span>
+        <span aria-current="page">{t("edit.new_title")}</span>
+      </nav>
+    </div>
+  );
+}
 
 /** /new — тот же экран записи, открытый в правке: «О чём» из места, вид — из адреса или заметка (разд. 5.9). */
 export function NewRecord({
@@ -56,6 +83,7 @@ export function NewRecord({
   const back = () => (about ? navigate(recordPath(about)) : navigate({ to: "/" }));
   return (
     <article className="note note--new" aria-label={t("edit.new_title")}>
+      <NewCrumbs folder={folder === undefined ? newNoteFolder() : folder === "-" ? "" : folder} />
       <RecordEditor
         initial={initial}
         labels={about && aboutLabel ? { [about]: aboutLabel } : {}}
