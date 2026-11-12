@@ -446,3 +446,8 @@ kbd {
   flex-wrap: wrap;
   gap: var(--s-2xs);
 }
+
+.bar__nav {
+  display: inline-flex;
+  gap: var(--s-3xs);
+}

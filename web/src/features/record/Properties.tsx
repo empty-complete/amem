@@ -91,18 +91,18 @@ export function Properties({ view, kindLabel }: { view: View; kindLabel: string 
   const values = (p.content?.values ?? []).slice(kind === "parameter" ? 1 : 0);
   return (
     <dl className="props" aria-label={t("record.props")}>
-      <Row icon="stack" name={t("record.p_kind")} hint={t("record.hint.kind")}>
+      <Row icon="stack" name={t("record.p_kind")}>
         <span className="pill kind" data-family={family(kind, view.target)}>
           {kindLabel}
         </span>
       </Row>
       {summary && (
-        <Row icon="text" name={t("record.p_summary")} hint={t("record.hint.summary")}>
+        <Row icon="text" name={t("record.p_summary")}>
           <span className="gist">{summary}</span>
         </Row>
       )}
       {!!view.about?.length && (
-        <Row icon="link" name={t("record.p_about")} hint={t("record.hint.about")}>
+        <Row icon="link" name={t("record.p_about")}>
           {view.about.map((a) => (
             <Link key={a.ref} className="pill obj" title={a.label} {...recordPath(a.ref)}>
               <span className="pill__t">{a.label}</span>
@@ -111,7 +111,7 @@ export function Properties({ view, kindLabel }: { view: View; kindLabel: string 
         </Row>
       )}
       {values.length > 0 && (
-        <Row icon="ruler" name={t("record.p_values")} hint={t("record.hint.values")}>
+        <Row icon="ruler" name={t("record.p_values")}>
           {values.map((v) => (
             <span key={v.property} className="num">
               {pickText(v.label, lang) && (
@@ -127,7 +127,7 @@ export function Properties({ view, kindLabel }: { view: View; kindLabel: string 
         </Row>
       )}
       {!!p.codes?.length && (
-        <Row icon="hash" name={t("record.p_codes")} hint={t("record.hint.codes")}>
+        <Row icon="hash" name={t("record.p_codes")}>
           {p.codes.map((c) => (
             <code key={c} className="code">
               {c}
@@ -136,14 +136,14 @@ export function Properties({ view, kindLabel }: { view: View; kindLabel: string 
         </Row>
       )}
       {(p.valid_from || p.valid_to) && (
-        <Row icon="calendar" name={t("record.p_when")} hint={t("record.hint.when")}>
+        <Row icon="calendar" name={t("record.p_when")}>
           {[p.valid_from && formatDate(p.valid_from, lang), p.valid_to && formatDate(p.valid_to, lang)]
             .filter(Boolean)
             .join(" — ")}
         </Row>
       )}
       {!!p.tags?.length && (
-        <Row icon="tag" name={t("record.p_tags")} hint={t("record.hint.tags")}>
+        <Row icon="tag" name={t("record.p_tags")}>
           {p.tags.map((tag) => (
             <Link key={tag} className="pill" to="/search" search={{ q: `#${tag}` } as never}>
               #{tag}
@@ -152,23 +152,18 @@ export function Properties({ view, kindLabel }: { view: View; kindLabel: string 
         </Row>
       )}
       {p.basis && (
-        <Row icon="shield" name={t("record.p_basis")} hint={t("record.hint.basis")}>
+        <Row icon="shield" name={t("record.p_basis")}>
           {t(`record.basis.${p.basis}`, { defaultValue: p.basis })}
         </Row>
       )}
       {(p.qualifiers ?? [])
         .filter((q) => q.value_text)
         .map((q) => (
-          <Row
-            key={q.property}
-            icon="dash"
-            name={pickText(q.label, lang) || q.property}
-            hint={t("record.hint.qualifier")}
-          >
+          <Row key={q.property} icon="dash" name={pickText(q.label, lang) || q.property}>
             {q.value_text}
           </Row>
         ))}
-      <Row icon="user" name={t("record.p_by")} hint={t("record.hint.by")}>
+      <Row icon="user" name={t("record.p_by")}>
         {agentName(view.agent, lang)}
         {p.confidence != null && view.agent.startsWith("model:") && (
           <span className="muted">

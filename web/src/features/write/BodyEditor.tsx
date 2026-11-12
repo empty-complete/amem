@@ -14,6 +14,11 @@ export interface BodyEditorApi {
   line: (prefix: string) => void;
   heading: (level: number) => void;
   focus: () => void;
+  /** Выделенный текст («» — ничего не выделено). */
+  selection: () => string;
+  /** Заменить выделение (или вставить в курсор) текстом. */
+  insert: (text: string) => void;
+  selectAll: () => void;
 }
 
 export interface Suggest {
@@ -144,8 +149,9 @@ const BodyEditor = forwardRef<
             ...historyKeymap,
           ]),
           EditorView.domEventHandlers({
-            contextmenu: (e, v) => {
-              if (!live.current.onMenu || v.state.selection.main.empty) return false;
+            contextmenu: (e) => {
+              // меню — всегда, как в Obsidian: без выделения часть пунктов недоступна
+              if (!live.current.onMenu) return false;
               e.preventDefault();
               live.current.onMenu({ x: e.clientX, y: e.clientY });
               return true;
@@ -172,6 +178,23 @@ const BodyEditor = forwardRef<
     wrap: (b, a) => view.current && wrap(view.current, b, a),
     line: (prefix) => view.current && line(view.current, prefix),
     heading: (level) => view.current && heading(view.current, level),
+    selection: () => {
+      const v = view.current;
+      if (!v) return "";
+      return v.state.selection.ranges.map((r) => v.state.sliceDoc(r.from, r.to)).join("\n");
+    },
+    insert: (text) => {
+      const v = view.current;
+      if (!v) return;
+      v.dispatch(v.state.replaceSelection(text));
+      v.focus();
+    },
+    selectAll: () => {
+      const v = view.current;
+      if (!v) return;
+      v.dispatch({ selection: { anchor: 0, head: v.state.doc.length } });
+      v.focus();
+    },
     focus: () => view.current?.focus(),
   }));
 

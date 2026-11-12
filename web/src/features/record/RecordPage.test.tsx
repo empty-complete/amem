@@ -99,10 +99,3 @@ test("источник — диапазон листа: панель показ�
   expect(await within(panel).findByRole("tab", { name: "В-2" })).toBeInTheDocument();
   expect(within(panel).queryByText(/превью нет/)).not.toBeInTheDocument();
 });
-
-test("у имени свойства — подсказка: что это и откуда берётся", async () => {
-  const user = userEvent.setup();
-  await renderWithApp(<RecordPage recordRef={A3} view="human" />, `/atom/${A3}`);
-  await user.hover(await screen.findByRole("button", { name: "Вид" }));
-  expect(await screen.findByRole("tooltip")).toHaveTextContent(/^Вид записи: факт, параметр/);
-});
