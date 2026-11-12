@@ -20,7 +20,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg
-from psycopg.rows import dict_row
 
 from . import __version__, bundle, lookup
 from .ids import uuid7

@@ -2665,6 +2665,17 @@ export interface operations {
                     anthology?: boolean;
                     /** @description Заголовок HTML-отчёта антологии */
                     title?: string;
+                    /**
+                     * @description bundle — подборка amem.bundle/1 для другой базы; markdown — заметки .md по папкам и файлы источников под исходными именами, как в Obsidian (notes_md)
+                     * @default bundle
+                     * @enum {string}
+                     */
+                    format?: "bundle" | "markdown";
+                    /**
+                     * @description Язык названий и текста заметок Markdown
+                     * @enum {string}
+                     */
+                    lang?: "ru" | "en";
                 };
             };
         };
@@ -2677,7 +2688,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         id: string;
-                        /** @description format, created_at, counts, packs (имена), with_files, with_packs, selection, anthology */
+                        /** @description format, created_at, counts (у заметок Markdown — notes, objects, files), packs (имена), with_files, with_packs, selection, anthology */
                         summary: Record<string, never>;
                         download: string;
                         report?: string | null;
