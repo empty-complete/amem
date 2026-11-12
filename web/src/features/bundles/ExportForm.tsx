@@ -90,7 +90,7 @@ function ReportButton({ href }: { href: string }) {
   );
 }
 
-/** Экспорт (разд. 5.10): отбор, «с файлами», «с пакетами и моими видами», готовый отбор «Антология».
+/** Экспорт (разд. 5.10): отбор, «приложить исходные документы», «для Obsidian» (заметки .md), отчёт для чтения (антология).
  * refs — выбранные в списке записи: отбор — ровно они (поля отбора скрыты), статусы — любые. */
 export function ExportForm({ refs, share = false }: { refs?: string[]; share?: boolean } = {}) {
   const { t, i18n } = useTranslation();
@@ -100,8 +100,8 @@ export function ExportForm({ refs, share = false }: { refs?: string[]; share?: b
     ...q.records(null),
     select: (d) => d.items.filter((r) => r.kind_or_class === "project"),
   });
-  // по умолчанию — заметки Markdown, как в Obsidian; подборка amemo — для другой базы amemo
-  const [format, setFormat] = useState<"markdown" | "bundle">("markdown");
+  // по умолчанию — подборка amemo (другой человек импортирует её целиком); галочка «Для Obsidian» — заметки .md
+  const [format, setFormat] = useState<"markdown" | "bundle">("bundle");
   const md = format === "markdown";
   const [anthology, setAnthology] = useState(false);
   const [title, setTitle] = useState("");
@@ -114,8 +114,7 @@ export function ExportForm({ refs, share = false }: { refs?: string[]; share?: b
   );
   const [since, setSince] = useState("");
   // «Поделиться» — подборка, которую другой человек импортирует целиком: с исходными файлами
-  const [withFiles, setWithFiles] = useState(share);
-  const [withPacks, setWithPacks] = useState(true);
+  const [withFiles, setWithFiles] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [res, setRes] = useState<Result | null>(null);
@@ -143,7 +142,8 @@ export function ExportForm({ refs, share = false }: { refs?: string[]; share?: b
               },
           with_files: withFiles,
           // антология пакеты не копирует (служба отвечает 400): у получателя нужны те же пакеты
-          with_packs: withPacks && !anthology && !md,
+          // виды записей едут всегда: импорт ставит их получателю сам (антология и заметки .md — без пакетов)
+          with_packs: !anthology && !md,
           anthology: anthology && !md,
           format,
           lang: i18n.language.startsWith("en") ? "en" : "ru",
@@ -197,38 +197,6 @@ export function ExportForm({ refs, share = false }: { refs?: string[]; share?: b
         void build();
       }}
     >
-      <fieldset className="fl bformat">
-        <legend>{t("bundles.format")}</legend>
-        {(["markdown", "bundle"] as const).map((f) => (
-          <label key={f} className="chk bpreset">
-            <input type="radio" name="bformat" checked={format === f} onChange={() => setFormat(f)} />
-            <span>
-              <strong>{t(`bundles.format_${f}`)}</strong>
-              <span className="muted">{t(`bundles.format_${f}_hint`)}</span>
-            </span>
-          </label>
-        ))}
-      </fieldset>
-      {!md && (
-        <label className="chk bpreset">
-          <input type="checkbox" checked={anthology} onChange={(e) => setAnthology(e.target.checked)} />
-          <span>
-            <strong>{t("bundles.anthology")}</strong>
-            <span className="muted">{t("bundles.anthology_hint")}</span>
-          </span>
-        </label>
-      )}
-      {anthology && !md && (
-        <label className="fl">
-          {t("bundles.anthology_title")}
-          <input
-            className="fld"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Антология"
-          />
-        </label>
-      )}
       {refs ? (
         <p className="bpicked">{t("bundles.picked", { count: refs.length })}</p>
       ) : (
@@ -299,26 +267,47 @@ export function ExportForm({ refs, share = false }: { refs?: string[]; share?: b
           </label>
         </fieldset>
       )}
-      <label className="chk">
+      <label className="chk bpreset">
         <input type="checkbox" checked={withFiles} onChange={(e) => setWithFiles(e.target.checked)} />
-        {t("bundles.with_files")}
+        <span>
+          <strong>{t("bundles.with_files")}</strong>
+          <span className="muted">{t("bundles.with_files_hint")}</span>
+        </span>
       </label>
-      {!md && (
-        <label className="chk">
-          <input
-            type="checkbox"
-            checked={withPacks && !anthology}
-            disabled={anthology}
-            aria-describedby={anthology ? "packs-note" : undefined}
-            onChange={(e) => setWithPacks(e.target.checked)}
-          />
-          {t("bundles.with_packs")}
-        </label>
-      )}
-      {anthology && !md && (
-        <p className="muted" id="packs-note">
-          {t("bundles.with_packs_anthology")}
-        </p>
+      <label className="chk bpreset">
+        <input
+          type="checkbox"
+          checked={md}
+          onChange={(e) => setFormat(e.target.checked ? "markdown" : "bundle")}
+        />
+        <span>
+          <strong>{t("bundles.obsidian")}</strong>
+          <span className="muted">{t("bundles.obsidian_hint")}</span>
+        </span>
+      </label>
+      {/* отчёт для чтения (антология) — редкое: спрятан, в «Поделиться» его нет */}
+      {!share && !md && (
+        <details className="bmore" open={anthology || undefined}>
+          <summary>{t("bundles.report_more")}</summary>
+          <label className="chk bpreset">
+            <input type="checkbox" checked={anthology} onChange={(e) => setAnthology(e.target.checked)} />
+            <span>
+              <strong>{t("bundles.anthology")}</strong>
+              <span className="muted">{t("bundles.anthology_hint")}</span>
+            </span>
+          </label>
+          {anthology && (
+            <label className="fl">
+              {t("bundles.anthology_title")}
+              <input
+                className="fld"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={t("bundles.anthology_title_ph")}
+              />
+            </label>
+          )}
+        </details>
       )}
       {err && (
         <p className="fielderr" role="alert">

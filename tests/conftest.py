@@ -54,6 +54,13 @@ def _hermetic_backend(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _hermetic_packs_home(monkeypatch, tmp_path_factory):
+    """Пакеты, которые ставит импорт подборки (packs.installed_root), — в своей пустой папке теста, а не в
+    ~/.local/share/amemo/packs разработчика: иначе они попали бы в discover() и в prepare всех баз."""
+    monkeypatch.setenv("AMEMO_PACKS_HOME", str(tmp_path_factory.mktemp("packs-home")))
+
+
+@pytest.fixture(autouse=True)
 def _hermetic_ocr(monkeypatch, tmp_path_factory):
     """OCR тестов — по системному tesseract (в CI он есть), а не по данным amemo ocr install разработчика: своя
     пустая папка ocr_data и режим по умолчанию (auto), языки — rus, eng."""
