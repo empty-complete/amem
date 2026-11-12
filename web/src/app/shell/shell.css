@@ -432,7 +432,13 @@ kbd {
 .folders__actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--s-2xs);
+  padding-top: var(--s-xs);
+  border-top: 1px solid var(--separator);
+}
+.folders__settings {
+  margin-left: auto;
 }
 
 .bar__nav {

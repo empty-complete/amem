@@ -5,6 +5,7 @@ import { type KeyboardEvent, type PointerEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { components } from "../../api/schema";
 import { Icon } from "../../ui/icons";
+import { useCorePlugin } from "../settings/store";
 import { Sky } from "../sky/Sky";
 import { SourcePanel } from "../source/SourcePanel";
 
@@ -53,7 +54,10 @@ export function SidePanel({
   onActive: (i: number) => void;
 }) {
   const { t } = useTranslation();
-  const [s, setS] = useState(load);
+  const [saved, setS] = useState(load);
+  // «Окрестность» — плагин ядра: выключен в настройках — вкладки нет, панель показывает источник
+  const sky = useCorePlugin("sky.record");
+  const s = sky ? saved : { ...saved, tab: "source" as const };
   const update = (patch: Partial<Saved>) =>
     setS((prev) => {
       const next = { ...prev, ...patch };
@@ -140,10 +144,12 @@ export function SidePanel({
                 {t("source.panel")}
                 <Tabs.Indicator />
               </Tabs.Tab>
-              <Tabs.Tab id="sky">
-                {t("sky.widget")}
-                <Tabs.Indicator />
-              </Tabs.Tab>
+              {sky && (
+                <Tabs.Tab id="sky">
+                  {t("sky.widget")}
+                  <Tabs.Indicator />
+                </Tabs.Tab>
+              )}
             </Tabs.List>
           </Tabs.ListContainer>
           <Button
@@ -160,9 +166,11 @@ export function SidePanel({
         <Tabs.Panel id="source" className="side__panel">
           <SourcePanel sources={sources} basis={basis} active={active} onActive={onActive} />
         </Tabs.Panel>
-        <Tabs.Panel id="sky" className="side__panel side__panel--sky">
-          <Sky centerRef={recordRef} height="100%" />
-        </Tabs.Panel>
+        {sky && (
+          <Tabs.Panel id="sky" className="side__panel side__panel--sky">
+            <Sky centerRef={recordRef} height="100%" />
+          </Tabs.Panel>
+        )}
       </Tabs>
     </div>
   );

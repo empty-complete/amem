@@ -1,4 +1,5 @@
 import { api, data } from "../api/client";
+import { settingsWindow } from "../features/settings/store";
 import { MOD } from "../ui/platform";
 import type { Plugin } from "./plugin";
 
@@ -44,7 +45,7 @@ export const corePlugin: Plugin = {
       id: "amemo.settings",
       title: { ru: "Настройки", en: "Settings" },
       keys: `${MOD},`,
-      run: ({ navigate }) => navigate("/settings"),
+      run: () => settingsWindow.open(),
     },
   ],
 };

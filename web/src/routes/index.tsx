@@ -1,7 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import { HomeSky } from "../features/home/HomeSky";
+import { RecordList } from "../features/records/RecordList";
 import { list } from "../features/search/params";
+import { useCorePlugin } from "../features/settings/store";
 
 const FAMILIES = ["source", "work", "object"] as const;
 
@@ -27,6 +30,10 @@ export const Route = createFileRoute("/")({
   }),
   component: function Home() {
     const s = Route.useSearch();
+    const { t } = useTranslation();
+    // небо — плагин ядра: выключено в настройках — на главной список всех записей
+    const sky = useCorePlugin("sky.home");
+    if (!sky) return <RecordList folder={null} title={t("folders.all")} />;
     return (
       <HomeSky
         families={s.f}
