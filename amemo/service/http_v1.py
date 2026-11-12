@@ -438,7 +438,8 @@ async def export_bundle(request: Request) -> JSONResponse:
     made = await _call(request, lambda conn: api.bundle_export(
         conn, state.store, state.settings.state, agent=request.state.agent, owner=session.owner(request),
         selection=body.get("selection"), with_files=body.get("with_files"), with_packs=body.get("with_packs"),
-        anthology=body.get("anthology"), title=body.get("title"), quota=state.settings.state_quota))
+        anthology=body.get("anthology"), title=body.get("title"), notes_format=body.get("format"),
+        notes_lang=body.get("lang"), quota=state.settings.state_quota))
     return JSONResponse(_bundle_links(made))
 
 
@@ -632,15 +633,18 @@ async def _receive(request: Request, boundary: bytes, upload: _Upload) -> None:
 
 async def inspect_bundle(request: Request) -> JSONResponse:
     """Загрузка подборки (Origin обязателен — проверяет session.Guard): файл — потоком во временный файл
-    в AMEMO_STATE/uploads, сверх UPLOAD_LIMIT — 413 и недокачанное удаляется; затем bundle.inspect без базы."""
+    в AMEMO_STATE/uploads, сверх UPLOAD_LIMIT — 413 и недокачанное удаляется; затем bundle.inspect без базы.
+    Заметки Markdown (.md или zip хранилища Obsidian) — тем же путём: отчёт notes_md.inspect."""
     boundary = _boundary(request, "подборки")
     settings = request.app.state.settings
     state, quota, owner = settings.state, settings.state_quota, session.owner(request)
     room = await run_in_threadpool(api.upload_room, state, owner, quota)
     upload_id, part = await run_in_threadpool(api.upload_begin, state)
-    await _receive(request, boundary, _Upload(part, room, quota))
+    upload = _Upload(part, room, quota)
+    await _receive(request, boundary, upload)
+    name = (upload.filename or b"").decode("utf-8", "replace") or None
     return JSONResponse(await run_in_threadpool(lambda: api.upload_finish(state, upload_id, part, owner=owner,
-                                                                          quota=quota)))
+                                                                          quota=quota, filename=name)))
 
 
 async def upload_object(request: Request) -> JSONResponse:
@@ -683,7 +687,7 @@ async def import_bundle(request: Request) -> JSONResponse:
     return JSONResponse(await _call(request, lambda conn: api.bundle_import(
         conn, state.store, state.settings.state, body.get("upload_id"), agent=request.state.agent,
         owner=session.owner(request), trust=body.get("trust"), dry_run=body.get("dry_run"),
-        can_write=request.state.can_write)))
+        can_write=request.state.can_write, docs=state.settings.docs)))
 
 
 # --- обновления (amemo/updates.py) ---

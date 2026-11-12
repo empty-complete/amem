@@ -713,6 +713,12 @@ paths:
                 with_packs: { type: boolean, default: false, description: "Копии пакетов, в том числе «Мои виды»: получатель увидит те же виды и формы" }
                 anthology: { type: boolean, default: false }
                 title: { type: string, description: "Заголовок HTML-отчёта антологии" }
+                format:
+                  type: string
+                  enum: [bundle, markdown]
+                  default: bundle
+                  description: "bundle — подборка amem.bundle/1 для другой базы; markdown — заметки .md по папкам и файлы источников под исходными именами, как в Obsidian (notes_md)"
+                lang: { type: string, enum: [ru, en], description: "Язык названий и текста заметок Markdown" }
       responses:
         "200":
           description: OK
@@ -723,7 +729,7 @@ paths:
                 required: [id, summary, download]
                 properties:
                   id: { type: string }
-                  summary: { type: object, description: "format, created_at, counts, packs (имена), with_files, with_packs, selection, anthology" }
+                  summary: { type: object, description: "format, created_at, counts (у заметок Markdown — notes, objects, files), packs (имена), with_files, with_packs, selection, anthology" }
                   download: { type: string }
                   report: { type: [string, "null"] }
         default: { $ref: "#/components/responses/Problem" }

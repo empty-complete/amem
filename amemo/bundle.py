@@ -431,6 +431,18 @@ def _zip(work: Path, out: Path) -> None:
             z.write(work / name, name, compress_type=zipfile.ZIP_STORED if stored else zipfile.ZIP_DEFLATED)
 
 
+def gather(conn: psycopg.Connection, selection: Selection) -> tuple[dict[uuid.UUID, dict], dict[uuid.UUID, dict]]:
+    """Отбор и его замыкание по ссылкам тел: текущие ревизии атомов и сущностей (общее у подборки и заметок
+    Markdown, notes_md). С проектом — и то, во что входят его сущности (датчик → стойка)."""
+    atom_ids, entity_ids = _select(conn, selection)
+    atoms, entities = _closure(conn, selection, _current(conn, "atom", atom_ids), entity_ids)
+    if selection.project:
+        more = _containers(conn, set(entities), list(selection.statuses)) - set(entities)
+        if more:
+            atoms, entities = _closure(conn, selection, atoms, set(entities) | more)
+    return atoms, entities
+
+
 def export(conn: psycopg.Connection, *, store, folder: Path, selection: Selection, agent: str,
            with_files: bool = False, with_history: bool = False, with_packs: bool = False) -> dict:
     """Записать подборку в папку folder (или zip, если имя кончается на .zip) и вернуть манифест.
@@ -448,13 +460,7 @@ def export(conn: psycopg.Connection, *, store, folder: Path, selection: Selectio
     work = folder.parent / f".{folder.name}.{uuid7()}.part"
     work.mkdir()
     try:
-        atom_ids, entity_ids = _select(conn, selection)
-        atoms, entities = _closure(conn, selection, _current(conn, "atom", atom_ids), entity_ids)
-        if selection.project:
-            # сущности проекта видны вместе с тем, во что они входят (датчик → стойка)
-            more = _containers(conn, set(entities), list(selection.statuses)) - set(entities)
-            if more:
-                atoms, entities = _closure(conn, selection, atoms, set(entities) | more)
+        atoms, entities = gather(conn, selection)
         atom_rows = _record_rows(conn, "atom", atoms, with_history)
         entity_rows = _record_rows(conn, "entity", entities, with_history)
         link_rows = _links(conn, set(atoms) | set(entities))
