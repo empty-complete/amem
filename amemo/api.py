@@ -25,6 +25,7 @@ import shutil
 import time
 import unicodedata
 import uuid
+import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -34,6 +35,7 @@ from psycopg.rows import dict_row
 
 from . import __version__, backup, bundle, check, db, folders, forms, lang, lookup, mine, objects, private, profile, \
     recipes, records, review, tasks, usefulness, vocab
+from . import notes_md
 from .anthology import export as anthology_export
 from .check import level1
 from .ids import uuid7
@@ -1707,13 +1709,20 @@ def _filename(title: str | None, bid: str) -> str:
 
 
 def bundle_export(conn: psycopg.Connection, store: ObjectStore, state: Path, *, agent: str, owner: str,
-                  selection, with_files=None, with_packs=None, anthology=None, title=None,
-                  quota: int | None = None) -> dict:
+                  selection, with_files=None, with_packs=None, anthology=None, title=None, notes_format=None,
+                  notes_lang=None, quota: int | None = None) -> dict:
     """Подборка в <state>/bundles/<id>: bundle.export по selection или, с anthology, антология (anthology.export,
     title — заголовок отчёта). Ответ — id, summary (counts, packs по именам, with_files, with_packs, selection,
     created_at) и has_report; ссылки на скачивание и отчёт добавляет служба. Отказ библиотеки — BundleError.
-    quota — предел места владельца (байт): подборка сверх него удаляется, QuotaExceeded."""
+    quota — предел места владельца (байт): подборка сверх него удаляется, QuotaExceeded. notes_format «markdown» —
+    заметки .md по папкам и файлы источников под исходными именами (notes_md), notes_lang — их язык."""
     sel = _selection(selection)
+    fmt = _str(notes_format, "format") or "bundle"
+    if fmt not in ("bundle", "markdown"):
+        raise BadRequest(f"format {fmt!r}: нужно bundle или markdown")
+    md_lang = _str(notes_lang, "lang") or "ru"
+    if md_lang not in notes_md.DIRS:
+        raise BadRequest(f"lang {md_lang!r}: нужно {' или '.join(notes_md.DIRS)}")
     files = _bool(with_files, "with_files", default=False)
     packs_ = _bool(with_packs, "with_packs", default=False)
     is_anthology = _bool(anthology, "anthology", default=False)
@@ -1722,13 +1731,18 @@ def bundle_export(conn: psycopg.Connection, store: ObjectStore, state: Path, *, 
         raise BadRequest(f"title: длиннее {TITLE_MAX} знаков")
     if is_anthology and packs_:
         raise BadRequest("with_packs: антология пакеты не копирует — у получателя нужны те же пакеты")
+    if fmt == "markdown" and (is_anthology or packs_):
+        raise BadRequest("format markdown: заметки — без антологии и без пакетов")
     if quota is not None and (used := state_usage(state, owner)) >= quota:
         raise quota_exceeded(used, quota, "экспорт подборки")
     bid = str(uuid7())
     folder = Path(state) / BUNDLES / bid
     folder.mkdir(parents=True)
     try:
-        if is_anthology:
+        if fmt == "markdown":
+            manifest = notes_md.export(conn, store=store, out=folder / BUNDLE_FILE, selection=sel, agent=agent,
+                                       with_files=files, lang=md_lang) | {"packs": [], "with_packs": False}
+        elif is_anthology:
             made = anthology_export(conn, store=store, folder=folder / BUNDLE_FILE, agent=agent, selection=sel,
                                     with_files=files, title=title or "Антология")
             manifest = made["manifest"]
@@ -1742,7 +1756,8 @@ def bundle_export(conn: psycopg.Connection, store: ObjectStore, state: Path, *, 
                              "selection": manifest["selection"], "anthology": is_anthology})
         _within_quota(state, owner, quota, folder, "экспорт подборки")
         _write_meta(folder, {"owner": owner, "created_at": _now(), "anthology": is_anthology,
-                             "filename": _filename(title or ("Антология" if is_anthology else None), bid)})
+                             "filename": _filename(title or ("Антология" if is_anthology else
+                                                             "amemo-notes" if fmt == "markdown" else None), bid)})
     except BaseException:
         _remove(folder)
         raise
@@ -1779,18 +1794,26 @@ def upload_begin(state: Path) -> tuple[str, Path]:
     return bid, root / f".{bid}.part"
 
 
-def upload_finish(state: Path, upload_id: str, part: Path, *, owner: str, quota: int | None = None) -> dict:
+def upload_finish(state: Path, upload_id: str, part: Path, *, owner: str, quota: int | None = None,
+                  filename: str | None = None) -> dict:
     """Принять докачанный файл загрузки: распаковать один раз в <state>/uploads/<id>/bundle (bundle.unpack — те же
     проверки архива), zip удалить, bundle.inspect по папке и записать владельца; import_ потом идёт по той же папке.
     Не подборка (не zip, нет манифеста, вредный архив) — BundleError (422), и загрузка удаляется. Распакованная
-    загрузка сверх предела места владельца (quota) — QuotaExceeded, и она тоже удаляется."""
+    загрузка сверх предела места владельца (quota) — QuotaExceeded, и она тоже удаляется. Заметки Markdown — один
+    .md (filename) или zip без манифеста с .md внутри (хранилище Obsidian, выгрузка notes_md): отчёт notes_md.inspect,
+    import_ потом вливает их как заметки."""
     folder = Path(state) / UPLOADS / upload_id
     try:
         folder.mkdir()
-        root = bundle.unpack(part, folder / UPLOAD_DIR)
-        Path(part).unlink()
+        if filename and filename.lower().endswith(".md") and not zipfile.is_zipfile(part):
+            root = folder / UPLOAD_DIR
+            root.mkdir()
+            os.replace(part, root / (notes_md._safe(Path(filename).stem, "заметка") + ".md"))
+        else:
+            root = bundle.unpack(part, folder / UPLOAD_DIR)
+            Path(part).unlink()
         _within_quota(state, owner, quota, folder, "загрузка подборки")
-        report = bundle.inspect(root)
+        report = notes_md.inspect(root) if notes_md.is_notes(root) else bundle.inspect(root)
         _write_meta(folder, {"owner": owner, "created_at": _now()})
     except BaseException:
         _remove(folder)
@@ -1800,7 +1823,7 @@ def upload_finish(state: Path, upload_id: str, part: Path, *, owner: str, quota:
 
 
 def bundle_import(conn: psycopg.Connection, store: ObjectStore, state: Path, upload_id, *, agent: str, owner: str,
-                  trust=None, dry_run=None, can_write: bool = True) -> dict:
+                  trust=None, dry_run=None, can_write: bool = True, docs: Path | None = None) -> dict:
     """Imported: bundle.import_ своей загрузки. dry_run по умолчанию — да (план без записи). Настоящий импорт
     вливает только человек: он решает, чему из чужой базы верить; модель смотрит план (dry_run) — Forbidden (403).
     Вход только для чтения (can_write=False) смотрит план, настоящий импорт — ReadOnly (403 read_only)."""
@@ -1812,6 +1835,8 @@ def bundle_import(conn: psycopg.Connection, store: ObjectStore, state: Path, upl
         raise Forbidden(f"подборку в базу вливает только человек (person:), а не {agent}: модели доступен "
                         f"пробный импорт (dry_run: true)")
     folder, _ = _stored(state, UPLOADS, upload_id, owner)
+    if notes_md.is_notes(folder / UPLOAD_DIR):
+        return _jsonable(notes_md.import_(conn, store, docs, folder / UPLOAD_DIR, agent=agent, dry_run=dry))
     result = bundle.import_(conn, store, folder / UPLOAD_DIR, agent=agent, trust=trust, dry_run=dry)
     out = {"changeset_id": str(result.changeset_id) if result.changeset_id is not None else None,
            "counts": result.counts, "queued": result.queued, "warnings": result.warnings,

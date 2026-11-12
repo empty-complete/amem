@@ -785,7 +785,7 @@
     "download": "Download zip",
     "report": "Open report",
     "again": "Build another",
-    "pick_file": "Bundle file (.zip)",
+    "pick_file": "File: an amemo bundle (.zip) or Markdown notes (.md or a zipped Obsidian vault)",
     "inspect": "Inspect",
     "from": "From base {{base}} · built by {{agent}} · {{when}}",
     "in_bundle": "In the bundle",
@@ -808,7 +808,9 @@
     "step1": "1. File",
     "step2": "2. Inspect",
     "step3": "3. Dry run",
-    "step4": "4. Merge"
+    "step4": "4. Merge",
+    "notes_counts": "Markdown notes: {{notes}}. Exported from amemo: {{with_id}} — they update the same records, the rest become new notes.",
+    "notes_skipped": "Exported objects skipped: {{n}} — edit them in amemo."
   },
   "content": {
     "formula": "Formula",

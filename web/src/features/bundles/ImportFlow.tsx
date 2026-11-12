@@ -13,6 +13,8 @@ type Imported = components["schemas"]["Imported"];
 type Inspect = {
   upload_id: string;
   report: {
+    /** «markdown» — заметки .md (хранилище Obsidian или выгрузка заметок), иначе подборка amemo. */
+    format?: string;
     base_id?: string;
     agent?: string;
     created_at?: string;
@@ -90,6 +92,7 @@ export function ImportFlow() {
   const queuedN = (d: Imported | null) =>
     (d?.queued ?? []).reduce((n, x) => n + Number((x as { count?: number }).count ?? 1), 0);
   const rep = ins?.report;
+  const notes = rep?.format === "markdown";
 
   return (
     <div className="bimport">
@@ -110,7 +113,7 @@ export function ImportFlow() {
           ref={file}
           className="fld"
           type="file"
-          accept=".zip,application/zip"
+          accept=".zip,.md,application/zip,text/markdown"
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) void inspect(f);
@@ -125,26 +128,37 @@ export function ImportFlow() {
       {rep && (
         <section className="bcard" aria-label={t("bundles.in_bundle")}>
           <h2>{t("bundles.in_bundle")}</h2>
-          <p className="muted">
-            {t("bundles.from", {
-              base: rep.base_id?.slice(-6) ?? "",
-              agent: (rep.agent ?? "").replace(/^person:/, ""),
-              when: rep.created_at ? new Date(rep.created_at).toLocaleString(i18n.language) : "",
-            })}
-          </p>
-          <p>
-            {t("bundles.counts", {
-              atoms: rep.counts?.atoms ?? 0,
-              entities: rep.counts?.entities ?? 0,
-              links: rep.counts?.links ?? 0,
-              objects: rep.counts?.objects ?? 0,
-            })}
-          </p>
+          {notes ? (
+            <p>
+              {t("bundles.notes_counts", {
+                notes: rep.counts?.notes ?? 0,
+                with_id: rep.counts?.with_id ?? 0,
+              })}
+            </p>
+          ) : (
+            <>
+              <p className="muted">
+                {t("bundles.from", {
+                  base: rep.base_id?.slice(-6) ?? "",
+                  agent: (rep.agent ?? "").replace(/^person:/, ""),
+                  when: rep.created_at ? new Date(rep.created_at).toLocaleString(i18n.language) : "",
+                })}
+              </p>
+              <p>
+                {t("bundles.counts", {
+                  atoms: rep.counts?.atoms ?? 0,
+                  entities: rep.counts?.entities ?? 0,
+                  links: rep.counts?.links ?? 0,
+                  objects: rep.counts?.objects ?? 0,
+                })}
+              </p>
+            </>
+          )}
           <p className="status" data-tone={rep.ok ? "ok" : "bad"}>
             <Icon name={rep.ok ? "check" : "cross"} />
             {rep.ok ? t("bundles.ok") : t("bundles.damaged", { list: (rep.damaged ?? []).join(", ") })}
           </p>
-          {!done && (
+          {!done && !notes && (
             <fieldset className="fl">
               <legend>{t("bundles.trust")}</legend>
               {(["keep", "review"] as const).map((v) => (
@@ -175,6 +189,7 @@ export function ImportFlow() {
               changed: c(dry).changed ?? 0,
             })}
           </p>
+          {!!c(dry).skipped && <p className="muted">{t("bundles.notes_skipped", { n: c(dry).skipped })}</p>}
           <p>{t("bundles.queued", { n: queuedN(dry) })}</p>
           {!!dry.warnings?.length && (
             <>
