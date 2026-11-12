@@ -16,9 +16,9 @@ export default function SettingsWindow() {
       className="modal-overlay"
     >
       <Modal className="modal setwin">
-        <Dialog className="setwin__in" aria-labelledby="setwin-title">
+        <Dialog className="setwin__in" aria-label={t("settings.title")}>
           <div className="setwin__bar">
-            <Heading slot="title" id="setwin-title" className="setwin__title">
+            <Heading slot="title" className="setwin__title">
               {t("settings.title")}
             </Heading>
             <button

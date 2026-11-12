@@ -7,8 +7,9 @@ test("антология: собрать, HTML-отчёт в окне прило
   await page.getByRole("button", { name: "Собрать подборку" }).click();
   await expect(page.getByRole("heading", { name: /Подборка собрана/ })).toBeVisible();
   await page.getByRole("button", { name: "Открыть отчёт" }).click();
-  const frame = page.getByRole("dialog", { name: "Отчёт подборки" }).frameLocator("iframe");
-  await expect(frame.getByRole("heading", { level: 1, name: "Датчики" })).toBeVisible();
+  // рамка отчёта изолирована (sandbox без скриптов): содержимое сверяем по srcdoc, внутрь рамки не заходим
+  const frame = page.getByRole("dialog", { name: "Отчёт подборки" }).locator("iframe");
+  await expect(frame).toHaveAttribute("srcdoc", /<h1>Датчики<\/h1>/);
 });
 
 test("импорт: проверка → пробный импорт → влить; пункты импорта — в проверке", async ({ page }) => {

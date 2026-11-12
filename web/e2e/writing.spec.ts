@@ -176,7 +176,8 @@ test("запись по шаблону пакета с источником-та
   await page.getByRole("main").getByRole("button", { name: "Записать" }).click();
   await page.waitForTimeout(WINDOW);
   await page.goto("./records");
-  await expect(page.getByRole("link", { name: /Влажность 7 ноября: 87 %/ })).toBeVisible();
+  // записи без папки стоят и в дереве слева — ищем в списке рабочей области
+  await expect(page.getByRole("main").getByRole("link", { name: /Влажность 7 ноября: 87 %/ })).toBeVisible();
 });
 
 test("неверная цитата — замечание уровня 2 у источника и «Взять это»", async ({ page }) => {
