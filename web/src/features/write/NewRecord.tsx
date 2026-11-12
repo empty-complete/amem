@@ -24,11 +24,14 @@ export function NewRecord({
   kind,
   related,
   issue,
+  folder,
 }: {
   about?: string;
   kind?: string;
   related?: string;
   issue?: string;
+  /** Папка из меню дерева: путь или «-» — корень. */
+  folder?: string;
 }) {
   const { t } = useTranslation();
   const { text } = useText();
@@ -58,13 +61,14 @@ export function NewRecord({
         labels={about && aboutLabel ? { [about]: aboutLabel } : {}}
         draftKey={key}
         extraLinks={related ? [{ src: NEW_REF, dst: related, rel: "see_also" }] : []}
+        folder={folder === undefined ? undefined : folder === "-" ? "" : folder}
         issues={issuesNow ?? (issue ? { fields: {}, sources: {}, other: [issue] } : null)}
         onQueued={back}
         onCancel={back}
         onRejected={(d, issues) => {
           saveDraft(key, d);
           rejected = { key, issues };
-          navigate({ to: "/new", search: { about, kind: d.kind } as never });
+          navigate({ to: "/new", search: { about, kind: d.kind, folder } as never });
         }}
       />
     </article>

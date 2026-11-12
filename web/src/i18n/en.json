@@ -18,7 +18,6 @@
     "forward": "Forward"
   },
   "folders": {
-    "as_list": "“{{name}}” as a list",
     "empty": "Empty",
     "moved_many_one": "{{count}} record moved to “{{to}}”",
     "moved_many_few": "{{count}} records moved to “{{to}}”",
@@ -28,17 +27,22 @@
     "all": "All records",
     "tags": "Tags",
     "unfiled": "No folder",
-    "new": "Folder",
+    "new": "New folder",
     "moved": "Moved to “{{to}}”",
     "rename": "Rename",
     "delete": "Delete",
-    "new_inside": "Folder inside",
+    "new_inside": "New folder inside",
     "new_name": "New folder name",
     "menu": "Folder “{{name}}”: actions",
     "move_to": "Move to folder",
     "move_title": "Move to",
     "drag": "Drag onto a folder on the left",
-    "width": "Folder panel width"
+    "width": "Folder panel width",
+    "new_note": "New note",
+    "open_list": "Open as list",
+    "all_list": "All records as list",
+    "collapse": "Collapse all folders",
+    "root_menu": "Folder panel: actions"
   },
   "records": {
     "empty": "Nothing here yet. Agents write to the base over MCP, and you can write the first note.",
@@ -135,8 +139,8 @@
     "sky_label_hint": "A star label is at most this many characters; the full title is in the star card.",
     "sky_label_n": "{{n}} characters",
     "new_in": "Where new records go",
-    "new_in_root": "To the root, no folder",
-    "new_in_hint": "As in Obsidian: new records from this window land here. Agents' records go to the root. For example, make an «Inbox» folder and pick it.",
+    "new_in_root": "Empty — the root",
+    "new_in_hint": "A folder path, as in Obsidian, e.g. “Inbox” or “Projects/Campus”. Empty means the root. A missing folder appears with the first note. Agents' records go to the root.",
     "base_unnamed": "unnamed"
   },
   "theme": {
@@ -453,8 +457,7 @@
     "scope": "What the sky shows",
     "folder": "Folder",
     "folder_any": "Any folder",
-    "scope_btn": "Narrow the sky",
-    "scope_open": "Narrow the sky: tags, kind, folder"
+    "tag_any": "Any tag"
   },
   "write": {
     "saved": "Saved: {{what}}",
@@ -722,7 +725,8 @@
     "no_source": "No source",
     "entities": "Entities",
     "first_n": "Showing the first {{n}} items — narrow the queue by reason or document.",
-    "width": "Review list width"
+    "width": "Review list width",
+    "any_reason": "Any reason"
   },
   "basepage": {
     "title": "Base",
@@ -810,7 +814,9 @@
     "step3": "3. Dry run",
     "step4": "4. Merge",
     "notes_counts": "Markdown notes: {{notes}}. Exported from amemo: {{with_id}} — they update the same records, the rest become new notes.",
-    "notes_skipped": "Exported objects skipped: {{n}} — edit them in amemo."
+    "notes_skipped": "Exported objects skipped: {{n}} — edit them in amemo.",
+    "report_failed": "The report did not open — build the bundle again",
+    "report_title": "Bundle report"
   },
   "content": {
     "formula": "Formula",

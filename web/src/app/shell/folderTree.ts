@@ -35,7 +35,7 @@ const subscribe = (f: () => void) => {
   return () => subs.delete(f);
 };
 
-/** Раскрыт ли раздел дерева; key — путь папки, «*» — все записи, «-» — без папки. */
+/** Раскрыт ли раздел дерева; key — путь папки. */
 export function useOpen(key: string): [boolean, () => void] {
   const isOpen = useSyncExternalStore(subscribe, () => open.has(key));
   return [
@@ -108,13 +108,20 @@ export const treePick = {
     anchor = ref;
     pickEmit();
   },
-  /** Диапазон от прошлой выбранной до ref — по порядку строк в панели (order — ссылки сверху вниз). */
-  range(ref: string, order: string[]) {
-    const a = anchor ? order.indexOf(anchor) : -1;
+  /** Диапазон от прошлой выбранной (или открытой — from) до ref по порядку строк в панели (order — ссылки сверху
+   * вниз): заменяет выбор, с add — добавляет к нему, как Shift и Ctrl+Shift в Obsidian. */
+  range(
+    ref: string,
+    order: string[],
+    { add = false, from = null }: { add?: boolean; from?: string | null } = {},
+  ) {
+    const start = anchor && order.includes(anchor) ? anchor : from;
+    const a = start ? order.indexOf(start) : -1;
     const b = order.indexOf(ref);
     if (a < 0 || b < 0) return treePick.set([ref]);
     const [lo, hi] = a < b ? [a, b] : [b, a];
-    picked = new Set([...picked, ...order.slice(lo, hi + 1)]);
+    picked = new Set([...(add ? picked : []), ...order.slice(lo, hi + 1)]);
+    anchor = start;
     pickEmit();
   },
   clear() {

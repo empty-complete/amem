@@ -159,9 +159,15 @@ kbd {
 }
 
 .body {
+  position: relative;
   display: grid;
   grid-template-columns: var(--folders-w, 248px) minmax(0, 1fr);
   min-height: 0;
+}
+/* край панели папок — поверх сетки, а не внутри прокрутки: курсор не попадает на полосу прокрутки */
+.folders > .colgrip.foldersgrip {
+  right: auto;
+  left: calc(var(--folders-w, 248px) - 4px);
 }
 .body > * {
   min-height: 0;
@@ -175,13 +181,13 @@ kbd {
   padding: var(--s-lg) var(--s-xl) var(--s-xl);
 }
 
+/* без position: край панели (.foldersgrip) отсчитывается от .body и не прокручивается вместе с панелью */
 .folders {
-  position: relative;
   overflow: auto;
   padding: var(--s-md) var(--s-sm);
   border-right: 1px solid var(--separator);
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: var(--s-md);
 }
 .folders ul {
@@ -318,16 +324,7 @@ kbd {
     display: none;
   }
 }
-.frow {
-  display: flex;
-  align-items: center;
-}
-.frow > a,
-.frow > .ftoggle {
-  flex: 1;
-  min-width: 0;
-}
-/* дерево: стрелка раскрытия, значок «списком» справа, записи раздела */
+/* дерево: стрелка раскрытия, папка, число; действия — правой кнопкой */
 .folders .ftoggle {
   grid-template-columns: 12px 16px minmax(0, 1fr) auto;
 }
@@ -342,36 +339,24 @@ kbd {
 .ftoggle[aria-expanded="true"] .ftoggle__chev {
   rotate: 90deg;
 }
-.folders .frow > .flist {
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  opacity: 0;
-}
-/* открытый списком раздел — значок заметнее, без заливки на полстроки */
-.folders .frow > .flist[aria-current="page"] {
-  background: none;
+/* папка, открытая списком в рабочей области */
+.folders .ftoggle[data-listed] {
   color: var(--foreground);
-  font-weight: inherit;
-}
-.folders .frow > .flist[aria-current="page"] svg {
-  color: var(--foreground);
-}
-.frow:hover > .flist,
-.frow:focus-within > .flist,
-.frow > .flist[aria-current="page"] {
-  opacity: 1;
+  font-weight: 500;
 }
 .folders .frecs {
   padding-left: calc(var(--s-md) + 4px);
   gap: 0;
 }
+/* записи без папки — в корне, вровень с папками */
+.folders .frecs--root {
+  padding-left: 0;
+}
 .folders .frec {
   grid-template-columns: 14px minmax(0, 1fr);
   padding-block: var(--s-3xs);
+  /* Shift-щелчок выбирает диапазон заметок, а не текст */
+  user-select: none;
 }
 .folders .frec > span {
   overflow: hidden;
@@ -384,23 +369,26 @@ kbd {
   color: var(--muted);
   font-size: var(--t-meta);
 }
-.folders .frecs__more {
-  grid-template-columns: 14px minmax(0, 1fr);
-  color: var(--muted);
-}
-.frow .fmenu {
-  opacity: 0;
-}
-.frow:hover .fmenu,
-.frow:focus-within .fmenu,
-.fmenu[aria-expanded="true"] {
-  opacity: 1;
-}
-.folders li[data-drop] > .frow > .ftoggle,
-.folders li[data-drop] > .frow > a,
-.folders li[data-drop] > a {
+.folders li[data-drop] > .ftoggle {
   background: color-mix(in oklab, var(--focus) 18%, transparent);
   outline: 2px solid var(--focus);
+}
+/* пустое место панели — тоже цель: правая кнопка (новая заметка, папка) и перенос в корень */
+.ftree {
+  flex: 1 0 auto;
+  display: grid;
+  align-content: start;
+  gap: var(--s-3xs);
+  border-radius: 8px;
+}
+.ftree[data-drop] {
+  outline: 2px dashed color-mix(in oklab, var(--focus) 60%, transparent);
+  outline-offset: 2px;
+}
+.ctxmenu .ctxmenu__sep {
+  height: 1px;
+  margin: var(--s-3xs) var(--s-xs);
+  background: var(--separator);
 }
 .fname {
   display: grid;

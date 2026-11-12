@@ -162,7 +162,9 @@ test("папки: создать, перенести запись из меню,
   const ref = await refOf(page, "Проверить растяжки мачты после ветра");
   await page.goto("./records");
   const nav = page.getByRole("navigation", { name: "Папки" });
-  await nav.getByRole("button", { name: "Папка", exact: true }).click();
+  // действия папок — правой кнопкой: по пустому месту панели — новая папка
+  await nav.locator(".ftree").dispatchEvent("contextmenu");
+  await page.getByRole("menuitem", { name: "Новая папка" }).click();
   await page.getByRole("textbox", { name: "Имя новой папки" }).fill("Обходы");
   await page.keyboard.press("Enter");
   await expect(nav.getByRole("button", { name: /^Обходы/ })).toBeVisible();
@@ -176,7 +178,7 @@ test("папки: создать, перенести запись из меню,
   await page.goto(`./records?folder=${encodeURIComponent("Обходы")}`);
   await expect(page.getByRole("link", { name: /Проверить растяжки мачты/ })).toBeVisible();
 
-  await nav.getByRole("button", { name: "Папка «Обходы»: действия" }).click();
+  await nav.getByRole("button", { name: /^Обходы/ }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Переименовать" }).click();
   await page.getByRole("textbox").filter({ hasText: "" }).last().fill("Обходы площадки");
   await page.keyboard.press("Enter");
@@ -189,7 +191,7 @@ test("папки: создать, перенести запись из меню,
     headers: { origin: new URL(page.url()).origin },
   });
   await page.reload();
-  await nav.getByRole("button", { name: "Папка «Обходы площадки»: действия" }).click();
+  await nav.getByRole("button", { name: /^Обходы площадки/ }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Удалить" }).click();
   await expect(nav.getByRole("button", { name: /^Обходы площадки/ })).toHaveCount(0);
   expect(problems).toEqual([]);
@@ -202,13 +204,13 @@ test("подборка: антология — zip и HTML-отчёт", async ({
   await page.getByRole("textbox", { name: "Заголовок отчёта" }).fill("Метеостанция");
   await page.getByRole("button", { name: "Собрать подборку" }).click();
   await expect(page.getByRole("heading", { name: /Подборка собрана/ })).toBeVisible();
-  const report = await page.getByRole("link", { name: "Открыть отчёт" }).getAttribute("href");
+  await page.getByRole("button", { name: "Открыть отчёт" }).click();
+  const frame = page.getByRole("dialog", { name: "Отчёт подборки" }).frameLocator("iframe");
+  await expect(frame.getByText("Метеостанция").first()).toBeVisible();
   const zip = await page
     .getByRole("link", { name: /zip|Скачать/ })
     .first()
     .getAttribute("href");
-  const html = await page.request.get(report as string);
-  expect(await html.text()).toContain("Метеостанция");
   expect((await page.request.get(zip as string)).headers()["content-type"]).toContain("zip");
   expect(problems).toEqual([]);
 });

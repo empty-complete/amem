@@ -1,4 +1,4 @@
-import { Button, ToggleButton, ToggleButtonGroup } from "@heroui/react";
+import { Button } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { errorText } from "../../api/errors";
 import { q, REVIEW_LIMIT } from "../../api/queries";
 import { ColumnGrip } from "../../ui/ColumnGrip";
+import { PillSelect } from "../../ui/PillSelect";
 import { RegionState } from "../../ui/RegionState";
 import { arrange, facets, filterItems, type Grouping, nextAfter } from "./groups";
 import { QueueList } from "./QueueList";
@@ -137,92 +138,59 @@ export function ReviewPage({
 
   const search = (patch: Record<string, string | undefined>) =>
     navigate({ to: "/review", search: { reason, state, group, object, about, who, ...patch } as never });
-  const more = (
-    <div className="rfilters rfilters--more">
-      <select
-        className="fld"
-        aria-label={t("review.doc")}
-        value={object ?? ""}
-        onChange={(e) => search({ object: e.target.value || undefined })}
-      >
-        <option value="">{t("review.all_docs")}</option>
-        {facet.docs.map((d) => (
-          <option key={d.key} value={d.key}>
-            {d.name} · {d.count}
-          </option>
-        ))}
-      </select>
-      <select
-        className="fld"
-        aria-label={t("review.about_f")}
-        value={about ?? ""}
-        onChange={(e) => search({ about: e.target.value || undefined })}
-      >
-        <option value="">{t("review.all_about")}</option>
-        {facet.about.map((d) => (
-          <option key={d.key} value={d.key}>
-            {d.name} · {d.count}
-          </option>
-        ))}
-      </select>
-      <ToggleButtonGroup
-        size="sm"
-        selectionMode="single"
-        disallowEmptySelection
-        selectedKeys={new Set([grouping])}
-        onSelectionChange={(k) => search({ group: [...k][0] === "source" ? "source" : undefined })}
-        aria-label={t("review.grouping")}
-      >
-        {(["time", "source"] as const).map((g, i) => (
-          <ToggleButton key={g} id={g}>
-            {i > 0 && <ToggleButtonGroup.Separator />}
-            {t(g === "time" ? "review.by_time" : "review.by_source")}
-          </ToggleButton>
-        ))}
-      </ToggleButtonGroup>
-    </div>
-  );
+  // фильтры — одной строкой плашек: причина, документ, объект, порядок; «Решённые» — третья вкладка
   const filters = (
     <div className="rfilters">
-      <select
-        className="fld"
-        aria-label={t("review.reason")}
+      <PillSelect
+        label={t("review.reason")}
         value={reason ?? ""}
-        onChange={(e) =>
-          navigate({
-            to: "/review",
-            search: { reason: e.target.value || undefined, state, group, object, about, who } as never,
-          })
-        }
+        onChange={(v) => search({ reason: v || undefined })}
       >
-        <option value="">{t("review.any")}</option>
+        <option value="">{t("review.any_reason")}</option>
         {REASONS.map((r) => (
           <option key={r} value={r}>
             {t(`review.r.${r}`)}
           </option>
         ))}
-      </select>
-      <ToggleButtonGroup
-        size="sm"
-        selectionMode="single"
-        disallowEmptySelection
-        selectedKeys={new Set([state])}
-        onSelectionChange={(k) => {
-          const s2 = [...k][0] === "done" ? "done" : undefined;
-          navigate({ to: "/review", search: { reason, state: s2, group, object, about, who } as never });
-        }}
-        aria-label={t("review.state")}
+      </PillSelect>
+      {facet.docs.length > 0 && (
+        <PillSelect
+          label={t("review.doc")}
+          value={object ?? ""}
+          onChange={(v) => search({ object: v || undefined })}
+        >
+          <option value="">{t("review.all_docs")}</option>
+          {facet.docs.map((d) => (
+            <option key={d.key} value={d.key}>
+              {d.name} · {d.count}
+            </option>
+          ))}
+        </PillSelect>
+      )}
+      {facet.about.length > 0 && (
+        <PillSelect
+          label={t("review.about_f")}
+          value={about ?? ""}
+          onChange={(v) => search({ about: v || undefined })}
+        >
+          <option value="">{t("review.all_about")}</option>
+          {facet.about.map((d) => (
+            <option key={d.key} value={d.key}>
+              {d.name} · {d.count}
+            </option>
+          ))}
+        </PillSelect>
+      )}
+      <PillSelect
+        label={t("review.grouping")}
+        value={grouping === "source" ? "source" : ""}
+        onChange={(v) => search({ group: v || undefined })}
       >
-        {(["open", "done"] as const).map((s2, i) => (
-          <ToggleButton key={s2} id={s2}>
-            {i > 0 && <ToggleButtonGroup.Separator />}
-            {t(`review.${s2}`)}
-          </ToggleButton>
-        ))}
-      </ToggleButtonGroup>
+        <option value="">{t("review.by_time")}</option>
+        <option value="source">{t("review.by_source")}</option>
+      </PillSelect>
     </div>
   );
-
   return (
     <div className="review" data-item={itemId ? true : undefined}>
       <section className="review__list" aria-labelledby="review-title">
@@ -231,47 +199,51 @@ export function ReviewPage({
           {t("review.title")}
           {list.data && <span className="count">{items.length}</span>}
         </h1>
-        {state === "open" && (
-          <>
-            <div className="rtabs" role="tablist" aria-label={t("review.tabs")}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={who !== "model"}
-                className="rtab"
-                onClick={() => navigate({ to: "/review", search: { state: undefined } as never })}
-              >
-                {t("review.tab_you")}
-                <span className="count">{mine.length}</span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={who === "model"}
-                className="rtab"
-                onClick={() => navigate({ to: "/review", search: { who: "model" } as never })}
-              >
-                {t("review.tab_model")}
-                <span className="count">{live.length - mine.length}</span>
-              </button>
-            </div>
-            <p className="muted review__intro">
-              {who === "model"
-                ? verifier?.last_at
-                  ? t("review.model_last", {
-                      when: new Date(verifier.last_at).toLocaleString(i18n.language, {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      }),
-                      count: verifier.decided ?? 0,
-                    })
-                  : t("review.model_never")
-                : t("review.intro")}
-            </p>
-          </>
+        <div className="rtabs" role="tablist" aria-label={t("review.tabs")}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={state === "open" && who !== "model"}
+            className="rtab"
+            onClick={() => navigate({ to: "/review", search: {} as never })}
+          >
+            {t("review.tab_you")}
+            {state === "open" && <span className="count">{mine.length}</span>}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={state === "open" && who === "model"}
+            className="rtab"
+            onClick={() => navigate({ to: "/review", search: { who: "model" } as never })}
+          >
+            {t("review.tab_model")}
+            {state === "open" && <span className="count">{live.length - mine.length}</span>}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={state === "done"}
+            className="rtab"
+            onClick={() => navigate({ to: "/review", search: { state: "done" } as never })}
+          >
+            {t("review.done")}
+          </button>
+        </div>
+        {state === "open" && who === "model" && (
+          <p className="muted review__intro">
+            {verifier?.last_at
+              ? t("review.model_last", {
+                  when: new Date(verifier.last_at).toLocaleString(i18n.language, {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  }),
+                  count: verifier.decided ?? 0,
+                })
+              : t("review.model_never")}
+          </p>
         )}
         {filters}
-        {more}
         {capped && <p className="muted review__cap">{t("review.first_n", { n: REVIEW_LIMIT })}</p>}
         {list.isPending ? (
           <RegionState state="loading" />

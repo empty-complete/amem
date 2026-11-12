@@ -39,29 +39,38 @@
   pointer-events: none;
 }
 .home__filters,
-.home__scopebtn,
+.home__scope > *,
 .home__head .navlink {
   pointer-events: auto;
 }
-/* фильтры неба: кнопка в шапке, теги, вид и папка — во всплывающем окне */
-.home__scopebtn {
-  display: inline-flex;
-  align-items: center;
+/* фильтры неба — строкой компактных плашек под семьями; пустое место строки пропускает щелчок к звёздам */
+.home__scope {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--s-2xs);
-  border: 0;
+}
+/* плашки фильтров на небе: полупрозрачные, цвета неба */
+.pillsel--sky {
   background: color-mix(in oklab, var(--sky) 70%, transparent);
   color: var(--sky-ink);
+}
+.pillsel--sky:hover {
+  background: color-mix(in oklab, var(--sky-ink) 12%, var(--sky));
+}
+.pillsel--sky[data-on] {
+  background: color-mix(in oklab, var(--sky-ink) 22%, var(--sky));
+  color: var(--sky-ink);
+}
+.pillsel--sky .pillsel__chev {
+  color: var(--sky-muted);
+}
+.pillsel--reset {
+  gap: var(--s-3xs);
+  padding: 0 var(--s-sm);
+  border: 0;
+  font: inherit;
+  font-size: var(--t-meta);
   cursor: pointer;
-}
-.home__scopepop {
-  width: min(28rem, calc(100vw - 2 * var(--s-md)));
-}
-.home__scopedlg {
-  outline: none;
-}
-.home__scope {
-  margin: 0;
-  padding: var(--s-xs);
 }
 .home__head h1 {
   margin: 0;

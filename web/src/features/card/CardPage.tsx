@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { ApiError, errorText } from "../../api/errors";
 import { q } from "../../api/queries";
+import { ColumnGrip } from "../../ui/ColumnGrip";
 import { formatValue, unitLabel } from "../../ui/format";
 import { KindChip } from "../../ui/KindChip";
 import { type LangString, langString, pickText } from "../../ui/lang";
@@ -245,6 +246,15 @@ export function CardPage({ entityRef }: { entityRef: string }) {
           </Tabs.Panel>
         </Tabs>
       </article>
+      <ColumnGrip
+        name="--entity-side-w"
+        label={t("side.width")}
+        min={280}
+        max={900}
+        initial={420}
+        side="left"
+        className="entitygrip"
+      />
       <aside className="entity__side" aria-label={t("sky.widget")}>
         <Sky centerRef={entityRef} height="var(--entity-sky-h)" />
       </aside>
