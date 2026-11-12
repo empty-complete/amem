@@ -79,7 +79,8 @@ test("окно настроек: Ctrl+, разделы и поиск; небо �
   const win = page.getByRole("dialog", { name: "Настройки" });
   await expect(win.getByRole("button", { name: "Общие" })).toHaveAttribute("aria-current", "page");
   await win.getByRole("searchbox", { name: "Поиск по настройкам" }).fill("папк");
-  await expect(win.getByRole("textbox", { name: "Куда класть новые записи" })).toBeVisible();
+  // поле пути с подсказками папок (datalist) — для доступности это combobox
+  await expect(win.getByRole("combobox", { name: "Куда класть новые записи" })).toBeVisible();
   await win.getByRole("searchbox", { name: "Поиск по настройкам" }).fill("");
   await win.getByRole("button", { name: "Плагины ядра" }).click();
   await win.getByRole("switch", { name: "Небо на главной" }).uncheck();
