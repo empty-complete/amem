@@ -114,7 +114,8 @@ const BodyEditor = forwardRef<
     if (!box.current) return;
     const source = async (ctx: CompletionContext) => {
       const wiki = ctx.matchBefore(/\[\[[^\]\n]*/);
-      const at = ctx.matchBefore(/@[\p{L}\p{N}._-]*/u);
+      // названия объектов бывают из нескольких слов: после @ — и пробелы (до 60 знаков); нет совпадений — окна нет
+      const at = ctx.matchBefore(/@(?:[\p{L}\p{N}._-][\p{L}\p{N} ._-]{0,60})?/u);
       const tag = ctx.matchBefore(/#[\p{L}\p{N}_-]*/u);
       const s = live.current.suggest;
       // ссылка на запись: вставить [[подпись]] (закрывающие «]]», если они уже стоят, — заменить) и сообщить ссылку

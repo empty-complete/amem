@@ -289,7 +289,7 @@ test("подсказки в тексте: @ — объект в «О чём», [
   await expect(body).toContainText("[[Датчик влажности В-2]]");
   await expect(page.locator(".props--edit")).toContainText("Датчик влажности В-2");
   // [[ — записи базы
-  await page.keyboard.type(" и [[Погрешность");
+  await page.keyboard.type(" и [[Погрешность влаж");
   await expect(list.getByRole("option", { name: /Погрешность влажности В-2/ })).toBeVisible();
   await page.keyboard.press("Enter");
   await expect(body).toContainText("[[Погрешность влажности В-2: ±2 %]]");
